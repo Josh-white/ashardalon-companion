@@ -7,7 +7,18 @@ export const HERO_TEMPLATES = [
   { key: 'paladin', name: 'Keyleth', className: 'Elf Paladin', color: 'amber', maxHp: 8, ac: 17, surgeValue: 4, speed: 6 },
   // Checked against Tarak's hero card.
   { key: 'rogue', name: 'Tarak', className: 'Half-Orc Rogue', color: 'emerald', maxHp: 8, ac: 14, surgeValue: 4, speed: 6 },
-  { key: 'wizard', name: 'Heskan', className: 'Dragonborn Wizard', color: 'violet', maxHp: 6, ac: 14, surgeValue: 3, speed: 5 },
+  // Checked against Heskan's hero card. His fixed power, Hurled Breath, is a daily.
+  {
+    key: 'wizard',
+    name: 'Heskan',
+    className: 'Dragonborn Wizard',
+    color: 'violet',
+    maxHp: 6,
+    ac: 14,
+    surgeValue: 3,
+    speed: 6,
+    powerSlots: ['at-will', 'at-will', 'utility', 'daily', 'daily'],
+  },
 ]
 
 export const STARTING_SURGES = 2
