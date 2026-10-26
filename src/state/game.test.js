@@ -1,14 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
-import { createHero, gameReducer, initialState, loadGame, saveGame, SAVE_KEY } from './game.js'
+import { createHero, gameReducer, initialState } from './game.js'
 
 const startGame = (count = 2) =>
   gameReducer(initialState, { type: 'START_GAME', heroes: HERO_TEMPLATES.slice(0, count).map((t) => createHero(t)) })
-
-const memoryStorage = () => {
-  const data = {}
-  return { getItem: (k) => data[k] ?? null, setItem: (k, v) => { data[k] = v } }
-}
 
 describe('heroes', () => {
   it('keeps HP between 0 and max', () => {
@@ -72,20 +67,5 @@ describe('turns', () => {
     expect(state.turn).toEqual({ heroIndex: 0, phase: 0, round: 2 })
     state = gameReducer(state, { type: 'PREVIOUS_PHASE' })
     expect(state.turn).toEqual({ heroIndex: 1, phase: 2, round: 1 })
-  })
-})
-
-describe('saving', () => {
-  it('restores a saved game', () => {
-    const storage = memoryStorage()
-    const state = startGame()
-    saveGame(state, storage)
-    expect(loadGame(storage)).toEqual(state)
-  })
-
-  it('starts fresh when the save is broken', () => {
-    const storage = memoryStorage()
-    storage.setItem(SAVE_KEY, '{not json')
-    expect(loadGame(storage)).toBe(initialState)
   })
 })

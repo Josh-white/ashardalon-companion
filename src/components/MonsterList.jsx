@@ -110,14 +110,16 @@ function MonsterRow({ monster, owner, isActiveOwner, dispatch }) {
   )
 }
 
-export default function MonsterList({ state, dispatch }) {
+// With ownerId, shows only that hero's monster cards (a player's own iPad).
+export default function MonsterList({ state, dispatch, ownerId }) {
   const [adding, setAdding] = useState(false)
   const activeHero = state.heroes[state.turn.heroIndex]
+  const monsters = ownerId ? state.monsters.filter((m) => m.ownerId === ownerId) : state.monsters
 
   return (
     <section>
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="font-display text-2xl font-bold text-zinc-100">Monsters</h2>
+        <h2 className="font-display text-2xl font-bold text-zinc-100">{ownerId ? 'Your monsters' : 'Monsters'}</h2>
         {!adding && (
           <Button variant="gold" onClick={() => setAdding(true)}>
             + Monster
@@ -126,16 +128,16 @@ export default function MonsterList({ state, dispatch }) {
       </div>
       {adding && (
         <div className="mb-4">
-          <AddMonster heroes={state.heroes} activeHeroId={activeHero.id} dispatch={dispatch} onDone={() => setAdding(false)} />
+          <AddMonster heroes={state.heroes} activeHeroId={ownerId ?? activeHero.id} dispatch={dispatch} onDone={() => setAdding(false)} />
         </div>
       )}
-      {state.monsters.length === 0 && !adding ? (
+      {monsters.length === 0 && !adding ? (
         <p className="rounded-2xl border border-dashed border-zinc-800 p-6 text-center text-zinc-500">
           The dungeon is quiet... for now.
         </p>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
-          {state.monsters.map((monster) => (
+          {monsters.map((monster) => (
             <MonsterRow
               key={monster.id}
               monster={monster}

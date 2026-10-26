@@ -1,8 +1,10 @@
 # Ashardalon Companion
 
-A tablet-friendly helper for playing **Dungeons & Dragons: Wrath of Ashardalon** at the table. It runs entirely in the browser and saves the current game there, so a refresh or a closed tab picks up where you left off.
+A tablet-friendly helper for playing **Dungeons & Dragons: Wrath of Ashardalon** at the table. Every player can open it on their own iPad: a small server on the Pi keeps the one shared game and sends each change to every device right away. The game is saved on the Pi, so a refresh, a sleeping iPad, or a restart picks up where you left off.
 
 ## What it does
+
+- **One iPad per player:** after setup, each iPad picks "I'm Keyleth" (it remembers) and shows that hero's card, their monster cards, the party's HP, and the turn guide when it's their turn. The **table view** shows everything on one screen.
 
 - **Hero cards:** HP with big +/− buttons, AC, healing surge value, daily and utility powers you can name and tap to mark used, conditions, and level up for 5 XP.
 - **Turn guide:** "Your turn!" banner for the active player and a checklist for the Hero, Exploration, and Villain phases.
@@ -19,15 +21,16 @@ cd ashardalon-companion
 docker compose up -d --build
 ```
 
-Then open `http://piserver.local:8081` on any device on your network. Change the left side of `8081:80` in `compose.yaml` if that port is taken.
+Then open `http://piserver.local:8081` (or https://ashardalon.codebasehome.com) on any device on your network. Change the left side of `8081:3000` in `compose.yaml` if that port is taken.
 
-To update after pulling new changes: `git pull && docker compose up -d --build`.
+To update after pulling new changes: `git pull && docker compose up -d --build`. The current game lives in the `game-data` Docker volume, so updates don't wipe it.
 
 ## Develop
 
 ```sh
 npm install
-npm run dev     # http://localhost:5173
+npm run dev:server   # the shared game, on port 3000
+npm run dev          # the app, http://localhost:5173
 npm test
 ```
 

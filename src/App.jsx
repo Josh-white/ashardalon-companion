@@ -1,14 +1,18 @@
-import { useEffect, useReducer } from 'react'
 import HeroCard from './components/HeroCard.jsx'
 import MonsterList from './components/MonsterList.jsx'
+import SeatPicker from './components/SeatPicker.jsx'
 import Setup from './components/Setup.jsx'
 import TurnGuide from './components/TurnGuide.jsx'
-import { Button } from './components/ui.jsx'
-import { gameReducer, loadGame, saveGame } from './state/game.js'
+import { Button, HpBar } from './components/ui.jsx'
+import { HERO_COLORS } from './data/heroes.js'
+import { PHASES } from './data/phases.js'
+import { useSeat, useSharedGame } from './state/useSharedGame.js'
 
-function PartyBar({ state, dispatch }) {
+const TABLE_SEAT = 'table'
+
+function PartyBar({ state, dispatch, seatLabel, onSwitchSeat }) {
   const newGame = () => {
-    if (window.confirm('Start a new game? This clears the current one.')) dispatch({ type: 'NEW_GAME' })
+    if (window.confirm('Start a new game? This clears the current one for everyone.')) dispatch({ type: 'NEW_GAME' })
   }
   return (
     <header className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur">
@@ -28,7 +32,10 @@ function PartyBar({ state, dispatch }) {
           </span>
           <Button className="!px-2 !py-0" onClick={() => dispatch({ type: 'ADJUST_SURGES', amount: 1 })}>+</Button>
         </div>
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex flex-wrap gap-2">
+          <Button variant="ghost" className="text-sm" onClick={onSwitchSeat}>
+            {seatLabel} · switch
+          </Button>
           <Button variant="ghost" className="text-sm" onClick={() => dispatch({ type: 'END_GAME', result: 'won' })}>
             We won!
           </Button>
@@ -85,42 +92,135 @@ function GameLog({ log }) {
   )
 }
 
-export default function App() {
-  const [state, dispatch] = useReducer(gameReducer, undefined, () => loadGame())
+function WaitingBanner({ state }) {
+  const hero = state.heroes[state.turn.heroIndex]
+  const phase = PHASES[state.turn.phase]
+  const color = HERO_COLORS[hero.color]
+  return (
+    <section className="rounded-3xl border border-zinc-800 bg-zinc-900 p-5">
+      <p className="text-sm uppercase tracking-widest text-zinc-500">Round {state.turn.round}</p>
+      <h2 className="font-display text-3xl font-bold text-zinc-200">
+        It's <span className={color.text}>{hero.player || hero.name}</span>'s turn
+      </h2>
+      <p className="mt-1 text-lg text-zinc-400">
+        {phase.emoji} {phase.title}
+      </p>
+    </section>
+  )
+}
 
-  useEffect(() => saveGame(state), [state])
+function PartyStrip({ heroes, exceptId }) {
+  const others = heroes.filter((h) => h.id !== exceptId)
+  if (others.length === 0) return null
+  return (
+    <section>
+      <h2 className="mb-2 font-display text-xl font-bold text-zinc-300">Your party</h2>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {others.map((hero) => (
+          <div key={hero.id} className={`rounded-xl p-3 ${HERO_COLORS[hero.color].bg}`}>
+            <div className="flex justify-between">
+              <span className={`font-display text-lg font-bold ${HERO_COLORS[hero.color].text}`}>{hero.name}</span>
+              <span className="text-zinc-300">
+                {hero.hp} / {hero.maxHp} HP
+              </span>
+            </div>
+            <HpBar hp={hero.hp} maxHp={hero.maxHp} />
+            {hero.conditions.length > 0 && <p className="mt-1 text-sm text-amber-400">{hero.conditions.join(', ')}</p>}
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function HeroView({ state, dispatch, hero }) {
+  const heroIndex = state.heroes.indexOf(hero)
+  const myTurn = heroIndex === state.turn.heroIndex
+  return (
+    <div className="mx-auto max-w-3xl space-y-6 p-4">
+      {myTurn ? <TurnGuide state={state} dispatch={dispatch} /> : <WaitingBanner state={state} />}
+      <HeroCard hero={hero} isActive={myTurn} xp={state.xp} surges={state.surges} dispatch={dispatch} />
+      <MonsterList state={state} dispatch={dispatch} ownerId={hero.id} />
+      <PartyStrip heroes={state.heroes} exceptId={hero.id} />
+      <GameLog log={state.log} />
+    </div>
+  )
+}
+
+function TableView({ state, dispatch }) {
+  return (
+    <div className="mx-auto max-w-6xl space-y-8 p-4">
+      <TurnGuide state={state} dispatch={dispatch} />
+      <section>
+        <h2 className="mb-3 font-display text-2xl font-bold text-zinc-100">Heroes</h2>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {state.heroes.map((hero, i) => (
+            <HeroCard
+              key={hero.id}
+              hero={hero}
+              isActive={i === state.turn.heroIndex}
+              xp={state.xp}
+              surges={state.surges}
+              dispatch={dispatch}
+            />
+          ))}
+        </div>
+      </section>
+      <MonsterList state={state} dispatch={dispatch} />
+      <GameLog log={state.log} />
+    </div>
+  )
+}
+
+function Connecting() {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-zinc-950 text-zinc-400">
+      <p className="font-display text-2xl">Opening the dungeon doors…</p>
+    </main>
+  )
+}
+
+export default function App() {
+  const { state, connected, dispatch } = useSharedGame()
+  const [seat, setSeat] = useSeat()
+
+  if (!state) return <Connecting />
+
+  const offline = !connected && (
+    <p className="sticky top-0 z-30 bg-amber-600 px-4 py-1 text-center text-sm font-semibold text-zinc-950">
+      Reconnecting to the game… changes won't be saved until it's back.
+    </p>
+  )
 
   if (state.status === 'setup') {
     return (
       <main className="min-h-screen bg-zinc-950 text-zinc-100">
+        {offline}
         <Setup onStart={(heroes) => dispatch({ type: 'START_GAME', heroes })} />
+      </main>
+    )
+  }
+
+  const myHero = state.heroes.find((h) => h.key === seat)
+  if (seat !== TABLE_SEAT && !myHero) {
+    return (
+      <main className="min-h-screen bg-zinc-950 text-zinc-100">
+        {offline}
+        <SeatPicker heroes={state.heroes} onPick={setSeat} tableSeat={TABLE_SEAT} />
       </main>
     )
   }
 
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100">
-      <PartyBar state={state} dispatch={dispatch} />
-      <div className="mx-auto max-w-6xl space-y-8 p-4">
-        <TurnGuide state={state} dispatch={dispatch} />
-        <section>
-          <h2 className="mb-3 font-display text-2xl font-bold text-zinc-100">Heroes</h2>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {state.heroes.map((hero, i) => (
-              <HeroCard
-                key={hero.id}
-                hero={hero}
-                isActive={i === state.turn.heroIndex}
-                xp={state.xp}
-                surges={state.surges}
-                dispatch={dispatch}
-              />
-            ))}
-          </div>
-        </section>
-        <MonsterList state={state} dispatch={dispatch} />
-        <GameLog log={state.log} />
-      </div>
+      {offline}
+      <PartyBar
+        state={state}
+        dispatch={dispatch}
+        seatLabel={myHero ? myHero.name : 'Table'}
+        onSwitchSeat={() => setSeat(null)}
+      />
+      {myHero ? <HeroView state={state} dispatch={dispatch} hero={myHero} /> : <TableView state={state} dispatch={dispatch} />}
       {(state.status === 'won' || state.status === 'lost') && <GameOver state={state} dispatch={dispatch} />}
     </main>
   )

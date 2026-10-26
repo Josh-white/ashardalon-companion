@@ -1,0 +1,32 @@
+import { HERO_COLORS } from '../data/heroes.js'
+import { Button } from './ui.jsx'
+
+export default function SeatPicker({ heroes, onPick, tableSeat }) {
+  return (
+    <div className="mx-auto max-w-3xl p-4 sm:p-8">
+      <h1 className="text-center font-display text-4xl font-bold text-amber-400">Who's playing on this iPad?</h1>
+      <div className="mt-8 grid gap-4 sm:grid-cols-2">
+        {heroes.map((hero) => {
+          const color = HERO_COLORS[hero.color]
+          return (
+            <button
+              key={hero.id}
+              type="button"
+              onClick={() => onPick(hero.key)}
+              className={`rounded-2xl border border-zinc-800 p-6 text-left transition active:scale-95 ${color.bg}`}
+            >
+              <span className={`block font-display text-3xl font-bold ${color.text}`}>I'm {hero.name}</span>
+              <span className="text-zinc-400">
+                {hero.className}
+                {hero.player && ` · ${hero.player}`}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+      <div className="mt-6 text-center">
+        <Button onClick={() => onPick(tableSeat)}>Table view (everyone's heroes and monsters)</Button>
+      </div>
+    </div>
+  )
+}
