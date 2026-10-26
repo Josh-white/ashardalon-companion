@@ -1,8 +1,22 @@
 // Starting stats for the five heroes in the box. Every number can be changed
 // on the setup screen, so check them against your hero cards.
+// For heroes whose fixed power is a daily: 2 at-wills, 1 utility, the fixed daily and 1 chosen daily.
+const DAILY_FIXED_POWER_SLOTS = ['at-will', 'at-will', 'utility', 'daily', 'daily']
+
 export const HERO_TEMPLATES = [
   { key: 'cleric', name: 'Quinn', className: 'Human Cleric', color: 'sky', maxHp: 8, ac: 17, surgeValue: 4, speed: 5 },
-  { key: 'fighter', name: 'Vistra', className: 'Dwarf Fighter', color: 'red', maxHp: 10, ac: 18, surgeValue: 5, speed: 5 },
+  // Checked against Vistra's hero card. Her fixed power, Dwarven Resilience, is a daily.
+  {
+    key: 'fighter',
+    name: 'Vistra',
+    className: 'Dwarf Fighter',
+    color: 'red',
+    maxHp: 8,
+    ac: 17,
+    surgeValue: 4,
+    speed: 5,
+    powerSlots: DAILY_FIXED_POWER_SLOTS,
+  },
   // Checked against Keyleth's hero card.
   { key: 'paladin', name: 'Keyleth', className: 'Elf Paladin', color: 'amber', maxHp: 8, ac: 17, surgeValue: 4, speed: 6 },
   // Checked against Tarak's hero card.
@@ -17,7 +31,7 @@ export const HERO_TEMPLATES = [
     ac: 14,
     surgeValue: 3,
     speed: 6,
-    powerSlots: ['at-will', 'at-will', 'utility', 'daily', 'daily'],
+    powerSlots: DAILY_FIXED_POWER_SLOTS,
   },
 ]
 
