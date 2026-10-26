@@ -62,6 +62,48 @@ describe('powers', () => {
   })
 })
 
+describe('big moments', () => {
+  it('rolls a d20 and flags natural 20s and 1s', () => {
+    let state = startGame()
+    const hero = state.heroes[0]
+    state = gameReducer(state, { type: 'ROLL_DIE', heroId: hero.id, value: 20 })
+    expect(state.moment).toMatchObject({ kind: 'crit', value: 20, heroId: hero.id })
+    state = gameReducer(state, { type: 'ROLL_DIE', heroId: hero.id, value: 1 })
+    expect(state.moment.kind).toBe('fumble')
+    state = gameReducer(state, { type: 'ROLL_DIE', heroId: hero.id, value: 12 })
+    expect(state.moment).toMatchObject({ kind: 'roll', title: `${hero.name} rolled 12` })
+    expect(state.log[0].text).toBe(`${hero.name} rolled a 12.`)
+  })
+
+  it('ignores rolls outside 1 to 20', () => {
+    const state = startGame()
+    for (const value of [0, 21, 2.5, 'x']) {
+      expect(gameReducer(state, { type: 'ROLL_DIE', heroId: state.heroes[0].id, value })).toBe(state)
+    }
+  })
+
+  it('marks a hero going down only when HP first reaches 0', () => {
+    let state = startGame()
+    const hero = state.heroes[0]
+    state = gameReducer(state, { type: 'ADJUST_HP', heroId: hero.id, amount: -1 })
+    expect(state.moment).toBeNull()
+    state = gameReducer(state, { type: 'ADJUST_HP', heroId: hero.id, amount: -99 })
+    const downMoment = state.moment
+    expect(downMoment).toMatchObject({ kind: 'down', heroId: hero.id })
+    state = gameReducer(state, { type: 'ADJUST_HP', heroId: hero.id, amount: -1 })
+    expect(state.moment).toBe(downMoment)
+  })
+
+  it('celebrates defeated monsters and level-ups', () => {
+    let state = { ...startGame(), xp: 5 }
+    state = gameReducer(state, { type: 'ADD_MONSTER', name: 'Snake', hp: 1, xp: 1, ownerId: state.heroes[0].id })
+    state = gameReducer(state, { type: 'DEFEAT_MONSTER', monsterId: state.monsters[0].id })
+    expect(state.moment).toMatchObject({ kind: 'defeat', title: 'Snake defeated!' })
+    state = gameReducer(state, { type: 'LEVEL_UP', heroId: state.heroes[0].id })
+    expect(state.moment.kind).toBe('level')
+  })
+})
+
 describe('monsters', () => {
   it('adds XP to the pool when defeated', () => {
     let state = startGame()

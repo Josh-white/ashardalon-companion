@@ -20,6 +20,7 @@ export const initialState = {
   monsters: [],
   turn: { heroIndex: 0, phase: 0, round: 1 },
   log: [],
+  moment: null, // the latest big moment, shown on every screen for a few seconds
 }
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
@@ -28,6 +29,13 @@ const withLog = (state, text) => ({
   ...state,
   log: [{ id: newId('log'), round: state.turn.round, text }, ...state.log].slice(0, 50),
 })
+
+const withMoment = (state, moment) => ({
+  ...state,
+  moment: { id: newId('moment'), at: Date.now(), ...moment },
+})
+
+const heroLabel = (hero) => hero.player || hero.name
 
 const updateHero = (state, heroId, change) => ({
   ...state,
@@ -80,8 +88,34 @@ export function gameReducer(state, action) {
       return withLog(started, `The adventure begins with ${action.heroes.map((h) => h.name).join(', ')}.`)
     }
 
-    case 'ADJUST_HP':
-      return updateHero(state, action.heroId, (hero) => ({ hp: clamp(hero.hp + action.amount, 0, hero.maxHp) }))
+    case 'ADJUST_HP': {
+      const hero = state.heroes.find((h) => h.id === action.heroId)
+      if (!hero) return state
+      const next = updateHero(state, hero.id, (h) => ({ hp: clamp(h.hp + action.amount, 0, h.maxHp) }))
+      if (hero.hp === 0 || next.heroes.find((h) => h.id === hero.id).hp !== 0) return next
+      return withMoment(withLog(next, `${hero.name} is down!`), {
+        kind: 'down',
+        heroId: hero.id,
+        title: `${hero.name} is down!`,
+        detail: state.surges > 0 ? 'Spend a healing surge at the start of your turn.' : 'No healing surges left!',
+      })
+    }
+
+    case 'ROLL_DIE': {
+      const value = Number(action.value)
+      if (!Number.isInteger(value) || value < 1 || value > 20) return state
+      const hero = state.heroes.find((h) => h.id === action.heroId)
+      const who = hero ? heroLabel(hero) : 'Someone'
+      const kind = value === 20 ? 'crit' : value === 1 ? 'fumble' : 'roll'
+      const title = kind === 'crit' ? 'NATURAL 20!' : kind === 'fumble' ? 'Oops… a 1' : `${who} rolled ${value}`
+      return withMoment(withLog(state, `${who} rolled a ${value}.`), {
+        kind,
+        heroId: hero?.id ?? null,
+        value,
+        title,
+        detail: kind === 'crit' ? `${who} rolled a critical hit!` : kind === 'fumble' ? `${who} rolled a 1.` : '',
+      })
+    }
 
     case 'USE_SURGE': {
       const hero = state.heroes.find((h) => h.id === action.heroId)
@@ -141,7 +175,12 @@ export function gameReducer(state, action) {
         maxHp: h.maxHp + LEVEL_UP_HP_BONUS,
         hp: h.hp + LEVEL_UP_HP_BONUS,
       }))
-      return withLog(leveled, `${hero.name} reached level 2!`)
+      return withMoment(withLog(leveled, `${hero.name} reached level 2!`), {
+        kind: 'level',
+        heroId: hero.id,
+        title: `${hero.name} reached level 2!`,
+        detail: 'Flip your hero card!',
+      })
     }
 
     case 'ADD_MONSTER': {
@@ -171,7 +210,11 @@ export function gameReducer(state, action) {
         xp: state.xp + monster.xp,
         monsters: state.monsters.filter((m) => m.id !== monster.id),
       }
-      return withLog(next, `The ${monster.name} was defeated! +${monster.xp} XP`)
+      return withMoment(withLog(next, `The ${monster.name} was defeated! +${monster.xp} XP`), {
+        kind: 'defeat',
+        title: `${monster.name} defeated!`,
+        detail: `+${monster.xp} XP for the party`,
+      })
     }
 
     case 'REMOVE_MONSTER':

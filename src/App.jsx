@@ -1,4 +1,6 @@
+import DiceButton from './components/DiceButton.jsx'
 import HeroCard from './components/HeroCard.jsx'
+import MomentOverlay from './components/MomentOverlay.jsx'
 import MonsterList from './components/MonsterList.jsx'
 import ProjectorView from './components/ProjectorView.jsx'
 import SeatPicker from './components/SeatPicker.jsx'
@@ -141,6 +143,7 @@ function HeroView({ state, dispatch, hero }) {
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4">
       {myTurn ? <TurnGuide state={state} dispatch={dispatch} /> : <WaitingBanner state={state} />}
+      <DiceButton heroId={hero.id} dispatch={dispatch} className="w-full" />
       <HeroCard hero={hero} isActive={myTurn} xp={state.xp} surges={state.surges} dispatch={dispatch} />
       <MonsterList state={state} dispatch={dispatch} ownerId={hero.id} />
       <PartyStrip heroes={state.heroes} exceptId={hero.id} />
@@ -153,6 +156,7 @@ function TableView({ state, dispatch }) {
   return (
     <div className="mx-auto max-w-6xl space-y-8 p-4">
       <TurnGuide state={state} dispatch={dispatch} />
+      <DiceButton heroId={state.heroes[state.turn.heroIndex].id} dispatch={dispatch} />
       <section>
         <h2 className="mb-3 font-display text-2xl font-bold text-zinc-100">Heroes</h2>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -209,6 +213,7 @@ export default function App() {
       <main className="min-h-screen bg-zinc-950 text-zinc-100">
         {offline}
         <ProjectorView state={state} onSwitchSeat={() => setSeat(null)} />
+        <MomentOverlay moment={state.moment} heroes={state.heroes} big />
         {(state.status === 'won' || state.status === 'lost') && <GameOver state={state} dispatch={dispatch} />}
       </main>
     )
@@ -232,6 +237,7 @@ export default function App() {
         onSwitchSeat={() => setSeat(null)}
       />
       {myHero ? <HeroView state={state} dispatch={dispatch} hero={myHero} /> : <TableView state={state} dispatch={dispatch} />}
+      <MomentOverlay moment={state.moment} heroes={state.heroes} />
       {(state.status === 'won' || state.status === 'lost') && <GameOver state={state} dispatch={dispatch} />}
     </main>
   )

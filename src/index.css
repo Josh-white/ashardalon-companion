@@ -12,3 +12,40 @@ body {
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
+
+@keyframes moment-pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  70% { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); }
+}
+@keyframes moment-spin {
+  from { transform: rotate(0deg) scale(0.9); }
+  to { transform: rotate(360deg) scale(0.9); }
+}
+@keyframes moment-land {
+  0% { transform: scale(1.4); }
+  100% { transform: scale(1); }
+}
+@keyframes moment-reveal {
+  0%, 60% { opacity: 0; transform: translateY(0.3em); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes moment-glow {
+  0%, 100% { box-shadow: 0 0 2rem rgb(245 158 11 / 0.4); }
+  50% { box-shadow: 0 0 5rem rgb(245 158 11 / 0.9); }
+}
+@keyframes moment-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-0.6rem); }
+  40%, 80% { transform: translateX(0.6rem); }
+}
+.moment-pop { animation: moment-pop 0.35s ease-out both; }
+.moment-spin { animation: moment-spin 0.3s linear infinite; }
+.moment-land { animation: moment-land 0.25s ease-out both; }
+.moment-reveal { animation: moment-reveal 1.5s ease-out both; }
+.moment-glow { animation: moment-pop 0.35s ease-out both, moment-glow 1.2s ease-in-out 0.35s infinite; }
+.moment-shake { animation: moment-pop 0.35s ease-out both, moment-shake 0.5s ease-in-out 0.35s 2; }
+
+@media (prefers-reduced-motion: reduce) {
+  .moment-pop, .moment-spin, .moment-land, .moment-reveal, .moment-glow, .moment-shake { animation: none; }
+}
