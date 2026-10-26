@@ -1,3 +1,4 @@
+import { cardStats } from '../data/cards.js'
 import { HERO_COLORS, HERO_TEMPLATES } from '../data/heroes.js'
 import { powerSlotsFor } from '../state/game.js'
 import { useCards } from '../state/useCards.js'
@@ -116,25 +117,36 @@ function MyHero({ claim, cards, deviceId, dispatch }) {
                     .map((card) => (
                       <option key={card.id} value={card.id}>
                         {card.name}
-                        {card.suggested ? ' (suggested)' : ''}
+                        {cardStats(card) && ` · ${cardStats(card)}`}
+                        {card.suggested ? ' · suggested' : ''}
                       </option>
                     ))}
                 </select>
               )}
+              {cardStats(picked) && <p className="mt-1 text-sm font-semibold text-zinc-200">{cardStats(picked)}</p>}
               {picked?.text && <p className="mt-1 text-sm text-zinc-400">{picked.text}</p>}
             </label>
           )
         })}
       </div>
+
+      <Button
+        variant={claim.ready ? 'default' : 'gold'}
+        className="mt-5 w-full py-3 text-lg"
+        disabled={!claimReady(claim, cards.powers)}
+        onClick={() => dispatch({ type: 'SET_LOBBY_READY', deviceId, ready: !claim.ready })}
+      >
+        {claim.ready ? '✓ Ready! (tap to change something)' : claimReady(claim, cards.powers) ? "I'm ready" : 'Choose every power to get ready'}
+      </Button>
     </section>
   )
 }
 
-export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watchOnly }) {
+export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watchOnly, onProjector, onLeaveProjector }) {
   const cards = useCards()
   const lobby = state.lobby ?? []
   const mine = lobby.find((c) => c.deviceId === deviceId)
-  const ready = cards.source !== 'loading' && lobby.length > 0 && lobby.every((c) => claimReady(c, cards.powers))
+  const ready = lobby.length > 0 && lobby.every((c) => c.ready)
 
   const claim = (template) => {
     dispatch({ type: 'CLAIM_HERO', deviceId, heroKey: template.key, picks: startingPicks(template, cards.powers) })
@@ -173,8 +185,8 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
               <span className="text-zinc-400">{template.className}</span>
               <span className="mt-1 block text-sm">
                 {taken ? (
-                  <span className={claimReady(owner, cards.powers) ? 'text-emerald-400' : 'text-amber-400'}>
-                    {owner.player || 'Another iPad'} · {claimReady(owner, cards.powers) ? 'ready' : 'choosing powers'}
+                  <span className={owner.ready ? 'text-emerald-400' : 'text-amber-400'}>
+                    {owner.player || 'Another iPad'} · {owner.ready ? 'ready' : 'choosing powers'}
                   </span>
                 ) : (
                   <span className="text-zinc-500">
@@ -188,17 +200,37 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
       </div>
 
       <div className="flex flex-col items-center gap-2">
-        <Button variant="gold" className="px-10 py-4 text-xl" disabled={!ready} onClick={() => dispatch({ type: 'START_GAME' })}>
-          Enter the dungeon
-        </Button>
+        {/* Only the projector starts the game, once every hero is ready. */}
+        {watchOnly && (
+          <Button variant="gold" className="px-10 py-4 text-xl" disabled={!ready} onClick={() => dispatch({ type: 'START_GAME' })}>
+            Enter the dungeon
+          </Button>
+        )}
         <p className="text-sm text-zinc-500">
           {lobby.length === 0
             ? 'Each player picks a hero on their own iPad.'
             : ready
-              ? `Turn order: ${lobby.map((c) => templateFor(c.heroKey).name).join(', ')}.`
-              : 'Waiting for every hero to choose their powers.'}
+              ? `Everyone's ready! Turn order: ${lobby.map((c) => templateFor(c.heroKey).name).join(', ')}.`
+              : 'Waiting for every hero to be ready.'}
+          {!watchOnly && lobby.length > 0 && ' The projector starts the game.'}
         </p>
       </div>
+
+      {watchOnly ? (
+        <p className="text-center text-sm">
+          <button type="button" className="text-zinc-600 underline" onClick={onLeaveProjector}>
+            Use this screen for a hero instead
+          </button>
+        </p>
+      ) : (
+        !mine && (
+          <p className="text-center text-sm">
+            <button type="button" className="font-semibold text-amber-400 underline" onClick={onProjector}>
+              Use this screen as the projector
+            </button>
+          </p>
+        )
+      )}
 
       {!watchOnly && (
         <p className="text-center text-sm text-zinc-500">

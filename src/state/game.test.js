@@ -173,7 +173,13 @@ describe('hero lobby', () => {
     })
     state = gameReducer(state, { type: 'CLAIM_HERO', deviceId: 'b', heroKey: 'rogue' })
     state = gameReducer(state, { type: 'SET_LOBBY_PLAYER', deviceId: 'a', player: 'Dad' })
+    state = gameReducer(state, { type: 'SET_LOBBY_READY', deviceId: 'a', ready: true })
+    state = gameReducer(state, { type: 'SET_LOBBY_READY', deviceId: 'b', ready: true })
+    // Changing a power after getting ready takes the hero out of ready.
     state = gameReducer(state, { type: 'SET_LOBBY_PICK', deviceId: 'a', slot: 1, card: card('two', 'at-will') })
+    expect(state.lobby[0].ready).toBe(false)
+    expect(gameReducer(state, { type: 'START_GAME' })).toBe(state)
+    state = gameReducer(state, { type: 'SET_LOBBY_READY', deviceId: 'a', ready: true })
     state = gameReducer(state, { type: 'START_GAME' })
 
     expect(state.status).toBe('playing')

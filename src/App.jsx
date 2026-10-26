@@ -226,6 +226,8 @@ export default function App() {
           onClaim={setSeat}
           onDemo={() => dispatch({ type: 'START_DEMO' })}
           watchOnly={seat === PROJECTOR_SEAT}
+          onProjector={() => setSeat(PROJECTOR_SEAT)}
+          onLeaveProjector={() => setSeat(null)}
         />
       </main>
     )

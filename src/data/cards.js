@@ -1,5 +1,10 @@
 import { HERO_TEMPLATES } from './heroes.js'
 
+// "Attack +8 · Damage 1", to compare cards while choosing.
+export function cardStats(card) {
+  return [card?.attack && `Attack ${card.attack}`, card?.damage && `Damage ${card.damage}`].filter(Boolean).join(' · ')
+}
+
 export const POWER_TYPES = ['at-will', 'utility', 'daily']
 const HERO_KEYS = HERO_TEMPLATES.map((t) => t.key)
 

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { cardStats } from '../data/cards.js'
 import { useCards } from '../state/useCards.js'
 import { Button } from './ui.jsx'
 
@@ -72,6 +73,7 @@ function PowerPicker({ hero, power, options, dispatch }) {
       {options.map((card) => (
         <option key={card.id} value={card.id}>
           {card.name}
+          {cardStats(card) && ` (${cardStats(card)})`}
         </option>
       ))}
     </select>

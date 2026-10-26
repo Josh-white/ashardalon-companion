@@ -25,7 +25,7 @@ export const initialState = {
   log: [],
   moment: null, // the latest big moment, shown on every screen for a few seconds
   // Before the game starts, each iPad claims one hero and picks its powers here.
-  lobby: [], // { deviceId, heroKey, player, picks: [card | null] per power slot }
+  lobby: [], // { deviceId, heroKey, player, picks: [card | null] per power slot, ready }
 }
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
@@ -122,6 +122,8 @@ export function gameReducer(state, action) {
 
     case 'START_GAME': {
       // Without a hero list, the heroes come from the lobby.
+      // Everyone in the lobby has to be ready first.
+      if (!action.heroes && !(state.lobby ?? []).every((c) => c.ready)) return state
       const heroes = action.heroes ?? heroesFromLobby(state.lobby ?? [])
       if (state.status !== 'setup' || heroes.length === 0) return state
       const started = { ...initialState, status: 'playing', heroes }
@@ -137,7 +139,7 @@ export function gameReducer(state, action) {
       const previous = lobby.find((c) => c.deviceId === action.deviceId)
       const slots = powerSlotsFor(template)
       const picks = slots.map((_, i) => copyCard(action.picks?.[i]))
-      const claim = { deviceId: action.deviceId, heroKey: template.key, player: previous?.player ?? '', picks }
+      const claim = { deviceId: action.deviceId, heroKey: template.key, player: previous?.player ?? '', picks, ready: false }
       return { ...state, lobby: [...lobby.filter((c) => c.deviceId !== action.deviceId), claim] }
     }
 
@@ -150,7 +152,11 @@ export function gameReducer(state, action) {
     case 'SET_LOBBY_PICK':
       return updateClaim(state, action.deviceId, (claim) => ({
         picks: claim.picks.map((card, i) => (i === action.slot ? copyCard(action.card) : card)),
+        ready: false,
       }))
+
+    case 'SET_LOBBY_READY':
+      return updateClaim(state, action.deviceId, () => ({ ready: Boolean(action.ready) }))
 
     case 'START_DEMO': {
       // A game already in progress, for trying features without setting one up:
