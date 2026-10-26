@@ -8,6 +8,8 @@ services:
     volumes:
       # The current game is saved here, so it survives restarts and updates.
       - game-data:/data
+      # Your own power cards (cards/cards.json) stay on the Pi, outside git.
+      - ./cards:/app/cards:ro
     restart: unless-stopped
 
 volumes:

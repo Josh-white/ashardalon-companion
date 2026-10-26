@@ -43,6 +43,13 @@ const updateMonster = (state, monsterId, change) => ({
 
 const toggle = (list, item) => (list.includes(item) ? list.filter((x) => x !== item) : [...list, item])
 
+// Each hero starts with two at-will powers, one utility, and one daily.
+export const STARTING_POWER_SLOTS = ['at-will', 'at-will', 'utility', 'daily']
+
+const POWER_LABELS = { 'at-will': 'At-will power', utility: 'Utility power', daily: 'Daily power' }
+
+const newPower = (type, name = POWER_LABELS[type] ?? 'Power') => ({ id: newId('power'), type, name, used: false, card: null })
+
 export function createHero(template, overrides = {}) {
   const hero = { ...template, ...overrides }
   return {
@@ -58,10 +65,7 @@ export function createHero(template, overrides = {}) {
     speed: hero.speed,
     level: 1,
     conditions: [],
-    powers: [
-      { id: newId('power'), type: 'daily', name: 'Daily power', used: false },
-      { id: newId('power'), type: 'utility', name: 'Utility power', used: false },
-    ],
+    powers: STARTING_POWER_SLOTS.map((type) => newPower(type)),
   }
 }
 
@@ -93,8 +97,28 @@ export function gameReducer(state, action) {
 
     case 'TOGGLE_POWER':
       return updateHero(state, action.heroId, (hero) => ({
-        powers: hero.powers.map((p) => (p.id === action.powerId ? { ...p, used: !p.used } : p)),
+        powers: hero.powers.map((p) =>
+          p.id === action.powerId && p.type !== 'at-will' ? { ...p, used: !p.used } : p,
+        ),
       }))
+
+    case 'SET_POWER_CARD': {
+      // The card is copied into the game, so later edits to the card file don't change a game in progress.
+      const card = action.card
+        ? {
+            id: String(action.card.id),
+            name: String(action.card.name),
+            text: String(action.card.text ?? ''),
+            attack: action.card.attack ? String(action.card.attack) : '',
+            damage: action.card.damage ? String(action.card.damage) : '',
+          }
+        : null
+      return updateHero(state, action.heroId, (hero) => ({
+        powers: hero.powers.map((p) =>
+          p.id === action.powerId ? { ...p, card, name: card ? card.name : POWER_LABELS[p.type] ?? 'Power' } : p,
+        ),
+      }))
+    }
 
     case 'RENAME_POWER':
       return updateHero(state, action.heroId, (hero) => ({
@@ -103,7 +127,7 @@ export function gameReducer(state, action) {
 
     case 'ADD_POWER':
       return updateHero(state, action.heroId, (hero) => ({
-        powers: [...hero.powers, { id: newId('power'), type: action.powerType, name: action.name, used: false }],
+        powers: [...hero.powers, newPower(action.powerType, action.name)],
       }))
 
     case 'TOGGLE_HERO_CONDITION':
