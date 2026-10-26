@@ -33,6 +33,10 @@ export function normalizeCardFile(data) {
       attack: typeof card.attack === 'string' ? card.attack : '',
       damage: typeof card.damage === 'string' ? card.damage : '',
       text: typeof card.text === 'string' ? card.text : '',
+      // Filled in on the setup screen: "always" cards are fixed (Keyleth's Lay on Hands),
+      // "suggested" ones are the rulebook's picks and can be swapped.
+      always: card.always === true,
+      suggested: card.suggested === true,
     })
   })
   return { powers, abilities: normalizeAbilities(data?.heroes, problems), problems }

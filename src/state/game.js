@@ -24,6 +24,8 @@ export const initialState = {
   turn: { heroIndex: 0, phase: 0, round: 1 },
   log: [],
   moment: null, // the latest big moment, shown on every screen for a few seconds
+  // Before the game starts, each iPad claims one hero and picks its powers here.
+  lobby: [], // { deviceId, heroKey, player, picks: [card | null] per power slot }
 }
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
@@ -57,6 +59,39 @@ const toggle = (list, item) => (list.includes(item) ? list.filter((x) => x !== i
 // Each hero starts with two at-will powers, one utility, and one daily.
 export const STARTING_POWER_SLOTS = ['at-will', 'at-will', 'utility', 'daily']
 
+export const powerSlotsFor = (template) => template.powerSlots ?? STARTING_POWER_SLOTS
+
+// The card is copied into the game, so later edits to the card file don't change a game in progress.
+const copyCard = (card) =>
+  card
+    ? {
+        id: String(card.id),
+        name: String(card.name),
+        text: String(card.text ?? ''),
+        attack: card.attack ? String(card.attack) : '',
+        damage: card.damage ? String(card.damage) : '',
+      }
+    : null
+
+const updateClaim = (state, deviceId, change) => ({
+  ...state,
+  lobby: (state.lobby ?? []).map((claim) => (claim.deviceId === deviceId ? { ...claim, ...change(claim) } : claim)),
+})
+
+// Turns the lobby into heroes, in the order they were claimed.
+function heroesFromLobby(lobby) {
+  return lobby.flatMap((claim) => {
+    const template = HERO_TEMPLATES.find((t) => t.key === claim.heroKey)
+    if (!template) return []
+    const hero = createHero(template)
+    const powers = hero.powers.map((power, i) => {
+      const card = claim.picks[i]
+      return card ? { ...power, name: card.name, card } : power
+    })
+    return [{ ...hero, player: claim.player, powers }]
+  })
+}
+
 const POWER_LABELS = { 'at-will': 'At-will power', utility: 'Utility power', daily: 'Daily power' }
 
 const newPower = (type, name = POWER_LABELS[type] ?? 'Power') => ({ id: newId('power'), type, name, used: false, card: null })
@@ -76,7 +111,7 @@ export function createHero(template, overrides = {}) {
     speed: hero.speed,
     level: 1,
     conditions: [],
-    powers: (hero.powerSlots ?? STARTING_POWER_SLOTS).map((type) => newPower(type)),
+    powers: powerSlotsFor(hero).map((type) => newPower(type)),
   }
 }
 
@@ -86,10 +121,36 @@ export function gameReducer(state, action) {
       return initialState
 
     case 'START_GAME': {
-      if (action.heroes.length === 0) return state
-      const started = { ...initialState, status: 'playing', heroes: action.heroes }
-      return withLog(started, `The adventure begins with ${action.heroes.map((h) => h.name).join(', ')}.`)
+      // Without a hero list, the heroes come from the lobby.
+      const heroes = action.heroes ?? heroesFromLobby(state.lobby ?? [])
+      if (state.status !== 'setup' || heroes.length === 0) return state
+      const started = { ...initialState, status: 'playing', heroes }
+      return withLog(started, `The adventure begins with ${heroes.map((h) => h.name).join(', ')}.`)
     }
+
+    case 'CLAIM_HERO': {
+      const template = HERO_TEMPLATES.find((t) => t.key === action.heroKey)
+      const lobby = state.lobby ?? []
+      if (state.status !== 'setup' || !template || !action.deviceId) return state
+      // One hero per iPad, and nobody can take a hero another iPad already has.
+      if (lobby.some((c) => c.heroKey === template.key && c.deviceId !== action.deviceId)) return state
+      const previous = lobby.find((c) => c.deviceId === action.deviceId)
+      const slots = powerSlotsFor(template)
+      const picks = slots.map((_, i) => copyCard(action.picks?.[i]))
+      const claim = { deviceId: action.deviceId, heroKey: template.key, player: previous?.player ?? '', picks }
+      return { ...state, lobby: [...lobby.filter((c) => c.deviceId !== action.deviceId), claim] }
+    }
+
+    case 'RELEASE_HERO':
+      return { ...state, lobby: (state.lobby ?? []).filter((c) => c.deviceId !== action.deviceId) }
+
+    case 'SET_LOBBY_PLAYER':
+      return updateClaim(state, action.deviceId, () => ({ player: String(action.player ?? '').slice(0, 40) }))
+
+    case 'SET_LOBBY_PICK':
+      return updateClaim(state, action.deviceId, (claim) => ({
+        picks: claim.picks.map((card, i) => (i === action.slot ? copyCard(action.card) : card)),
+      }))
 
     case 'START_DEMO': {
       // A game already in progress, for trying features without setting one up:
@@ -160,16 +221,7 @@ export function gameReducer(state, action) {
       }))
 
     case 'SET_POWER_CARD': {
-      // The card is copied into the game, so later edits to the card file don't change a game in progress.
-      const card = action.card
-        ? {
-            id: String(action.card.id),
-            name: String(action.card.name),
-            text: String(action.card.text ?? ''),
-            attack: action.card.attack ? String(action.card.attack) : '',
-            damage: action.card.damage ? String(action.card.damage) : '',
-          }
-        : null
+      const card = copyCard(action.card)
       return updateHero(state, action.heroId, (hero) => ({
         powers: hero.powers.map((p) =>
           p.id === action.powerId ? { ...p, card, name: card ? card.name : POWER_LABELS[p.type] ?? 'Power' } : p,

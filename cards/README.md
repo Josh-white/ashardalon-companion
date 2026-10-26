@@ -33,6 +33,8 @@ Changes show up the next time an iPad reloads the page; no restart needed. Cards
 - `hero`: `cleric`, `fighter`, `paladin`, `rogue`, or `wizard`.
 - `type`: `at-will`, `utility`, or `daily`.
 - `attack`, `damage`, `text`: optional, shown on the hero card.
+- `suggested`: optional, `true` for the rulebook's suggested picks. They're filled in on the setup screen, and players can swap them.
+- `always`: optional, `true` for a power the hero card always gives (Keyleth's Lay on Hands). It's filled in and can't be swapped.
 
 ### Hero abilities (optional)
 

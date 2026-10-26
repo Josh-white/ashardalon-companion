@@ -72,6 +72,8 @@ function serveStatic(staticDir, req, res) {
   createReadStream(file).pipe(res)
 }
 
+const NOT_UNDOABLE = new Set(['ROLL_DIE', 'CLAIM_HERO', 'RELEASE_HERO', 'SET_LOBBY_PLAYER', 'SET_LOBBY_PICK'])
+
 export function startServer({
   port = Number(process.env.PORT ?? 3000),
   saveFile = process.env.SAVE_FILE ?? join(ROOT, 'data', 'game.json'),
@@ -133,8 +135,9 @@ export function startServer({
       } else {
         const next = gameReducer(state, action)
         if (next === state) return
-        // Dice rolls can't be undone: no rerolling a bad roll.
-        if (action.type !== 'ROLL_DIE') {
+        // Dice rolls can't be undone (no rerolling a bad roll), and neither can
+        // picking heroes, since each iPad changes its own pick freely.
+        if (!NOT_UNDOABLE.has(action.type)) {
           history.push({ state, label: describeAction(state, action) })
           if (history.length > UNDO_LIMIT) history.shift()
         }
