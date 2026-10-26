@@ -25,4 +25,14 @@ describe('setup picks', () => {
     expect(claimReady({ heroKey: 'paladin', picks: full }, cards)).toBe(true)
     expect(claimReady({ heroKey: 'rogue', picks: [null, null, null, null] }, cards)).toBe(true)
   })
+
+  it('gives Heskan two daily slots, one for Hurled Breath', () => {
+    const wizard = HERO_TEMPLATES.find((t) => t.key === 'wizard')
+    const wizardCards = [
+      { id: 'breath', hero: 'wizard', type: 'daily', always: true },
+      { id: 'ram', hero: 'wizard', type: 'daily', suggested: true },
+      { id: 'invis', hero: 'wizard', type: 'utility', suggested: true },
+    ]
+    expect(startingPicks(wizard, wizardCards).map((c) => c?.id ?? null)).toEqual([null, null, 'invis', 'breath', 'ram'])
+  })
 })
