@@ -6,8 +6,7 @@ import {
 } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
 
-export const SAVE_KEY = 'ashardalon-companion/game'
-const SAVE_VERSION = 1
+export const SAVE_VERSION = 1
 
 let idCounter = 0
 const newId = (prefix) => `${prefix}-${Date.now().toString(36)}-${(idCounter++).toString(36)}`
@@ -195,23 +194,5 @@ export function gameReducer(state, action) {
 
     default:
       return state
-  }
-}
-
-export function loadGame(storage = globalThis.localStorage) {
-  try {
-    const saved = JSON.parse(storage.getItem(SAVE_KEY))
-    if (saved && saved.version === SAVE_VERSION) return saved
-  } catch {
-    // A missing or broken save starts a fresh game.
-  }
-  return initialState
-}
-
-export function saveGame(state, storage = globalThis.localStorage) {
-  try {
-    storage.setItem(SAVE_KEY, JSON.stringify(state))
-  } catch {
-    // Private browsing can block storage; the game still works without saving.
   }
 }

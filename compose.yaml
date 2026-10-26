@@ -4,5 +4,11 @@ services:
     image: ashardalon-companion
     container_name: ashardalon-companion
     ports:
-      - "8081:80"
+      - "8081:3000"
+    volumes:
+      # The current game is saved here, so it survives restarts and updates.
+      - game-data:/data
     restart: unless-stopped
+
+volumes:
+  game-data:
