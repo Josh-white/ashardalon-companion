@@ -83,7 +83,14 @@ function PowerPicker({ hero, power, options, dispatch }) {
 export default function PowerList({ hero, dispatch }) {
   const [choosing, setChoosing] = useState(false)
   const cards = useCards()
-  const optionsFor = (type) => cards.powers.filter((c) => c.hero === hero.key && c.type === type)
+  // A card picked in another slot isn't offered again.
+  const optionsFor = (power) =>
+    cards.powers.filter(
+      (c) =>
+        c.hero === hero.key &&
+        c.type === power.type &&
+        (c.id === power.card?.id || !hero.powers.some((p) => p.card?.id === c.id)),
+    )
 
   if (choosing) {
     return (
@@ -91,7 +98,7 @@ export default function PowerList({ hero, dispatch }) {
         {hero.powers.map((power) => (
           <label key={power.id} className="block text-xs uppercase tracking-wide text-amber-500/80">
             {power.type}
-            <PowerPicker hero={hero} power={power} options={optionsFor(power.type)} dispatch={dispatch} />
+            <PowerPicker hero={hero} power={power} options={optionsFor(power)} dispatch={dispatch} />
           </label>
         ))}
         {cards.source === 'example' && (

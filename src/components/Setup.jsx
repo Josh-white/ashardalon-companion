@@ -26,6 +26,9 @@ const powersChosen = (claim, cards) =>
     (type, i) => claim.picks[i] || !cards.some((c) => c.hero === claim.heroKey && c.type === type),
   )
 
+// Starting picks for every hero, for a demo game.
+export const demoPicks = (cards) => Object.fromEntries(HERO_TEMPLATES.map((t) => [t.key, startingPicks(t, cards)]))
+
 // A claim can get ready once the player has typed a name and every slot that has
 // cards to choose from has one picked.
 export function claimReady(claim, cards) {
@@ -248,7 +251,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
       {!watchOnly && (
         <p className="text-center text-sm text-zinc-500">
           Just trying things out?{' '}
-          <button type="button" className="font-semibold text-amber-400 underline" onClick={onDemo}>
+          <button type="button" className="font-semibold text-amber-400 underline" onClick={() => onDemo(demoPicks(cards.powers))}>
             Start a demo game
           </button>{' '}
           with all five heroes and a few monsters.

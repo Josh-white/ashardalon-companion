@@ -63,6 +63,17 @@ describe('powers', () => {
     state = gameReducer(state, { type: 'SET_POWER_CARD', heroId: hero.id, powerId: daily.id, card: null })
     expect(state.heroes[0].powers[4]).toMatchObject({ name: 'Daily power', card: null })
   })
+
+  it("won't put the same card in two of a hero's slots", () => {
+    let state = startGame()
+    const hero = state.heroes[0]
+    const [first, second] = hero.powers
+    const card = { id: 'strike', name: 'Holy Strike' }
+    state = gameReducer(state, { type: 'SET_POWER_CARD', heroId: hero.id, powerId: first.id, card })
+    expect(gameReducer(state, { type: 'SET_POWER_CARD', heroId: hero.id, powerId: second.id, card })).toBe(state)
+    // Picking it again for the slot that already has it is fine.
+    expect(gameReducer(state, { type: 'SET_POWER_CARD', heroId: hero.id, powerId: first.id, card }).heroes[0].powers[0].name).toBe('Holy Strike')
+  })
 })
 
 describe('big moments', () => {
@@ -145,10 +156,24 @@ describe('START_DEMO', () => {
     expect(state.monsters.every((m) => state.heroes.some((h) => h.id === m.ownerId))).toBe(true)
     expect(state.xp).toBe(3)
   })
+
+  it('gives each hero the starting cards it is handed', () => {
+    const picks = { cleric: [{ id: 'flame', name: 'Sacred Flame', type: 'at-will' }] }
+    const state = gameReducer(initialState, { type: 'START_DEMO', picks })
+    const quinn = state.heroes.find((h) => h.key === 'cleric')
+    expect(quinn.powers[0]).toMatchObject({ name: 'Sacred Flame', card: { id: 'flame' } })
+    expect(quinn.powers[1].card).toBe(null)
+  })
 })
 
 describe('hero lobby', () => {
   const card = (id, type) => ({ id, hero: 'paladin', type, name: id, text: `${id} text` })
+
+  it("won't pick the same card for two lobby slots", () => {
+    let state = gameReducer(initialState, { type: 'CLAIM_HERO', deviceId: 'a', heroKey: 'paladin' })
+    state = gameReducer(state, { type: 'SET_LOBBY_PICK', deviceId: 'a', slot: 0, card: card('one', 'at-will') })
+    expect(gameReducer(state, { type: 'SET_LOBBY_PICK', deviceId: 'a', slot: 1, card: card('one', 'at-will') })).toBe(state)
+  })
 
   it('lets each iPad claim one hero that no other iPad can take', () => {
     let state = gameReducer(initialState, { type: 'CLAIM_HERO', deviceId: 'a', heroKey: 'paladin' })
