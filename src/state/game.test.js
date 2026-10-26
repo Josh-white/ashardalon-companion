@@ -45,28 +45,23 @@ describe('heroes', () => {
 })
 
 describe('powers', () => {
-  it('starts each hero with two at-wills, a utility, and a daily', () => {
-    expect(startGame().heroes[0].powers.map((p) => p.type)).toEqual(['at-will', 'at-will', 'utility', 'daily'])
-  })
-
-  it('gives Keyleth an extra utility slot for Lay on Hands', () => {
-    const paladin = HERO_TEMPLATES.find((t) => t.key === 'paladin')
-    expect(createHero(paladin).powers.map((p) => p.type)).toEqual(['at-will', 'at-will', 'utility', 'utility', 'daily'])
+  it('starts each hero with two at-wills, two utilities, and a daily', () => {
+    expect(startGame().heroes[0].powers.map((p) => p.type)).toEqual(['at-will', 'at-will', 'utility', 'utility', 'daily'])
   })
 
   it('picks a card for a slot and never marks at-wills as used', () => {
     let state = startGame()
     const hero = state.heroes[0]
-    const [atWill, , , daily] = hero.powers
+    const [atWill, , , , daily] = hero.powers
     const card = { id: 'x', name: 'Holy Strike', text: 'Smite!', attack: '+6', damage: '1' }
     state = gameReducer(state, { type: 'SET_POWER_CARD', heroId: hero.id, powerId: daily.id, card })
     state = gameReducer(state, { type: 'TOGGLE_POWER', heroId: hero.id, powerId: daily.id })
     state = gameReducer(state, { type: 'TOGGLE_POWER', heroId: hero.id, powerId: atWill.id })
     const powers = state.heroes[0].powers
-    expect(powers[3]).toMatchObject({ name: 'Holy Strike', used: true, card: { text: 'Smite!' } })
+    expect(powers[4]).toMatchObject({ name: 'Holy Strike', used: true, card: { text: 'Smite!' } })
     expect(powers[0].used).toBe(false)
     state = gameReducer(state, { type: 'SET_POWER_CARD', heroId: hero.id, powerId: daily.id, card: null })
-    expect(state.heroes[0].powers[3]).toMatchObject({ name: 'Daily power', card: null })
+    expect(state.heroes[0].powers[4]).toMatchObject({ name: 'Daily power', card: null })
   })
 })
 
