@@ -19,7 +19,7 @@ cd ashardalon-companion
 docker compose up -d --build
 ```
 
-Then open `http://piserver.local:8080` on any device on your network. Change the left side of `8080:80` in `compose.yaml` if that port is taken.
+Then open `http://piserver.local:8081` on any device on your network. Change the left side of `8081:80` in `compose.yaml` if that port is taken.
 
 To update after pulling new changes: `git pull && docker compose up -d --build`.
 

@@ -4,5 +4,5 @@ services:
     image: ashardalon-companion
     container_name: ashardalon-companion
     ports:
-      - "8080:80"
+      - "8081:80"
     restart: unless-stopped
