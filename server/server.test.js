@@ -11,9 +11,11 @@ import { loadCards, loadSavedGame, startServer } from './server.js'
 function connect(port) {
   const socket = new WebSocket(`ws://localhost:${port}/ws`)
   const states = []
+  const messages = []
   const waiters = []
   socket.on('message', (raw) => {
     const message = JSON.parse(raw)
+    messages.push(message)
     states.push(message.state)
     waiters.splice(0).forEach((resolve) => resolve())
   })
@@ -23,7 +25,7 @@ function connect(port) {
       check()
     })
   const send = (action) => socket.send(JSON.stringify({ type: 'action', action }))
-  return { socket, nextState, send }
+  return { socket, nextState, send, messages }
 }
 
 describe('sync server', () => {
@@ -56,6 +58,40 @@ describe('sync server', () => {
 
     const saved = JSON.parse(readFileSync(join(dir, 'game.json'), 'utf8'))
     expect(saved.heroes[0].hp).toBe(HERO_TEMPLATES[0].maxHp - 3)
+    dad.socket.close()
+    son.socket.close()
+  })
+
+  it('undoes the last change for everyone, but never a dice roll', async () => {
+    const dad = connect(server.port)
+    const son = connect(server.port)
+    await dad.nextState(1)
+    await son.nextState(1)
+    dad.send({ type: 'START_GAME', heroes: [createHero(HERO_TEMPLATES[2])] })
+    const started = await son.nextState(2)
+    const heroId = started.heroes[0].id
+
+    son.send({ type: 'ADJUST_HP', heroId, amount: -2 })
+    await dad.nextState(3)
+    expect(dad.messages[2].undo).toBe('Keyleth −2 HP')
+
+    son.send({ type: 'ROLL_DIE', heroId, value: 7 })
+    await dad.nextState(4)
+    expect(dad.messages[3].undo).toBe('Keyleth −2 HP')
+
+    // Dad and Sam both tap Undo at once: only one change comes back.
+    dad.send({ type: 'UNDO', depth: dad.messages[3].undoDepth })
+    son.send({ type: 'UNDO', depth: dad.messages[3].undoDepth })
+    const undone = await son.nextState(5)
+    expect(undone.heroes[0].hp).toBe(HERO_TEMPLATES[2].maxHp)
+    expect(undone.moment).toBeNull()
+    expect(son.messages[4].undo).toBe('Starting the game')
+
+    await new Promise((r) => setTimeout(r, 100))
+    expect(son.messages).toHaveLength(5)
+    dad.send({ type: 'UNDO', depth: son.messages[4].undoDepth })
+    expect((await son.nextState(6)).status).toBe('setup')
+    expect(son.messages[5].undo).toBeNull()
     dad.socket.close()
     son.socket.close()
   })

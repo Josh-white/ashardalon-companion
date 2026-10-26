@@ -6,9 +6,14 @@ import { dirname, extname, join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer } from 'ws'
 import { normalizeCardFile } from '../src/data/cards.js'
+import { describeAction } from '../src/state/describeAction.js'
 import { gameReducer, initialState, SAVE_VERSION } from '../src/state/game.js'
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
+
+// How many changes Undo can step back through. Kept in memory only, so a
+// restart of the server starts with nothing to undo.
+export const UNDO_LIMIT = 30
 
 const CONTENT_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -75,6 +80,8 @@ export function startServer({
   exampleCardsFile = join(ROOT, 'cards', 'cards.example.json'),
 } = {}) {
   let state = loadSavedGame(saveFile)
+  // Earlier versions of the game, newest last, each with what changed after it.
+  const history = []
 
   const server = createServer((req, res) => {
     if (req.url === '/health') {
@@ -92,15 +99,18 @@ export function startServer({
 
   const wss = new WebSocketServer({ server, path: '/ws' })
 
+  const stateMessage = () =>
+    JSON.stringify({ type: 'state', state, undo: history.at(-1)?.label ?? null, undoDepth: history.length })
+
   const broadcast = () => {
-    const message = JSON.stringify({ type: 'state', state })
+    const message = stateMessage()
     for (const client of wss.clients) {
       if (client.readyState === client.OPEN) client.send(message)
     }
   }
 
   wss.on('connection', (socket) => {
-    socket.send(JSON.stringify({ type: 'state', state }))
+    socket.send(stateMessage())
     socket.on('message', (raw) => {
       let message
       try {
@@ -109,9 +119,25 @@ export function startServer({
         return
       }
       if (message?.type !== 'action' || typeof message.action?.type !== 'string') return
-      const next = gameReducer(state, message.action)
-      if (next === state) return
-      state = next
+      const action = message.action
+      if (action.type === 'UNDO') {
+        // Two people tapping Undo at once both saw the same history depth; only
+        // the first tap counts, so one tap never undoes two changes.
+        if (action.depth !== history.length) return
+        const previous = history.pop()
+        if (!previous) return
+        // Clear the moment so screens don't replay an old celebration.
+        state = { ...previous.state, moment: null }
+      } else {
+        const next = gameReducer(state, action)
+        if (next === state) return
+        // Dice rolls can't be undone: no rerolling a bad roll.
+        if (action.type !== 'ROLL_DIE') {
+          history.push({ state, label: describeAction(state, action) })
+          if (history.length > UNDO_LIMIT) history.shift()
+        }
+        state = next
+      }
       try {
         writeSave(saveFile, state)
       } catch (error) {
