@@ -78,6 +78,8 @@ export function startServer({
   staticDir = join(ROOT, 'dist'),
   cardsFile = process.env.CARDS_FILE ?? join(ROOT, 'cards', 'cards.json'),
   exampleCardsFile = join(ROOT, 'cards', 'cards.example.json'),
+  // Set on the test copy so every screen shows it isn't the real game.
+  instance = process.env.INSTANCE_LABEL || null,
 } = {}) {
   let state = loadSavedGame(saveFile)
   // Earlier versions of the game, newest last, each with what changed after it.
@@ -100,7 +102,7 @@ export function startServer({
   const wss = new WebSocketServer({ server, path: '/ws' })
 
   const stateMessage = () =>
-    JSON.stringify({ type: 'state', state, undo: history.at(-1)?.label ?? null, undoDepth: history.length })
+    JSON.stringify({ type: 'state', state, undo: history.at(-1)?.label ?? null, undoDepth: history.length, instance })
 
   const broadcast = () => {
     const message = stateMessage()

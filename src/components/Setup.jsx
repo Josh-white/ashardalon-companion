@@ -3,7 +3,7 @@ import { HERO_COLORS, HERO_TEMPLATES } from '../data/heroes.js'
 import { createHero } from '../state/game.js'
 import { Button, Stepper } from './ui.jsx'
 
-export default function Setup({ onStart }) {
+export default function Setup({ onStart, onDemo }) {
   const [picked, setPicked] = useState([])
   const [stats, setStats] = useState(() =>
     Object.fromEntries(HERO_TEMPLATES.map((t) => [t.key, { maxHp: t.maxHp, ac: t.ac, surgeValue: t.surgeValue }])),
@@ -84,6 +84,13 @@ export default function Setup({ onStart }) {
           Enter the dungeon
         </Button>
       </div>
+      <p className="mt-6 text-center text-sm text-zinc-500">
+        Just trying things out?{' '}
+        <button type="button" className="font-semibold text-amber-400 underline" onClick={onDemo}>
+          Start a demo game
+        </button>{' '}
+        with all five heroes and a few monsters.
+      </p>
     </div>
   )
 }

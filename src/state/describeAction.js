@@ -41,6 +41,8 @@ export function describeAction(state, action) {
     case 'NEXT_PHASE':
     case 'PREVIOUS_PHASE':
       return 'Changing the phase'
+    case 'START_DEMO':
+      return 'Demo game'
     case 'START_GAME':
       return 'Starting the game'
     case 'NEW_GAME':

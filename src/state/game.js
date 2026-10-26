@@ -1,4 +1,5 @@
 import {
+  HERO_TEMPLATES,
   LEVEL_UP_HP_BONUS,
   STARTING_SURGES,
   XP_TO_CANCEL_ENCOUNTER,
@@ -86,6 +87,26 @@ export function gameReducer(state, action) {
       if (action.heroes.length === 0) return state
       const started = { ...initialState, status: 'playing', heroes: action.heroes }
       return withLog(started, `The adventure begins with ${action.heroes.map((h) => h.name).join(', ')}.`)
+    }
+
+    case 'START_DEMO': {
+      // A game already in progress, for trying features without setting one up:
+      // every hero, a few monsters, some XP, and a hero with a condition.
+      const heroes = HERO_TEMPLATES.map((t) => ({ ...createHero(t), player: '' }))
+      heroes[1] = { ...heroes[1], hp: heroes[1].maxHp - 3 }
+      heroes[3] = { ...heroes[3], conditions: ['Poisoned'] }
+      const monster = (name, hp, xp, owner) => ({
+        id: newId('monster'), name, maxHp: hp, hp, xp, ownerId: heroes[owner].id, conditions: [],
+      })
+      const demo = {
+        ...initialState,
+        status: 'playing',
+        heroes,
+        monsters: [monster('Kobold Dragonshield', 2, 1, 0), monster('Orc Smasher', 2, 2, 2), monster('Grell', 2, 2, 4)],
+        xp: 3,
+        turn: { ...initialState.turn, round: 2 },
+      }
+      return withLog(demo, 'A demo game begins. Nothing here is your real game.')
     }
 
     case 'ADJUST_HP': {

@@ -189,27 +189,36 @@ function Connecting() {
 }
 
 export default function App() {
-  const { state, connected, dispatch, undo, undoDepth } = useSharedGame()
+  const { state, connected, dispatch, undo, undoDepth, instance } = useSharedGame()
   const [seat, setSeat] = useSeat()
 
   if (!state) return <Connecting />
 
-  const offline = !connected && (
-    <p className="sticky top-0 z-30 bg-amber-600 px-4 py-1 text-center text-sm font-semibold text-zinc-950">
-      Reconnecting to the game… changes won't be saved until it's back.
-    </p>
+  const banners = (
+    <>
+      {instance && (
+        <p className="bg-fuchsia-700 px-4 py-1 text-center text-sm font-bold uppercase tracking-widest text-white">
+          {instance} · not your real game
+        </p>
+      )}
+      {!connected && (
+        <p className="sticky top-0 z-30 bg-amber-600 px-4 py-1 text-center text-sm font-semibold text-zinc-950">
+          Reconnecting to the game… changes won't be saved until it's back.
+        </p>
+      )}
+    </>
   )
 
   if (state.status === 'setup') {
     return (
       <main className="min-h-screen bg-zinc-950 text-zinc-100">
-        {offline}
+        {banners}
         {undo === 'New game' && (
           <div className="pt-4 text-center">
             <UndoButton undo={undo} depth={undoDepth} dispatch={dispatch} className="border border-zinc-700" />
           </div>
         )}
-        <Setup onStart={(heroes) => dispatch({ type: 'START_GAME', heroes })} />
+        <Setup onStart={(heroes) => dispatch({ type: 'START_GAME', heroes })} onDemo={() => dispatch({ type: 'START_DEMO' })} />
       </main>
     )
   }
@@ -218,7 +227,7 @@ export default function App() {
   if (seat === PROJECTOR_SEAT) {
     return (
       <main className="min-h-screen bg-zinc-950 text-zinc-100">
-        {offline}
+        {banners}
         <ProjectorView state={state} onSwitchSeat={() => setSeat(null)} />
         <MomentOverlay moment={state.moment} heroes={state.heroes} big />
         {(state.status === 'won' || state.status === 'lost') && <GameOver state={state} dispatch={dispatch} />}
@@ -228,7 +237,7 @@ export default function App() {
   if (seat !== TABLE_SEAT && !myHero) {
     return (
       <main className="min-h-screen bg-zinc-950 text-zinc-100">
-        {offline}
+        {banners}
         <SeatPicker heroes={state.heroes} onPick={setSeat} tableSeat={TABLE_SEAT} projectorSeat={PROJECTOR_SEAT} />
       </main>
     )
@@ -236,7 +245,7 @@ export default function App() {
 
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100">
-      {offline}
+      {banners}
       <PartyBar
         undo={undo}
         undoDepth={undoDepth}
