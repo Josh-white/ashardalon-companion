@@ -12,6 +12,7 @@ function socketUrl() {
 export function useSharedGame() {
   const [state, setState] = useState(null)
   const [connected, setConnected] = useState(false)
+  const [undo, setUndo] = useState(null)
   const socketRef = useRef(null)
 
   useEffect(() => {
@@ -24,7 +25,10 @@ export function useSharedGame() {
       socket.onopen = () => setConnected(true)
       socket.onmessage = (event) => {
         const message = JSON.parse(event.data)
-        if (message.type === 'state') setState(message.state)
+        if (message.type === 'state') {
+          setState(message.state)
+          setUndo(message.undo ?? null)
+        }
       }
       socket.onclose = () => {
         setConnected(false)
@@ -55,7 +59,7 @@ export function useSharedGame() {
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'action', action }))
   }, [])
 
-  return { state, connected, dispatch }
+  return { state, connected, dispatch, undo }
 }
 
 const SEAT_KEY = 'ashardalon-companion/seat'
