@@ -59,7 +59,7 @@ const toggle = (list, item) => (list.includes(item) ? list.filter((x) => x !== i
 // Each hero card names one power the hero always has (Keyleth's Lay on Hands, Tarak's
 // Furious Assault), plus 1 utility, 2 at-wills, and 1 daily to choose. Most fixed powers
 // are utilities. A template sets its own `powerSlots` when its fixed power is another
-// type (Heskan's Hurled Breath is a daily).
+// type (Heskan's Hurled Breath and Vistra's Dwarven Resilience are dailies).
 export const STARTING_POWER_SLOTS = ['at-will', 'at-will', 'utility', 'utility', 'daily']
 
 export const powerSlotsFor = (template) => template.powerSlots ?? STARTING_POWER_SLOTS
