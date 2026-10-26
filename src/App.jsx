@@ -142,11 +142,20 @@ function PartyStrip({ heroes, exceptId }) {
 function HeroView({ state, dispatch, hero }) {
   const heroIndex = state.heroes.indexOf(hero)
   const myTurn = heroIndex === state.turn.heroIndex
+  // During your Hero Phase the turn guide lists your powers, so the hero card doesn't repeat them.
+  const powersInTurnGuide = myTurn && PHASES[state.turn.phase].key === 'hero'
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4">
       {myTurn ? <TurnGuide state={state} dispatch={dispatch} /> : <WaitingBanner state={state} />}
       <DiceButton heroId={hero.id} dispatch={dispatch} className="w-full" />
-      <HeroCard hero={hero} isActive={myTurn} xp={state.xp} surges={state.surges} dispatch={dispatch} />
+      <HeroCard
+        hero={hero}
+        isActive={myTurn}
+        xp={state.xp}
+        surges={state.surges}
+        dispatch={dispatch}
+        powersInTurnGuide={powersInTurnGuide}
+      />
       <MonsterList state={state} dispatch={dispatch} ownerId={hero.id} />
       <PartyStrip heroes={state.heroes} exceptId={hero.id} />
       <GameLog log={state.log} />
@@ -170,6 +179,7 @@ function TableView({ state, dispatch }) {
               xp={state.xp}
               surges={state.surges}
               dispatch={dispatch}
+              powersInTurnGuide={i === state.turn.heroIndex && PHASES[state.turn.phase].key === 'hero'}
             />
           ))}
         </div>

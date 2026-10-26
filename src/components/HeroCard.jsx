@@ -3,7 +3,7 @@ import { useCards } from '../state/useCards.js'
 import PowerList from './PowerList.jsx'
 import { Button, Chip, HpBar } from './ui.jsx'
 
-export default function HeroCard({ hero, isActive, xp, surges, dispatch }) {
+export default function HeroCard({ hero, isActive, xp, surges, dispatch, powersInTurnGuide = false }) {
   const color = HERO_COLORS[hero.color]
   const down = hero.hp === 0
   const abilities = (useCards().abilities ?? []).filter((a) => a.hero === hero.key && a.level <= hero.level)
@@ -66,7 +66,7 @@ export default function HeroCard({ hero, isActive, xp, surges, dispatch }) {
         </div>
       )}
 
-      <PowerList hero={hero} dispatch={dispatch} />
+      <PowerList hero={hero} dispatch={dispatch} tilesHidden={powersInTurnGuide} />
 
       <div className="mt-3 flex flex-wrap gap-2">
         {CONDITIONS.map((condition) => (

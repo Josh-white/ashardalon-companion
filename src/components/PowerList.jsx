@@ -80,7 +80,8 @@ function PowerPicker({ hero, power, options, dispatch }) {
   )
 }
 
-export default function PowerList({ hero, dispatch }) {
+// tilesHidden: the turn guide is already showing this hero's powers, so only the button shows here.
+export default function PowerList({ hero, dispatch, tilesHidden = false }) {
   const [choosing, setChoosing] = useState(false)
   const cards = useCards()
   // A card picked in another slot isn't offered again.
@@ -129,15 +130,17 @@ export default function PowerList({ hero, dispatch }) {
 
   return (
     <div className="mt-4">
-      <div className="grid grid-cols-2 gap-2">
-        {hero.powers.map((power) => (
-          <PowerTile
-            key={power.id}
-            power={power}
-            onToggle={() => dispatch({ type: 'TOGGLE_POWER', heroId: hero.id, powerId: power.id })}
-          />
-        ))}
-      </div>
+      {!tilesHidden && (
+        <div className="grid grid-cols-2 gap-2">
+          {hero.powers.map((power) => (
+            <PowerTile
+              key={power.id}
+              power={power}
+              onToggle={() => dispatch({ type: 'TOGGLE_POWER', heroId: hero.id, powerId: power.id })}
+            />
+          ))}
+        </div>
+      )}
       <Button variant="ghost" className="mt-2 text-sm" onClick={() => setChoosing(true)}>
         Choose powers
       </Button>
