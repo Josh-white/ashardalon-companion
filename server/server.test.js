@@ -79,13 +79,17 @@ describe('sync server', () => {
     await dad.nextState(4)
     expect(dad.messages[3].undo).toBe('Keyleth −2 HP')
 
-    dad.send({ type: 'UNDO' })
+    // Dad and Sam both tap Undo at once: only one change comes back.
+    dad.send({ type: 'UNDO', depth: dad.messages[3].undoDepth })
+    son.send({ type: 'UNDO', depth: dad.messages[3].undoDepth })
     const undone = await son.nextState(5)
     expect(undone.heroes[0].hp).toBe(HERO_TEMPLATES[2].maxHp)
     expect(undone.moment).toBeNull()
     expect(son.messages[4].undo).toBe('Starting the game')
 
-    dad.send({ type: 'UNDO' })
+    await new Promise((r) => setTimeout(r, 100))
+    expect(son.messages).toHaveLength(5)
+    dad.send({ type: 'UNDO', depth: son.messages[4].undoDepth })
     expect((await son.nextState(6)).status).toBe('setup')
     expect(son.messages[5].undo).toBeNull()
     dad.socket.close()

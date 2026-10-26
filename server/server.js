@@ -99,7 +99,8 @@ export function startServer({
 
   const wss = new WebSocketServer({ server, path: '/ws' })
 
-  const stateMessage = () => JSON.stringify({ type: 'state', state, undo: history.at(-1)?.label ?? null })
+  const stateMessage = () =>
+    JSON.stringify({ type: 'state', state, undo: history.at(-1)?.label ?? null, undoDepth: history.length })
 
   const broadcast = () => {
     const message = stateMessage()
@@ -120,6 +121,9 @@ export function startServer({
       if (message?.type !== 'action' || typeof message.action?.type !== 'string') return
       const action = message.action
       if (action.type === 'UNDO') {
+        // Two people tapping Undo at once both saw the same history depth; only
+        // the first tap counts, so one tap never undoes two changes.
+        if (action.depth !== history.length) return
         const previous = history.pop()
         if (!previous) return
         // Clear the moment so screens don't replay an old celebration.
