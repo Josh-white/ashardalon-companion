@@ -1,9 +1,8 @@
 import { useState } from 'react'
 import { cardStats } from '../data/cards.js'
 import { useCards } from '../state/useCards.js'
-import { Button } from './ui.jsx'
 
-function PowerTile({ power, onToggle }) {
+export function PowerTile({ power, onToggle }) {
   const [open, setOpen] = useState(false)
   const card = power.card
   const usable = power.type !== 'at-will'
@@ -46,94 +45,62 @@ function PowerTile({ power, onToggle }) {
   )
 }
 
+// Powers are chosen in the lobby before the heroes enter the dungeon. The one pick made
+// during a game is the extra daily from leveling up, so only an empty slot gets a picker.
 function PowerPicker({ hero, power, options, dispatch }) {
-  if (options.length === 0) {
-    return (
-      <input
-        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-2 text-zinc-100"
-        value={power.name}
-        onChange={(e) => dispatch({ type: 'RENAME_POWER', heroId: hero.id, powerId: power.id, name: e.target.value })}
-      />
-    )
-  }
   return (
-    <select
-      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-2 text-zinc-100"
-      value={power.card?.id ?? ''}
-      onChange={(e) =>
-        dispatch({
-          type: 'SET_POWER_CARD',
-          heroId: hero.id,
-          powerId: power.id,
-          card: options.find((c) => c.id === e.target.value) ?? null,
-        })
-      }
-    >
-      <option value="">Pick {power.type === 'at-will' ? 'an' : 'a'} {power.type} power…</option>
-      {options.map((card) => (
-        <option key={card.id} value={card.id}>
-          {card.name}
-          {cardStats(card) && ` (${cardStats(card)})`}
-        </option>
-      ))}
-    </select>
+    <label className="block rounded-lg border border-amber-500 bg-zinc-950/60 px-3 py-2 text-xs uppercase tracking-wide text-amber-400">
+      New {power.type} power
+      <select
+        className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-2 text-sm normal-case tracking-normal text-zinc-100"
+        value=""
+        onChange={(e) =>
+          dispatch({
+            type: 'SET_POWER_CARD',
+            heroId: hero.id,
+            powerId: power.id,
+            card: options.find((c) => c.id === e.target.value) ?? null,
+          })
+        }
+      >
+        <option value="">Pick {power.type === 'at-will' ? 'an' : 'a'} {power.type} power…</option>
+        {options.map((card) => (
+          <option key={card.id} value={card.id}>
+            {card.name}
+            {cardStats(card) && ` (${cardStats(card)})`}
+          </option>
+        ))}
+      </select>
+    </label>
   )
 }
 
-export default function PowerList({ hero, dispatch }) {
-  const [choosing, setChoosing] = useState(false)
+// tilesHidden: the turn guide is already showing this hero's powers, so only an
+// empty slot's picker shows here.
+export default function PowerList({ hero, dispatch, tilesHidden = false }) {
   const cards = useCards()
-  const optionsFor = (type) => cards.powers.filter((c) => c.hero === hero.key && c.type === type)
-
-  if (choosing) {
-    return (
-      <div className="mt-4 space-y-2 rounded-xl bg-zinc-950/60 p-3">
-        {hero.powers.map((power) => (
-          <label key={power.id} className="block text-xs uppercase tracking-wide text-amber-500/80">
-            {power.type}
-            <PowerPicker hero={hero} power={power} options={optionsFor(power.type)} dispatch={dispatch} />
-          </label>
-        ))}
-        {cards.source === 'example' && (
-          <p className="text-xs text-zinc-500">These are placeholder cards. Add your own in cards/cards.json on the Pi.</p>
-        )}
-        {cards.problems.length > 0 && (
-          <ul className="list-disc pl-5 text-xs text-amber-400">
-            {cards.problems.map((problem) => (
-              <li key={problem}>{problem}</li>
-            ))}
-          </ul>
-        )}
-        <div className="flex flex-wrap gap-2 pt-1">
-          <Button variant="gold" className="text-sm" onClick={() => setChoosing(false)}>
-            Done
-          </Button>
-          <Button
-            variant="ghost"
-            className="text-sm"
-            onClick={() => dispatch({ type: 'ADD_POWER', heroId: hero.id, powerType: 'daily', name: 'Daily power' })}
-          >
-            + Daily power
-          </Button>
-        </div>
-      </div>
+  // A card picked in another slot isn't offered again.
+  const optionsFor = (power) =>
+    cards.powers.filter(
+      (c) => c.hero === hero.key && c.type === power.type && !hero.powers.some((p) => p.card?.id === c.id),
     )
-  }
+  const needsPick = (power) => !power.card && optionsFor(power).length > 0
+  const shown = hero.powers.filter((power) => !tilesHidden || needsPick(power))
+  if (shown.length === 0) return null
 
   return (
-    <div className="mt-4">
-      <div className="grid grid-cols-2 gap-2">
-        {hero.powers.map((power) => (
+    <div className="mt-4 grid grid-cols-2 gap-2">
+      {shown.map((power) =>
+        needsPick(power) ? (
+          <PowerPicker key={power.id} hero={hero} power={power} options={optionsFor(power)} dispatch={dispatch} />
+        ) : (
           <PowerTile
             key={power.id}
             power={power}
             onToggle={() => dispatch({ type: 'TOGGLE_POWER', heroId: hero.id, powerId: power.id })}
           />
-        ))}
-      </div>
-      <Button variant="ghost" className="mt-2 text-sm" onClick={() => setChoosing(true)}>
-        Choose powers
-      </Button>
+        ),
+      )}
     </div>
   )
 }

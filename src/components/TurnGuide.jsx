@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { HERO_COLORS, XP_TO_CANCEL_ENCOUNTER } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
+import { PowerTile } from './PowerList.jsx'
 import { Button } from './ui.jsx'
 
 export default function TurnGuide({ state, dispatch }) {
@@ -62,6 +63,25 @@ export default function TurnGuide({ state, dispatch }) {
           )
         })}
       </ul>
+
+      {/* The hero's chosen powers, right where the Hero Phase asks for an attack. Tap a
+          daily or utility to flip it over once it's used. */}
+      {current.key === 'hero' && hero.powers.length > 0 && (
+        <div className="mt-5">
+          <h3 className="font-display text-xl font-bold text-zinc-200">{hero.name}'s powers</h3>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {[...hero.powers]
+              .sort((a, b) => Number(a.used) - Number(b.used))
+              .map((power) => (
+                <PowerTile
+                  key={power.id}
+                  power={power}
+                  onToggle={() => dispatch({ type: 'TOGGLE_POWER', heroId: hero.id, powerId: power.id })}
+                />
+              ))}
+          </div>
+        </div>
+      )}
 
       {current.key === 'villain' && (
         <div className="mt-3">

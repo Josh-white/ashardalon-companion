@@ -82,16 +82,23 @@ const updateClaim = (state, deviceId, change) => ({
 })
 
 // Turns the lobby into heroes, in the order they were claimed.
+// Fills a new hero's power slots with picked cards, in slot order.
+const withPicks = (hero, picks = []) => ({
+  ...hero,
+  powers: hero.powers.map((power, i) => {
+    const card = copyCard(picks[i])
+    return card ? { ...power, name: card.name, card } : power
+  }),
+})
+
+// True when another slot already holds this card, so no hero gets the same power twice.
+const pickedElsewhere = (cards, slot, card) => Boolean(card) && cards.some((c, i) => i !== slot && c?.id === card.id)
+
 function heroesFromLobby(lobby) {
   return lobby.flatMap((claim) => {
     const template = HERO_TEMPLATES.find((t) => t.key === claim.heroKey)
     if (!template) return []
-    const hero = createHero(template)
-    const powers = hero.powers.map((power, i) => {
-      const card = claim.picks[i]
-      return card ? { ...power, name: card.name, card } : power
-    })
-    return [{ ...hero, player: claim.player, powers }]
+    return [{ ...withPicks(createHero(template), claim.picks), player: claim.player }]
   })
 }
 
@@ -150,21 +157,29 @@ export function gameReducer(state, action) {
       return { ...state, lobby: (state.lobby ?? []).filter((c) => c.deviceId !== action.deviceId) }
 
     case 'SET_LOBBY_PLAYER':
-      return updateClaim(state, action.deviceId, () => ({ player: String(action.player ?? '').slice(0, 40) }))
+      return updateClaim(state, action.deviceId, (claim) => {
+        const player = String(action.player ?? '').slice(0, 40)
+        // A player can't stay ready without a name; the turn screens greet them by it.
+        return { player, ready: claim.ready && player.trim() !== '' }
+      })
 
-    case 'SET_LOBBY_PICK':
+    case 'SET_LOBBY_PICK': {
+      const claim = (state.lobby ?? []).find((c) => c.deviceId === action.deviceId)
+      if (claim && pickedElsewhere(claim.picks, action.slot, action.card)) return state
       return updateClaim(state, action.deviceId, (claim) => ({
         picks: claim.picks.map((card, i) => (i === action.slot ? copyCard(action.card) : card)),
         ready: false,
       }))
+    }
 
     case 'SET_LOBBY_READY':
-      return updateClaim(state, action.deviceId, () => ({ ready: Boolean(action.ready) }))
+      return updateClaim(state, action.deviceId, (claim) => ({ ready: Boolean(action.ready) && claim.player.trim() !== '' }))
 
     case 'START_DEMO': {
       // A game already in progress, for trying features without setting one up:
       // every hero, a few monsters, some XP, and a hero with a condition.
-      const heroes = HERO_TEMPLATES.map((t) => ({ ...createHero(t), player: '' }))
+      // `picks` gives each hero's starting cards by hero key (the rulebook's suggestions).
+      const heroes = HERO_TEMPLATES.map((t) => ({ ...withPicks(createHero(t), action.picks?.[t.key]), player: '' }))
       heroes[1] = { ...heroes[1], hp: heroes[1].maxHp - 3 }
       heroes[3] = { ...heroes[3], conditions: ['Poisoned'] }
       const monster = (name, hp, xp, owner) => ({
@@ -230,6 +245,9 @@ export function gameReducer(state, action) {
       }))
 
     case 'SET_POWER_CARD': {
+      const hero = state.heroes.find((h) => h.id === action.heroId)
+      const slot = hero?.powers.findIndex((p) => p.id === action.powerId)
+      if (hero && pickedElsewhere(hero.powers.map((p) => p.card), slot, action.card)) return state
       const card = copyCard(action.card)
       return updateHero(state, action.heroId, (hero) => ({
         powers: hero.powers.map((p) =>

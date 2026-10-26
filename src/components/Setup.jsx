@@ -19,10 +19,20 @@ export function startingPicks(template, cards) {
   return picks
 }
 
-// A claim is ready when every slot that has cards to choose from has one picked.
+const hasName = (claim) => Boolean(claim.player?.trim())
+
+const powersChosen = (claim, cards) =>
+  powerSlotsFor(templateFor(claim.heroKey)).every(
+    (type, i) => claim.picks[i] || !cards.some((c) => c.hero === claim.heroKey && c.type === type),
+  )
+
+// Starting picks for every hero, for a demo game.
+export const demoPicks = (cards) => Object.fromEntries(HERO_TEMPLATES.map((t) => [t.key, startingPicks(t, cards)]))
+
+// A claim can get ready once the player has typed a name and every slot that has
+// cards to choose from has one picked.
 export function claimReady(claim, cards) {
-  const slots = powerSlotsFor(templateFor(claim.heroKey))
-  return slots.every((type, i) => claim.picks[i] || !cards.some((c) => c.hero === claim.heroKey && c.type === type))
+  return hasName(claim) && powersChosen(claim, cards)
 }
 
 function Stats({ template }) {
@@ -65,7 +75,7 @@ function MyHero({ claim, cards, deviceId, dispatch }) {
 
       <input
         className="mt-3 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
-        placeholder="Your name"
+        placeholder="Your name (needed to get ready)"
         value={claim.player}
         onChange={(e) => dispatch({ type: 'SET_LOBBY_PLAYER', deviceId, player: e.target.value })}
       />
@@ -136,7 +146,13 @@ function MyHero({ claim, cards, deviceId, dispatch }) {
         disabled={!claimReady(claim, cards.powers)}
         onClick={() => dispatch({ type: 'SET_LOBBY_READY', deviceId, ready: !claim.ready })}
       >
-        {claim.ready ? '✓ Ready! (tap to change something)' : claimReady(claim, cards.powers) ? "I'm ready" : 'Choose every power to get ready'}
+        {claim.ready
+          ? '✓ Ready! (tap to change something)'
+          : !hasName(claim)
+            ? 'Type your name to get ready'
+            : powersChosen(claim, cards.powers)
+              ? "I'm ready"
+              : 'Choose every power to get ready'}
       </Button>
     </section>
   )
@@ -235,7 +251,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
       {!watchOnly && (
         <p className="text-center text-sm text-zinc-500">
           Just trying things out?{' '}
-          <button type="button" className="font-semibold text-amber-400 underline" onClick={onDemo}>
+          <button type="button" className="font-semibold text-amber-400 underline" onClick={() => onDemo(demoPicks(cards.powers))}>
             Start a demo game
           </button>{' '}
           with all five heroes and a few monsters.
