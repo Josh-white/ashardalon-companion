@@ -20,10 +20,17 @@ describe('setup picks', () => {
 
   it('is ready only when every slot with cards has a pick', () => {
     const picks = startingPicks(paladin, cards)
-    expect(claimReady({ heroKey: 'paladin', picks }, cards)).toBe(false)
+    expect(claimReady({ heroKey: 'paladin', player: 'Dad', picks }, cards)).toBe(false)
     const full = [picks[0], cards[1], picks[2], picks[3], cards[4]]
-    expect(claimReady({ heroKey: 'paladin', picks: full }, cards)).toBe(true)
-    expect(claimReady({ heroKey: 'rogue', picks: [null, null, null, null] }, cards)).toBe(true)
+    expect(claimReady({ heroKey: 'paladin', player: 'Dad', picks: full }, cards)).toBe(true)
+    expect(claimReady({ heroKey: 'rogue', player: 'Dad', picks: [null, null, null, null] }, cards)).toBe(true)
+  })
+
+  it('needs a name before getting ready', () => {
+    const picks = [cards[0], cards[1], cards[2], cards[3], cards[4]]
+    expect(claimReady({ heroKey: 'paladin', player: '', picks }, cards)).toBe(false)
+    expect(claimReady({ heroKey: 'paladin', player: '   ', picks }, cards)).toBe(false)
+    expect(claimReady({ heroKey: 'paladin', player: 'Sam', picks }, cards)).toBe(true)
   })
 
   it('gives Heskan two daily slots, one for Hurled Breath', () => {

@@ -150,7 +150,11 @@ export function gameReducer(state, action) {
       return { ...state, lobby: (state.lobby ?? []).filter((c) => c.deviceId !== action.deviceId) }
 
     case 'SET_LOBBY_PLAYER':
-      return updateClaim(state, action.deviceId, () => ({ player: String(action.player ?? '').slice(0, 40) }))
+      return updateClaim(state, action.deviceId, (claim) => {
+        const player = String(action.player ?? '').slice(0, 40)
+        // A player can't stay ready without a name; the turn screens greet them by it.
+        return { player, ready: claim.ready && player.trim() !== '' }
+      })
 
     case 'SET_LOBBY_PICK':
       return updateClaim(state, action.deviceId, (claim) => ({
@@ -159,7 +163,7 @@ export function gameReducer(state, action) {
       }))
 
     case 'SET_LOBBY_READY':
-      return updateClaim(state, action.deviceId, () => ({ ready: Boolean(action.ready) }))
+      return updateClaim(state, action.deviceId, (claim) => ({ ready: Boolean(action.ready) && claim.player.trim() !== '' }))
 
     case 'START_DEMO': {
       // A game already in progress, for trying features without setting one up:
