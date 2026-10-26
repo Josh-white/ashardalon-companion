@@ -132,3 +132,14 @@ describe('turns', () => {
     expect(state.turn).toEqual({ heroIndex: 1, phase: 2, round: 1 })
   })
 })
+
+describe('START_DEMO', () => {
+  it('starts a game in progress with every hero and some monsters', () => {
+    const state = gameReducer(initialState, { type: 'START_DEMO' })
+    expect(state.status).toBe('playing')
+    expect(state.heroes).toHaveLength(5)
+    expect(state.monsters.length).toBeGreaterThan(0)
+    expect(state.monsters.every((m) => state.heroes.some((h) => h.id === m.ownerId))).toBe(true)
+    expect(state.xp).toBe(3)
+  })
+})

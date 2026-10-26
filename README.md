@@ -29,9 +29,25 @@ cd ashardalon-companion
 docker compose up -d --build
 ```
 
-Then open `http://piserver.local:8081` (or https://ashardalon.codebasehome.com) on any device on your network. Change the left side of `8081:3000` in `compose.yaml` if that port is taken.
+Then open `http://piserver.local:8081` (or https://ashardalon.codebasehome.com) on any device on your network. To use another port, put `HOST_PORT=8090` in a `.env` file next to `compose.yaml`.
 
 To update after pulling new changes: `git pull && docker compose up -d --build`. The current game lives in the `game-data` Docker volume, so updates don't wipe it.
+
+## A test copy
+
+A second copy of the app, with its own saved game, is handy for trying new features without touching the real game. Clone the repo into another folder and give it its own `.env`:
+
+```sh
+git clone https://github.com/Josh-white/ashardalon-companion.git ~/ashardalon-test
+cd ~/ashardalon-test
+cp ../ashardalon-companion/cards/cards.json cards/ 2>/dev/null
+printf 'COMPOSE_PROJECT_NAME=ashardalon-test\nCONTAINER_NAME=ashardalon-test\nHOST_PORT=8082\nINSTANCE_LABEL=Test copy\n' > .env
+docker compose up -d --build
+```
+
+Open `http://piserver.local:8082`. Every screen shows a **Test copy** banner. To try a branch before it's merged: `git fetch && git checkout <branch> && docker compose up -d --build`.
+
+On the setup screen, **Start a demo game** skips setup and drops you into round 2 with all five heroes and a few monsters.
 
 ## Develop
 

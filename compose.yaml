@@ -1,10 +1,13 @@
 services:
   ashardalon:
     build: .
-    image: ashardalon-companion
-    container_name: ashardalon-companion
+    # The test copy sets these in its own .env file (see README); the real game uses the defaults.
+    image: ${CONTAINER_NAME:-ashardalon-companion}
+    container_name: ${CONTAINER_NAME:-ashardalon-companion}
     ports:
-      - "8081:3000"
+      - "${HOST_PORT:-8081}:3000"
+    environment:
+      - INSTANCE_LABEL=${INSTANCE_LABEL:-}
     volumes:
       # The current game is saved here, so it survives restarts and updates.
       - game-data:/data
