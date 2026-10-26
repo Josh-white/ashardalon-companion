@@ -1,0 +1,185 @@
+{
+  "about": "Example card file. Copy it to cards/cards.json and replace these with the power cards from your own copy of the game. cards.json is ignored by git.",
+  "powers": [
+    {
+      "id": "example-cleric-at-will-1",
+      "hero": "cleric",
+      "type": "at-will",
+      "name": "Example At-Will 1 (Quinn)",
+      "attack": "+6",
+      "damage": "1",
+      "text": "Placeholder. Put the real card text in cards/cards.json on your own server."
+    },
+    {
+      "id": "example-cleric-at-will-2",
+      "hero": "cleric",
+      "type": "at-will",
+      "name": "Example At-Will 2 (Quinn)",
+      "attack": "+6",
+      "damage": "1",
+      "text": "Placeholder. Put the real card text in cards/cards.json on your own server."
+    },
+    {
+      "id": "example-cleric-utility",
+      "hero": "cleric",
+      "type": "utility",
+      "name": "Example Utility (Quinn)",
+      "attack": "",
+      "damage": "",
+      "text": "Placeholder utility power."
+    },
+    {
+      "id": "example-cleric-daily",
+      "hero": "cleric",
+      "type": "daily",
+      "name": "Example Daily (Quinn)",
+      "attack": "+8",
+      "damage": "3",
+      "text": "Placeholder daily power."
+    },
+    {
+      "id": "example-fighter-at-will-1",
+      "hero": "fighter",
+      "type": "at-will",
+      "name": "Example At-Will 1 (Vistra)",
+      "attack": "+6",
+      "damage": "1",
+      "text": "Placeholder. Put the real card text in cards/cards.json on your own server."
+    },
+    {
+      "id": "example-fighter-at-will-2",
+      "hero": "fighter",
+      "type": "at-will",
+      "name": "Example At-Will 2 (Vistra)",
+      "attack": "+6",
+      "damage": "1",
+      "text": "Placeholder. Put the real card text in cards/cards.json on your own server."
+    },
+    {
+      "id": "example-fighter-utility",
+      "hero": "fighter",
+      "type": "utility",
+      "name": "Example Utility (Vistra)",
+      "attack": "",
+      "damage": "",
+      "text": "Placeholder utility power."
+    },
+    {
+      "id": "example-fighter-daily",
+      "hero": "fighter",
+      "type": "daily",
+      "name": "Example Daily (Vistra)",
+      "attack": "+8",
+      "damage": "3",
+      "text": "Placeholder daily power."
+    },
+    {
+      "id": "example-paladin-at-will-1",
+      "hero": "paladin",
+      "type": "at-will",
+      "name": "Example At-Will 1 (Keyleth)",
+      "attack": "+6",
+      "damage": "1",
+      "text": "Placeholder. Put the real card text in cards/cards.json on your own server."
+    },
+    {
+      "id": "example-paladin-at-will-2",
+      "hero": "paladin",
+      "type": "at-will",
+      "name": "Example At-Will 2 (Keyleth)",
+      "attack": "+6",
+      "damage": "1",
+      "text": "Placeholder. Put the real card text in cards/cards.json on your own server."
+    },
+    {
+      "id": "example-paladin-utility",
+      "hero": "paladin",
+      "type": "utility",
+      "name": "Example Utility (Keyleth)",
+      "attack": "",
+      "damage": "",
+      "text": "Placeholder utility power."
+    },
+    {
+      "id": "example-paladin-daily",
+      "hero": "paladin",
+      "type": "daily",
+      "name": "Example Daily (Keyleth)",
+      "attack": "+8",
+      "damage": "3",
+      "text": "Placeholder daily power."
+    },
+    {
+      "id": "example-rogue-at-will-1",
+      "hero": "rogue",
+      "type": "at-will",
+      "name": "Example At-Will 1 (Tarak)",
+      "attack": "+6",
+      "damage": "1",
+      "text": "Placeholder. Put the real card text in cards/cards.json on your own server."
+    },
+    {
+      "id": "example-rogue-at-will-2",
+      "hero": "rogue",
+      "type": "at-will",
+      "name": "Example At-Will 2 (Tarak)",
+      "attack": "+6",
+      "damage": "1",
+      "text": "Placeholder. Put the real card text in cards/cards.json on your own server."
+    },
+    {
+      "id": "example-rogue-utility",
+      "hero": "rogue",
+      "type": "utility",
+      "name": "Example Utility (Tarak)",
+      "attack": "",
+      "damage": "",
+      "text": "Placeholder utility power."
+    },
+    {
+      "id": "example-rogue-daily",
+      "hero": "rogue",
+      "type": "daily",
+      "name": "Example Daily (Tarak)",
+      "attack": "+8",
+      "damage": "3",
+      "text": "Placeholder daily power."
+    },
+    {
+      "id": "example-wizard-at-will-1",
+      "hero": "wizard",
+      "type": "at-will",
+      "name": "Example At-Will 1 (Heskan)",
+      "attack": "+6",
+      "damage": "1",
+      "text": "Placeholder. Put the real card text in cards/cards.json on your own server."
+    },
+    {
+      "id": "example-wizard-at-will-2",
+      "hero": "wizard",
+      "type": "at-will",
+      "name": "Example At-Will 2 (Heskan)",
+      "attack": "+6",
+      "damage": "1",
+      "text": "Placeholder. Put the real card text in cards/cards.json on your own server."
+    },
+    {
+      "id": "example-wizard-utility",
+      "hero": "wizard",
+      "type": "utility",
+      "name": "Example Utility (Heskan)",
+      "attack": "",
+      "damage": "",
+      "text": "Placeholder utility power."
+    },
+    {
+      "id": "example-wizard-daily",
+      "hero": "wizard",
+      "type": "daily",
+      "name": "Example Daily (Heskan)",
+      "attack": "+8",
+      "damage": "3",
+      "text": "Placeholder daily power."
+    }
+  ]
+}

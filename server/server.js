@@ -5,6 +5,7 @@ import { createServer } from 'node:http'
 import { dirname, extname, join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer } from 'ws'
+import { normalizeCardFile } from '../src/data/cards.js'
 import { gameReducer, initialState, SAVE_VERSION } from '../src/state/game.js'
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -37,6 +38,17 @@ function writeSave(file, state) {
   renameSync(temp, file)
 }
 
+// Reads the card file on every request, so edits show up on the next reload.
+export function loadCards(cardsFile, exampleFile) {
+  const file = existsSync(cardsFile) ? cardsFile : exampleFile
+  const source = file === cardsFile ? 'custom' : 'example'
+  try {
+    return { source, ...normalizeCardFile(JSON.parse(readFileSync(file, 'utf8'))) }
+  } catch (error) {
+    return { source, powers: [], problems: [`Could not read ${source === 'custom' ? 'cards.json' : 'the example cards'}: ${error.message}`] }
+  }
+}
+
 function serveStatic(staticDir, req, res) {
   const path = decodeURIComponent(new URL(req.url, 'http://localhost').pathname)
   let file = normalize(join(staticDir, path))
@@ -59,12 +71,20 @@ export function startServer({
   port = Number(process.env.PORT ?? 3000),
   saveFile = process.env.SAVE_FILE ?? join(ROOT, 'data', 'game.json'),
   staticDir = join(ROOT, 'dist'),
+  cardsFile = process.env.CARDS_FILE ?? join(ROOT, 'cards', 'cards.json'),
+  exampleCardsFile = join(ROOT, 'cards', 'cards.example.json'),
 } = {}) {
   let state = loadSavedGame(saveFile)
 
   const server = createServer((req, res) => {
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'text/plain' }).end('ok')
+      return
+    }
+    if (req.url === '/cards.json') {
+      res
+        .writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+        .end(JSON.stringify(loadCards(cardsFile, exampleCardsFile)))
       return
     }
     serveStatic(staticDir, req, res)

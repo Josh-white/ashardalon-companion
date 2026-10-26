@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import { HERO_TEMPLATES } from '../src/data/heroes.js'
 import { createHero, initialState } from '../src/state/game.js'
-import { loadSavedGame, startServer } from './server.js'
+import { loadCards, loadSavedGame, startServer } from './server.js'
 
 // Opens a socket and collects every state the server sends.
 function connect(port) {
@@ -77,6 +77,21 @@ describe('loading a saved game', () => {
     expect(loadSavedGame(join(dir, 'missing.json'))).toBe(initialState)
     writeFileSync(join(dir, 'broken.json'), '{not json')
     expect(loadSavedGame(join(dir, 'broken.json'))).toBe(initialState)
+    rmSync(dir, { recursive: true, force: true })
+  })
+})
+
+describe('loading cards', () => {
+  it('uses cards.json when it exists, otherwise the example', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ashardalon-'))
+    const example = join(dir, 'example.json')
+    const custom = join(dir, 'cards.json')
+    writeFileSync(example, JSON.stringify({ powers: [{ id: 'e', hero: 'wizard', type: 'daily', name: 'Example' }] }))
+    expect(loadCards(custom, example)).toMatchObject({ source: 'example', powers: [{ name: 'Example' }] })
+    writeFileSync(custom, JSON.stringify({ powers: [{ id: 'c', hero: 'wizard', type: 'daily', name: 'Mine' }] }))
+    expect(loadCards(custom, example)).toMatchObject({ source: 'custom', powers: [{ name: 'Mine' }] })
+    writeFileSync(custom, '{oops')
+    expect(loadCards(custom, example).problems[0]).toMatch(/Could not read cards.json/)
     rmSync(dir, { recursive: true, force: true })
   })
 })

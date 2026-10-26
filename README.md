@@ -13,6 +13,10 @@ A tablet-friendly helper for playing **Dungeons & Dragons: Wrath of Ashardalon**
 
 Starting hero stats are prefilled on the setup screen and can be adjusted there, so check them against your hero cards.
 
+## Power cards
+
+Each hero has two at-will, one utility, and one daily power slot. Tap **Choose powers** to pick each one from a dropdown, tap a used daily or utility power to flip it, and tap **Read** to see the card text. The cards come from `cards/cards.json`, a file that stays on your server and is ignored by git. See [cards/README.md](cards/README.md) for the format.
+
 ## Run it on the Raspberry Pi
 
 ```sh

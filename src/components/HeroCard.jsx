@@ -1,9 +1,8 @@
-import { useState } from 'react'
 import { CONDITIONS, HERO_COLORS, XP_TO_LEVEL_UP } from '../data/heroes.js'
+import PowerList from './PowerList.jsx'
 import { Button, Chip, HpBar } from './ui.jsx'
 
 export default function HeroCard({ hero, isActive, xp, surges, dispatch }) {
-  const [editing, setEditing] = useState(false)
   const color = HERO_COLORS[hero.color]
   const down = hero.hp === 0
 
@@ -55,31 +54,7 @@ export default function HeroCard({ hero, isActive, xp, surges, dispatch }) {
         </div>
       )}
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        {hero.powers.map((power) => (
-          <div
-            key={power.id}
-            role={editing ? undefined : 'button'}
-            onClick={editing ? undefined : () => dispatch({ type: 'TOGGLE_POWER', heroId: hero.id, powerId: power.id })}
-            className={`cursor-pointer select-none rounded-lg border px-3 py-2 text-left text-sm transition ${
-              power.used
-                ? 'border-zinc-800 bg-zinc-900 text-zinc-600 line-through'
-                : 'border-amber-600/60 bg-zinc-950/60 text-zinc-100'
-            }`}
-          >
-            <span className="block text-xs uppercase tracking-wide text-amber-500/80">{power.type}</span>
-            {editing ? (
-              <input
-                className="w-32 rounded bg-zinc-800 px-1 text-zinc-100"
-                value={power.name}
-                onChange={(e) => dispatch({ type: 'RENAME_POWER', heroId: hero.id, powerId: power.id, name: e.target.value })}
-              />
-            ) : (
-              power.name
-            )}
-          </div>
-        ))}
-      </div>
+      <PowerList hero={hero} dispatch={dispatch} />
 
       <div className="mt-3 flex flex-wrap gap-2">
         {CONDITIONS.map((condition) => (
@@ -94,18 +69,6 @@ export default function HeroCard({ hero, isActive, xp, surges, dispatch }) {
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button variant="ghost" className="text-sm" onClick={() => setEditing((e) => !e)}>
-          {editing ? 'Done naming powers' : 'Name powers'}
-        </Button>
-        {editing && (
-          <Button
-            variant="ghost"
-            className="text-sm"
-            onClick={() => dispatch({ type: 'ADD_POWER', heroId: hero.id, powerType: 'daily', name: 'New daily power' })}
-          >
-            + Daily power
-          </Button>
-        )}
         {hero.level === 1 && (
           <Button
             variant="ghost"
