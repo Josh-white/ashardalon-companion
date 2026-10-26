@@ -1,5 +1,6 @@
 import HeroCard from './components/HeroCard.jsx'
 import MonsterList from './components/MonsterList.jsx'
+import ProjectorView from './components/ProjectorView.jsx'
 import SeatPicker from './components/SeatPicker.jsx'
 import Setup from './components/Setup.jsx'
 import TurnGuide from './components/TurnGuide.jsx'
@@ -9,6 +10,7 @@ import { PHASES } from './data/phases.js'
 import { useSeat, useSharedGame } from './state/useSharedGame.js'
 
 const TABLE_SEAT = 'table'
+const PROJECTOR_SEAT = 'projector'
 
 function PartyBar({ state, dispatch, seatLabel, onSwitchSeat }) {
   const newGame = () => {
@@ -202,11 +204,20 @@ export default function App() {
   }
 
   const myHero = state.heroes.find((h) => h.key === seat)
+  if (seat === PROJECTOR_SEAT) {
+    return (
+      <main className="min-h-screen bg-zinc-950 text-zinc-100">
+        {offline}
+        <ProjectorView state={state} onSwitchSeat={() => setSeat(null)} />
+        {(state.status === 'won' || state.status === 'lost') && <GameOver state={state} dispatch={dispatch} />}
+      </main>
+    )
+  }
   if (seat !== TABLE_SEAT && !myHero) {
     return (
       <main className="min-h-screen bg-zinc-950 text-zinc-100">
         {offline}
-        <SeatPicker heroes={state.heroes} onPick={setSeat} tableSeat={TABLE_SEAT} />
+        <SeatPicker heroes={state.heroes} onPick={setSeat} tableSeat={TABLE_SEAT} projectorSeat={PROJECTOR_SEAT} />
       </main>
     )
   }

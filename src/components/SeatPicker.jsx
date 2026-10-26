@@ -1,7 +1,7 @@
 import { HERO_COLORS } from '../data/heroes.js'
 import { Button } from './ui.jsx'
 
-export default function SeatPicker({ heroes, onPick, tableSeat }) {
+export default function SeatPicker({ heroes, onPick, tableSeat, projectorSeat }) {
   return (
     <div className="mx-auto max-w-3xl p-4 sm:p-8">
       <h1 className="text-center font-display text-4xl font-bold text-amber-400">Who's playing on this iPad?</h1>
@@ -24,8 +24,9 @@ export default function SeatPicker({ heroes, onPick, tableSeat }) {
           )
         })}
       </div>
-      <div className="mt-6 text-center">
+      <div className="mt-6 flex flex-wrap justify-center gap-3">
         <Button onClick={() => onPick(tableSeat)}>Table view (everyone's heroes and monsters)</Button>
+        <Button onClick={() => onPick(projectorSeat)}>Projector view (big screen, no buttons)</Button>
       </div>
     </div>
   )
