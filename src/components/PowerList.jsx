@@ -3,7 +3,7 @@ import { cardStats } from '../data/cards.js'
 import { useCards } from '../state/useCards.js'
 import { Button } from './ui.jsx'
 
-function PowerTile({ power, onToggle }) {
+export function PowerTile({ power, onToggle }) {
   const [open, setOpen] = useState(false)
   const card = power.card
   const usable = power.type !== 'at-will'
