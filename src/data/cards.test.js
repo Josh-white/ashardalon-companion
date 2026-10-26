@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { normalizeCardFile } from './cards.js'
+import { cardStats, normalizeCardFile } from './cards.js'
 
 describe('card files', () => {
   it('accepts the example file with no problems', () => {
@@ -43,5 +43,13 @@ describe('hero abilities', () => {
       ['Critical Hit', 2],
     ])
     expect(problems).toHaveLength(2)
+  })
+})
+
+describe('cardStats', () => {
+  it('shows attack and damage when the card has them', () => {
+    expect(cardStats({ attack: '+8', damage: '1' })).toBe('Attack +8 · Damage 1')
+    expect(cardStats({ text: 'heal' })).toBe('')
+    expect(cardStats(null)).toBe('')
   })
 })

@@ -10,7 +10,7 @@ import UndoButton from './components/UndoButton.jsx'
 import { Button, HpBar } from './components/ui.jsx'
 import { HERO_COLORS } from './data/heroes.js'
 import { PHASES } from './data/phases.js'
-import { useSeat, useSharedGame } from './state/useSharedGame.js'
+import { useDeviceId, useSeat, useSharedGame } from './state/useSharedGame.js'
 
 const TABLE_SEAT = 'table'
 const PROJECTOR_SEAT = 'projector'
@@ -191,6 +191,7 @@ function Connecting() {
 export default function App() {
   const { state, connected, dispatch, undo, undoDepth, instance } = useSharedGame()
   const [seat, setSeat] = useSeat()
+  const deviceId = useDeviceId()
 
   if (!state) return <Connecting />
 
@@ -218,7 +219,16 @@ export default function App() {
             <UndoButton undo={undo} depth={undoDepth} dispatch={dispatch} className="border border-zinc-700" />
           </div>
         )}
-        <Setup onStart={(heroes) => dispatch({ type: 'START_GAME', heroes })} onDemo={() => dispatch({ type: 'START_DEMO' })} />
+        <Setup
+          state={state}
+          dispatch={dispatch}
+          deviceId={deviceId}
+          onClaim={setSeat}
+          onDemo={() => dispatch({ type: 'START_DEMO' })}
+          watchOnly={seat === PROJECTOR_SEAT}
+          onProjector={() => setSeat(PROJECTOR_SEAT)}
+          onLeaveProjector={() => setSeat(null)}
+        />
       </main>
     )
   }

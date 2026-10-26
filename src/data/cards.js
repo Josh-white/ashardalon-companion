@@ -1,5 +1,10 @@
 import { HERO_TEMPLATES } from './heroes.js'
 
+// "Attack +8 · Damage 1", to compare cards while choosing.
+export function cardStats(card) {
+  return [card?.attack && `Attack ${card.attack}`, card?.damage && `Damage ${card.damage}`].filter(Boolean).join(' · ')
+}
+
 export const POWER_TYPES = ['at-will', 'utility', 'daily']
 const HERO_KEYS = HERO_TEMPLATES.map((t) => t.key)
 
@@ -33,6 +38,10 @@ export function normalizeCardFile(data) {
       attack: typeof card.attack === 'string' ? card.attack : '',
       damage: typeof card.damage === 'string' ? card.damage : '',
       text: typeof card.text === 'string' ? card.text : '',
+      // Filled in on the setup screen: "always" cards are fixed (Keyleth's Lay on Hands),
+      // "suggested" ones are the rulebook's picks and can be swapped.
+      always: card.always === true,
+      suggested: card.suggested === true,
     })
   })
   return { powers, abilities: normalizeAbilities(data?.heroes, problems), problems }

@@ -66,6 +66,29 @@ export function useSharedGame() {
   return { state, connected, dispatch, undo, undoDepth, instance }
 }
 
+const DEVICE_KEY = 'ashardalon-companion/device'
+
+// A random id for this iPad, so the setup screen knows which hero it claimed.
+export function useDeviceId() {
+  const [id] = useState(() => {
+    try {
+      const saved = localStorage.getItem(DEVICE_KEY)
+      if (saved) return saved
+    } catch {
+      // Storage blocked: a fresh id each load still works for one sitting.
+    }
+    const bytes = crypto.getRandomValues(new Uint8Array(8))
+    const fresh = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+    try {
+      localStorage.setItem(DEVICE_KEY, fresh)
+    } catch {
+      // See above.
+    }
+    return fresh
+  })
+  return id
+}
+
 const SEAT_KEY = 'ashardalon-companion/seat'
 
 // Which hero this device belongs to ("table" for the shared screen). Stored per

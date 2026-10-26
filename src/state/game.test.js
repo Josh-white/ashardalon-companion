@@ -151,3 +151,48 @@ describe('START_DEMO', () => {
     expect(state.xp).toBe(3)
   })
 })
+
+describe('hero lobby', () => {
+  const card = (id, type) => ({ id, hero: 'paladin', type, name: id, text: `${id} text` })
+
+  it('lets each iPad claim one hero that no other iPad can take', () => {
+    let state = gameReducer(initialState, { type: 'CLAIM_HERO', deviceId: 'a', heroKey: 'paladin' })
+    expect(gameReducer(state, { type: 'CLAIM_HERO', deviceId: 'b', heroKey: 'paladin' })).toBe(state)
+    state = gameReducer(state, { type: 'CLAIM_HERO', deviceId: 'a', heroKey: 'rogue' })
+    expect(state.lobby.map((c) => c.heroKey)).toEqual(['rogue'])
+    state = gameReducer(state, { type: 'RELEASE_HERO', deviceId: 'a' })
+    expect(state.lobby).toEqual([])
+  })
+
+  it('starts the game from the lobby in claim order, with the picked powers and card stats', () => {
+    let state = gameReducer(initialState, {
+      type: 'CLAIM_HERO',
+      deviceId: 'a',
+      heroKey: 'paladin',
+      picks: [card('one', 'at-will'), null, card('lay', 'utility')],
+    })
+    state = gameReducer(state, { type: 'CLAIM_HERO', deviceId: 'b', heroKey: 'rogue' })
+    state = gameReducer(state, { type: 'SET_LOBBY_PLAYER', deviceId: 'a', player: 'Dad' })
+    state = gameReducer(state, { type: 'SET_LOBBY_READY', deviceId: 'a', ready: true })
+    state = gameReducer(state, { type: 'SET_LOBBY_READY', deviceId: 'b', ready: true })
+    // Changing a power after getting ready takes the hero out of ready.
+    state = gameReducer(state, { type: 'SET_LOBBY_PICK', deviceId: 'a', slot: 1, card: card('two', 'at-will') })
+    expect(state.lobby[0].ready).toBe(false)
+    expect(gameReducer(state, { type: 'START_GAME' })).toBe(state)
+    state = gameReducer(state, { type: 'SET_LOBBY_READY', deviceId: 'a', ready: true })
+    state = gameReducer(state, { type: 'START_GAME' })
+
+    expect(state.status).toBe('playing')
+    expect(state.heroes.map((h) => h.key)).toEqual(['paladin', 'rogue'])
+    const keyleth = state.heroes[0]
+    expect(keyleth).toMatchObject({ player: 'Dad', maxHp: 8, hp: 8, ac: 17 })
+    expect(keyleth.powers.map((p) => p.name)).toEqual(['one', 'two', 'lay', 'Utility power', 'Daily power'])
+    expect(keyleth.powers[0].card.text).toBe('one text')
+    expect(state.lobby).toEqual([])
+  })
+
+  it('ignores hero claims once the game has started', () => {
+    const state = gameReducer(initialState, { type: 'START_DEMO' })
+    expect(gameReducer(state, { type: 'CLAIM_HERO', deviceId: 'a', heroKey: 'paladin' })).toBe(state)
+  })
+})
