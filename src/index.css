@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Georgia", "Times New Roman", serif;
+}
+
+html, body, #root {
+  min-height: 100%;
+}
+
+body {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
