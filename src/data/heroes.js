@@ -3,7 +3,12 @@
 export const HERO_TEMPLATES = [
   { key: 'cleric', name: 'Quinn', className: 'Human Cleric', color: 'sky', maxHp: 8, ac: 17, surgeValue: 4, speed: 5 },
   { key: 'fighter', name: 'Vistra', className: 'Dwarf Fighter', color: 'red', maxHp: 10, ac: 18, surgeValue: 5, speed: 5 },
-  { key: 'paladin', name: 'Keyleth', className: 'Dragonborn Paladin', color: 'amber', maxHp: 10, ac: 18, surgeValue: 5, speed: 5 },
+  // Checked against Keyleth's hero card. Her card also gives her Lay on Hands on top of
+  // the usual picks, so she starts with a second utility slot.
+  {
+    key: 'paladin', name: 'Keyleth', className: 'Elf Paladin', color: 'amber', maxHp: 8, ac: 17, surgeValue: 4, speed: 6,
+    powerSlots: ['at-will', 'at-will', 'utility', 'utility', 'daily'],
+  },
   { key: 'rogue', name: 'Tarak', className: 'Half-Orc Rogue', color: 'emerald', maxHp: 8, ac: 17, surgeValue: 4, speed: 7 },
   { key: 'wizard', name: 'Heskan', className: 'Dragonborn Wizard', color: 'violet', maxHp: 6, ac: 14, surgeValue: 3, speed: 5 },
 ]
@@ -11,7 +16,10 @@ export const HERO_TEMPLATES = [
 export const STARTING_SURGES = 2
 export const XP_TO_CANCEL_ENCOUNTER = 5
 export const XP_TO_LEVEL_UP = 5
+// From the 2nd-level side of the hero cards: +2 HP, +1 AC, +1 surge value, and one more daily power.
 export const LEVEL_UP_HP_BONUS = 2
+export const LEVEL_UP_AC_BONUS = 1
+export const LEVEL_UP_SURGE_BONUS = 1
 
 export const CONDITIONS = ['Dazed', 'Immobilized', 'Poisoned', 'Slowed', 'Weakened']
 

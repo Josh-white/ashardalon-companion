@@ -10,7 +10,7 @@ export function normalizeCardFile(data) {
   const powers = []
   const seen = new Set()
   const list = Array.isArray(data?.powers) ? data.powers : null
-  if (!list) return { powers, problems: ['The file needs a "powers" list.'] }
+  if (!list) return { powers, abilities: [], problems: ['The file needs a "powers" list.'] }
 
   list.forEach((card, i) => {
     const label = card?.name ? `"${card.name}"` : `power #${i + 1}`
@@ -35,5 +35,34 @@ export function normalizeCardFile(data) {
       text: typeof card.text === 'string' ? card.text : '',
     })
   })
-  return { powers, problems }
+  return { powers, abilities: normalizeAbilities(data?.heroes, problems), problems }
+}
+
+// Hero card abilities, such as Keyleth's Healing Hands. Optional; `level` 2 means
+// the ability is only on the 2nd-level side of the card.
+function normalizeAbilities(list, problems) {
+  if (list === undefined) return []
+  if (!Array.isArray(list)) {
+    problems.push('"heroes" should be a list.')
+    return []
+  }
+  const abilities = []
+  list.forEach((entry, i) => {
+    if (!HERO_KEYS.includes(entry?.hero)) {
+      return problems.push(`Hero entry #${i + 1} has hero "${entry?.hero}"; use one of ${HERO_KEYS.join(', ')}.`)
+    }
+    for (const ability of Array.isArray(entry.abilities) ? entry.abilities : []) {
+      if (!ability?.name || typeof ability.name !== 'string') {
+        problems.push(`An ability for ${entry.hero} needs a "name".`)
+        continue
+      }
+      abilities.push({
+        hero: entry.hero,
+        name: ability.name,
+        text: typeof ability.text === 'string' ? ability.text : '',
+        level: ability.level === 2 ? 2 : 1,
+      })
+    }
+  })
+  return abilities
 }

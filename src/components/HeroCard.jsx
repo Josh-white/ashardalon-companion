@@ -1,10 +1,12 @@
 import { CONDITIONS, HERO_COLORS, XP_TO_LEVEL_UP } from '../data/heroes.js'
+import { useCards } from '../state/useCards.js'
 import PowerList from './PowerList.jsx'
 import { Button, Chip, HpBar } from './ui.jsx'
 
 export default function HeroCard({ hero, isActive, xp, surges, dispatch }) {
   const color = HERO_COLORS[hero.color]
   const down = hero.hp === 0
+  const abilities = (useCards().abilities ?? []).filter((a) => a.hero === hero.key && a.level <= hero.level)
 
   return (
     <div
@@ -28,6 +30,16 @@ export default function HeroCard({ hero, isActive, xp, surges, dispatch }) {
           <div>Speed {hero.speed}</div>
         </div>
       </div>
+
+      {abilities.length > 0 && (
+        <ul className="mt-2 space-y-1 text-sm text-zinc-300">
+          {abilities.map((ability) => (
+            <li key={ability.name}>
+              <span className="font-semibold text-amber-300">{ability.name}:</span> {ability.text}
+            </li>
+          ))}
+        </ul>
+      )}
 
       <div className="mt-4 flex items-center gap-3">
         <Button className="h-14 w-14 !px-0 text-3xl" onClick={() => dispatch({ type: 'ADJUST_HP', heroId: hero.id, amount: -1 })}>
