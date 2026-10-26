@@ -56,8 +56,11 @@ const updateMonster = (state, monsterId, change) => ({
 
 const toggle = (list, item) => (list.includes(item) ? list.filter((x) => x !== item) : [...list, item])
 
-// Each hero starts with two at-will powers, one utility, and one daily.
-export const STARTING_POWER_SLOTS = ['at-will', 'at-will', 'utility', 'daily']
+// Each hero card names one power the hero always has (Keyleth's Lay on Hands, Tarak's
+// Furious Assault), plus 1 utility, 2 at-wills, and 1 daily to choose. Both fixed powers
+// seen so far are utilities, and the rulebook suggests 5 cards for every hero.
+// A template can set its own `powerSlots` if a hero card says otherwise.
+export const STARTING_POWER_SLOTS = ['at-will', 'at-will', 'utility', 'utility', 'daily']
 
 export const powerSlotsFor = (template) => template.powerSlots ?? STARTING_POWER_SLOTS
 
