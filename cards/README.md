@@ -34,4 +34,23 @@ Changes show up the next time an iPad reloads the page; no restart needed. Cards
 - `type`: `at-will`, `utility`, or `daily`.
 - `attack`, `damage`, `text`: optional, shown on the hero card.
 
+### Hero abilities (optional)
+
+Abilities printed on a hero card show under the hero's name. Use `"level": 2` for ones only on the 2nd-level side.
+
+```json
+{
+  "powers": [],
+  "heroes": [
+    {
+      "hero": "paladin",
+      "abilities": [
+        { "name": "Healing Hands", "text": "What the card says." },
+        { "name": "Critical Hit", "level": 2, "text": "What the card says." }
+      ]
+    }
+  ]
+}
+```
+
 If a card has a mistake, the app lists it on the hero card's power picker so it's easy to fix.

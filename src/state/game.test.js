@@ -36,6 +36,9 @@ describe('heroes', () => {
     state = gameReducer(state, { type: 'LEVEL_UP', heroId: hero.id })
     expect(state.heroes[0].level).toBe(2)
     expect(state.heroes[0].maxHp).toBe(hero.maxHp + 2)
+    expect(state.heroes[0].ac).toBe(hero.ac + 1)
+    expect(state.heroes[0].surgeValue).toBe(hero.surgeValue + 1)
+    expect(state.heroes[0].powers.filter((p) => p.type === 'daily')).toHaveLength(2)
     expect(state.xp).toBe(1)
     expect(gameReducer(state, { type: 'LEVEL_UP', heroId: hero.id })).toBe(state)
   })
@@ -44,6 +47,11 @@ describe('heroes', () => {
 describe('powers', () => {
   it('starts each hero with two at-wills, a utility, and a daily', () => {
     expect(startGame().heroes[0].powers.map((p) => p.type)).toEqual(['at-will', 'at-will', 'utility', 'daily'])
+  })
+
+  it('gives Keyleth an extra utility slot for Lay on Hands', () => {
+    const paladin = HERO_TEMPLATES.find((t) => t.key === 'paladin')
+    expect(createHero(paladin).powers.map((p) => p.type)).toEqual(['at-will', 'at-will', 'utility', 'utility', 'daily'])
   })
 
   it('picks a card for a slot and never marks at-wills as used', () => {

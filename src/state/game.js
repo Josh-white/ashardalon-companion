@@ -1,6 +1,8 @@
 import {
   HERO_TEMPLATES,
+  LEVEL_UP_AC_BONUS,
   LEVEL_UP_HP_BONUS,
+  LEVEL_UP_SURGE_BONUS,
   STARTING_SURGES,
   XP_TO_CANCEL_ENCOUNTER,
   XP_TO_LEVEL_UP,
@@ -74,7 +76,7 @@ export function createHero(template, overrides = {}) {
     speed: hero.speed,
     level: 1,
     conditions: [],
-    powers: STARTING_POWER_SLOTS.map((type) => newPower(type)),
+    powers: (hero.powerSlots ?? STARTING_POWER_SLOTS).map((type) => newPower(type)),
   }
 }
 
@@ -195,12 +197,15 @@ export function gameReducer(state, action) {
         level: 2,
         maxHp: h.maxHp + LEVEL_UP_HP_BONUS,
         hp: h.hp + LEVEL_UP_HP_BONUS,
+        ac: h.ac + LEVEL_UP_AC_BONUS,
+        surgeValue: h.surgeValue + LEVEL_UP_SURGE_BONUS,
+        powers: [...h.powers, newPower('daily')],
       }))
       return withMoment(withLog(leveled, `${hero.name} reached level 2!`), {
         kind: 'level',
         heroId: hero.id,
         title: `${hero.name} reached level 2!`,
-        detail: 'Flip your hero card!',
+        detail: 'Flip your hero card and choose another daily power!',
       })
     }
 
