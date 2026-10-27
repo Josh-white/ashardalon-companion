@@ -2,7 +2,8 @@
 // and the adventure's special tiles wait to the side. The app counts the stack and
 // says when a special tile turns up, so nobody has to slip it in at the right depth.
 
-export const STARTING_TILES = 30
+// The box has 22 regular dungeon tiles besides the Start tile.
+export const STARTING_TILES = 22
 export const MIN_TILES = 10
 export const MAX_TILES = 60
 // Where a special tile turns up when its adventure doesn't say: the book's usual
