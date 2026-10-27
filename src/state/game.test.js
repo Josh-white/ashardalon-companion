@@ -605,10 +605,191 @@ describe('encounter deck', () => {
     expect(state.monsterDeck.discard).toEqual(['rat', 'rat', 'rat'])
   })
 
+  it('stacks the monster deck before a card like Spotted! draws its monster', () => {
+    let state = startGame()
+    const cards = Object.fromEntries(monsters.map((m) => [m.id, m]))
+    state = { ...state, monsterDeck: { cards, draw: ['rat', 'rat', 'orc', 'rat', 'rat', 'rat'], discard: [] } }
+    state = drawCard(state, 'orcs')
+    state = { ...state, encounter: { ...state.encounter, card: { ...state.encounter.card, drawMonster: true } } }
+    state = gameReducer(state, { type: 'FILTER_ENCOUNTER_MONSTERS', random: [], monsterCards: monsters })
+    expect(state.monsterDeck.draw).toEqual(['orc', 'rat'])
+    expect(gameReducer(state, { type: 'CANCEL_ENCOUNTER' })).toBe(state)
+    state = gameReducer(state, { type: 'DRAW_MONSTER', heroId: state.heroes[0].id, cards: monsters, random: [] })
+    expect(state.monsters.at(-1).name).toBe('Orc')
+    state = resolve(state)
+    expect(state.monsterDeck.draw).toEqual(['rat'])
+  })
+
   it('passes a monster card to another hero', () => {
     let state = startGame()
     state = gameReducer(state, { type: 'ADD_MONSTER', name: 'Rat', hp: 1, xp: 1, ownerId: state.heroes[0].id })
     state = gameReducer(state, { type: 'SET_MONSTER_OWNER', monsterId: state.monsters[0].id, ownerId: state.heroes[1].id })
     expect(state.monsters[0].ownerId).toBe(state.heroes[1].id)
+  })
+})
+
+describe('treasure deck', () => {
+  const { treasures, monsters } = normalizeCardFile({
+    powers: [],
+    monsters: [
+      { id: 'ogre', name: 'Ogre', ac: 14, hp: 1, xp: 2, attacks: [{ id: 'slam', name: 'Slam', bonus: 8, damage: 2 }], tactics: [{ move: 'toward' }] },
+      { id: 'rat', name: 'Rat', ac: 12, hp: 1, xp: 1, attacks: [], tactics: [{ move: 'toward' }] },
+    ],
+    treasures: [
+      { id: 'sword', name: 'Sword', inPlay: true, attackBonus: 2, attackRange: 'adjacent', critFrom: 18 },
+      { id: 'amulet', name: 'Amulet', inPlay: true, acBonus: 1 },
+      { id: 'shield', name: 'Shield', inPlay: true, tileAcBonus: 2 },
+      { id: 'potion', name: 'Potion', use: 'heal', heal: 2, after: 'discard' },
+      { id: 'ring', name: 'Ring', attack: { bonus: 8, damage: 1 }, after: 'flip' },
+      { id: 'charm', name: 'Charm', use: 'reroll', after: 'discard' },
+      { id: 'tome', name: 'Tome', use: 'levelUp', after: 'discard' },
+      { id: 'pearl', name: 'Pearl', use: 'refreshAny', after: 'flip' },
+      { id: 'tools', name: 'Tools', inPlay: true, trapBonus: 4 },
+      { id: 'scroll', name: 'Scroll', use: 'monsterControl', monsterAttack: { bonus: 9, damage: 1 }, after: 'discard' },
+      { id: 'wand', name: 'Wand', use: 'polymorph', after: 'flip' },
+    ],
+  })
+  const strike = { id: 'strike', name: 'Strike', attack: '+6', damage: '1' }
+  // Two heroes, each with a monster, Quinn holding a Strike.
+  const setup = () => {
+    let state = startGame()
+    const quinn = state.heroes[0]
+    state = gameReducer(state, { type: 'SET_POWER_CARD', heroId: quinn.id, powerId: quinn.powers[0].id, card: strike })
+    for (const hero of state.heroes) state = gameReducer(state, { type: 'DRAW_MONSTER', heroId: hero.id, cards: monsters, random: [] })
+    return state
+  }
+  // Gives a hero a treasure by drawing it off a one-card deck.
+  const give = (state, id, heroIndex = 0) => {
+    const owed = { ...state, turn: { ...state.turn, treasureOwed: state.heroes[heroIndex].id } }
+    const deck = { cards: Object.fromEntries(treasures.map((t) => [t.id, t])), draw: [id], discard: state.treasureDeck?.discard ?? [] }
+    const drawn = gameReducer({ ...owed, treasureDeck: deck }, { type: 'DRAW_TREASURE', cards: treasures, random: [] })
+    return gameReducer(drawn, { type: 'KEEP_TREASURE' })
+  }
+  const item = (state, name, heroIndex = 0) => state.heroes[heroIndex].items.find((i) => i.name === name)
+  const attack = (state, roll, extra = {}) =>
+    gameReducer(state, {
+      type: 'HERO_ATTACK',
+      heroId: state.heroes[0].id,
+      powerId: state.heroes[0].powers[0].id,
+      targets: [{ monsterId: state.monsters[0].id, roll }],
+      ...extra,
+    })
+
+  it('reads the made-up cards without problems', () => {
+    expect(treasures).toHaveLength(11)
+  })
+
+  it('gives each hero one treasure card before the adventure starts', () => {
+    const heroes = HERO_TEMPLATES.slice(0, 3).map((t) => createHero(t))
+    const state = gameReducer(initialState, { type: 'START_GAME', heroes, treasureCards: treasures, random: [] })
+    expect(state.heroes.map((h) => h.items.map((i) => i.name))).toEqual([['Sword'], ['Amulet'], ['Shield']])
+    expect(state.treasureDeck.draw).toHaveLength(8)
+    expect(state.moment).toMatchObject({ kind: 'treasure', title: 'Starting treasure!' })
+    // Without treasure cards, nobody gets one.
+    expect(startGame().heroes[0].items).toBeUndefined()
+  })
+
+  it('owes the defeating hero one treasure card a turn, and draws it from the deck', () => {
+    let state = attack(setup(), 10) // 10 + 6 beats the Ogre's AC 14
+    expect(state.turn.treasureOwed).toBe(state.heroes[0].id)
+    state = gameReducer(state, { type: 'DRAW_TREASURE', cards: treasures, random: [] })
+    expect(state.treasure.card.name).toBe('Sword')
+    expect(state.treasureDeck.draw).toHaveLength(10)
+    expect(state.turn.treasureOwed).toBe(null)
+    expect(state.moment.kind).toBe('treasure')
+    // A second draw in the same turn does nothing.
+    expect(gameReducer(state, { type: 'DRAW_TREASURE', cards: treasures, random: [] })).toBe(state)
+  })
+
+  it('keeps the turn from passing until someone takes the treasure, who can be another hero', () => {
+    let state = attack(setup(), 10)
+    state = gameReducer(state, { type: 'DRAW_TREASURE', cards: treasures, random: [] })
+    state = { ...state, turn: { ...state.turn, phase: 2 } }
+    expect(gameReducer(state, { type: 'NEXT_PHASE' })).toBe(state)
+    state = gameReducer(state, { type: 'KEEP_TREASURE', heroId: state.heroes[1].id })
+    expect(item(state, 'Sword', 1)).toMatchObject({ used: false })
+    expect(state.treasure).toBe(null)
+    expect(gameReducer(state, { type: 'NEXT_PHASE' }).turn.heroIndex).toBe(1)
+  })
+
+  it('adds a weapon bonus only against a monster next to the hero, plus damage on a high roll', () => {
+    const state = give(setup(), 'sword')
+    // 7 + 6 = 13 misses AC 14 from afar, but + 2 hits next to the hero.
+    expect(attack(state, 7, { distances: { [state.monsters[0].id]: 'far' } }).turn.lastAttack.rolls[0].hit).toBe(false)
+    expect(attack(state, 7, { distances: { [state.monsters[0].id]: 'adjacent' } }).turn.lastAttack.rolls[0].hit).toBe(true)
+    expect(attack(state, 18).turn.lastAttack.rolls[0].dealt).toBe(2)
+  })
+
+  it('raises AC, and a shield guards heroes on its owner\'s tile when asked', () => {
+    let state = give(give(setup(), 'amulet'), 'shield', 1)
+    const [quinn, vistra] = state.heroes
+    expect(heroAc(quinn)).toBe(quinn.ac + 1)
+    expect(heroAc(vistra)).toBe(vistra.ac + 2)
+    // The Ogre's 9 + 8 = 17 hits Quinn's AC 17 (16 + 1 for the amulet), but not 19 on the shield's tile.
+    const ogre = state.monsters[0]
+    const hit = gameReducer(state, { type: 'MONSTER_ATTACK', monsterId: ogre.id, attackId: 'slam', targets: [{ heroId: quinn.id, roll: 9 }] })
+    expect(hit.turn.lastMonsterAttack.results[0].hit).toBe(true)
+    const guarded = gameReducer(state, { type: 'MONSTER_ATTACK', monsterId: ogre.id, attackId: 'slam', targets: [{ heroId: quinn.id, roll: 9 }], tileGuarded: [quinn.id] })
+    expect(guarded.turn.lastMonsterAttack.results[0]).toMatchObject({ hit: false, ac: 19 })
+  })
+
+  it('uses a potion on another hero and discards it', () => {
+    let state = give(setup(), 'potion')
+    const vistra = state.heroes[1]
+    state = gameReducer(state, { type: 'ADJUST_HP', heroId: vistra.id, amount: -3 })
+    state = gameReducer(state, { type: 'USE_ITEM', heroId: state.heroes[0].id, itemId: item(state, 'Potion').id, heroIds: [vistra.id] })
+    expect(state.heroes[1].hp).toBe(vistra.maxHp - 1)
+    expect(state.heroes[0].items).toEqual([])
+    expect(state.treasureDeck.discard).toEqual(['potion'])
+  })
+
+  it('attacks with an item, then flips it over until a pearl flips it back', () => {
+    let state = give(give(setup(), 'ring'), 'pearl')
+    state = gameReducer(state, { type: 'HERO_ATTACK', heroId: state.heroes[0].id, itemId: item(state, 'Ring').id, targets: [{ monsterId: state.monsters[0].id, roll: 6 }] })
+    expect(state.monsters.map((m) => m.name)).toEqual(['Rat']) // 6 + 8 beats AC 14
+    expect(item(state, 'Ring').used).toBe(true)
+    state = gameReducer(state, { type: 'USE_ITEM', heroId: state.heroes[0].id, itemId: item(state, 'Pearl').id, targetId: item(state, 'Ring').id })
+    expect(item(state, 'Ring').used).toBe(false)
+    expect(item(state, 'Pearl').used).toBe(true)
+  })
+
+  it('rerolls a missed attack with a lucky charm', () => {
+    let state = attack(give(setup(), 'charm'), 2)
+    const hero = state.heroes[0]
+    state = gameReducer(state, { type: 'REROLL_ATTACK', helperId: hero.id, helperItemId: item(state, 'Charm').id, monsterId: state.monsters[0].id, roll: 15 })
+    expect(state.monsters.map((m) => m.name)).toEqual(['Rat'])
+    expect(state.heroes[0].items).toEqual([])
+  })
+
+  it('levels a hero up with a tome, without XP or a natural 20', () => {
+    let state = give(setup(), 'tome')
+    state = gameReducer(state, { type: 'USE_ITEM', heroId: state.heroes[0].id, itemId: item(state, 'Tome').id })
+    expect(state.heroes[0].level).toBe(2)
+    expect(state.xp).toBe(0)
+  })
+
+  it('makes one monster attack another with the scroll', () => {
+    let state = give(setup(), 'scroll')
+    const [ogre, rat] = state.monsters
+    state = gameReducer(state, { type: 'MONSTER_CONTROL', heroId: state.heroes[0].id, itemId: item(state, 'Scroll').id, monsterId: ogre.id, targetId: rat.id, roll: 5 })
+    expect(state.monsters.map((m) => m.name)).toEqual(['Ogre'])
+    expect(state.xp).toBe(1)
+    expect(state.turn.treasureOwed).toBe(state.heroes[0].id)
+  })
+
+  it('turns a monster into the next one off the monster deck', () => {
+    let state = give(setup(), 'wand')
+    const rat = state.monsters[1]
+    state = gameReducer(state, { type: 'USE_ITEM', heroId: state.heroes[0].id, itemId: item(state, 'Wand').id, monsterId: rat.id, cards: monsters, random: [] })
+    expect(state.monsters).toHaveLength(2)
+    expect(state.monsters.find((m) => m.id === rat.id)).toBeUndefined()
+    expect(state.monsters[1].ownerId).toBe(rat.ownerId)
+  })
+
+  it('adds thieves\' tools to the roll to disable a trap', () => {
+    let state = give(setup(), 'tools')
+    state = { ...state, traps: [{ id: 't1', cardId: 'darts', name: 'Darts', type: 'trap', ownerId: state.heroes[0].id, card: { trap: { disable: 10 } } }] }
+    state = gameReducer(state, { type: 'DISABLE_TRAP', trapId: 't1', heroId: state.heroes[0].id, roll: 6 })
+    expect(state.traps).toEqual([])
   })
 })

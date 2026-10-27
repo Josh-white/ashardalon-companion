@@ -11,6 +11,21 @@ describe('card files', () => {
     expect(monsters.map((m) => m.copies)).toEqual([3, 2])
   })
 
+  it('skips treasure cards with an unknown use or range', () => {
+    const { treasures, problems } = normalizeCardFile({
+      powers: [],
+      treasures: [
+        { id: 'ok', name: 'Sword', inPlay: true, attackBonus: 1, attackRange: 'adjacent' },
+        { id: 'bad-use', name: 'Bad use', use: 'teleport' },
+        { id: 'bad-range', name: 'Bad range', attackBonus: 1, attackRange: 'far away' },
+        { id: 'bad-attack', name: 'Bad attack', attack: { damage: 1 } },
+      ],
+    })
+    expect(treasures.map((t) => t.name)).toEqual(['Sword'])
+    expect(treasures[0]).toMatchObject({ copies: 1, inPlay: true, attackBonus: 1, after: null, use: null })
+    expect(problems).toHaveLength(3)
+  })
+
   it('skips encounter cards with a bad type, attack or curse roll', () => {
     const { encounters, problems } = normalizeCardFile({
       powers: [],

@@ -33,7 +33,7 @@ export function describeAction(state, action) {
     case 'MONSTER_ATTACK':
       return monster ? `${monster.name}'s attack` : 'Monster attack'
     case 'HERO_ATTACK': {
-      const power = hero?.powers.find((p) => p.id === action.powerId)
+      const power = hero?.powers.find((p) => p.id === action.powerId) ?? hero?.items?.find((i) => i.id === action.itemId)
       return power ? `${hero.name}'s ${power.name}` : 'Hero attack'
     }
     case 'USE_POWER': {
@@ -64,6 +64,7 @@ export function describeAction(state, action) {
       return 'Drawing an encounter'
     case 'ENCOUNTER_ATTACK':
       return state.encounter ? `${state.encounter.card.name}'s attack` : 'Encounter attack'
+    case 'FILTER_ENCOUNTER_MONSTERS':
     case 'RESOLVE_ENCOUNTER':
     case 'REDRAW_ENCOUNTER':
       return state.encounter ? state.encounter.card.name : 'Encounter'
@@ -77,6 +78,17 @@ export function describeAction(state, action) {
       return hero?.curses?.find((c) => c.id === action.curseId)?.name ?? 'Curse'
     case 'SET_MONSTER_OWNER':
       return monster ? `Passing ${monster.name}` : 'Passing a monster'
+    case 'DRAW_TREASURE':
+      return 'Drawing a treasure'
+    case 'KEEP_TREASURE':
+      return state.treasure ? `Taking the ${state.treasure.card.name}` : 'Treasure'
+    case 'USE_ITEM':
+    case 'TOGGLE_ITEM':
+    case 'DISCARD_ITEM':
+    case 'MONSTER_CONTROL': {
+      const item = hero?.items?.find((i) => i.id === action.itemId)
+      return item ? `${hero.name}'s ${item.name}` : 'Item'
+    }
     case 'SET_TRIANGLE':
       return 'Black triangle'
     case 'ADJUST_SURGES':

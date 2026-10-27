@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { asksIfStayed, attackItems, distanceChoices, heroItems, itemsWithUse } from '../data/items.js'
 import { effectsOf, maxRolls, reactionsFor } from '../data/powerEffects.js'
 import { rollD20 } from '../state/random.js'
 import { powerNumber } from '../state/game.js'
@@ -59,10 +60,13 @@ function FollowUp({ state, hero, power, last, dispatch }) {
 export function AttackAftermath({ state, last, dispatch }) {
   const hero = state.heroes.find((h) => h.id === last.heroId)
   const power = hero?.powers.find((p) => p.id === last.powerId)
-  if (!hero || !power) return null
+  const item = heroItems(hero).find((i) => i.id === last.itemId)
+  if (!hero || !(power || item)) return null
   const effects = effectsOf(power)
   const alive = (row) => state.monsters.some((m) => m.id === row.monsterId)
   const advice = reactionsFor(state.heroes, 'reroll')
+  // A Lucky Charm rerolls its owner's own miss.
+  const charms = itemsWithUse([hero], 'reroll')
   const furious = reactionsFor([hero], 'furious')[0]
   const rerollable = last.rolls.filter((r) => !r.hit && !r.rerolled && alive(r))
   const furiousRows = furious ? last.rolls.filter((r) => r.hit && alive(r)) : []
@@ -74,7 +78,7 @@ export function AttackAftermath({ state, last, dispatch }) {
       <ul className="space-y-2">
         {last.rolls.map((r, i) => (
           <li key={i} className={`rounded-xl p-3 text-lg ${r.hit ? 'bg-emerald-950' : 'bg-zinc-900'}`}>
-            {hero.name} {r.rerolled ? 'rolled again:' : 'rolled'} {r.value} + {last.attack.bonus} = {r.total} against the {r.label}'s AC {r.ac}.{' '}
+            {hero.name} {r.rerolled ? 'rolled again:' : 'rolled'} {r.value} + {r.attack?.bonus ?? last.attack.bonus} = {r.total} against the {r.label}'s AC {r.ac}.{' '}
             <b className={r.hit ? 'text-emerald-300' : 'text-zinc-300'}>{r.outcome}</b>
           </li>
         ))}
@@ -92,6 +96,17 @@ export function AttackAftermath({ state, last, dispatch }) {
           </Button>
         )),
       )}
+      {once(rerollable).flatMap((row) =>
+        charms.map(({ item: charm }) => (
+          <Button
+            key={`${row.monsterId}-${charm.id}`}
+            className="w-full"
+            onClick={() => dispatch({ type: 'REROLL_ATTACK', helperId: hero.id, helperItemId: charm.id, monsterId: row.monsterId, roll: rollD20() })}
+          >
+            🍀 Lucky Charm: roll again against the {row.label} (then it's discarded)
+          </Button>
+        )),
+      )}
       {once(furiousRows).map((row) => (
         <Button
           key={row.monsterId}
@@ -101,7 +116,7 @@ export function AttackAftermath({ state, last, dispatch }) {
           😤 Furious Assault: +1 damage to the {row.label}
         </Button>
       ))}
-      <FollowUp key={`${last.powerId}-${last.rolls.length}`} state={state} hero={hero} power={power} last={last} dispatch={dispatch} />
+      {power && <FollowUp key={`${last.powerId}-${last.rolls.length}`} state={state} hero={hero} power={power} last={last} dispatch={dispatch} />}
       {effects.note && <p className="rounded-lg bg-amber-950/60 p-3 text-amber-200">{effects.note}</p>}
     </div>
   )
@@ -140,6 +155,41 @@ function BeforeQuestion({ hero, effects, answers, setAnswers }) {
   return null
 }
 
+const DISTANCE_LABELS = { adjacent: 'Next to me', within1: 'Within 1 tile', far: 'Farther' }
+
+// Magic weapons only help against monsters close enough, so the app asks how far each one is.
+function DistanceQuestion({ state, hero, chosen, distances, setDistances, stayed, setStayed }) {
+  const choices = distanceChoices(hero)
+  const ids = chosen.filter((id, i) => chosen.indexOf(id) === i)
+  if (!choices && !asksIfStayed(hero)) return null
+  return (
+    <div className="space-y-2 rounded-xl bg-yellow-950/40 p-3">
+      {choices &&
+        ids.map((id) => {
+          const monster = state.monsters.find((m) => m.id === id)
+          return (
+            <div key={id}>
+              <p className="text-zinc-200">💰 How far is the {monster ? monsterName(state, monster) : 'monster'} from {hero.name}?</p>
+              <div className="mt-1 grid grid-cols-3 gap-2">
+                {choices.map((d) => (
+                  <Button key={d} variant={distances[id] === d ? 'gold' : 'default'} onClick={() => setDistances({ ...distances, [id]: d })}>
+                    {DISTANCE_LABELS[d]}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      {asksIfStayed(hero) && (
+        <label className="flex items-center gap-3 text-zinc-200">
+          <input type="checkbox" className="h-6 w-6" checked={stayed} onChange={() => setStayed(!stayed)} />
+          {hero.name} didn't move this Hero Phase (Dwarven Hammer hits harder)
+        </label>
+      )}
+    </div>
+  )
+}
+
 // The Hero Phase's attack: pick a power and the monster (or monsters) it hits, then the
 // app rolls against each monster's AC, takes off the damage and hands out XP.
 // `extra` is a free at-will attack from Cause Fear or Acrobatic Onslaught.
@@ -147,15 +197,22 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   const powers = hero.powers.filter(
     (p) => !p.used && powerNumber(p.card?.attack) !== null && (!extra || p.type === 'at-will'),
   )
+  // Items with their own attack (Crossbow of Speed) are picked like a power.
+  const items = extra ? [] : attackItems(hero)
   const [powerId, setPowerId] = useState(null)
   const [chosen, setChosen] = useState([])
   const [answers, setAnswers] = useState({})
+  const [distances, setDistances] = useState({})
+  const [stayed, setStayed] = useState(false)
   const [rolled, setRolled] = useState(false)
-  const power = powers.find((p) => p.id === powerId)
-  const effects = effectsOf(power)
-  const limit = power ? maxRolls(power) : 1
+  const item = items.find((i) => i.id === powerId)
+  // An item's attack reads like a power's: a name, an attack number and damage.
+  const power = powers.find((p) => p.id === powerId) ?? (item && { ...item, type: 'item', card: { attack: `+${item.card.attack.bonus}`, damage: String(item.card.attack.damage), text: item.card.text } })
+  const effects = effectsOf(item ? null : power)
+  const limit = item ? 1 : power ? maxRolls(power) : 1
   const unknownAc = state.monsters.find((m) => chosen.includes(m.id) && !m.ac)
-  const needsAnswer = effects.ask && Object.keys(answers).length === 0
+  const needsAnswer =
+    (effects.ask && Object.keys(answers).length === 0) || (distanceChoices(hero) && chosen.some((id) => !distances[id]))
   const last = state.turn.lastAttack
   const showResults = rolled && last && !last.bonus && last.heroId === hero.id
 
@@ -167,6 +224,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
     setPowerId(id)
     setChosen([])
     setAnswers({})
+    setDistances({})
   }
   const tap = (id) =>
     setChosen((list) => {
@@ -184,7 +242,8 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
 
   const roll = () => {
     const targets = chosen.map((monsterId) => ({ monsterId, roll: rollD20() }))
-    dispatch({ type: 'HERO_ATTACK', heroId: hero.id, powerId: power.id, targets, bonusAttack: Boolean(extra), ...answers })
+    const source = item ? { itemId: item.id } : { powerId: power.id }
+    dispatch({ type: 'HERO_ATTACK', heroId: hero.id, ...source, targets, bonusAttack: Boolean(extra), distances, stayed, ...answers })
     setRolled(true)
   }
 
@@ -217,7 +276,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
         </>
       ) : (
         <>
-          {powers.length === 0 ? (
+          {powers.length + items.length === 0 ? (
             <p className="text-zinc-400">None of {hero.name}'s unused {extra ? 'at-will ' : ''}powers has an attack number.</p>
           ) : (
             <div className="flex flex-wrap gap-2">
@@ -233,6 +292,21 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
                   <span className="block font-semibold text-zinc-100">{p.name}</span>
                   <span className="text-sm text-zinc-400">
                     {p.card.attack} · {p.card.damage || '0'} damage{p.type === 'daily' ? ' · daily' : ''}
+                  </span>
+                </button>
+              ))}
+              {items.map((i) => (
+                <button
+                  key={i.id}
+                  type="button"
+                  onClick={() => pickPower(i.id)}
+                  className={`rounded-xl border-2 px-3 py-2 text-left transition active:scale-95 ${
+                    i.id === powerId ? 'border-amber-400 bg-amber-950/60' : 'border-yellow-700 bg-zinc-900'
+                  }`}
+                >
+                  <span className="block font-semibold text-zinc-100">💰 {i.name}</span>
+                  <span className="text-sm text-zinc-400">
+                    +{i.card.attack.bonus} · {i.card.attack.damage} damage · item
                   </span>
                 </button>
               ))}
@@ -252,6 +326,18 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
               </div>
               <MonsterChoice state={state} chosen={chosen} onToggle={tap} />
               <BeforeQuestion hero={hero} effects={effects} answers={answers} setAnswers={setAnswers} />
+              {chosen.length > 0 && (
+                <DistanceQuestion
+                  state={state}
+                  hero={hero}
+                  chosen={chosen}
+                  distances={distances}
+                  setDistances={setDistances}
+                  stayed={stayed}
+                  setStayed={setStayed}
+                />
+              )}
+              {item?.card.note && <p className="rounded-lg bg-amber-950/60 p-3 text-amber-200">{item.card.note}</p>}
               {power.card.text && (
                 <details className="text-sm text-zinc-500">
                   <summary>What {power.name} says</summary>
