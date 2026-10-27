@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { AdventurePanel } from './components/Adventure.jsx'
 import HeroCard from './components/HeroCard.jsx'
 import MomentOverlay from './components/MomentOverlay.jsx'
 import MonsterList, { VillainList } from './components/MonsterList.jsx'
@@ -71,6 +72,7 @@ function GameOver({ state, dispatch }) {
         <h2 className={`mt-4 font-display text-4xl font-bold ${won ? 'text-amber-400' : 'text-red-400'}`}>
           {won ? 'Victory!' : 'The party has fallen'}
         </h2>
+        {won && state.adventure?.card.story.victory && <p className="mt-3 italic text-zinc-200">{state.adventure.card.story.victory}</p>}
         <p className="mt-2 text-zinc-400">
           {state.turn.round} rounds · {state.xp} XP left in the pool
         </p>
@@ -153,6 +155,7 @@ function HeroView({ state, dispatch, hero }) {
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4">
       {myTurn ? <TurnGuide state={state} dispatch={dispatch} /> : <WaitingBanner state={state} />}
+      <AdventurePanel state={state} dispatch={dispatch} />
       {/* Cause Fear gives other heroes an attack during someone else's turn. */}
       {!myTurn && <ExtraAttacks state={state} dispatch={dispatch} onlyHeroId={hero.id} />}
       <HeroCard
@@ -178,6 +181,7 @@ function TableView({ state, dispatch }) {
   return (
     <div className="mx-auto max-w-6xl space-y-8 p-4">
       <TurnGuide state={state} dispatch={dispatch} />
+      <AdventurePanel state={state} dispatch={dispatch} />
       <section>
         <h2 className="mb-3 font-display text-2xl font-bold text-zinc-100">Heroes</h2>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

@@ -316,6 +316,64 @@
       "after": "flip"
     }
   ],
+  "adventures": [
+    {
+      "id": "example-practice-hunt",
+      "title": "Example Practice Hunt",
+      "players": "1-5",
+      "goal": "Defeat 5 monsters.",
+      "blurb": "Placeholder. Put the adventures from your own adventure book in cards/cards.json on your own server.",
+      "setup": [
+        "Put the Start tile on the table and the heroes next to its stairs.",
+        "Shuffle the dungeon tiles."
+      ],
+      "story": {
+        "start": "Placeholder start text.",
+        "victory": "Placeholder victory text."
+      },
+      "win": {
+        "figures": 5
+      }
+    },
+    {
+      "id": "example-lost-bag",
+      "title": "Example Lost Bag",
+      "players": "2-5",
+      "goal": "Find the bag and beat its guards.",
+      "setup": [
+        "Shuffle a special tile into the dungeon tiles."
+      ],
+      "reveals": [
+        {
+          "tile": "Special tile",
+          "story": "Placeholder text for the special tile.",
+          "steps": [
+            "Put a token on the tile for the bag."
+          ],
+          "actions": [
+            {
+              "type": "placeToken",
+              "name": "Bag"
+            },
+            {
+              "type": "drawGuardians",
+              "count": 2
+            },
+            {
+              "type": "extraEncounters",
+              "count": 1
+            }
+          ]
+        }
+      ],
+      "win": {
+        "guardians": true,
+        "tokens": [
+          "Bag"
+        ]
+      }
+    }
+  ],
   "villains": [
     {
       "id": "example-villain",

@@ -144,6 +144,51 @@ Treasure cards make a virtual treasure deck. The first monster defeated in a tur
 - `use`: what tapping it does: `heal` (with `heal`), `endCondition`, `refreshPower`, `refreshAny` (a power or an item), `reduceDamage` (1 HP back after a hit), `levelUp`, `polymorph` (swap a monster for a new monster card), `reroll` (offered on a missed attack), `caltrops` (with `tokens`), `monsterControl` (on a monster's turn, with a `monsterAttack`), or `note`.
 - `after`: `flip` or `discard` once used. Leave it out for items that can be used again.
 
+## Adventures (optional)
+
+Adventures from the adventure book go in an `adventures` list. The projector picks one before the game, and the app shows its setup, reads its story text, and calls the victory when the goal is done.
+
+```json
+{
+  "adventures": [
+    {
+      "id": "rogues-bag",
+      "number": 3,
+      "title": "The Lost Bag",
+      "players": "2-5",
+      "blurb": "One line about the adventure.",
+      "goal": "What the heroes have to do.",
+      "setup": ["Each setup step, in order."],
+      "rules": [{ "name": "Vault", "text": "A special rule to remember." }],
+      "story": { "start": "Read when the game starts.", "victory": "Read when the heroes win." },
+      "reveals": [
+        {
+          "tile": "Vault",
+          "story": "Read when the tile turns up.",
+          "steps": ["What to put on the board."],
+          "actions": [
+            { "type": "placeToken", "name": "Bag" },
+            { "type": "drawGuardians", "count": 2 },
+            { "type": "extraEncounters", "count": 1 }
+          ]
+        }
+      ],
+      "win": { "guardians": true, "tokens": ["Bag"] },
+      "needs": []
+    }
+  ]
+}
+```
+
+- `reveals`: special tiles. In the Exploration Phase each one gets an "It's the Vault!" button that shows its story and steps and does its `actions`:
+  - `drawGuardians`: draws `count` monster cards for the hero who found the tile; they're the guardians.
+  - `placeToken`: a token to pick up, such as a lost bag.
+  - `extraEncounters`: `count` more encounter cards every Villain Phase from now on.
+  - `placeVillain`: puts the villain `name` in play.
+- `win`: every part listed has to be done. `figures` (defeat that many monster figures; each figure of a group card counts), `guardians` (defeat the guardians), `tokens` (a hero picked each one up), `villains` (defeat each one by name), `escape` (the players tap "We escaped").
+- `onceOnly`: monster names that can come out only once; later copies are discarded with no replacement.
+- `needs`: bigger features the adventure needs, such as `villains` or `chambers`. The picker shows it as coming soon until the app has them.
+
 ### Villain cards (optional)
 
 Villains are the bosses an adventure brings out. When one is on the board it shows on every screen, heroes can attack it like a monster, and it takes its turn at the start of every Villain Phase, before anything else, with the same one-question-at-a-time guide as monsters. A defeated villain stays in the game's villain list marked defeated, so an adventure can check it. Until an adventure places its villain by itself, the table view has a **Put a villain on the board** button.

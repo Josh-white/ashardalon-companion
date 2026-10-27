@@ -5,6 +5,7 @@ import { ProjectorTreasure } from './Treasure.jsx'
 import { heroItems } from '../data/items.js'
 import { heroAc } from '../data/powerEffects.js'
 import { activeVillains } from '../state/game.js'
+import { ProjectorAdventure } from './Adventure.jsx'
 import { HpBar } from './ui.jsx'
 
 // A read-only screen for the projector: big enough to read across the room,
@@ -51,6 +52,8 @@ export default function ProjectorView({ state, onSwitchSeat }) {
           ))}
         </ul>
       </section>
+
+      <ProjectorAdventure state={state} />
 
       {(state.environment || state.encounter || state.treasure) && (
         <section className="space-y-[1vh]">
