@@ -360,15 +360,30 @@ export function EncounterStep({ state, hero, dispatch }) {
   if (left === 0) {
     return drawn > 0 ? <p className="mt-4 rounded-xl bg-emerald-950/60 p-3 text-lg text-emerald-200">✓ Encounters done.</p> : null
   }
+  // Why there's more than the usual card, so a second draw isn't a surprise.
+  const reasons = [
+    ...(hero.curses ?? []).filter((c) => c.card?.extraEncounter > 0).map((c) => `${c.name}: ${hero.name} draws an extra card every Villain Phase.`),
+    state.adventure?.extraEncounters > 0 && 'The adventure adds an extra card every Villain Phase.',
+    ...(state.turn.owedBecause ?? []),
+  ].filter(Boolean)
   return (
-    <Button
-      variant="danger"
-      className="mt-4 w-full px-5 py-4 text-xl font-bold"
-      onClick={() => dispatch({ type: 'DRAW_ENCOUNTER', heroId: hero.id, cards: encounters, random: randomNumbers(SHUFFLE_NUMBERS) })}
-    >
-      🃏 Draw {drawn > 0 ? 'another' : 'an'} encounter card
-      {left > 1 && <span className="ml-2 text-base font-normal opacity-80">({left} to draw)</span>}
-    </Button>
+    <>
+      {reasons.length > 0 && (
+        <ul className="mt-4 space-y-1 rounded-xl bg-zinc-950/50 p-3 text-lg text-amber-200">
+          {reasons.map((why) => (
+            <li key={why}>{why}</li>
+          ))}
+        </ul>
+      )}
+      <Button
+        variant="danger"
+        className="mt-4 w-full px-5 py-4 text-xl font-bold"
+        onClick={() => dispatch({ type: 'DRAW_ENCOUNTER', heroId: hero.id, cards: encounters, random: randomNumbers(SHUFFLE_NUMBERS) })}
+      >
+        🃏 Draw {drawn > 0 ? 'another' : 'an'} encounter card
+        {left > 1 && <span className="ml-2 text-base font-normal opacity-80">({left} to draw)</span>}
+      </Button>
+    </>
   )
 }
 

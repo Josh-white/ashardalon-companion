@@ -588,6 +588,7 @@ describe('encounter deck', () => {
     const state = resolve(drawCard(startGame(), 'heat'))
     expect(state.heroes.every((h) => h.hp === h.maxHp - 1)).toBe(true)
     expect(state.turn.encountersOwed).toBe(1)
+    expect(state.turn.owedBecause).toEqual(['Heat says to draw another encounter card.'])
   })
 
   it('hurts the active hero only when a monster is on their tile', () => {

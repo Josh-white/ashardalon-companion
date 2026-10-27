@@ -391,6 +391,12 @@ function filterMonsterDeck(state, type, random, cards = []) {
 // A card about a villain (Ashardalon Breathes!) only does anything while that villain is in play.
 export const villainInPlay = (state, card) => !card.villain || activeVillains(state).some((v) => v.cardId === card.villain)
 
+// One more encounter card this Villain Phase, with the reason shown on the button.
+const oweEncounter = (state, why) => ({
+  ...state,
+  turn: { ...state.turn, encountersOwed: (state.turn.encountersOwed ?? 0) + 1, owedBecause: [...(state.turn.owedBecause ?? []), why] },
+})
+
 // After the encounter card is read out (and any attack rolled), the app does what it
 // can and puts the card where it goes: on the hero (curse), in play (environment), on
 // the board (trap, hazard), or in the discards (event).
@@ -428,7 +434,7 @@ function resolveEncounter(state, action) {
   } else {
     next = discardEncounterCard(next, card.id)
   }
-  if (card.drawAnother) next = { ...next, turn: { ...next.turn, encountersOwed: (next.turn.encountersOwed ?? 0) + 1 } }
+  if (card.drawAnother) next = oweEncounter(next, `${card.name} says to draw another encounter card.`)
   if (downed.length > 0) {
     next = withMoment(next, { kind: 'down', title: `${downed.join(' and ')} ${downed.length > 1 ? 'are' : 'is'} down!`, detail: card.name })
   }
@@ -1870,7 +1876,7 @@ function reduce(state, action) {
       if (!encounter || encounter.attacked) return state
       const next = discardEncounterCard({ ...state, encounter: null }, encounter.cardId)
       return withLog(
-        { ...next, turn: { ...next.turn, encountersOwed: (next.turn.encountersOwed ?? 0) + 1 } },
+        oweEncounter(next, `${encounter.card.name} was discarded because the tile already had a marker, so draw a new card.`),
         `That tile already has a marker, so ${encounter.card.name} was discarded.`,
       )
     }
