@@ -310,3 +310,79 @@ describe('monster deck', () => {
     expect(state.monsterDeck.draw).toHaveLength(0)
   })
 })
+
+describe('hero attacks', () => {
+  const ogre = {
+    id: 'ogre', name: 'Ogre', copies: 1, ac: 14, hp: 2, xp: 2, figures: 1,
+    attacks: [{ id: 'slam', name: 'Slam', bonus: 7, damage: 1, miss: 0, conditions: [] }],
+    tactics: [{ move: 'toward' }],
+  }
+  const devils = { ...ogre, id: 'devils', name: 'Devil', hp: 1, xp: 3, figures: 3 }
+  const withPower = (state, card, type = 'at-will') => {
+    const hero = state.heroes[0]
+    return gameReducer(state, { type: 'SET_POWER_CARD', heroId: hero.id, powerId: hero.powers.find((p) => p.type === type).id, card })
+  }
+  const setup = (cards = [ogre], power = { id: 'strike', name: 'Strike', attack: '+6', damage: '2' }, type) => {
+    let state = startGame()
+    state = gameReducer(state, { type: 'DRAW_MONSTER', heroId: state.heroes[1].id, cards, random: [] })
+    return withPower(state, power, type)
+  }
+  const attack = (state, roll, powerType = 'at-will') =>
+    gameReducer(state, {
+      type: 'HERO_ATTACK',
+      heroId: state.heroes[0].id,
+      powerId: state.heroes[0].powers.find((p) => p.type === powerType).id,
+      targets: [{ monsterId: state.monsters[0].id, roll }],
+    })
+
+  it('misses below the monster AC and defeats it on a hit that drops it to 0', () => {
+    let state = setup()
+    expect(attack(state, 7).monsters[0].hp).toBe(2) // 7 + 6 = 13 vs AC 14
+    state = attack(state, 8)
+    expect(state.monsters).toHaveLength(0)
+    expect(state.xp).toBe(2)
+    expect(state.monsterDeck.discard).toEqual(['ogre'])
+    expect(state.moment.kind).toBe('defeat')
+  })
+
+  it('takes one Legion Devil figure at a time', () => {
+    const state = attack(setup([devils]), 15)
+    expect(state.monsters[0].hp).toBe(2)
+  })
+
+  it('uses up a daily power after attacking', () => {
+    const state = attack(setup([ogre], { id: 'blast', name: 'Blast', attack: '+8', damage: '1' }, 'daily'), 2, 'daily')
+    expect(state.heroes[0].powers.find((p) => p.type === 'daily').used).toBe(true)
+    expect(attack(state, 15, 'daily')).toBe(state)
+  })
+
+  it('needs a power with an attack number', () => {
+    const state = setup([ogre], { id: 'heal', name: 'Heal', attack: '', damage: '' })
+    expect(attack(state, 15)).toBe(state)
+  })
+})
+
+describe('turn guide answers', () => {
+  const toExploration = (state) => gameReducer(state, { type: 'NEXT_PHASE' })
+
+  it('moves on to the Villain Phase when the hero did not explore', () => {
+    const state = gameReducer(toExploration(startGame()), { type: 'SET_EXPLORED', explored: false })
+    expect(state.turn).toMatchObject({ phase: 2, explored: false })
+  })
+
+  it('remembers the monster drawn for a new tile until the turn passes', () => {
+    let state = gameReducer(toExploration(startGame()), { type: 'SET_EXPLORED', explored: true })
+    expect(state.turn).toMatchObject({ phase: 1, explored: true })
+    state = gameReducer(state, { type: 'DRAW_MONSTER', heroId: state.heroes[0].id, cards: [
+      { id: 'a', name: 'A', copies: 2, ac: 13, hp: 1, xp: 1, attacks: [], tactics: [{ move: 'toward' }] },
+    ], random: [] })
+    expect(state.turn.monsterDrawn).toBe(true)
+    state = gameReducer(gameReducer(state, { type: 'NEXT_PHASE' }), { type: 'NEXT_PHASE' })
+    expect(state.turn).toEqual({ heroIndex: 1, phase: 0, round: 1 })
+  })
+
+  it('only answers the exploration question during the Exploration Phase', () => {
+    const state = startGame()
+    expect(gameReducer(state, { type: 'SET_EXPLORED', explored: false })).toBe(state)
+  })
+})

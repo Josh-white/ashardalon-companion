@@ -32,6 +32,12 @@ export function describeAction(state, action) {
       return 'Drawing a monster'
     case 'MONSTER_ATTACK':
       return monster ? `${monster.name}'s attack` : 'Monster attack'
+    case 'HERO_ATTACK': {
+      const power = hero?.powers.find((p) => p.id === action.powerId)
+      return power ? `${hero.name}'s ${power.name}` : 'Hero attack'
+    }
+    case 'SET_EXPLORED':
+      return action.explored ? 'Exploring' : 'Not exploring'
     case 'DEFEAT_MONSTER':
       return monster ? `Defeating ${monster.name}` : 'Defeated monster'
     case 'REMOVE_MONSTER':

@@ -75,12 +75,13 @@ export default function MomentOverlay({ moment, heroes, big = false }) {
           // A monster attack: one die per hero it attacked, with the result under each.
           <div className={`flex justify-center gap-[0.6em] ${rolls.length > 1 ? (big ? 'text-[5vw]' : 'text-5xl') : big ? 'text-[8vw]' : 'text-7xl'}`}>
             {rolls.map((r) => {
-              const target = heroes.find((h) => h.id === r.heroId)
+              // A monster's attack rolls against heroes; a hero's attack rolls against labeled monsters.
+              const target = r.label ? null : heroes.find((h) => h.id === r.heroId)
               return (
-                <div key={r.heroId}>
+                <div key={r.heroId ?? r.monsterId}>
                   <Die value={r.value} />
-                  <div className={`${reveal} mt-1 text-[0.3em] font-bold ${target ? HERO_COLORS[target.color].text : ''}`}>
-                    {target?.name}
+                  <div className={`${reveal} mt-1 text-[0.3em] font-bold ${target ? HERO_COLORS[target.color].text : 'text-red-300'}`}>
+                    {r.label ?? target?.name}
                   </div>
                   <div className={`${reveal} text-[0.25em] ${r.hit ? 'text-red-300' : 'text-emerald-300'}`}>{r.outcome}</div>
                 </div>

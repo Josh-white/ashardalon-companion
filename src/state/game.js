@@ -110,15 +110,18 @@ function drawMonster(state, heroId, random) {
   if (!card) return state
   const monster = monsterFromCard(card, hero.id)
   const figures = monster.card.figures
+  // One monster per new tile: the Exploration Phase's draw button locks after this.
+  const exploring = PHASES[next.turn.phase]?.key === 'exploration' && next.heroes[next.turn.heroIndex]?.id === hero.id
   next = {
     ...next,
     monsterDeck: { ...deck, draw: draw.slice(1), discard },
     monsters: [...next.monsters, monster],
+    turn: exploring ? { ...next.turn, monsterDrawn: true } : next.turn,
   }
-  return withMoment(withLog(next, `${heroLabel(hero)} drew a ${card.name}!`), {
+  return withMoment(withLog(next, `${heroLabel(hero)} drew ${/^[AEIOU]/.test(card.name) ? 'an' : 'a'} ${card.name}!`), {
     kind: 'spawn',
     heroId: hero.id,
-    title: figures > 1 ? `${figures} ${card.name}s appear!` : `A ${card.name} appears!`,
+    title: figures > 1 ? `${figures} ${card.name}s appear!` : `${/^[AEIOU]/.test(card.name) ? 'An' : 'A'} ${card.name} appears!`,
     detail: figures > 1 ? `Place ${figures} ${card.name} figures on the new tile.` : 'Place its figure on the new tile.',
   })
 }
@@ -153,7 +156,10 @@ function monsterAttack(state, action) {
     const result = [damage > 0 && `${damage} damage`, ...conditions].filter(Boolean).join(' and ')
     const outcome = hit ? `Hit! ${result || 'No damage'}` : damage > 0 ? `Miss, but ${result}` : 'Miss!'
     rolls.push({ heroId: hero.id, value: roll, total, ac: hero.ac, hit, outcome })
-    next = withLog(next, `${monster.name}'s ${attack.name} vs ${hero.name}: ${roll} + ${attack.bonus} = ${total} vs AC ${hero.ac}. ${outcome}`)
+    next = withLog(
+      next,
+      `The ${monster.name} attacked ${hero.name} with its ${attack.name}: rolled ${roll} + ${attack.bonus} = ${total} against AC ${hero.ac}. ${outcome}`,
+    )
   }
   for (const name of downed) next = withLog(next, `${name} is down!`)
   return withMoment(next, {
@@ -161,6 +167,74 @@ function monsterAttack(state, action) {
     monsterId: monster.id,
     title: `${monster.name}: ${attack.name}!`,
     detail: downed.length > 0 ? `${downed.join(' and ')} ${downed.length > 1 ? 'are' : 'is'} down!` : '',
+    rolls,
+  })
+}
+
+// "+6" → 6, "2" → 2. A power without a number has no attack roll.
+export const powerNumber = (text) => {
+  const match = /[+-]?\d+/.exec(String(text ?? ''))
+  return match ? Number(match[0]) : null
+}
+
+// Damage to a monster. A group card (three Legion Devils) loses one figure at a
+// time, so extra damage doesn't spill onto the next figure.
+function damageMonster(monster, damage) {
+  const perFigure = monster.card?.figures > 1 ? monster.card.hp : monster.maxHp
+  const current = monster.hp - perFigure * (Math.ceil(monster.hp / perFigure) - 1)
+  return monster.hp - Math.min(damage, current)
+}
+
+// A hero attacks one or more monsters with a power. Each target comes with the d20 the
+// device rolled. Monsters brought to 0 HP are defeated, and a daily power is used up.
+function heroAttack(state, action) {
+  const hero = state.heroes.find((h) => h.id === action.heroId)
+  const power = hero?.powers.find((p) => p.id === action.powerId)
+  const bonus = powerNumber(power?.card?.attack)
+  const damage = powerNumber(power?.card?.damage) ?? 0
+  const targets = (Array.isArray(action.targets) ? action.targets : []).filter(
+    (t) => state.monsters.some((m) => m.id === t.monsterId && m.ac) && Number.isInteger(t.roll) && t.roll >= 1 && t.roll <= 20,
+  )
+  if (!power || bonus === null || power.used || targets.length === 0) return state
+
+  let next = power.type === 'daily' ? updateHero(state, hero.id, (h) => ({
+    powers: h.powers.map((p) => (p.id === power.id ? { ...p, used: true } : p)),
+  })) : state
+  const rolls = []
+  const defeated = []
+  for (const { monsterId, roll } of targets) {
+    const monster = next.monsters.find((m) => m.id === monsterId)
+    const total = roll + bonus
+    const hit = total >= monster.ac
+    const hp = hit ? damageMonster(monster, damage) : monster.hp
+    const outcome = hit ? (damage > 0 ? `Hit! ${damage} damage` : 'Hit!') : 'Miss!'
+    rolls.push({ monsterId, label: monster.name, value: roll, total, ac: monster.ac, hit, outcome })
+    next = withLog(
+      next,
+      `${hero.name}'s ${power.name} vs the ${monster.name}: rolled ${roll} + ${bonus} = ${total} against AC ${monster.ac}. ${outcome}`,
+    )
+    if (hp > 0) {
+      next = updateMonster(next, monster.id, () => ({ hp }))
+    } else {
+      defeated.push(monster)
+      next = discardMonsterCard(
+        { ...next, xp: next.xp + monster.xp, monsters: next.monsters.filter((m) => m.id !== monster.id) },
+        monster,
+      )
+      next = withLog(next, `The ${monster.name} was defeated! +${monster.xp} XP`)
+    }
+  }
+  const natural20 = rolls.some((r) => r.value === 20)
+  const canLevel = natural20 && hero.level === 1 && next.xp >= XP_TO_LEVEL_UP
+  const details = [
+    defeated.length > 0 && `${defeated.map((m) => m.name).join(' and ')} defeated! +${defeated.reduce((sum, m) => sum + m.xp, 0)} XP`,
+    canLevel && 'Natural 20! You can level up.',
+  ].filter(Boolean)
+  return withMoment(next, {
+    kind: natural20 ? 'crit' : defeated.length > 0 ? 'defeat' : 'roll',
+    heroId: hero.id,
+    title: `${hero.name}: ${power.name}!`,
+    detail: details.join(' '),
     rolls,
   })
 }
@@ -424,6 +498,17 @@ export function gameReducer(state, action) {
 
     case 'MONSTER_ATTACK':
       return monsterAttack(state, action)
+
+    case 'HERO_ATTACK':
+      return heroAttack(state, action)
+
+    case 'SET_EXPLORED': {
+      // The Exploration Phase's question: is the hero on an unexplored edge? With no
+      // new tile the phase is over, and the Villain Phase knows to draw an encounter.
+      if (PHASES[state.turn.phase]?.key !== 'exploration') return state
+      const explored = Boolean(action.explored)
+      return { ...state, turn: { ...state.turn, explored, phase: explored ? state.turn.phase : state.turn.phase + 1 } }
+    }
 
     case 'ADJUST_MONSTER_HP':
       return updateMonster(state, action.monsterId, (m) => ({ hp: clamp(m.hp + action.amount, 0, m.maxHp) }))

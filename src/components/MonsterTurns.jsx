@@ -189,8 +189,8 @@ function MonsterActivation({ monster, state, dispatch, activeHeroId, onDone }) {
           <ul className="space-y-2">
             {results.map(({ hero, value, total, hit }) => (
               <li key={hero.id} className={`rounded-xl p-3 text-lg ${hit ? 'bg-red-950' : 'bg-zinc-900'}`}>
-                <span className={`font-bold ${HERO_COLORS[hero.color].text}`}>{hero.name}</span>: rolled {value} + {attack.bonus} ={' '}
-                {total} vs AC {hero.ac}.{' '}
+                The {name} rolled {value} + {attack.bonus} = {total} against{' '}
+                <span className={`font-bold ${HERO_COLORS[hero.color].text}`}>{hero.name}</span>'s AC {hero.ac}.{' '}
                 <b className={hit ? 'text-red-300' : 'text-emerald-300'}>{hit ? 'Hit!' : 'Miss!'}</b> {hero.name} takes {effect(hit)}.
               </li>
             ))}

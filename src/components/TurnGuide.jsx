@@ -1,20 +1,154 @@
 import { useState } from 'react'
-import { HERO_COLORS, XP_TO_CANCEL_ENCOUNTER } from '../data/heroes.js'
+import { HERO_COLORS, XP_TO_CANCEL_ENCOUNTER, XP_TO_LEVEL_UP } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
+import HeroAttack from './HeroAttack.jsx'
 import MonsterTurns, { DrawMonsterButton } from './MonsterTurns.jsx'
 import { PowerTile } from './PowerList.jsx'
 import { Button } from './ui.jsx'
+
+// Each phase asks only what the app can't see for itself. The checklist each phase
+// used to show is still on the projector, as a reminder for the whole table.
+
+function Note({ children, tone = 'plain' }) {
+  const tones = {
+    plain: 'bg-zinc-950/50 text-zinc-100',
+    warn: 'bg-red-950/70 text-red-200',
+    good: 'bg-emerald-950/60 text-emerald-200',
+  }
+  return <div className={`mt-4 rounded-xl p-3 text-lg ${tones[tone]}`}>{children}</div>
+}
+
+function YesNo({ question, onYes, onNo }) {
+  return (
+    <div className="mt-4">
+      <p className="text-2xl font-semibold text-zinc-100">{question}</p>
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <Button variant="gold" className="py-4 text-2xl" onClick={onYes}>
+          Yes
+        </Button>
+        <Button className="py-4 text-2xl" onClick={onNo}>
+          No
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function HeroPhase({ state, hero, dispatch }) {
+  return (
+    <>
+      {hero.hp === 0 && (
+        <Note tone="warn">
+          <p>{hero.name} is at 0 HP. Spend a healing surge before anything else.</p>
+          <Button
+            variant={state.surges > 0 ? 'gold' : 'danger'}
+            className="mt-2"
+            onClick={() => dispatch({ type: 'USE_SURGE', heroId: hero.id })}
+          >
+            {state.surges > 0 ? `Use a healing surge (heal to ${hero.surgeValue})` : 'No surges left: the party falls'}
+          </Button>
+        </Note>
+      )}
+      <Note>Move and attack, attack and move, or move twice.</Note>
+
+      {/* The hero's chosen powers, right where the Hero Phase asks for an attack. Tap a
+          daily or utility to flip it over once it's used. */}
+      {hero.powers.length > 0 && (
+        <div className="mt-5">
+          <h3 className="font-display text-xl font-bold text-zinc-200">{hero.name}'s powers</h3>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {[...hero.powers]
+              .sort((a, b) => Number(a.used) - Number(b.used))
+              .map((power) => (
+                <PowerTile
+                  key={power.id}
+                  power={power}
+                  onToggle={() => dispatch({ type: 'TOGGLE_POWER', heroId: hero.id, powerId: power.id })}
+                />
+              ))}
+          </div>
+        </div>
+      )}
+
+      <HeroAttack state={state} hero={hero} dispatch={dispatch} />
+
+      {hero.level === 1 && state.xp >= XP_TO_LEVEL_UP && (
+        <Note tone="good">
+          <p>Rolled a natural 20 this turn? Spend {XP_TO_LEVEL_UP} XP to reach level 2.</p>
+          <Button variant="gold" className="mt-2" onClick={() => dispatch({ type: 'LEVEL_UP', heroId: hero.id })}>
+            Level up
+          </Button>
+        </Note>
+      )}
+    </>
+  )
+}
+
+function ExplorationPhase({ state, hero, dispatch }) {
+  const { explored, monsterDrawn } = state.turn
+  if (explored !== true) {
+    return (
+      <YesNo
+        question={`Is ${hero.name} standing on an unexplored edge?`}
+        onYes={() => dispatch({ type: 'SET_EXPLORED', explored: true })}
+        onNo={() => dispatch({ type: 'SET_EXPLORED', explored: false })}
+      />
+    )
+  }
+  const newest = monsterDrawn && [...state.monsters].reverse().find((m) => m.ownerId === hero.id)
+  return (
+    <>
+      <Note>Draw a dungeon tile and put it on that edge.</Note>
+      {monsterDrawn ? (
+        <Note tone="good">
+          ✓ {newest ? `${/^[AEIOU]/.test(newest.name) ? 'An' : 'A'} ${newest.name} was drawn.` : 'Monster drawn.'} Put its figure on the new tile.
+        </Note>
+      ) : (
+        <DrawMonsterButton state={state} heroId={hero.id} dispatch={dispatch} className="mt-4 w-full" />
+      )}
+    </>
+  )
+}
+
+function VillainPhase({ state, hero, dispatch }) {
+  const explored = state.turn.explored === true
+  // Only a new tile can skip the encounter, and only when it has no black triangle.
+  const [triangle, setTriangle] = useState(null)
+  const needEncounter = !explored || triangle === true
+
+  return (
+    <>
+      {explored && triangle === null ? (
+        <YesNo
+          question="Does the new tile have a black triangle?"
+          onYes={() => setTriangle(true)}
+          onNo={() => setTriangle(false)}
+        />
+      ) : needEncounter ? (
+        <Note>
+          <p>{explored ? 'The new tile has a black triangle,' : 'No new tile this turn,'} so draw an encounter card and do what it says.</p>
+          <Button
+            className="mt-2"
+            disabled={state.xp < XP_TO_CANCEL_ENCOUNTER}
+            onClick={() => dispatch({ type: 'CANCEL_ENCOUNTER' })}
+          >
+            Spend {XP_TO_CANCEL_ENCOUNTER} XP to cancel the encounter
+          </Button>
+        </Note>
+      ) : (
+        <Note tone="good">No encounter card this turn.</Note>
+      )}
+      <MonsterTurns state={state} dispatch={dispatch} hero={hero} />
+    </>
+  )
+}
 
 export default function TurnGuide({ state, dispatch }) {
   const { heroIndex, phase, round } = state.turn
   const hero = state.heroes[heroIndex]
   const current = PHASES[phase]
   const color = HERO_COLORS[hero.color]
-  const [checked, setChecked] = useState({})
   const stepKey = `${round}-${heroIndex}-${phase}`
-
-  const toggleStep = (i) =>
-    setChecked((c) => ({ ...c, [stepKey]: { ...c[stepKey], [i]: !c[stepKey]?.[i] } }))
 
   const isLastPhase = phase === PHASES.length - 1
   const nextHero = state.heroes[(heroIndex + 1) % state.heroes.length]
@@ -41,66 +175,9 @@ export default function TurnGuide({ state, dispatch }) {
         ))}
       </div>
 
-      <ul className="mt-5 space-y-2">
-        {current.steps.map((step, i) => {
-          const done = checked[stepKey]?.[i]
-          return (
-            <li key={step}>
-              <button
-                type="button"
-                onClick={() => toggleStep(i)}
-                className="flex w-full items-start gap-3 rounded-xl bg-zinc-950/50 p-3 text-left text-lg"
-              >
-                <span
-                  className={`mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 ${
-                    done ? 'border-amber-500 bg-amber-500 text-zinc-950' : 'border-zinc-600'
-                  }`}
-                >
-                  {done && '✓'}
-                </span>
-                <span className={done ? 'text-zinc-500 line-through' : 'text-zinc-100'}>{step}</span>
-              </button>
-            </li>
-          )
-        })}
-      </ul>
-
-      {/* The hero's chosen powers, right where the Hero Phase asks for an attack. Tap a
-          daily or utility to flip it over once it's used. */}
-      {current.key === 'hero' && hero.powers.length > 0 && (
-        <div className="mt-5">
-          <h3 className="font-display text-xl font-bold text-zinc-200">{hero.name}'s powers</h3>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            {[...hero.powers]
-              .sort((a, b) => Number(a.used) - Number(b.used))
-              .map((power) => (
-                <PowerTile
-                  key={power.id}
-                  power={power}
-                  onToggle={() => dispatch({ type: 'TOGGLE_POWER', heroId: hero.id, powerId: power.id })}
-                />
-              ))}
-          </div>
-        </div>
-      )}
-
-      {current.key === 'exploration' && (
-        <DrawMonsterButton state={state} heroId={hero.id} dispatch={dispatch} className="mt-4 w-full" />
-      )}
-
-      {current.key === 'villain' && (
-        <>
-          <div className="mt-3">
-            <Button
-              disabled={state.xp < XP_TO_CANCEL_ENCOUNTER}
-              onClick={() => dispatch({ type: 'CANCEL_ENCOUNTER' })}
-            >
-              Spend {XP_TO_CANCEL_ENCOUNTER} XP to cancel the encounter
-            </Button>
-          </div>
-          <MonsterTurns key={stepKey} state={state} dispatch={dispatch} hero={hero} />
-        </>
-      )}
+      {current.key === 'hero' && <HeroPhase key={stepKey} state={state} hero={hero} dispatch={dispatch} />}
+      {current.key === 'exploration' && <ExplorationPhase state={state} hero={hero} dispatch={dispatch} />}
+      {current.key === 'villain' && <VillainPhase key={stepKey} state={state} hero={hero} dispatch={dispatch} />}
 
       <div className="mt-6 flex items-center justify-between gap-3">
         <Button variant="ghost" onClick={() => dispatch({ type: 'PREVIOUS_PHASE' })}>
