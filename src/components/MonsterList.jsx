@@ -124,7 +124,9 @@ function MonsterRow({ monster, owner, isActiveOwner, dispatch }) {
         <div>
           <h3 className="font-display text-xl font-bold text-red-300">{monster.name}</h3>
           <p className="text-sm text-zinc-400">
-            {owner ? `${owner.name}'s card` : 'No owner'} · {monster.ac ? `AC ${monster.ac} · ` : ''}worth {monster.xp} XP
+            {monster.objective ? 'In the chamber' : owner ? `${owner.name}'s card` : 'No owner'} · {monster.ac ? `AC ${monster.ac}` : ''}
+            {!monster.objective && `${monster.ac ? ' · ' : ''}worth ${monster.xp} XP`}
+            {monster.chamber && ' · in the chamber'}
           </p>
           {monster.card?.figures > 1 && (
             <p className="text-sm text-amber-400">
@@ -170,7 +172,7 @@ function MonsterRow({ monster, owner, isActiveOwner, dispatch }) {
         className="mt-3 w-full py-3 text-lg"
         onClick={() => dispatch({ type: 'DEFEAT_MONSTER', monsterId: monster.id })}
       >
-        Defeated! +{monster.xp} XP
+        {monster.objective ? 'Destroyed!' : `Defeated! +${monster.xp} XP`}
       </Button>
     </div>
   )

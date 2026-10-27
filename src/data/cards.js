@@ -15,7 +15,7 @@ export function normalizeCardFile(data) {
   const powers = []
   const seen = new Set()
   const list = Array.isArray(data?.powers) ? data.powers : null
-  if (!list) return { powers, abilities: [], monsters: [], villains: [], encounters: [], adventures: [], treasures: [], problems: ['The file needs a "powers" list.'] }
+  if (!list) return { powers, abilities: [], monsters: [], villains: [], encounters: [], adventures: [], chambers: [], treasures: [], problems: ['The file needs a "powers" list.'] }
 
   list.forEach((card, i) => {
     const label = card?.name ? `"${card.name}"` : `power #${i + 1}`
@@ -51,6 +51,7 @@ export function normalizeCardFile(data) {
     villains: normalizeVillains(data?.villains, problems),
     encounters: normalizeEncounters(data?.encounters, problems),
     adventures: normalizeAdventures(data?.adventures, problems),
+    chambers: normalizeChambers(data?.chambers, problems),
     treasures: normalizeTreasures(data?.treasures, problems),
     problems,
   }
@@ -413,7 +414,7 @@ function normalizeTreasures(list, problems) {
 
 // What an adventure can do when its special tile is revealed. "placeVillain" is
 // handled by the villain rules (PLACE_VILLAIN); the rest by the adventure rules in state/adventure.js.
-export const REVEAL_ACTIONS = ['drawGuardians', 'placeToken', 'extraEncounters', 'placeVillain']
+export const REVEAL_ACTIONS = ['drawGuardians', 'placeToken', 'extraEncounters', 'placeVillain', 'chamber']
 const strings = (list) => (Array.isArray(list) ? list : []).filter((s) => typeof s === 'string' && s.trim() !== '')
 const text = (value) => (typeof value === 'string' ? value : '')
 
@@ -443,7 +444,9 @@ function normalizeAdventures(list, problems) {
         }
         actions.push({ type: action.type, count: wholeNumber(action.count, 1) ? action.count : 1, name: text(action.name) })
       }
-      reveals.push({ tile: reveal.tile, story: text(reveal.story), steps: strings(reveal.steps), actions })
+      // `door`: it happens when a door opens (the Hero Phase), not when a tile turns up.
+      // `after`: it can't happen until that other reveal has.
+      reveals.push({ tile: reveal.tile, story: text(reveal.story), steps: strings(reveal.steps), actions, door: reveal.door === true, after: text(reveal.after) })
     }
     const win = adv.win ?? {}
     seen.add(adv.id)
@@ -469,6 +472,7 @@ function normalizeAdventures(list, problems) {
         tokens: strings(win.tokens),
         villains: strings(win.villains),
         escape: win.escape === true,
+        chamber: win.chamber === true,
       },
       // Monster cards that come out once per game; later copies are discarded with no replacement.
       onceOnly: strings(adv.onceOnly),
@@ -477,4 +481,57 @@ function normalizeAdventures(list, problems) {
     })
   })
   return adventures
+}
+
+// Chamber cards: what fills a chamber when its entrance turns up, and the goal that
+// wins the adventure. Optional; the card text stays in cards.json like the rest.
+function normalizeChambers(list, problems) {
+  if (list === undefined) return []
+  if (!Array.isArray(list)) {
+    problems.push('"chambers" should be a list.')
+    return []
+  }
+  const chambers = []
+  const seen = new Set()
+  list.forEach((card, i) => {
+    const label = card?.name ? `"${card.name}"` : `chamber #${i + 1}`
+    if (!card || typeof card !== 'object') return problems.push(`${label} is not a chamber card.`)
+    if (!card.id || typeof card.id !== 'string') return problems.push(`${label} needs an "id".`)
+    if (seen.has(card.id)) return problems.push(`${label} reuses the id "${card.id}".`)
+    if (!card.name || typeof card.name !== 'string') return problems.push(`${label} needs a "name".`)
+    const objective = card.objective
+    if (objective !== undefined && !(typeof objective?.name === 'string' && wholeNumber(objective.hp, 1) && wholeNumber(objective.ac, 1))) {
+      return problems.push(`${label} has an "objective" that needs a "name", "hp" and "ac".`)
+    }
+    const monsters = card.monsters ?? {}
+    const win = card.win ?? {}
+    seen.add(card.id)
+    chambers.push({
+      id: card.id,
+      name: card.name,
+      setup: strings(card.setup),
+      goal: text(card.goal),
+      villain: text(card.villain),
+      // Unknown Overlord: one of these, picked at random.
+      villainFrom: strings(card.villainFrom),
+      monsters: {
+        perPlayer: wholeNumber(monsters.perPlayer, 0) ? monsters.perPlayer : 1,
+        // A monster without one of these types is discarded once and another drawn.
+        types: strings(monsters.types),
+        // Same for a monster worth one of these XP values.
+        redrawXp: (Array.isArray(monsters.redrawXp) ? monsters.redrawXp : []).filter((n) => wholeNumber(n, 0)),
+      },
+      objective: objective ? { name: objective.name, hp: objective.hp, ac: objective.ac } : null,
+      win: {
+        chamberMonsters: win.chamberMonsters === true,
+        villain: win.villain === true,
+        objective: win.objective === true,
+        escape: win.escape === true,
+        // A goal the app can't check: the players tap when it's done.
+        manual: text(win.manual),
+      },
+      needs: strings(card.needs),
+    })
+  })
+  return chambers
 }

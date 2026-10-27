@@ -185,9 +185,42 @@ Adventures from the adventure book go in an `adventures` list. The projector pic
   - `placeToken`: a token to pick up, such as a lost bag.
   - `extraEncounters`: `count` more encounter cards every Villain Phase from now on.
   - `placeVillain`: puts the villain `name` in play.
-- `win`: every part listed has to be done. `figures` (defeat that many monster figures; each figure of a group card counts), `guardians` (defeat the guardians), `tokens` (a hero picked each one up), `villains` (defeat each one by name), `escape` (the players tap "We escaped").
+  - `chamber`: opens the chamber. With `name`, that Chamber card (Elite Regiment); without, the app draws one from the chamber cards it can run.
+  - A reveal with `"door": true` happens when a door opens instead of when a tile turns up: its button is in the Hero Phase's door box. `after` names a reveal that has to happen first (the Secret Chamber door comes after its entrance tile).
+- `win`: every part listed has to be done. `chamber` (the chamber card's goal), `figures` (defeat that many monster figures; each figure of a group card counts), `guardians` (defeat the guardians), `tokens` (a hero picked each one up), `villains` (defeat each one by name), `escape` (the players tap "We escaped").
 - `onceOnly`: monster names that can come out only once; later copies are discarded with no replacement.
 - `needs`: bigger features the adventure needs, such as `villains` or `chambers`. The picker shows it as coming soon until the app has them.
+
+### Chamber cards (optional)
+
+The 14 Chamber cards. When an adventure's chamber entrance turns up, the app puts the card's villain or Altar on the board, then each hero, starting with the active one, draws monsters for the chamber. The card's goal becomes the adventure's goal.
+
+```json
+{
+  "chambers": [
+    {
+      "id": "stables",
+      "name": "Stables",
+      "setup": ["Each paragraph of the card, in order."],
+      "goal": "The card's goal.",
+      "villain": "Rage Drake",
+      "monsters": { "perPlayer": 1, "types": ["Animal", "Reptile"], "redrawXp": [] },
+      "win": { "villain": true },
+      "needs": []
+    }
+  ]
+}
+```
+
+- `villain`: the villain the card places, by name. `villainFrom` instead: a list to pick one from at random (Unknown Overlord).
+- `monsters`: `perPlayer` monsters for each hero (Endless Horde: 2). A monster that isn't one of `types`, or is worth one of the `redrawXp` values, is discarded once and another drawn.
+- `objective`: something to destroy that isn't a monster, such as `{ "name": "Altar", "hp": 5, "ac": 12 }`. Heroes attack it like a monster; it gives no XP or treasure.
+- `win`: `chamberMonsters` (defeat the monsters the chamber placed), `villain`, `objective`, `escape`, or `manual` (a goal the players tap when it's done).
+- `needs`: features the card needs; until the app has them it stays out of the drawn Chamber deck.
+
+### Doors
+
+Adventures that need `doors` get a door box in the Hero Phase: turn over the Closed Door token and tap Unlocked, Trapped (1 damage to each hero next to it) or Locked (roll 10 or more to unlock instead of attacking).
 
 ### Villain cards (optional)
 
