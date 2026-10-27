@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { HERO_COLORS } from '../data/heroes.js'
+import { heroAc, reactionsFor } from '../data/powerEffects.js'
 import { useCards } from '../state/useCards.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
 import { Button } from './ui.jsx'
@@ -65,7 +66,9 @@ function HeroPicker({ heroes, chosen, onToggle }) {
             } ${HERO_COLORS[hero.color].text}`}
           >
             {hero.name}
-            <span className="block text-sm font-normal text-zinc-400">AC {hero.ac} · {hero.hp} HP</span>
+            <span className="block text-sm font-normal text-zinc-400">AC {heroAc(hero)} · {hero.hp} HP</span>
+            {hero.tokens?.invisible && <span className="block text-sm font-normal text-sky-300">👻 Invisible: never the closest</span>}
+            {hero.tokens?.refuge && <span className="block text-sm font-normal text-sky-300">✨ In the Astral Refuge</span>}
           </button>
         )
       })}
@@ -101,18 +104,16 @@ function MonsterActivation({ monster, state, dispatch, activeHeroId, onDone }) {
       step.targets === 'all' ? (list.includes(heroId) ? list.filter((id) => id !== heroId) : [...list, heroId]) : [heroId],
     )
 
-  const roll = () => {
+  const roll = (nobleShield) => {
     const targets = chosen.map((heroId) => ({ heroId, roll: rollD20() }))
-    dispatch({ type: 'MONSTER_ATTACK', monsterId: monster.id, attackId: attack.id, targets })
-    // The server does the same sums; these are shown here so the player can read them.
-    setResults(
-      targets.map(({ heroId, roll: value }) => {
-        const hero = state.heroes.find((h) => h.id === heroId)
-        const total = value + attack.bonus
-        return { hero, value, total, hit: total >= hero.ac }
-      }),
-    )
+    dispatch({ type: 'MONSTER_ATTACK', monsterId: monster.id, attackId: attack.id, targets, nobleShield })
+    setResults(true)
   }
+  // Noble Shield: an attack on several heroes, one of them a paladin with the power unused.
+  const shield = chosen.length > 1 && reactionsFor(state.heroes.filter((h) => chosen.includes(h.id)), 'noble-shield')[0]
+  // The server's sums, so Mirror Image and Cleric's Shield are counted, and Tumbling Escape can change them.
+  const last = state.turn.lastMonsterAttack
+  const rows = results && last?.monsterId === monster.id ? last.results : []
 
   const movedTo = state.heroes.find((h) => h.id === chosen[0])
   const effect = (hit) => {
@@ -178,22 +179,38 @@ function MonsterActivation({ monster, state, dispatch, activeHeroId, onDone }) {
               First, move the {name} next to {movedTo.name}.
             </p>
           )}
-          <Button variant="danger" className="w-full py-4 text-xl font-bold" disabled={chosen.length === 0} onClick={roll}>
+          <Button variant="danger" className="w-full py-4 text-xl font-bold" disabled={chosen.length === 0} onClick={() => roll()}>
             🎲 Roll the {attack.name} attack (+{attack.bonus})
           </Button>
+          {shield && (
+            <Button className="w-full" onClick={() => roll({ heroId: shield.hero.id, powerId: shield.power.id })}>
+              🛡️ {shield.hero.name} uses Noble Shield: only {shield.hero.name} is attacked, and it counts as a 20
+            </Button>
+          )}
         </>
       )}
 
       {results && (
         <>
           <ul className="space-y-2">
-            {results.map(({ hero, value, total, hit }) => (
-              <li key={hero.id} className={`rounded-xl p-3 text-lg ${hit ? 'bg-red-950' : 'bg-zinc-900'}`}>
-                The {name} rolled {value} + {attack.bonus} = {total} against{' '}
-                <span className={`font-bold ${HERO_COLORS[hero.color].text}`}>{hero.name}</span>'s AC {hero.ac}.{' '}
-                <b className={hit ? 'text-red-300' : 'text-emerald-300'}>{hit ? 'Hit!' : 'Miss!'}</b> {hero.name} takes {effect(hit)}.
-              </li>
-            ))}
+            {rows.map((row) => {
+              const hero = state.heroes.find((h) => h.id === row.heroId)
+              const hit = row.hit && !row.dodged
+              const escape = row.hit && !row.dodged && reactionsFor([hero], 'dodge')[0]
+              return (
+                <li key={row.heroId} className={`rounded-xl p-3 text-lg ${hit ? 'bg-red-950' : 'bg-zinc-900'}`}>
+                  The {name} rolled {row.value} + {attack.bonus} = {row.total} against{' '}
+                  <span className={`font-bold ${HERO_COLORS[hero.color].text}`}>{hero.name}</span>'s AC {row.ac}.{' '}
+                  <b className={hit ? 'text-red-300' : 'text-emerald-300'}>{row.dodged ? 'Tumbling Escape: a miss!' : hit ? 'Hit!' : 'Miss!'}</b>{' '}
+                  {hero.name} takes {effect(hit)}.
+                  {escape && (
+                    <Button className="mt-2 w-full" onClick={() => dispatch({ type: 'DODGE_HIT', heroId: hero.id, powerId: escape.power.id })}>
+                      🤸 {hero.name} uses Tumbling Escape: the attack misses
+                    </Button>
+                  )}
+                </li>
+              )
+            })}
           </ul>
           <Button variant="gold" className="w-full py-3 text-lg" onClick={finish}>
             {figure < figures ? `Next ${name} →` : `Done with the ${name}`}

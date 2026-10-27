@@ -36,6 +36,18 @@ export function describeAction(state, action) {
       const power = hero?.powers.find((p) => p.id === action.powerId)
       return power ? `${hero.name}'s ${power.name}` : 'Hero attack'
     }
+    case 'USE_POWER': {
+      const power = hero?.powers.find((p) => p.id === action.powerId)
+      return power ? `${hero.name}'s ${power.name}` : 'Using a power'
+    }
+    case 'ATTACK_FOLLOW_UP':
+      return hero ? `${hero.name}'s power choice` : 'Power choice'
+    case 'REROLL_ATTACK':
+      return 'Inspiring Advice reroll'
+    case 'POWER_DAMAGE':
+      return { furious: 'Furious Assault', bladeBarrier: 'Blade Barrier', flamingSphere: 'Flaming Sphere' }[action.source] ?? 'Power damage'
+    case 'DODGE_HIT':
+      return hero ? `${hero.name}'s Tumbling Escape` : 'Tumbling Escape'
     case 'ATTACH_MONSTER_CARDS':
       return 'Monster cards'
     case 'SET_EXPLORED':

@@ -5,7 +5,7 @@ import MonsterList from './components/MonsterList.jsx'
 import ProjectorView from './components/ProjectorView.jsx'
 import SeatPicker from './components/SeatPicker.jsx'
 import Setup from './components/Setup.jsx'
-import TurnGuide from './components/TurnGuide.jsx'
+import TurnGuide, { ExtraAttacks } from './components/TurnGuide.jsx'
 import UndoButton from './components/UndoButton.jsx'
 import { Button, HpBar } from './components/ui.jsx'
 import { HERO_COLORS } from './data/heroes.js'
@@ -149,7 +149,10 @@ function HeroView({ state, dispatch, hero }) {
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4">
       {myTurn ? <TurnGuide state={state} dispatch={dispatch} /> : <WaitingBanner state={state} />}
+      {/* Cause Fear gives other heroes an attack during someone else's turn. */}
+      {!myTurn && <ExtraAttacks state={state} dispatch={dispatch} onlyHeroId={hero.id} />}
       <HeroCard
+        state={state}
         hero={hero}
         isActive={myTurn}
         xp={state.xp}
@@ -175,6 +178,7 @@ function TableView({ state, dispatch }) {
           {state.heroes.map((hero, i) => (
             <HeroCard
               key={hero.id}
+              state={state}
               hero={hero}
               isActive={i === state.turn.heroIndex}
               xp={state.xp}
