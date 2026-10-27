@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { heroArt } from '../data/art.js'
 import { CONDITIONS, HERO_COLORS, XP_TO_LEVEL_UP } from '../data/heroes.js'
 import { itemSpeed } from '../data/items.js'
 import { heroAc } from '../data/powerEffects.js'
 import { useCards } from '../state/useCards.js'
+import Art from './Art.jsx'
 import { MonsterChoice } from './Pickers.jsx'
 import PowerList from './PowerList.jsx'
 import { ItemList } from './Treasure.jsx'
@@ -119,8 +121,9 @@ export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, 
         isActive ? `ring-4 ${color.ring}` : ''
       } ${down ? 'opacity-80' : ''}`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div>
+      <div className="flex items-start gap-3">
+        <Art name={heroArt(hero.key)} className={`w-20 ${down ? 'grayscale' : ''}`} />
+        <div className="mr-auto">
           <h3 className={`font-display text-2xl font-bold ${color.text}`}>
             {hero.name}
             {hero.level === 2 && <span className="ml-2 text-base text-amber-400">★ Lv 2</span>}

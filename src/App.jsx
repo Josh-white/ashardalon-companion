@@ -1,5 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { AdventurePanel } from './components/Adventure.jsx'
+import Art from './components/Art.jsx'
+import ArtScreen from './components/ArtScreen.jsx'
 import HeroCard from './components/HeroCard.jsx'
 import MomentOverlay from './components/MomentOverlay.jsx'
 import Narrator from './components/Narrator.jsx'
@@ -12,6 +14,7 @@ import TurnGuide, { ExtraAttacks } from './components/TurnGuide.jsx'
 import UndoButton from './components/UndoButton.jsx'
 import { SoundToggle, TapForSound } from './components/SoundToggle.jsx'
 import { Button, HpBar } from './components/ui.jsx'
+import { heroArt } from './data/art.js'
 import { useSoundEffects } from './audio/sfx.js'
 import { useAudioLocked, useSoundSetting } from './audio/soundSetting.js'
 import { HERO_COLORS } from './data/heroes.js'
@@ -135,8 +138,9 @@ function PartyStrip({ heroes, exceptId }) {
       <div className="grid gap-3 sm:grid-cols-2">
         {others.map((hero) => (
           <div key={hero.id} className={`rounded-xl p-3 ${HERO_COLORS[hero.color].bg}`}>
-            <div className="flex justify-between">
-              <span className={`font-display text-lg font-bold ${HERO_COLORS[hero.color].text}`}>{hero.name}</span>
+            <div className="flex items-center justify-between gap-2">
+              <Art name={heroArt(hero.key)} className="w-10" />
+              <span className={`mr-auto font-display text-lg font-bold ${HERO_COLORS[hero.color].text}`}>{hero.name}</span>
               <span className="text-zinc-300">
                 {hero.hp} / {hero.maxHp} HP
               </span>
@@ -227,6 +231,7 @@ export default function App() {
   const [seat, setSeat] = useSeat()
   const deviceId = useDeviceId()
   const cards = useCards()
+  const [artOpen, setArtOpen] = useState(false)
 
   // A game from before the monster deck has monsters without their card; give them one.
   const needsCards = state?.monsters.some((m) => !m.card && cards.monsters.some((c) => c.name.toLowerCase() === m.name.toLowerCase()))
@@ -263,6 +268,15 @@ export default function App() {
     </>
   )
 
+  if (artOpen) {
+    return (
+      <main className="min-h-screen bg-zinc-950 text-zinc-100">
+        {banners}
+        <ArtScreen onDone={() => setArtOpen(false)} />
+      </main>
+    )
+  }
+
   if (state.status === 'setup') {
     return (
       <main className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -283,6 +297,7 @@ export default function App() {
           watchOnly={seat === PROJECTOR_SEAT}
           onProjector={() => setSeat(PROJECTOR_SEAT)}
           onLeaveProjector={() => setSeat(null)}
+          onArt={() => setArtOpen(true)}
         />
       </main>
     )
@@ -304,7 +319,7 @@ export default function App() {
     return (
       <main className="min-h-screen bg-zinc-950 text-zinc-100">
         {banners}
-        <SeatPicker heroes={state.heroes} onPick={setSeat} tableSeat={TABLE_SEAT} projectorSeat={PROJECTOR_SEAT} />
+        <SeatPicker heroes={state.heroes} onPick={setSeat} tableSeat={TABLE_SEAT} projectorSeat={PROJECTOR_SEAT} onArt={() => setArtOpen(true)} />
       </main>
     )
   }

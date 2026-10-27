@@ -1,10 +1,11 @@
 // Serves the built app and keeps the one shared game. Every iPad connects over
 // a WebSocket, sends actions, and receives the new state after each change.
-import { createReadStream, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { dirname, extname, join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer } from 'ws'
+import { ART_NAME, MAX_ART_BYTES } from '../src/data/art.js'
 import { createNarrator } from './narrator.js'
 import { normalizeCardFile } from '../src/data/cards.js'
 import { describeAction } from '../src/state/describeAction.js'
@@ -22,6 +23,7 @@ const CONTENT_TYPES = {
   '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.jpg': 'image/jpeg',
   '.json': 'application/json',
   '.ico': 'image/x-icon',
   '.webmanifest': 'application/manifest+json',
@@ -55,6 +57,83 @@ export function loadCards(cardsFile, exampleFile) {
   }
 }
 
+// Which card pictures are on the Pi, each with a version that changes when the
+// picture does, so screens fetch a new photo and cache the rest.
+export function listArt(artDir) {
+  const art = {}
+  try {
+    for (const file of readdirSync(artDir)) {
+      const name = file.replace(/\.jpg$/, '')
+      if (file.endsWith('.jpg') && ART_NAME.test(name)) art[name] = Math.round(statSync(join(artDir, file)).mtimeMs)
+    }
+  } catch {
+    // No art folder yet: no pictures.
+  }
+  return art
+}
+
+function readBody(req, limit) {
+  return new Promise((resolve, reject) => {
+    const chunks = []
+    let size = 0
+    req.on('data', (chunk) => {
+      size += chunk.length
+      if (size > limit) {
+        reject(new Error('too big'))
+        req.destroy()
+      } else chunks.push(chunk)
+    })
+    req.on('end', () => resolve(Buffer.concat(chunks)))
+    req.on('error', reject)
+  })
+}
+
+// GET /art/<name>.jpg serves a picture, PUT saves one from the card art screen,
+// and DELETE takes it away. Every change tells the screens to look again.
+async function handleArt(artDir, req, res, onChange) {
+  const name = decodeURIComponent(new URL(req.url, 'http://localhost').pathname).match(/^\/art\/(.+)\.jpg$/)?.[1]
+  if (!name || !ART_NAME.test(name)) {
+    res.writeHead(404).end('Not found')
+    return
+  }
+  const file = join(artDir, `${name}.jpg`)
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    if (!existsSync(file)) {
+      res.writeHead(404).end('Not found')
+      return
+    }
+    // Screens ask for ?v=<version>, so a picture never changes under one URL.
+    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=31536000, immutable' })
+    if (req.method === 'HEAD') res.end()
+    else createReadStream(file).pipe(res)
+    return
+  }
+  try {
+    if (req.method === 'PUT') {
+      const body = await readBody(req, MAX_ART_BYTES)
+      // Only JPEGs, which start with these three bytes.
+      if (body.length < 3 || body[0] !== 0xff || body[1] !== 0xd8 || body[2] !== 0xff) {
+        res.writeHead(400, { 'Content-Type': 'text/plain' }).end('Send a JPEG picture.')
+        return
+      }
+      mkdirSync(artDir, { recursive: true })
+      writeFileSync(`${file}.tmp`, body)
+      renameSync(`${file}.tmp`, file)
+    } else if (req.method === 'DELETE') {
+      rmSync(file, { force: true })
+    } else {
+      res.writeHead(405).end('Not allowed')
+      return
+    }
+  } catch (error) {
+    const tooBig = error.message === 'too big'
+    if (!res.headersSent) res.writeHead(tooBig ? 413 : 500, { 'Content-Type': 'text/plain' }).end(tooBig ? 'That picture is too big.' : `Could not save the picture: ${error.message}`)
+    return
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(listArt(artDir)))
+  onChange()
+}
+
 function serveStatic(staticDir, req, res) {
   const path = decodeURIComponent(new URL(req.url, 'http://localhost').pathname)
   let file = normalize(join(staticDir, path))
@@ -81,6 +160,7 @@ export function startServer({
   staticDir = join(ROOT, 'dist'),
   cardsFile = process.env.CARDS_FILE ?? join(ROOT, 'cards', 'cards.json'),
   exampleCardsFile = join(ROOT, 'cards', 'cards.example.json'),
+  artDir = process.env.ART_DIR ?? join(ROOT, 'cards', 'art'),
   // Set on the test copy so every screen shows it isn't the real game.
   instance = process.env.INSTANCE_LABEL || null,
   // Spoken lines are saved next to the game, so they survive updates.
@@ -101,6 +181,16 @@ export function startServer({
         .end(JSON.stringify(loadCards(cardsFile, exampleCardsFile)))
       return
     }
+    if (req.url === '/art.json') {
+      res
+        .writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+        .end(JSON.stringify(listArt(artDir)))
+      return
+    }
+    if (req.url.startsWith('/art/')) {
+      handleArt(artDir, req, res, () => broadcastRaw(JSON.stringify({ type: 'art' })))
+      return
+    }
     if (narrator.handle(req, res)) return
     serveStatic(staticDir, req, res)
   })
@@ -110,12 +200,12 @@ export function startServer({
   const stateMessage = () =>
     JSON.stringify({ type: 'state', state, undo: history.at(-1)?.label ?? null, undoDepth: history.length, instance })
 
-  const broadcast = () => {
-    const message = stateMessage()
+  function broadcastRaw(message) {
     for (const client of wss.clients) {
       if (client.readyState === client.OPEN) client.send(message)
     }
   }
+  const broadcast = () => broadcastRaw(stateMessage())
 
   wss.on('connection', (socket) => {
     socket.send(stateMessage())

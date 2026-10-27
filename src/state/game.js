@@ -7,6 +7,7 @@ import {
   XP_TO_CANCEL_ENCOUNTER,
   XP_TO_LEVEL_UP,
 } from '../data/heroes.js'
+import { monsterArt } from '../data/art.js'
 import { PHASES } from '../data/phases.js'
 import { heroItems, itemAttackBonus, itemTrapBonus, tileAcBonus } from '../data/items.js'
 import { effectsOf, heroAc, heroAttackPenalty, maxRolls } from '../data/powerEffects.js'
@@ -178,6 +179,7 @@ function drawMonster(state, heroId, random) {
   return withMoment(withLog(next, `${heroLabel(hero)} drew ${article(card.name)} ${card.name}!`), {
     kind: 'spawn',
     heroId: hero.id,
+    art: monsterArt(monster),
     title: figures > 1 ? `${figures} ${card.name}s appear!` : `${article(card.name) === 'an' ? 'An' : 'A'} ${card.name} appears!`,
     detail: figures > 1 ? `Place ${figures} ${card.name} figures on the new tile.` : 'Place its figure on the new tile.',
   })
@@ -254,6 +256,7 @@ function monsterAttack(state, action) {
   return withMoment(next, {
     kind: downed.length > 0 ? 'monster-down' : 'monster',
     monsterId: monster.id,
+    art: monsterArt(monster),
     title: `${monster.name}: ${attack.name}!`,
     detail: downed.length > 0 ? `${downed.join(' and ')} ${downed.length > 1 ? 'are' : 'is'} down!` : '',
     rolls,
@@ -471,6 +474,7 @@ function defeatVillain(state, villain) {
     return {
       state: withMoment(withLog(next, `The ${villain.name} is enraged! It's back up with ${rage.hp} HP and AC ${rage.ac}.`), {
         kind: 'spawn',
+        art: monsterArt(villain),
         title: `The ${villain.name} is enraged!`,
         detail: `It gets back up with ${rage.hp} HP, AC ${rage.ac} and nastier tactics. Flip its card over.`,
       }),
@@ -1307,6 +1311,7 @@ function placeVillain(state, action) {
   if (card.addEncounter) next = { ...next, encounterAdds: [...(next.encounterAdds ?? []).filter((id) => id !== card.addEncounter), card.addEncounter] }
   return withMoment(withLog(next, `The villain ${villain.fullName} appears!`), {
     kind: 'spawn',
+    art: monsterArt(villain),
     title: `${villain.fullName} appears!`,
     detail: [
       `Place the ${villain.name} figure. It takes a turn at the start of every Villain Phase.`,
@@ -1757,7 +1762,7 @@ function reduce(state, action) {
       if (villain) {
         // The Rage Drake still flips to its enraged side the first time.
         const { state: next, defeated } = defeatVillain(state, villain)
-        return defeated ? withMoment(next, { kind: 'defeat', title: `${villain.name} defeated!`, detail: '' }) : next
+        return defeated ? withMoment(next, { kind: 'defeat', art: monsterArt(villain), title: `${villain.name} defeated!`, detail: '' }) : next
       }
       const monster = state.monsters.find((m) => m.id === action.monsterId)
       if (!monster) return state
@@ -1778,6 +1783,7 @@ function reduce(state, action) {
       }
       return withMoment(withLog(next, `The ${monster.name} was defeated! +${monster.xp} XP`), {
         kind: 'defeat',
+        art: monsterArt(monster),
         title: `${monster.name} defeated!`,
         detail: `+${monster.xp} XP for the party${treasure ? '. Draw a treasure card!' : ''}`,
       })

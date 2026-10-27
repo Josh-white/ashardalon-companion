@@ -21,6 +21,12 @@ Starting hero stats are prefilled on the setup screen and can be adjusted there,
 
 Each hero has two at-will, one utility, and one daily power slot. Tap **Choose powers** to pick each one from a dropdown, tap a used daily or utility power to flip it, and tap **Read** to see the card text. The cards come from `cards/cards.json`, a file that stays on your server and is ignored by git. See [cards/README.md](cards/README.md) for the format.
 
+## Card art
+
+Tap **📷 Add photos of your cards** (on the setup screen, or the "Who's playing" screen during a game). For each hero, monster and villain, take a photo of your card, then drag and pinch until its picture fills the square. The pictures show on the hero cards, monster cards, the projector, and the big screens when a monster appears or falls.
+
+Like the card text, the photos stay on your Pi in `cards/art/`, which git ignores. Each copy of the app has its own; to copy the test copy's photos to the real game: `cp ~/ashardalon-test/cards/art/*.jpg ~/ashardalon-companion/cards/art/`.
+
 ## Narrator voice
 
 The projector can read the game out loud in a dungeon-master voice: monsters arriving, encounter cards, new tiles, whose turn it is, natural 20s and 1s, defeats and treasure. It uses [ElevenLabs](https://elevenlabs.io). Put your API key in the `.env` file next to `compose.yaml` on the Pi (never in the repo), then rebuild:
