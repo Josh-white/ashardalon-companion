@@ -82,7 +82,8 @@ function Cropper({ file, title, onSave, onCancel }) {
           setSaving(false)
           setError(`Couldn't save it: ${e.message}`)
         }),
-      'image/jpeg',
+      // A PNG token keeps its see-through corners.
+      file.type === 'image/png' ? 'image/png' : 'image/jpeg',
       0.85,
     )
   }
@@ -90,7 +91,7 @@ function Cropper({ file, title, onSave, onCancel }) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-zinc-950/95 p-4">
       <h2 className="font-display text-3xl font-bold text-amber-400">{title}</h2>
-      <p className="text-center text-zinc-400">Drag the photo and pinch to zoom until the picture fills the square.</p>
+      <p className="text-center text-zinc-400">Drag the photo and pinch to zoom until the picture fills the circle.</p>
       <div
         ref={frameRef}
         className="relative aspect-square w-[min(85vw,60vh,28rem)] touch-none overflow-hidden rounded-2xl border-4 border-amber-500 bg-zinc-900"
@@ -108,6 +109,8 @@ function Cropper({ file, title, onSave, onCancel }) {
             style={{ left: placed.left, top: placed.top, width: placed.width, height: placed.height }}
           />
         )}
+        {/* Screens show the picture in a circle. */}
+        <div className="pointer-events-none absolute inset-0 rounded-full shadow-[0_0_0_999px_rgba(0,0,0,0.45)]" />
         {!image && !error && <p className="absolute inset-0 flex items-center justify-center text-zinc-500">Opening the photo…</p>}
       </div>
       <label className="flex w-[min(85vw,28rem)] items-center gap-3 text-zinc-400">
@@ -141,9 +144,9 @@ function ArtTile({ name, title, subtitle, titleClass = 'text-zinc-100', onPhoto 
   return (
     <div className="flex flex-col gap-2 rounded-2xl border border-zinc-800 bg-zinc-900 p-3">
       {src ? (
-        <img src={src} alt="" className="aspect-square w-full rounded-xl object-cover" />
+        <img src={src} alt="" className="aspect-square w-full rounded-full object-cover" />
       ) : (
-        <div className="flex aspect-square w-full items-center justify-center rounded-xl border-2 border-dashed border-zinc-700 text-5xl text-zinc-700">
+        <div className="flex aspect-square w-full items-center justify-center rounded-full border-2 border-dashed border-zinc-700 text-5xl text-zinc-700">
           📷
         </div>
       )}
@@ -187,7 +190,7 @@ export default function ArtScreen({ onDone }) {
         <div>
           <h1 className="font-display text-4xl font-bold text-amber-400">Card art</h1>
           <p className="mt-1 text-zinc-400">
-            Take a photo of each card and fit its picture in the square. Every iPad and the projector show it. The photos stay on the Pi.
+            Take a photo of each card (or pick a token picture) and fit it in the circle. Every iPad and the projector show it. The photos stay on the Pi.
           </p>
         </div>
         <Button variant="gold" className="px-6 py-3 text-lg" onClick={onDone}>

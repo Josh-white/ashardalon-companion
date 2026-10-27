@@ -155,7 +155,7 @@ describe('card art', () => {
 
     const saved = await fetch(url('/art/monster-human-cultist.jpg'), { method: 'PUT', body: jpeg })
     expect(saved.status).toBe(200)
-    expect(Object.keys(await saved.json())).toEqual(['monster-human-cultist'])
+    expect(await saved.json()).toEqual({ 'monster-human-cultist': { ext: 'jpg', v: expect.any(Number) } })
     expect(readFileSync(join(dir, 'art', 'monster-human-cultist.jpg'))).toEqual(jpeg)
     await screen.nextState(2)
     expect(screen.messages[1]).toEqual({ type: 'art' })
@@ -168,6 +168,16 @@ describe('card art', () => {
     expect(await (await fetch(url('/art.json'))).json()).toEqual({})
     expect((await fetch(url('/art/monster-human-cultist.jpg'))).status).toBe(404)
     screen.socket.close()
+  })
+
+  it('takes a PNG token in place of a JPEG', async () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    await fetch(url('/art/hero-cleric.jpg'), { method: 'PUT', body: jpeg })
+    expect((await fetch(url('/art/hero-cleric.png'), { method: 'PUT', body: jpeg })).status).toBe(400)
+    expect((await fetch(url('/art/hero-cleric.png'), { method: 'PUT', body: png })).status).toBe(200)
+    expect(await (await fetch(url('/art.json'))).json()).toEqual({ 'hero-cleric': { ext: 'png', v: expect.any(Number) } })
+    expect((await fetch(url('/art/hero-cleric.png'))).headers.get('content-type')).toBe('image/png')
+    expect((await fetch(url('/art/hero-cleric.jpg'))).status).toBe(404)
   })
 
   it('turns away odd names and files that are not JPEGs', async () => {

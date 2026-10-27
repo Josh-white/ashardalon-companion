@@ -54,7 +54,7 @@ export default function MomentOverlay({ moment, heroes, big = false }) {
         }`}
       >
         {picture && isRoll && (
-          <img src={picture} alt="" className={`mx-auto mb-3 aspect-square rounded-2xl object-cover ${big ? 'w-[10vw]' : 'w-24'}`} />
+          <img src={picture} alt="" className={`mx-auto mb-3 aspect-square rounded-full object-cover ${big ? 'w-[10vw]' : 'w-24'}`} />
         )}
         {rolls.length > 0 ? (
           // A monster attack: one die per hero it attacked, with the result under each.
@@ -78,7 +78,7 @@ export default function MomentOverlay({ moment, heroes, big = false }) {
             <Die value={visible.value} />
           </div>
         ) : picture ? (
-          <img src={picture} alt="" className={`mx-auto aspect-square rounded-2xl object-cover shadow-2xl ${big ? 'w-[24vw]' : 'w-56'}`} />
+          <img src={picture} alt="" className={`mx-auto aspect-square rounded-full object-cover shadow-2xl ${big ? 'w-[24vw]' : 'w-56'}`} />
         ) : (
           <div className={big ? 'text-[7vw]' : 'text-6xl'}>{style.icon}</div>
         )}

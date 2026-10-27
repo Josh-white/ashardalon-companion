@@ -57,14 +57,20 @@ export function loadCards(cardsFile, exampleFile) {
   }
 }
 
-// Which card pictures are on the Pi, each with a version that changes when the
-// picture does, so screens fetch a new photo and cache the rest.
+// Card pictures are JPEGs (cropped photos) or PNGs (tokens with see-through corners).
+const ART_TYPES = {
+  jpg: { type: 'image/jpeg', magic: [0xff, 0xd8, 0xff] },
+  png: { type: 'image/png', magic: [0x89, 0x50, 0x4e, 0x47] },
+}
+
+// Which card pictures are on the Pi, each with its file type and a version that
+// changes when the picture does, so screens fetch a new one and cache the rest.
 export function listArt(artDir) {
   const art = {}
   try {
     for (const file of readdirSync(artDir)) {
-      const name = file.replace(/\.jpg$/, '')
-      if (file.endsWith('.jpg') && ART_NAME.test(name)) art[name] = Math.round(statSync(join(artDir, file)).mtimeMs)
+      const [, name, ext] = file.match(/^(.+)\.(jpg|png)$/) ?? []
+      if (name && ART_NAME.test(name)) art[name] = { ext, v: Math.round(statSync(join(artDir, file)).mtimeMs) }
     }
   } catch {
     // No art folder yet: no pictures.
@@ -88,22 +94,23 @@ function readBody(req, limit) {
   })
 }
 
-// GET /art/<name>.jpg serves a picture, PUT saves one from the card art screen,
-// and DELETE takes it away. Every change tells the screens to look again.
+// GET /art/<name>.jpg (or .png) serves a picture, PUT saves one, and DELETE
+// takes it away. Every change tells the screens to look again.
 async function handleArt(artDir, req, res, onChange) {
-  const name = decodeURIComponent(new URL(req.url, 'http://localhost').pathname).match(/^\/art\/(.+)\.jpg$/)?.[1]
+  const [, name, ext] = decodeURIComponent(new URL(req.url, 'http://localhost').pathname).match(/^\/art\/(.+)\.(jpg|png)$/) ?? []
   if (!name || !ART_NAME.test(name)) {
     res.writeHead(404).end('Not found')
     return
   }
-  const file = join(artDir, `${name}.jpg`)
+  const file = join(artDir, `${name}.${ext}`)
+  const others = Object.keys(ART_TYPES).map((e) => join(artDir, `${name}.${e}`))
   if (req.method === 'GET' || req.method === 'HEAD') {
     if (!existsSync(file)) {
       res.writeHead(404).end('Not found')
       return
     }
     // Screens ask for ?v=<version>, so a picture never changes under one URL.
-    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=31536000, immutable' })
+    res.writeHead(200, { 'Content-Type': ART_TYPES[ext].type, 'Cache-Control': 'public, max-age=31536000, immutable' })
     if (req.method === 'HEAD') res.end()
     else createReadStream(file).pipe(res)
     return
@@ -111,16 +118,18 @@ async function handleArt(artDir, req, res, onChange) {
   try {
     if (req.method === 'PUT') {
       const body = await readBody(req, MAX_ART_BYTES)
-      // Only JPEGs, which start with these three bytes.
-      if (body.length < 3 || body[0] !== 0xff || body[1] !== 0xd8 || body[2] !== 0xff) {
-        res.writeHead(400, { 'Content-Type': 'text/plain' }).end('Send a JPEG picture.')
+      // The file has to really be the picture type its name says.
+      if (!ART_TYPES[ext].magic.every((byte, i) => body[i] === byte)) {
+        res.writeHead(400, { 'Content-Type': 'text/plain' }).end(`Send a ${ext.toUpperCase()} picture.`)
         return
       }
       mkdirSync(artDir, { recursive: true })
       writeFileSync(`${file}.tmp`, body)
       renameSync(`${file}.tmp`, file)
+      // One picture per card: a new PNG replaces an old JPEG and the other way round.
+      for (const other of others) if (other !== file) rmSync(other, { force: true })
     } else if (req.method === 'DELETE') {
-      rmSync(file, { force: true })
+      for (const other of others) rmSync(other, { force: true })
     } else {
       res.writeHead(405).end('Not allowed')
       return
