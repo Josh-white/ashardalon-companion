@@ -50,7 +50,7 @@ export function loadCards(cardsFile, exampleFile) {
   try {
     return { source, ...normalizeCardFile(JSON.parse(readFileSync(file, 'utf8'))) }
   } catch (error) {
-    return { source, powers: [], abilities: [], monsters: [], encounters: [], problems: [`Could not read ${source === 'custom' ? 'cards.json' : 'the example cards'}: ${error.message}`] }
+    return { source, powers: [], abilities: [], monsters: [], villains: [], encounters: [], problems: [`Could not read ${source === 'custom' ? 'cards.json' : 'the example cards'}: ${error.message}`] }
   }
 }
 

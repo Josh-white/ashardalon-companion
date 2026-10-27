@@ -2,7 +2,7 @@ import { HERO_COLORS, XP_TO_LEVEL_UP } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
 import { CurseNotes, DisableTraps, EncounterStep, EnvironmentBanner, PassMonsters, TrapTurns } from './Encounters.jsx'
 import HeroAttack, { AttackAftermath } from './HeroAttack.jsx'
-import MonsterTurns, { DrawMonsterButton } from './MonsterTurns.jsx'
+import MonsterTurns, { DrawMonsterButton, VillainTurns } from './MonsterTurns.jsx'
 import { rollD20 } from '../state/random.js'
 import { Button } from './ui.jsx'
 
@@ -140,6 +140,7 @@ function VillainPhase({ state, hero, dispatch }) {
 
   return (
     <>
+      <VillainTurns state={state} dispatch={dispatch} hero={hero} />
       {surrounded && (
         <Note tone="warn">
           <p>Surrounded! {hero.name} has no monster, so draw one and put it on the closest unexplored edge.</p>

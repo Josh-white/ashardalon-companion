@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import HeroCard from './components/HeroCard.jsx'
 import MomentOverlay from './components/MomentOverlay.jsx'
-import MonsterList from './components/MonsterList.jsx'
+import MonsterList, { VillainList } from './components/MonsterList.jsx'
 import ProjectorView from './components/ProjectorView.jsx'
 import SeatPicker from './components/SeatPicker.jsx'
 import Setup from './components/Setup.jsx'
@@ -161,6 +161,7 @@ function HeroView({ state, dispatch, hero }) {
         powersInTurnGuide={powersInTurnGuide}
         natural20={state.turn.natural20 === hero.id}
       />
+      <VillainList state={state} dispatch={dispatch} />
       <MonsterList state={state} dispatch={dispatch} ownerId={hero.id} />
       <PartyStrip heroes={state.heroes} exceptId={hero.id} />
       <GameLog log={state.log} />
@@ -190,6 +191,7 @@ function TableView({ state, dispatch }) {
           ))}
         </div>
       </section>
+      <VillainList state={state} dispatch={dispatch} canPlace />
       <MonsterList state={state} dispatch={dispatch} />
       <GameLog log={state.log} />
     </div>

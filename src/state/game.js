@@ -34,6 +34,9 @@ export const initialState = {
   encounter: null, // the encounter card being read out: { id, cardId, heroId, card, attacked }
   environment: null, // the Environment card in play: { cardId, name, card }
   traps: [], // trap and hazard markers on the board: { id, cardId, name, type, ownerId, card }
+  // Villains an adventure put on the board. A defeated villain stays here with
+  // defeated: true, so an adventure can tell it was beaten.
+  villains: [],
 }
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
@@ -55,12 +58,18 @@ const updateHero = (state, heroId, change) => ({
   heroes: state.heroes.map((hero) => (hero.id === heroId ? { ...hero, ...change(hero) } : hero)),
 })
 
-const updateMonster = (state, monsterId, change) => ({
-  ...state,
-  monsters: state.monsters.map((monster) =>
-    monster.id === monsterId ? { ...monster, ...change(monster) } : monster,
-  ),
-})
+const updateMonster = (state, monsterId, change) => {
+  const update = (list) => list.map((monster) => (monster.id === monsterId ? { ...monster, ...change(monster) } : monster))
+  return state.villains?.some((v) => v.id === monsterId)
+    ? { ...state, villains: update(state.villains) }
+    : { ...state, monsters: update(state.monsters) }
+}
+
+// Villains still on the board. Heroes attack them like monsters, and they take turns like monsters.
+export const activeVillains = (state) => (state.villains ?? []).filter((v) => !v.defeated)
+// Everything a hero can attack: the monsters, then the villains.
+export const foes = (state) => [...state.monsters, ...activeVillains(state)]
+const findFoe = (state, id) => foes(state).find((m) => m.id === id)
 
 const toggle = (list, item) => (list.includes(item) ? list.filter((x) => x !== item) : [...list, item])
 
@@ -166,14 +175,18 @@ const discardMonsterCard = (state, monster) =>
 // One monster attack against one or more heroes. Each target comes with the d20 the
 // device rolled for it. A hit deals the damage and conditions; a miss deals the miss damage.
 function monsterAttack(state, action) {
-  const monster = state.monsters.find((m) => m.id === action.monsterId)
-  const attack = monster?.card?.attacks.find((a) => a.id === action.attackId)
+  const monster = findFoe(state, action.monsterId)
+  // A table of attacks (the Gauth's eye ray): the device's roll picks which one.
+  const table = validRoll(action.tableRoll) && monster?.card?.attacks.filter((a) => a.group === action.attackId)
+  const attack = table?.length
+    ? table.find((a) => action.tableRoll >= a.roll[0] && action.tableRoll <= a.roll[1])
+    : monster?.card?.attacks.find((a) => a.id === action.attackId)
   let targets = (Array.isArray(action.targets) ? action.targets : []).filter(
     (t) => state.heroes.some((h) => h.id === t.heroId) && validRoll(t.roll),
   )
   if (!attack || targets.length === 0) return state
 
-  let next = state
+  let next = table?.length ? withLog(state, `The ${monster.name} rolled ${action.tableRoll} for its ${action.attackId.replace(/-/g, ' ')}: ${attack.name}!`) : state
   // Noble Shield: Keyleth takes an attack aimed at several heroes alone, and it rolls a 20.
   const shield = action.nobleShield
   if (shield) {
@@ -201,7 +214,7 @@ function monsterAttack(state, action) {
     const result = [damage > 0 && `${damage} damage`, ...conditions].filter(Boolean).join(' and ')
     const outcome = hit ? `Hit! ${result || 'No damage'}` : damage > 0 ? `Miss, but ${result}` : 'Miss!'
     rolls.push({ heroId: hero.id, value: roll, total, ac, hit, outcome })
-    results.push({ heroId: hero.id, value: roll, total, ac, hit, dealt: hero.hp - hp, miss: attack.miss, conditions })
+    results.push({ heroId: hero.id, value: roll, total, ac, hit, dealt: hero.hp - hp, miss: attack.miss, conditions, effect: attack.effect })
     next = withLog(
       next,
       `The ${monster.name} attacked ${hero.name} with its ${attack.name}: rolled ${roll} + ${attack.bonus} = ${total} against AC ${ac}. ${outcome}`,
@@ -213,7 +226,7 @@ function monsterAttack(state, action) {
     }
   }
   // Remembered so Tumbling Escape can turn a hit into a miss.
-  next = { ...next, turn: { ...next.turn, lastMonsterAttack: { monsterId: monster.id, attackId: attack.id, results } } }
+  next = { ...next, turn: { ...next.turn, lastMonsterAttack: { monsterId: monster.id, attackId: attack.id, tableRoll: table?.length ? action.tableRoll : null, results } } }
   for (const name of downed) next = withLog(next, `${name} is down!`)
   return withMoment(next, {
     kind: downed.length > 0 ? 'monster-down' : 'monster',
@@ -394,16 +407,38 @@ function damageMonster(monster, damage) {
 function hurtMonster(state, monster, dealt) {
   const hp = dealt > 0 ? damageMonster(monster, dealt) : monster.hp
   if (hp > 0) return { state: updateMonster(state, monster.id, () => ({ hp })), defeated: false }
+  if (monster.villain) return defeatVillain(state, monster)
   const next = { ...state, xp: state.xp + monster.xp, monsters: state.monsters.filter((m) => m.id !== monster.id) }
   return { state: withLog(next, `The ${monster.name} was defeated! +${monster.xp} XP`), defeated: true }
 }
 
-// The first monster defeated in a turn earns a treasure card. Returns the moment's words.
+// A villain at 0 HP. The Rage Drake flips to its enraged side the first time; any other
+// villain is defeated, and stays in the villain list marked defeated for the adventure.
+function defeatVillain(state, villain) {
+  const rage = villain.card.enraged
+  if (rage) {
+    const card = { ...villain.card, hp: rage.hp, attacks: rage.attacks, tactics: rage.tactics, enraged: null }
+    const next = updateMonster(state, villain.id, () => ({ hp: rage.hp, maxHp: rage.hp, ac: rage.ac, enraged: true, card }))
+    return {
+      state: withMoment(withLog(next, `The ${villain.name} is enraged! It's back up with ${rage.hp} HP and AC ${rage.ac}.`), {
+        kind: 'spawn',
+        title: `The ${villain.name} is enraged!`,
+        detail: `It gets back up with ${rage.hp} HP, AC ${rage.ac} and nastier tactics. Flip its card over.`,
+      }),
+      defeated: false,
+    }
+  }
+  const next = updateMonster(state, villain.id, () => ({ hp: 0, defeated: true }))
+  return { state: withLog(next, `The villain ${villain.name} was defeated!`), defeated: true }
+}
+
+// The first monster defeated in a turn earns a treasure card (a villain doesn't). Returns the moment's words.
 function defeatDetails(state, defeated) {
   if (defeated.length === 0) return { state, details: [] }
+  if (defeated.every((m) => m.villain)) return { state, details: [`${defeated.map((m) => m.name).join(' and ')} defeated!`] }
   const treasure = !state.turn.treasureDrawn
   const next = treasure ? { ...state, turn: { ...state.turn, treasureDrawn: true } } : state
-  const xp = defeated.reduce((sum, m) => sum + m.xp, 0)
+  const xp = defeated.reduce((sum, m) => sum + (m.xp ?? 0), 0)
   return {
     state: next,
     details: [`${defeated.map((m) => m.name).join(' and ')} defeated! +${xp} XP`, treasure && 'Draw a treasure card!'].filter(Boolean),
@@ -448,7 +483,7 @@ function heroAttack(state, action) {
   if (action.bonusAttack && (!extraAttack || power?.type !== 'at-will')) return state
   const baseBonus = powerNumber(power?.card?.attack)
   const targets = (Array.isArray(action.targets) ? action.targets : [])
-    .filter((t) => state.monsters.some((m) => m.id === t.monsterId && m.ac) && validRoll(t.roll))
+    .filter((t) => foes(state).some((m) => m.id === t.monsterId && m.ac) && validRoll(t.roll))
     .slice(0, maxRolls(power))
   if (!power || baseBonus === null || power.used || targets.length === 0) return state
 
@@ -465,7 +500,7 @@ function heroAttack(state, action) {
   const rolls = []
   const defeated = []
   for (const { monsterId, roll } of targets) {
-    const monster = next.monsters.find((m) => m.id === monsterId)
+    const monster = findFoe(next, monsterId)
     if (!monster) {
       // Tornado Strike can aim a second roll at a monster the first one already beat.
       next = withLog(next, `${hero.name}'s ${power.name}: that monster was already defeated.`)
@@ -524,7 +559,7 @@ function rerollAttack(state, action) {
   const helper = state.heroes.find((h) => h.id === action.helperId)
   const advice = helper?.powers.find((p) => p.id === action.helperPowerId)
   const row = last?.rolls.find((r) => r.monsterId === action.monsterId && !r.hit && !r.rerolled)
-  const monster = state.monsters.find((m) => m.id === action.monsterId)
+  const monster = findFoe(state, action.monsterId)
   const hero = state.heroes.find((h) => h.id === last?.heroId)
   const power = hero?.powers.find((p) => p.id === last.powerId)
   if (!row || !monster || !advice || advice.used || effectsOf(advice).reaction !== 'reroll' || !validRoll(action.roll)) return state
@@ -599,7 +634,7 @@ function attackFollowUp(state, action) {
 function powerDamage(state, action) {
   const hero = state.heroes.find((h) => h.id === action.heroId)
   const monsters = (Array.isArray(action.monsterIds) ? action.monsterIds : [])
-    .map((id) => state.monsters.find((m) => m.id === id))
+    .map((id) => findFoe(state, id))
     .filter(Boolean)
   if (!hero || monsters.length === 0) return state
   const tokens = hero.tokens ?? {}
@@ -853,6 +888,50 @@ export function createHero(template, overrides = {}) {
   }
 }
 
+// Puts a villain on the board, found by its card's id or name ("Kobold Dragonlord").
+// An adventure does this when its villain's tile is revealed.
+function placeVillain(state, action) {
+  const wanted = String(action.name ?? '').toLowerCase()
+  const card = (Array.isArray(action.cards) ? action.cards : []).find(
+    (c) => c.id.toLowerCase() === wanted || c.name.toLowerCase() === wanted || c.fullName?.toLowerCase() === wanted,
+  )
+  if (!card) return withLog(state, `The app has no villain card called "${action.name}".`)
+  if (activeVillains(state).some((v) => v.cardId === card.id)) return state
+  const villain = {
+    id: newId('villain'),
+    villain: true,
+    cardId: card.id,
+    name: card.name,
+    fullName: card.fullName ?? card.name,
+    maxHp: card.hp,
+    hp: card.hp,
+    ac: card.ac,
+    xp: 0,
+    ownerId: null,
+    conditions: [],
+    defeated: false,
+    enraged: false,
+    card: {
+      hp: card.hp,
+      figures: 1,
+      level: card.level ?? null,
+      flavor: card.flavor ?? '',
+      special: card.special ?? '',
+      onPlace: card.onPlace ?? '',
+      types: card.types ?? [],
+      attacks: card.attacks,
+      tactics: card.tactics,
+      enraged: card.enraged ?? null,
+    },
+  }
+  const next = { ...state, villains: [...(state.villains ?? []), villain] }
+  return withMoment(withLog(next, `The villain ${villain.fullName} appears!`), {
+    kind: 'spawn',
+    title: `${villain.fullName} appears!`,
+    detail: [`Place the ${villain.name} figure. It takes a turn at the start of every Villain Phase.`, card.onPlace].filter(Boolean).join(' '),
+  })
+}
+
 export function gameReducer(state, action) {
   switch (action.type) {
     case 'NEW_GAME':
@@ -1044,6 +1123,13 @@ export function gameReducer(state, action) {
     case 'MONSTER_ATTACK':
       return monsterAttack(state, action)
 
+    case 'PLACE_VILLAIN':
+      return placeVillain(state, action)
+
+    case 'REMOVE_VILLAIN':
+      // Put on the board by mistake: it goes away without counting as defeated.
+      return { ...state, villains: (state.villains ?? []).filter((v) => v.id !== action.villainId) }
+
     case 'HERO_ATTACK':
       return heroAttack(state, action)
 
@@ -1094,6 +1180,12 @@ export function gameReducer(state, action) {
       return updateMonster(state, action.monsterId, (m) => ({ conditions: toggle(m.conditions, action.condition) }))
 
     case 'DEFEAT_MONSTER': {
+      const villain = activeVillains(state).find((v) => v.id === action.monsterId)
+      if (villain) {
+        // The Rage Drake still flips to its enraged side the first time.
+        const { state: next, defeated } = defeatVillain(state, villain)
+        return defeated ? withMoment(next, { kind: 'defeat', title: `${villain.name} defeated!`, detail: '' }) : next
+      }
       const monster = state.monsters.find((m) => m.id === action.monsterId)
       if (!monster) return state
       // One treasure card per turn, for the first monster defeated.

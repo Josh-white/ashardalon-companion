@@ -24,8 +24,8 @@ export const PHASES = [
     title: 'Villain Phase',
     emoji: '🐉',
     steps: [
+      'Activate the villain, if one is in play (its card says it goes first).',
       'No new tile, or the new tile has a black triangle? Draw an encounter card.',
-      'Activate the villain, if one is in play.',
       'Activate each monster card in front of you, once per card.',
     ],
   },
