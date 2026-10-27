@@ -5,7 +5,7 @@ import HeroAttack, { AttackAftermath } from './HeroAttack.jsx'
 import { Doors, EscapeNote, RevealButtons } from './Adventure.jsx'
 import MonsterTurns, { DrawMonsterButton, VillainTurns } from './MonsterTurns.jsx'
 import { rollD20 } from '../state/random.js'
-import { checksFor, phaseChecks } from '../state/game.js'
+import { checksFor, phaseChecks, phaseTodo } from '../state/game.js'
 import { useCards } from '../state/useCards.js'
 import { treasurePending } from './Treasure.jsx'
 import { Button } from './ui.jsx'
@@ -215,21 +215,20 @@ export default function TurnGuide({ state, dispatch }) {
   const color = HERO_COLORS[hero.color]
   const stepKey = `${round}-${heroIndex}-${phase}`
 
-  const { treasures, encounters } = useCards()
+  const { treasures, encounters, monsters } = useCards()
   const isLastPhase = phase === PHASES.length - 1
-  // An encounter card the turn still owes (or the black triangle question) has to come
-  // first, so a quick tap on Pass doesn't skip it. Only with the app's encounter deck.
-  const encounterOwed =
-    isLastPhase &&
-    (Boolean(state.encounterDeck) || encounters.length > 0) &&
-    ((state.turn.explored === true && state.turn.triangle === undefined) || encountersLeft(state, hero) > 0)
-  // The turn can't pass while a treasure card waits to be drawn or handed out.
-  const waiting =
-    Boolean(state.encounter) ||
-    Boolean(state.turn.startDamageDue) ||
-    encounterOwed ||
-    (isLastPhase && treasurePending(state, treasures)) ||
-    phaseChecks(state, checksFor(current.key)).length > 0
+  // What this phase still needs (questions, the monster draw, every monster's turn, the
+  // encounter card), so a quick tap doesn't skip something. Decks the table plays from
+  // the real cards aren't checked.
+  const todo = phaseTodo(state, { monsters: Boolean(state.monsterDeck) || monsters.length > 0, encounters: Boolean(state.encounterDeck) || encounters.length > 0 })
+  if (isLastPhase && treasurePending(state, treasures)) todo.push('the treasure card')
+  // These can't be skipped at all: an open encounter card and a card's own questions.
+  const blocked = Boolean(state.encounter) || Boolean(state.turn.startDamageDue) || phaseChecks(state, checksFor(current.key)).length > 0
+  const waiting = blocked || todo.length > 0
+  const next = () => dispatch({ type: 'NEXT_PHASE', roll: rollD20(), rolls: [rollD20(), rollD20(), rollD20()] })
+  const skip = () => {
+    if (window.confirm(`Still to do: ${todo.join(', ')}. Move on anyway?`)) next()
+  }
   const nextHero = state.heroes[(heroIndex + 1) % state.heroes.length]
 
   return (
@@ -260,8 +259,15 @@ export default function TurnGuide({ state, dispatch }) {
       {current.key === 'exploration' && <ExplorationPhase state={state} hero={hero} dispatch={dispatch} />}
       {current.key === 'villain' && <VillainPhase key={stepKey} state={state} hero={hero} dispatch={dispatch} />}
 
-      {encounterOwed && !state.encounter && (
-        <p className="mt-4 text-right text-sm text-amber-300">Draw the encounter card before passing the turn.</p>
+      {waiting && todo.length > 0 && (
+        <p className="mt-4 text-right text-amber-300">
+          Still to do: {todo.join(', ')}.
+          {!blocked && (
+            <button type="button" className="ml-2 text-sm text-zinc-500 underline" onClick={skip}>
+              Skip
+            </button>
+          )}
+        </p>
       )}
       <div className="mt-6 flex items-center justify-between gap-3">
         <Button variant="ghost" onClick={() => dispatch({ type: 'PREVIOUS_PHASE' })}>
@@ -272,7 +278,7 @@ export default function TurnGuide({ state, dispatch }) {
           variant="gold"
           className="px-6 py-3 text-lg"
           disabled={waiting}
-          onClick={() => dispatch({ type: 'NEXT_PHASE', roll: rollD20(), rolls: [rollD20(), rollD20(), rollD20()] })}
+          onClick={next}
         >
           {isLastPhase ? `Pass to ${nextHero.player || nextHero.name} →` : `On to ${PHASES[phase + 1].title} →`}
         </Button>

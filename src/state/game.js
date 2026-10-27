@@ -906,6 +906,42 @@ function answerCheck(state, action) {
   return next
 }
 
+// What the phase still needs before the turn moves on, as short labels for the screen.
+// `cards` says which virtual decks are in use (the table may draw from the real ones).
+export function phaseTodo(state, cards = {}) {
+  const { phase, explored, triangle, monsterDrawn, acted = [] } = state.turn
+  const hero = state.heroes[state.turn.heroIndex]
+  if (!hero) return []
+  const todo = []
+  if (state.turn.startDamageDue) todo.push(`${hero.name}'s healing surge`)
+  const key = PHASES[phase]?.key
+  if (key === 'exploration') {
+    if (explored === undefined) todo.push('the unexplored edge question')
+    else if (explored === true && cards.monsters && !monsterDrawn) todo.push('the new monster')
+  }
+  if (key === 'villain') {
+    for (const villain of activeVillains(state)) if (!acted.includes(villain.id)) todo.push(`the ${villain.name}'s turn`)
+    if (cards.encounters) {
+      if (explored === true && triangle === undefined) todo.push('the black triangle question')
+      else if (state.encounter || encounterCount(state, hero) > 0) todo.push('the encounter card')
+    }
+    for (const monster of state.monsters.filter((m) => m.ownerId === hero.id)) if (!acted.includes(monster.id)) todo.push(`the ${monster.name}'s turn`)
+    for (const trap of (state.traps ?? []).filter((t) => t.ownerId === hero.id && t.type === 'trap')) if (!acted.includes(trap.id)) todo.push(`the ${trap.name}`)
+  }
+  return todo
+}
+
+// Encounter cards the Villain Phase still owes: one without a new tile (or with a black
+// triangle), plus curses (Bad Luck), the adventure's extras and "draw another" cards.
+export function encounterCount(state, hero) {
+  const { explored, triangle, encountersDrawn = 0, encountersOwed = 0 } = state.turn
+  const base = explored !== true || triangle === true ? 1 : 0
+  const badLuck = (hero.curses ?? []).reduce((sum, c) => sum + (c.card?.extraEncounter ?? 0), 0)
+  // Some adventures add an encounter to every Villain Phase (Roghar's Gear, once the Vault is found).
+  const adventure = state.adventure?.extraEncounters ?? 0
+  return Math.max(0, base + badLuck + adventure + encountersOwed - encountersDrawn)
+}
+
 // Poison (and Bloodlust) hurt at the start of the hero's turn, and a hero lost in a Time
 // Leap comes back.
 function startTurn(state) {
@@ -1716,6 +1752,14 @@ function reduce(state, action) {
         return { ...monsterFromCard(card, ownerId), id, hp: Math.min(hp, card.hp * (card.figures ?? 1)), maxHp: Math.max(maxHp, card.hp), conditions }
       })
       return changed ? { ...state, monsters } : state
+    }
+
+    case 'MARK_ACTED': {
+      // A monster, villain or trap finished its turn this Villain Phase. Kept in the game so
+      // every screen sees it, and the turn can't pass until they all have.
+      const acted = state.turn.acted ?? []
+      if (!action.id || acted.includes(action.id)) return state
+      return { ...state, turn: { ...state.turn, acted: [...acted, action.id] } }
     }
 
     case 'SET_EXPLORED': {

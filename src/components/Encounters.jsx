@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { HERO_COLORS, XP_TO_CANCEL_ENCOUNTER } from '../data/heroes.js'
 import { itemTrapBonus, tileAcBonus } from '../data/items.js'
 import { heroAc, reactionsFor } from '../data/powerEffects.js'
-import { ENCOUNTER_LABELS, canTryCurse, phaseChecks, villainInPlay } from '../state/game.js'
+import { ENCOUNTER_LABELS, canTryCurse, encounterCount, phaseChecks, villainInPlay } from '../state/game.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { DrawMonsterButton, HeroPicker } from './MonsterTurns.jsx'
@@ -333,14 +333,7 @@ function EncounterCard({ state, hero, dispatch }) {
 }
 
 // How many encounter cards this Villain Phase still has to draw.
-export function encountersLeft(state, hero) {
-  const { explored, triangle, encountersDrawn = 0, encountersOwed = 0 } = state.turn
-  const base = explored !== true || triangle === true ? 1 : 0
-  const badLuck = (hero.curses ?? []).reduce((sum, c) => sum + (c.card?.extraEncounter ?? 0), 0)
-  // Some adventures add an encounter to every Villain Phase (Roghar's Gear, once the Vault is found).
-  const adventure = state.adventure?.extraEncounters ?? 0
-  return Math.max(0, base + badLuck + adventure + encountersOwed - encountersDrawn)
-}
+export const encountersLeft = (state, hero) => encounterCount(state, hero)
 
 // The Villain Phase's encounter step: draw from the virtual deck, read it out, resolve it.
 // Without encounter cards in the card file, the table draws from the real deck instead.
@@ -429,8 +422,8 @@ function TrapActivation({ state, hero, trap, dispatch, onDone }) {
 }
 
 export function TrapTurns({ state, hero, dispatch }) {
-  const [done, setDone] = useState([])
   const [activeId, setActiveId] = useState(null)
+  const done = state.turn.acted ?? []
   const traps = (state.traps ?? []).filter((t) => t.ownerId === hero.id && t.type === 'trap')
   if (traps.length === 0) return null
   const active = traps.find((t) => t.id === activeId)
@@ -446,7 +439,7 @@ export function TrapTurns({ state, hero, dispatch }) {
             trap={active}
             dispatch={dispatch}
             onDone={() => {
-              setDone((d) => [...d, active.id])
+              dispatch({ type: 'MARK_ACTED', id: active.id, name: active.name })
               setActiveId(null)
             }}
           />

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { normalizeCardFile } from '../data/cards.js'
 import { heroAc, heroAttackPenalty } from '../data/powerEffects.js'
-import { checksFor, createHero, encounterCardsOutdated, gameReducer, initialState, phaseChecks } from './game.js'
+import { checksFor, createHero, encounterCardsOutdated, gameReducer, initialState, phaseChecks, phaseTodo } from './game.js'
 
 const startGame = (count = 2) =>
   gameReducer(initialState, { type: 'START_GAME', heroes: HERO_TEMPLATES.slice(0, count).map((t) => createHero(t)) })
@@ -483,6 +483,35 @@ describe('conditions between phases', () => {
     const state = gameReducer(start, { type: 'TOGGLE_HERO_CONDITION', heroId: start.heroes[0].id, condition: 'Dazed' })
     expect(state.heroes[0].conditions).toEqual(['Dazed'])
     expect(next(state).heroes[0].conditions).toEqual([])
+  })
+})
+
+describe('what a phase still needs', () => {
+  const next = (state) => gameReducer(state, { type: 'NEXT_PHASE', roll: 1 })
+  const decks = { monsters: true, encounters: true }
+
+  it('asks about the edge, then for the monster draw', () => {
+    let state = next(startGame())
+    expect(phaseTodo(state, decks)).toEqual(['the unexplored edge question'])
+    state = gameReducer(state, { type: 'SET_EXPLORED', explored: true })
+    expect(phaseTodo(state, decks)).toEqual(['the new monster'])
+    expect(phaseTodo(state, { encounters: true })).toEqual([])
+    state = { ...state, turn: { ...state.turn, monsterDrawn: true } }
+    expect(phaseTodo(state, decks)).toEqual([])
+  })
+
+  it('waits for the encounter card and each monster turn', () => {
+    let state = startGame()
+    const hero = state.heroes[0]
+    state = { ...state, monsters: [{ id: 'm1', name: 'Rat', ownerId: hero.id }, { id: 'm2', name: 'Imp', ownerId: state.heroes[1].id }] }
+    state = next(next(state))
+    expect(phaseTodo(state, decks)).toEqual(['the encounter card', "the Rat's turn"])
+    expect(phaseTodo(state, {})).toEqual(["the Rat's turn"])
+    state = gameReducer(state, { type: 'MARK_ACTED', id: 'm1' })
+    expect(state.turn.acted).toEqual(['m1'])
+    expect(phaseTodo({ ...state, turn: { ...state.turn, encountersDrawn: 1 } }, decks)).toEqual([])
+    // The next hero's turn starts with nobody having gone.
+    expect(next(state).turn.acted).toBeUndefined()
   })
 })
 

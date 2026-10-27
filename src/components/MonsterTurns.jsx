@@ -346,13 +346,12 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
 // The Villain Phase's monster activations for the active hero: each of their monster
 // cards takes a turn, one at a time.
 export default function MonsterTurns({ state, dispatch, hero }) {
-  const [done, setDone] = useState({})
   const [activeId, setActiveId] = useState(null)
-  const turnKey = `${state.turn.round}-${state.turn.heroIndex}`
   const monsters = state.monsters.filter((m) => m.ownerId === hero.id)
-  const isDone = (monster) => done[turnKey]?.includes(monster.id)
+  // Kept in the game, so every iPad sees which monsters have gone.
+  const isDone = (monster) => (state.turn.acted ?? []).includes(monster.id)
   const markDone = (monster) => {
-    setDone((d) => ({ ...d, [turnKey]: [...(d[turnKey] ?? []), monster.id] }))
+    dispatch({ type: 'MARK_ACTED', id: monster.id, name: monster.name })
     setActiveId(null)
   }
   const active = monsters.find((m) => m.id === activeId)
@@ -406,14 +405,12 @@ export default function MonsterTurns({ state, dispatch, hero }) {
 // Villains go first in every Villain Phase, whoever's turn it is: each takes its turn
 // from its card's tactics, the same way a monster does.
 export function VillainTurns({ state, dispatch, hero }) {
-  const [done, setDone] = useState({})
   const [activeId, setActiveId] = useState(null)
-  const turnKey = `${state.turn.round}-${state.turn.heroIndex}`
   const villains = activeVillains(state)
   if (villains.length === 0) return null
-  const isDone = (villain) => done[turnKey]?.includes(villain.id)
+  const isDone = (villain) => (state.turn.acted ?? []).includes(villain.id)
   const markDone = (villain) => {
-    setDone((d) => ({ ...d, [turnKey]: [...(d[turnKey] ?? []), villain.id] }))
+    dispatch({ type: 'MARK_ACTED', id: villain.id, name: villain.name })
     setActiveId(null)
   }
   const active = villains.find((v) => v.id === activeId)
