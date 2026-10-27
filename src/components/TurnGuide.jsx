@@ -115,6 +115,21 @@ function HeroPhase({ state, hero, dispatch }) {
 
 function ExplorationPhase({ state, hero, dispatch }) {
   const { explored, monsterDrawn } = state.turn
+  const checks = <PhaseChecks state={state} hero={hero} phaseKey="exploration" dispatch={dispatch} />
+  if (explored === false) {
+    // No new tile, but a card still has something to do before the phase ends.
+    return (
+      <>
+        <Note>
+          <p>{hero.name} isn't on an unexplored edge, so no new tile this turn.</p>
+          <Button variant="ghost" className="mt-2" onClick={() => dispatch({ type: 'SET_EXPLORED', explored: true })}>
+            Oops, {hero.name} is on an edge
+          </Button>
+        </Note>
+        {checks}
+      </>
+    )
+  }
   if (explored !== true) {
     return (
       <YesNo
@@ -136,6 +151,7 @@ function ExplorationPhase({ state, hero, dispatch }) {
       ) : (
         <DrawMonsterButton state={state} heroId={hero.id} dispatch={dispatch} className="mt-4 w-full" />
       )}
+      {checks}
     </>
   )
 }
@@ -147,7 +163,6 @@ function VillainPhase({ state, hero, dispatch }) {
 
   return (
     <>
-      <PhaseChecks state={state} hero={hero} phaseKey="exploration" dispatch={dispatch} />
       <VillainTurns state={state} dispatch={dispatch} hero={hero} />
       {surrounded && (
         <Note tone="warn">
