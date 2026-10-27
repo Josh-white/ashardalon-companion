@@ -4,6 +4,8 @@ import { CurseNotes, DisableTraps, EncounterStep, EnvironmentBanner, PassMonster
 import HeroAttack, { AttackAftermath } from './HeroAttack.jsx'
 import MonsterTurns, { DrawMonsterButton, VillainTurns } from './MonsterTurns.jsx'
 import { rollD20 } from '../state/random.js'
+import { useCards } from '../state/useCards.js'
+import { treasurePending } from './Treasure.jsx'
 import { Button } from './ui.jsx'
 
 // Each phase asks only what the app can't see for itself. The checklist each phase
@@ -184,7 +186,10 @@ export default function TurnGuide({ state, dispatch }) {
   const color = HERO_COLORS[hero.color]
   const stepKey = `${round}-${heroIndex}-${phase}`
 
+  const { treasures } = useCards()
   const isLastPhase = phase === PHASES.length - 1
+  // The turn can't pass while a treasure card waits to be drawn or handed out.
+  const waiting = Boolean(state.encounter) || (isLastPhase && treasurePending(state, treasures))
   const nextHero = state.heroes[(heroIndex + 1) % state.heroes.length]
 
   return (
@@ -223,7 +228,7 @@ export default function TurnGuide({ state, dispatch }) {
         <Button
           variant="gold"
           className="px-6 py-3 text-lg"
-          disabled={Boolean(state.encounter)}
+          disabled={waiting}
           onClick={() => dispatch({ type: 'NEXT_PHASE', roll: rollD20(), rolls: [rollD20(), rollD20(), rollD20()] })}
         >
           {isLastPhase ? `Pass to ${nextHero.player || nextHero.name} →` : `On to ${PHASES[phase + 1].title} →`}

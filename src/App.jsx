@@ -5,6 +5,7 @@ import MonsterList, { VillainList } from './components/MonsterList.jsx'
 import ProjectorView from './components/ProjectorView.jsx'
 import SeatPicker from './components/SeatPicker.jsx'
 import Setup from './components/Setup.jsx'
+import { TreasureStep } from './components/Treasure.jsx'
 import TurnGuide, { ExtraAttacks } from './components/TurnGuide.jsx'
 import UndoButton from './components/UndoButton.jsx'
 import { Button, HpBar } from './components/ui.jsx'
@@ -134,6 +135,9 @@ function PartyStrip({ heroes, exceptId }) {
             </div>
             <HpBar hp={hero.hp} maxHp={hero.maxHp} />
             {hero.conditions.length > 0 && <p className="mt-1 text-sm text-amber-400">{hero.conditions.join(', ')}</p>}
+            {(hero.items ?? []).length > 0 && (
+              <p className="mt-1 text-sm text-yellow-300">💰 {hero.items.map((i) => (i.used ? `${i.name} (used)` : i.name)).join(', ')}</p>
+            )}
           </div>
         ))}
       </div>
@@ -165,6 +169,7 @@ function HeroView({ state, dispatch, hero }) {
       <MonsterList state={state} dispatch={dispatch} ownerId={hero.id} />
       <PartyStrip heroes={state.heroes} exceptId={hero.id} />
       <GameLog log={state.log} />
+      <TreasureStep state={state} dispatch={dispatch} heroId={hero.id} />
     </div>
   )
 }
@@ -194,6 +199,7 @@ function TableView({ state, dispatch }) {
       <VillainList state={state} dispatch={dispatch} canPlace />
       <MonsterList state={state} dispatch={dispatch} />
       <GameLog log={state.log} />
+      <TreasureStep state={state} dispatch={dispatch} />
     </div>
   )
 }
@@ -249,7 +255,9 @@ export default function App() {
           dispatch={dispatch}
           deviceId={deviceId}
           onClaim={setSeat}
-          onDemo={(picks, monsterCards) => dispatch({ type: 'START_DEMO', picks, monsterCards, random: randomNumbers(128) })}
+          onDemo={(picks, monsterCards, treasureCards) =>
+            dispatch({ type: 'START_DEMO', picks, monsterCards, treasureCards, random: randomNumbers(128) })
+          }
           watchOnly={seat === PROJECTOR_SEAT}
           onProjector={() => setSeat(PROJECTOR_SEAT)}
           onLeaveProjector={() => setSeat(null)}

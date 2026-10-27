@@ -287,6 +287,35 @@
       }
     }
   ],
+  "treasures": [
+    {
+      "id": "example-sword",
+      "name": "Example Sword",
+      "copies": 2,
+      "text": "Placeholder item: +1 to attacks against monsters next to you.",
+      "inPlay": true,
+      "attackBonus": 1,
+      "attackRange": "adjacent"
+    },
+    {
+      "id": "example-potion",
+      "name": "Example Potion",
+      "text": "Placeholder item: you or a hero next to you gets 2 HP. Discard it after using it.",
+      "use": "heal",
+      "heal": 2,
+      "after": "discard"
+    },
+    {
+      "id": "example-wand",
+      "name": "Example Wand",
+      "text": "Placeholder item: attack a monster within 2 tiles. Flip it over after using it.",
+      "attack": {
+        "bonus": 8,
+        "damage": 1
+      },
+      "after": "flip"
+    }
+  ],
   "villains": [
     {
       "id": "example-villain",

@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { HERO_COLORS } from '../data/heroes.js'
+import { itemsWithUse } from '../data/items.js'
 import { heroAc, reactionsFor } from '../data/powerEffects.js'
 import { activeVillains } from '../state/game.js'
 import { useCards } from '../state/useCards.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
+import { MonsterControl, TileGuardQuestion } from './Treasure.jsx'
 import { Button } from './ui.jsx'
 
 // Enough random numbers to shuffle the whole monster deck.
@@ -110,9 +112,14 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
   const [stepIndex, setStepIndex] = useState(0)
   const [answered, setAnswered] = useState(false) // "Yes" to this step's question
   const [chosen, setChosen] = useState([])
+  const [guarded, setGuarded] = useState([])
   const [results, setResults] = useState(null)
   const [tiePick, setTiePick] = useState(null) // the players' pick when heroes tie for the most HP
+  const [controlling, setControlling] = useState(false)
   const step = card.tactics[stepIndex]
+  // Scroll of Monster Control, read on the active hero's own turn.
+  const activeHero = state.heroes.find((h) => h.id === activeHeroId)
+  const [scroll] = itemsWithUse(activeHero ? [activeHero] : [], 'monsterControl')
   // A table of attacks (the Gauth's eye ray) rolls to pick one; `table` is its rows.
   const table = card.attacks.filter((a) => a.group && a.group === step?.attack)
   const attack = card.attacks.find((a) => a.id === step?.attack) ?? (table.length > 0 ? { ...table[0], id: step.attack, name: step.attack.replace(/-/g, ' ') } : null)
@@ -123,6 +130,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
     setStepIndex(0)
     setAnswered(false)
     setChosen([])
+    setGuarded([])
     setResults(null)
   }
   const finish = figure < figures ? nextFigure : onDone
@@ -141,7 +149,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
   const roll = (nobleShield) => {
     const targets = targetIds.map((heroId) => ({ heroId, roll: rollD20() }))
     const tableRoll = table.length > 0 ? rollD20() : undefined
-    dispatch({ type: 'MONSTER_ATTACK', monsterId: monster.id, attackId: attack.id, tableRoll, targets, nobleShield })
+    dispatch({ type: 'MONSTER_ATTACK', monsterId: monster.id, attackId: attack.id, tableRoll, targets, nobleShield, tileGuarded: guarded })
     setResults(true)
   }
   // Noble Shield: an attack on several heroes, one of them a paladin with the power unused.
@@ -176,7 +184,16 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
         <p className="rounded-lg bg-zinc-900 p-2 text-sm text-zinc-400">{card.special}</p>
       )}
 
-      {asking && (
+      {scroll && !results && stepIndex === 0 && !answered &&
+        (controlling ? (
+          <MonsterControl state={state} hero={scroll.hero} monster={monster} item={scroll.item} dispatch={dispatch} onDone={onDone} />
+        ) : (
+          <Button className="w-full" onClick={() => setControlling(true)}>
+            📜 Use the {scroll.item.name} on the {name}
+          </Button>
+        ))}
+
+      {!controlling && asking && (
         <>
           <p className="text-2xl font-semibold text-zinc-100">{QUESTIONS[step.when](name)}</p>
           {HINTS[step.when] && <p className="text-zinc-400">{HINTS[step.when]}</p>}
@@ -191,7 +208,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
         </>
       )}
 
-      {!asking && step?.explore && (
+      {!controlling && !asking && step?.explore && (
         <>
           <p className="text-xl text-zinc-100">
             Draw a dungeon tile from the <b>bottom</b> of the stack and put it next to the {name}'s tile.
@@ -209,7 +226,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
         </>
       )}
 
-      {!asking && attack && !results && (
+      {!controlling && !asking && attack && !results && (
         <>
           <p className="text-xl text-zinc-100">
             It attacks with its <b>{attack.name}</b>. {targetPrompt(step)}
@@ -233,6 +250,12 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
               </div>
             </div>
           )}
+          <TileGuardQuestion
+            state={state}
+            targets={targetIds}
+            guarded={guarded}
+            onToggle={(id) => setGuarded((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]))}
+          />
           {step.move === 'adjacent' && step.targets !== 'all' && movedTo && (
             <p className="rounded-lg bg-amber-950/60 p-3 text-lg text-amber-200">
               First, move the {name} next to {movedTo.name}.
@@ -264,6 +287,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
               const hero = state.heroes.find((h) => h.id === row.heroId)
               const hit = row.hit && !row.dodged
               const escape = row.hit && !row.dodged && reactionsFor([hero], 'dodge')[0]
+              const [bracers] = row.hit && !row.dodged && row.dealt > 0 ? itemsWithUse([hero], 'reduceDamage') : []
               return (
                 <li key={row.heroId} className={`rounded-xl p-3 text-lg ${hit ? 'bg-red-950' : 'bg-zinc-900'}`}>
                   The {name} rolled {row.value} + {used.bonus} = {row.total} against{' '}
@@ -274,6 +298,11 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
                   {escape && (
                     <Button className="mt-2 w-full" onClick={() => dispatch({ type: 'DODGE_HIT', heroId: hero.id, powerId: escape.power.id })}>
                       🤸 {hero.name} uses Tumbling Escape: the attack misses
+                    </Button>
+                  )}
+                  {bracers && (
+                    <Button className="mt-2 w-full" onClick={() => dispatch({ type: 'USE_ITEM', heroId: hero.id, itemId: bracers.item.id })}>
+                      💰 {hero.name} uses the {bracers.item.name}: 1 less damage
                     </Button>
                   )}
                 </li>
@@ -289,7 +318,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
         </>
       )}
 
-      {!asking && !step?.explore && !attack && (
+      {!controlling && !asking && !step?.explore && !attack && (
         <>
           <p className="text-xl text-zinc-100">
             {step?.move === 'toward' || !step

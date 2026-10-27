@@ -1,6 +1,8 @@
 import { HERO_COLORS } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
 import { EnvironmentBanner } from './Encounters.jsx'
+import { ProjectorTreasure } from './Treasure.jsx'
+import { heroItems } from '../data/items.js'
 import { heroAc } from '../data/powerEffects.js'
 import { activeVillains } from '../state/game.js'
 import { HpBar } from './ui.jsx'
@@ -50,8 +52,9 @@ export default function ProjectorView({ state, onSwitchSeat }) {
         </ul>
       </section>
 
-      {(state.environment || state.encounter) && (
+      {(state.environment || state.encounter || state.treasure) && (
         <section className="space-y-[1vh]">
+          <ProjectorTreasure treasure={state.treasure} />
           {state.encounter && (
             <div className="rounded-[1.2vw] border border-sky-700 bg-sky-950/60 p-[1vw]">
               <span className="font-display text-[2.4vw] font-bold text-sky-200">🃏 {state.encounter.card.name}</span>
@@ -85,7 +88,10 @@ export default function ProjectorView({ state, onSwitchSeat }) {
               {(hero.curses ?? []).length > 0 && (
                 <p className="mt-[0.5vh] text-purple-300">🕯️ {hero.curses.map((c) => c.name).join(', ')}</p>
               )}
-              {heroAc(hero) !== hero.ac && <p className="text-red-300">AC {heroAc(hero)}</p>}
+              {heroAc(hero) !== hero.ac && <p className={heroAc(hero) > hero.ac ? 'text-sky-300' : 'text-red-300'}>AC {heroAc(hero)}</p>}
+              {heroItems(hero).length > 0 && (
+                <p className="mt-[0.5vh] text-yellow-300">💰 {heroItems(hero).map((i) => i.name).join(', ')}</p>
+              )}
             </div>
           )
         })}

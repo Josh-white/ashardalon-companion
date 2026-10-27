@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { HERO_COLORS } from '../data/heroes.js'
 
-const SHOW_MS = { roll: 2200, crit: 3500, fumble: 3000, defeat: 3000, level: 3500, down: 3500, poison: 3500, spawn: 3000, monster: 4500, 'monster-down': 5000, encounter: 4500 }
+const SHOW_MS = { roll: 2200, crit: 3500, fumble: 3000, defeat: 3000, level: 3500, down: 3500, poison: 3500, spawn: 3000, monster: 4500, 'monster-down': 5000, encounter: 4500, treasure: 4000 }
 // A device that reconnects shouldn't replay a moment that is long over.
 const STALE_MS = 8000
 const ROLL_SPIN_MS = 900
@@ -18,6 +18,7 @@ const STYLES = {
   monster: { icon: '👹', title: 'text-red-300', panel: 'border-red-700 bg-zinc-900/95' },
   'monster-down': { icon: '💀', title: 'text-red-300', panel: 'border-red-600 bg-red-950/95' },
   encounter: { icon: '🃏', title: 'text-sky-300', panel: 'border-sky-600 bg-zinc-900/95' },
+  treasure: { icon: '💰', title: 'text-amber-300', panel: 'border-amber-400 bg-amber-950/95 moment-glow' },
 }
 
 function Die({ value }) {

@@ -1,6 +1,7 @@
 import { cardStats } from '../data/cards.js'
 import { HERO_COLORS, HERO_TEMPLATES } from '../data/heroes.js'
 import { powerSlotsFor } from '../state/game.js'
+import { randomNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { Button } from './ui.jsx'
 
@@ -218,7 +219,9 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
       <div className="flex flex-col items-center gap-2">
         {/* Only the projector starts the game, once every hero is ready. */}
         {watchOnly && (
-          <Button variant="gold" className="px-10 py-4 text-xl" disabled={!ready} onClick={() => dispatch({ type: 'START_GAME' })}>
+          <Button variant="gold" className="px-10 py-4 text-xl" disabled={!ready}
+            onClick={() => dispatch({ type: 'START_GAME', treasureCards: cards.treasures, random: randomNumbers(128) })}
+          >
             Enter the dungeon
           </Button>
         )}
@@ -251,7 +254,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
       {!watchOnly && (
         <p className="text-center text-sm text-zinc-500">
           Just trying things out?{' '}
-          <button type="button" className="font-semibold text-amber-400 underline" onClick={() => onDemo(demoPicks(cards.powers), cards.monsters)}>
+          <button type="button" className="font-semibold text-amber-400 underline" onClick={() => onDemo(demoPicks(cards.powers), cards.monsters, cards.treasures)}>
             Start a demo game
           </button>{' '}
           with all five heroes and a few monsters.
