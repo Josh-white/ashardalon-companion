@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { HERO_COLORS, XP_TO_CANCEL_ENCOUNTER } from '../data/heroes.js'
 import { itemTrapBonus, tileAcBonus } from '../data/items.js'
 import { heroAc, reactionsFor } from '../data/powerEffects.js'
-import { ENCOUNTER_LABELS, phaseChecks, villainInPlay } from '../state/game.js'
+import { ENCOUNTER_LABELS, canTryCurse, phaseChecks, villainInPlay } from '../state/game.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { DrawMonsterButton, HeroPicker } from './MonsterTurns.jsx'
@@ -482,9 +482,36 @@ export function DisableTraps({ state, hero, dispatch }) {
 }
 
 // Hero Phase: what the hero's curses do, and the Cage's roll to get out.
-export function CurseNotes({ hero, dispatch }) {
+// What stops a hero from trying to open the Cage right now, or null when they can.
+function curseTryBlocked(state, hero) {
+  if (canTryCurse(state, hero)) return null
+  return state.turn.curseTried === hero.id ? `${hero.name} already rolled for a cage this turn.` : `${hero.name} attacked this turn, so the cage has to wait.`
+}
+
+function CurseRollButton({ state, hero, cursed, curse, dispatch }) {
+  const roll = curse.card.removeRoll
+  const blocked = curseTryBlocked(state, hero)
+  if (blocked) return <p className="mt-2 text-sm text-purple-300">{blocked}</p>
+  const helping = cursed.id !== hero.id
+  return (
+    <>
+      <Button className="mt-2" onClick={() => dispatch({ type: 'CURSE_ROLL', heroId: cursed.id, curseId: curse.id, roll: rollD20() })}>
+        🎲 {helping ? `Help ${cursed.name}: ${(roll.label || 'roll to end it').toLowerCase()}` : roll.label || 'Roll to end it'} ({roll.target}+)
+      </Button>
+      <p className="mt-1 text-sm text-purple-300">
+        {helping ? `${hero.name} has to be on ${cursed.name}'s tile. ` : ''}This takes the place of {hero.name}'s attack this turn.
+      </p>
+    </>
+  )
+}
+
+export function CurseNotes({ state, hero, dispatch }) {
   const curses = hero.curses ?? []
-  if (curses.length === 0) return null
+  // Other heroes' curses that this hero can roll to end from the same tile (the Cage).
+  const helpable = state.heroes.flatMap((h) =>
+    h.id === hero.id ? [] : (h.curses ?? []).filter((c) => c.card?.removeRoll?.phase === 'action').map((curse) => ({ cursed: h, curse })),
+  )
+  if (curses.length === 0 && helpable.length === 0) return null
   return (
     <div className="mt-4 space-y-2">
       {curses.map((curse) => {
@@ -500,17 +527,16 @@ export function CurseNotes({ hero, dispatch }) {
                 The app rolls for you at the end of your {roll.phase === 'hero' ? 'Hero' : roll.phase === 'exploration' ? 'Exploration' : 'Villain'} Phase: {roll.target}+ ends it.
               </p>
             )}
-            {roll?.phase === 'action' && (
-              <Button
-                className="mt-2"
-                onClick={() => dispatch({ type: 'CURSE_ROLL', heroId: hero.id, curseId: curse.id, roll: rollD20() })}
-              >
-                🎲 {roll.label || 'Roll to end it'} ({roll.target}+)
-              </Button>
-            )}
+            {roll?.phase === 'action' && <CurseRollButton state={state} hero={hero} cursed={hero} curse={curse} dispatch={dispatch} />}
           </div>
         )
       })}
+      {helpable.map(({ cursed, curse }) => (
+        <div key={curse.id} className="rounded-xl bg-purple-950/50 p-3 text-purple-100">
+          <p className="font-bold">🕯️ {cursed.name} is stuck in the {curse.name}</p>
+          <CurseRollButton state={state} hero={hero} cursed={cursed} curse={curse} dispatch={dispatch} />
+        </div>
+      ))}
     </div>
   )
 }

@@ -931,6 +931,14 @@ function startTurn(state) {
   })
 }
 
+// Trying to open the Cage takes the place of the active hero's attack: once per Hero
+// Phase, and not after they've attacked.
+export function canTryCurse(state, hero) {
+  if (!hero || PHASES[state.turn.phase]?.key !== 'hero' || state.heroes[state.turn.heroIndex]?.id !== hero.id) return false
+  const last = state.turn.lastAttack
+  return !state.turn.curseTried && !(last && !last.bonus && last.heroId === hero.id)
+}
+
 // Some curses end on a roll at the end of a phase ("Roll a die at the end of your Hero
 // Phase: 10+ discard this card"). The device sends the dice with NEXT_PHASE.
 function endPhaseCurses(state, hero, phaseKey, rolls = []) {
@@ -940,10 +948,18 @@ function endPhaseCurses(state, hero, phaseKey, rolls = []) {
     const roll = rolls[i++]
     if (!validRoll(roll)) continue
     const { target } = curse.card.removeRoll
-    next =
-      roll >= target
-        ? removeCurse(next, hero.id, curse.id, `${hero.name} rolled ${roll} and broke the ${curse.name} curse!`)
-        : withLog(next, `${hero.name} rolled ${roll} against the ${curse.name} curse (needed ${target}). Still cursed.`)
+    const broken = roll >= target
+    next = broken
+      ? removeCurse(next, hero.id, curse.id, `${hero.name} rolled ${roll} and broke the ${curse.name} curse!`)
+      : withLog(next, `${hero.name} rolled ${roll} against the ${curse.name} curse (needed ${target}). Still cursed.`)
+    // Shown on the big screen too, so nobody wonders whether the roll happened.
+    next = withMoment(next, {
+      kind: broken ? 'defeat' : 'roll',
+      heroId: hero.id,
+      value: roll,
+      title: broken ? `${hero.name} broke the ${curse.name} curse!` : `${hero.name} is still under ${curse.name}`,
+      detail: `The curse roll needed ${target}.`,
+    })
   }
   return next
 }
@@ -1850,21 +1866,27 @@ function reduce(state, action) {
     }
 
     case 'CURSE_ROLL': {
-      // A curse the hero can try to end with a roll instead of attacking (opening the Cage).
+      // A curse a hero can try to end with a roll instead of attacking (opening the Cage).
+      // The active hero rolls for their own curse, or for a hero on their tile, and it
+      // takes the place of their attack this turn.
       const hero = state.heroes.find((h) => h.id === action.heroId)
       const curse = hero?.curses?.find((c) => c.id === action.curseId)
       const removeRoll = curse?.card?.removeRoll
       if (!removeRoll || removeRoll.phase !== 'action' || !validRoll(action.roll)) return state
+      const helper = state.heroes[state.turn.heroIndex]
+      if (!canTryCurse(state, helper)) return state
       const broken = action.roll >= removeRoll.target
+      const who = helper.id === hero.id ? hero.name : `${helper.name}, helping ${hero.name},`
+      const tried = { ...state, turn: { ...state.turn, curseTried: helper.id } }
       const next = broken
-        ? removeCurse(state, hero.id, curse.id, `${hero.name} rolled ${action.roll} and is free of the ${curse.name}!`)
-        : withLog(state, `${hero.name} rolled ${action.roll} against the ${curse.name} (needed ${removeRoll.target}).`)
+        ? removeCurse(tried, hero.id, curse.id, `${who} rolled ${action.roll}. ${hero.name} is free of the ${curse.name}!`)
+        : withLog(tried, `${who} rolled ${action.roll} against the ${curse.name} (needed ${removeRoll.target}).`)
       return withMoment(next, {
         kind: broken ? 'defeat' : 'roll',
-        heroId: hero.id,
+        heroId: helper.id,
         value: action.roll,
-        title: broken ? `Free of the ${curse.name}!` : `Still stuck in the ${curse.name}`,
-        detail: `${hero.name} needed ${removeRoll.target}.`,
+        title: broken ? `${hero.name} is free of the ${curse.name}!` : `${hero.name} is still stuck in the ${curse.name}`,
+        detail: `${helper.name} needed ${removeRoll.target}.`,
       })
     }
 

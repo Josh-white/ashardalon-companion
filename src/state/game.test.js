@@ -550,13 +550,35 @@ describe('encounter deck', () => {
     expect(state.encounterDeck.discard).toContain('jinx')
   })
 
-  it('opens the cage on a 10 or more', () => {
+  it('opens the cage on a 10 or more, once a turn instead of attacking', () => {
     let state = resolve(drawCard(startGame(), 'cage'))
     const curseId = state.heroes[0].curses[0].id
     const heroId = state.heroes[0].id
-    expect(gameReducer(state, { type: 'CURSE_ROLL', heroId, curseId, roll: 9 }).heroes[0].curses).toHaveLength(1)
+    const missed = gameReducer(state, { type: 'CURSE_ROLL', heroId, curseId, roll: 9 })
+    expect(missed.heroes[0].curses).toHaveLength(1)
+    expect(missed.turn.curseTried).toBe(heroId)
+    expect(gameReducer(missed, { type: 'CURSE_ROLL', heroId, curseId, roll: 12 })).toBe(missed)
+    const attacked = { ...state, turn: { ...state.turn, lastAttack: { heroId, bonus: false } } }
+    expect(gameReducer(attacked, { type: 'CURSE_ROLL', heroId, curseId, roll: 12 })).toBe(attacked)
     state = gameReducer(state, { type: 'CURSE_ROLL', heroId, curseId, roll: 12 })
     expect(state.heroes[0].curses).toHaveLength(0)
+  })
+
+  it('lets another hero open the cage on their own turn', () => {
+    let state = resolve(drawCard(startGame(), 'cage'))
+    const curseId = state.heroes[0].curses[0].id
+    const heroId = state.heroes[0].id
+    for (let i = 0; i < 3; i++) state = gameReducer(state, { type: 'NEXT_PHASE' })
+    expect(state.turn.heroIndex).toBe(1)
+    state = gameReducer(state, { type: 'CURSE_ROLL', heroId, curseId, roll: 15 })
+    expect(state.heroes[0].curses).toHaveLength(0)
+    expect(state.turn.curseTried).toBe(state.heroes[1].id)
+    expect(state.log[0].text).toContain('helping')
+  })
+
+  it('shows the end-of-phase curse roll as a moment', () => {
+    const state = gameReducer(resolve(drawCard(startGame(), 'jinx')), { type: 'NEXT_PHASE', rolls: [8] })
+    expect(state.moment).toMatchObject({ kind: 'roll', value: 8 })
   })
 
   it('hurts at the start of the turn until the hero defeats a monster', () => {
