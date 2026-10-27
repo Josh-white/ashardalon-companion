@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DIE_LANDS_MS, momentSoundMs, momentSounds } from './sfx.js'
+import { DIE_LANDS_MS, momentSoundMs, momentSounds, monsterVoice, tileRevealed } from './sfx.js'
 
 const names = (moment) => momentSounds(moment).map(([sound]) => sound)
 const heroAttack = (rolls, kind = 'roll') => ({ kind, rolls: rolls.map(([value, hit]) => ({ monsterId: 'm', label: 'Kobold', value, hit })) })
@@ -35,7 +35,7 @@ describe('moment sounds', () => {
   })
 
   it('gives each moment without dice its own sound', () => {
-    expect(names({ kind: 'spawn' })).toEqual(['roar'])
+    expect(names({ kind: 'spawn', title: 'The Throne Room!' })).toEqual(['roar'])
     expect(names({ kind: 'down' })).toEqual(['down'])
     expect(names({ kind: 'treasure' })).toEqual(['coins'])
     expect(names({ kind: 'level' })).toEqual(['levelup'])
@@ -48,5 +48,45 @@ describe('moment sounds', () => {
     expect(momentSoundMs({ kind: 'crit', value: 20 })).toBe(DIE_LANDS_MS + 1700)
     expect(momentSoundMs({ kind: 'spawn' })).toBe(1500)
     expect(momentSoundMs(null)).toBe(0)
+  })
+})
+
+describe('monster sounds', () => {
+  it('gives each monster its own sound when drawn', () => {
+    expect(names({ kind: 'spawn', title: 'A Cave Bear appears!' })).toEqual(['bear'])
+    expect(names({ kind: 'spawn', title: '2 Snakes appear!' })).toEqual(['hiss'])
+    expect(monsterVoice('An Orc Archer appears!')).toBe('bow')
+    expect(monsterVoice('Ashardalon, the Red Dragon appears!')).toBe('dragon')
+    expect(monsterVoice('The Kobold Dragonlord is enraged!')).toBe('dragonlord')
+    expect(monsterVoice('A Kobold Dragonshield appears!')).toBe('kobold')
+  })
+
+  it('roars for anything it does not know', () => {
+    expect(monsterVoice('A Beholder appears!')).toBe('roar')
+    expect(monsterVoice()).toBe('roar')
+  })
+
+  it('lets the narrator wait for the monster sound', () => {
+    expect(momentSoundMs({ kind: 'spawn', title: 'A Cave Bear appears!' })).toBe(2000)
+  })
+})
+
+describe('new tile music', () => {
+  const game = (turn) => ({ status: 'playing', turn: { explored: false, tiles: {}, ...turn } })
+
+  it('plays when the hero explores', () => {
+    expect(tileRevealed(game({}), game({ explored: true }))).toBe(true)
+  })
+
+  it('plays when the tile tracker turns over a tile', () => {
+    expect(tileRevealed(game({}), game({ tiles: { chamber: 'tile-3' } }))).toBe(true)
+    const drawn = game({ explored: true, tiles: { explore: 'tile-1' } })
+    expect(tileRevealed(drawn, { ...drawn })).toBe(false)
+  })
+
+  it('stays quiet when the stack is empty, on reconnect and outside the game', () => {
+    expect(tileRevealed(game({}), game({ tiles: { explore: 'none' } }))).toBe(false)
+    expect(tileRevealed(null, game({ explored: true }))).toBe(false)
+    expect(tileRevealed({ ...game({}), status: 'setup' }, game({ explored: true }))).toBe(false)
   })
 })

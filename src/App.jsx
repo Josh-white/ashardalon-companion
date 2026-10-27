@@ -235,7 +235,7 @@ export default function App() {
   const [soundOn, setSoundOn] = useSoundSetting(seat)
   const sound = { on: soundOn, setOn: setSoundOn }
   const soundLocked = useAudioLocked(soundOn)
-  useSoundEffects(state?.moment, soundOn)
+  useSoundEffects(state, soundOn)
 
   if (!state) return <Connecting />
 
