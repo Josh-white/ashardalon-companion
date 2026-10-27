@@ -21,6 +21,27 @@ const STYLES = {
   treasure: { icon: '💰', title: 'text-amber-300', panel: 'border-amber-400 bg-amber-950/95 moment-glow' },
 }
 
+// The front view of a real d20: a hexagon outline split into ten triangle faces,
+// with the rolled number on the face pointing at you.
+const V = { t: [50, 3], ur: [91, 27], lr: [91, 75], b: [50, 99], ll: [9, 75], ul: [9, 27], a: [50, 24], r: [74, 66], l: [26, 66] }
+const FACES = [
+  ['t', 'ur', 'a', 0.85],
+  ['t', 'a', 'ul', 0.7],
+  ['ur', 'r', 'a', 0.55],
+  ['ul', 'a', 'l', 0.45],
+  ['ur', 'lr', 'r', 0.35],
+  ['ul', 'l', 'll', 0.3],
+  ['lr', 'b', 'r', 0.2],
+  ['ll', 'l', 'b', 0.15],
+  ['b', 'l', 'r', 0.25],
+]
+const points = (...keys) => keys.map((k) => V[k].join(',')).join(' ')
+const DIE_COLORS = {
+  normal: { face: '#b91c1c', edge: '#fbbf24', text: '#fef3c7' },
+  crit: { face: '#d97706', edge: '#fef3c7', text: '#ffffff' },
+  fumble: { face: '#3f3f46', edge: '#71717a', text: '#a1a1aa' },
+}
+
 function Die({ value }) {
   const [shown, setShown] = useState(() => Math.ceil(Math.random() * 20))
   const [spinning, setSpinning] = useState(true)
@@ -36,13 +57,34 @@ function Die({ value }) {
       clearTimeout(stop)
     }
   }, [value])
+  const colors = spinning ? DIE_COLORS.normal : value === 20 ? DIE_COLORS.crit : value === 1 ? DIE_COLORS.fumble : DIE_COLORS.normal
   return (
-    <div
-      className={`mx-auto flex h-[1.6em] w-[1.6em] items-center justify-center rounded-[0.3em] border-4 border-amber-500 bg-zinc-950 font-bold text-amber-300 ${
-        spinning ? 'moment-spin' : 'moment-land'
-      }`}
-    >
-      {shown}
+    <div className={`mx-auto h-[2.1em] w-[1.9em] ${spinning ? 'd20-roll' : 'd20-land'} ${!spinning && value === 20 ? 'd20-crit' : ''}`}>
+      <svg viewBox="0 0 100 102" className="h-full w-full overflow-visible" role="img" aria-label={`d20 showing ${shown}`}>
+        <g stroke={colors.edge} strokeWidth="2" strokeLinejoin="round">
+          {FACES.map(([p, q, r]) => (
+            <polygon key={p + q + r} points={points(p, q, r)} fill={colors.face} />
+          ))}
+          {FACES.map(([p, q, r, light]) => (
+            <polygon key={`shade-${p}${q}${r}`} points={points(p, q, r)} fill={light > 0.5 ? '#ffffff' : '#000000'} fillOpacity={Math.abs(light - 0.5) * 0.7} stroke="none" />
+          ))}
+          <polygon points={points('a', 'r', 'l')} fill={colors.face} />
+          <polygon points={points('t', 'ur', 'lr', 'b', 'll', 'ul')} fill="none" strokeWidth="3" />
+        </g>
+        <text
+          x="50"
+          y="54"
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fill={colors.text}
+          fontSize={shown >= 10 ? 27 : 32}
+          fontWeight="bold"
+          fontFamily="Georgia, 'Times New Roman', serif"
+        >
+          {shown}
+        </text>
+        {(shown === 6 || shown === 9) && <line x1="44" y1="65" x2="56" y2="65" stroke={colors.text} strokeWidth="2" />}
+      </svg>
     </div>
   )
 }
