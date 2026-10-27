@@ -21,6 +21,17 @@ Starting hero stats are prefilled on the setup screen and can be adjusted there,
 
 Each hero has two at-will, one utility, and one daily power slot. Tap **Choose powers** to pick each one from a dropdown, tap a used daily or utility power to flip it, and tap **Read** to see the card text. The cards come from `cards/cards.json`, a file that stays on your server and is ignored by git. See [cards/README.md](cards/README.md) for the format.
 
+## Narrator voice
+
+The projector can read the game out loud in a dungeon-master voice: monsters arriving, encounter cards, new tiles, whose turn it is, natural 20s and 1s, defeats and treasure. It uses [ElevenLabs](https://elevenlabs.io). Put your API key in the `.env` file next to `compose.yaml` on the Pi (never in the repo), then rebuild:
+
+```sh
+read -rsp "Paste ElevenLabs key: " K; echo; printf 'ELEVENLABS_API_KEY=%s\n' "$K" >> .env; chmod 600 .env; unset K
+docker compose up -d --build
+```
+
+Only the Pi talks to ElevenLabs, and every line it has spoken is saved in the `game-data` volume, so repeats are free. Optional `.env` settings: `ELEVENLABS_VOICE_ID` (default: George) and `ELEVENLABS_MODEL` (default: `eleven_multilingual_v2`; `eleven_flash_v2_5` costs half as much). Browsers only play sound after a tap, so the projector shows **Tap to hear the narrator** if it needs one, and a small *narrator on/off* switch in the corner.
+
 ## Run it on the Raspberry Pi
 
 ```sh
@@ -80,4 +91,3 @@ npm test
 
 - Tile, encounter, and treasure deck trackers
 - Adventure picker
-- Narration with ElevenLabs voices. The API key must stay out of this repo; it will be supplied on the Pi as an environment variable.

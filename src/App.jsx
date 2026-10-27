@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { AdventurePanel } from './components/Adventure.jsx'
 import HeroCard from './components/HeroCard.jsx'
 import MomentOverlay from './components/MomentOverlay.jsx'
+import Narrator from './components/Narrator.jsx'
 import MonsterList, { VillainList } from './components/MonsterList.jsx'
 import ProjectorView from './components/ProjectorView.jsx'
 import SeatPicker from './components/SeatPicker.jsx'
@@ -249,6 +250,7 @@ export default function App() {
           Reconnecting to the game… changes won't be saved until it's back.
         </p>
       )}
+      {seat === PROJECTOR_SEAT && <Narrator state={state} />}
     </>
   )
 
