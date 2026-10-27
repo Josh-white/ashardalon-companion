@@ -11,10 +11,19 @@ import { TilesLeft } from './Tiles.jsx'
 import Art from './Art.jsx'
 import { SoundToggle } from './SoundToggle.jsx'
 import { HpBar } from './ui.jsx'
+import { useLayoutEffect, useRef, useState } from 'react'
 
 // A read-only screen for the projector: big enough to read across the room,
 // with no buttons to tap. Everything changes from the players' iPads.
-export default function ProjectorView({ state, onSwitchSeat, sound }) {
+export default function ProjectorView(props) {
+  return (
+    <FitToScreen>
+      <ProjectorScreen {...props} />
+    </FitToScreen>
+  )
+}
+
+function ProjectorScreen({ state, onSwitchSeat, sound }) {
   const { heroIndex, phase, round } = state.turn
   const activeHero = state.heroes[heroIndex]
   const current = PHASES[phase]
@@ -177,6 +186,38 @@ export default function ProjectorView({ state, onSwitchSeat, sound }) {
           </button>
         </span>
       </footer>
+    </div>
+  )
+}
+
+// Nobody can scroll the projector during a game, so when the screen holds more
+// than the window, shrink all of it until it fits.
+function FitToScreen({ children }) {
+  const outer = useRef(null)
+  const inner = useRef(null)
+  const [fit, setFit] = useState({ scale: 1, height: null })
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      const height = window.innerHeight - outer.current.getBoundingClientRect().top
+      const scale = Math.min(1, height / inner.current.scrollHeight)
+      setFit((prev) => (prev.scale === scale && prev.height === height ? prev : { scale, height }))
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(inner.current)
+    window.addEventListener('resize', measure)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [])
+
+  return (
+    <div ref={outer} className="overflow-hidden" style={{ height: fit.height ?? '100vh' }}>
+      <div ref={inner} style={{ transform: `scale(${fit.scale})`, transformOrigin: 'top center' }}>
+        {children}
+      </div>
     </div>
   )
 }
