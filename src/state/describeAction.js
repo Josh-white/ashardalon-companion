@@ -111,6 +111,8 @@ export function describeAction(state, action) {
     case 'END_GAME':
     case 'RESUME':
       return 'Ending the game'
+    case 'MARK_ACTED':
+      return action.name ? `${action.name}'s turn done` : 'Turn done'
     default:
       return 'Last change'
   }

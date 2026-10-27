@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { HERO_COLORS, XP_TO_CANCEL_ENCOUNTER } from '../data/heroes.js'
 import { itemTrapBonus, tileAcBonus } from '../data/items.js'
 import { heroAc, reactionsFor } from '../data/powerEffects.js'
-import { ENCOUNTER_LABELS, canTryCurse, phaseChecks, villainInPlay } from '../state/game.js'
+import { ENCOUNTER_LABELS, canTryCurse, encounterCount, phaseChecks, villainInPlay } from '../state/game.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { DrawMonsterButton, HeroPicker } from './MonsterTurns.jsx'
@@ -238,6 +238,11 @@ function EncounterCard({ state, hero, dispatch }) {
   const { monsters: monsterCards, villains } = useCards()
   const { card, attacked } = state.encounter
   const [markerChecked, setMarkerChecked] = useState(false)
+  // Frenzied Leap: null until the table says whether a monster is on the active hero's tile.
+  const [monsterOnTile, setMonsterOnTile] = useState(null)
+  const asksTile = card.damageIfMonsterOnTile > 0 && monsterOnTile === null
+  const resolve = (extra = {}) =>
+    dispatch({ type: 'RESOLVE_ENCOUNTER', monsterCards, villains, random: randomNumbers(SHUFFLE_NUMBERS), monsterOnTile: monsterOnTile === true, ...extra })
   const placesMarker = card.type === 'hazard' || card.type === 'trap'
   // Ashardalon Breathes! does nothing (and is discarded) when Ashardalon isn't in play.
   const villainHere = villainInPlay(state, card)
@@ -301,7 +306,20 @@ function EncounterCard({ state, hero, dispatch }) {
               dispatch={dispatch}
             />
           )}
-          {!needsAttack && (
+          {!needsAttack && asksTile && (
+            <div>
+              <p className="text-xl font-semibold text-zinc-100">Is a monster on {hero.name}'s tile?</p>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <Button variant="danger" className="py-3 text-xl" onClick={() => resolve({ monsterOnTile: true })}>
+                  Yes: {card.damageIfMonsterOnTile} damage
+                </Button>
+                <Button className="py-3 text-xl" onClick={() => setMonsterOnTile(false)}>
+                  No
+                </Button>
+              </div>
+            </div>
+          )}
+          {!needsAttack && !asksTile && (
             <>
               {card.id === 'occupied-lair' && (
                 <DrawTileButton state={state} dispatch={dispatch} drawKey={`encounter-${state.encounter.id}`} from="bottom" />
@@ -329,9 +347,7 @@ function EncounterCard({ state, hero, dispatch }) {
               <Button
                 variant="gold"
                 className="w-full py-3 text-lg"
-                onClick={() =>
-                  dispatch({ type: 'RESOLVE_ENCOUNTER', monsterCards, villains, random: randomNumbers(SHUFFLE_NUMBERS) })
-                }
+                onClick={() => resolve()}
               >
                 {!villainHere ? 'Discard it' : card.returnToTop > 0 ? 'Done, shuffle it back in' : card.afterDrawTop ? 'Done' : RESOLVE_LABELS[card.type](hero)}
               </Button>
@@ -344,14 +360,7 @@ function EncounterCard({ state, hero, dispatch }) {
 }
 
 // How many encounter cards this Villain Phase still has to draw.
-export function encountersLeft(state, hero) {
-  const { explored, triangle, encountersDrawn = 0, encountersOwed = 0 } = state.turn
-  const base = explored !== true || triangle === true ? 1 : 0
-  const badLuck = (hero.curses ?? []).reduce((sum, c) => sum + (c.card?.extraEncounter ?? 0), 0)
-  // Some adventures add an encounter to every Villain Phase (Roghar's Gear, once the Vault is found).
-  const adventure = state.adventure?.extraEncounters ?? 0
-  return Math.max(0, base + badLuck + adventure + encountersOwed - encountersDrawn)
-}
+export const encountersLeft = (state, hero) => encounterCount(state, hero)
 
 // The Villain Phase's encounter step: draw from the virtual deck, read it out, resolve it.
 // Without encounter cards in the card file, the table draws from the real deck instead.
@@ -378,15 +387,30 @@ export function EncounterStep({ state, hero, dispatch }) {
   if (left === 0) {
     return drawn > 0 ? <p className="mt-4 rounded-xl bg-emerald-950/60 p-3 text-lg text-emerald-200">✓ Encounters done.</p> : null
   }
+  // Why there's more than the usual card, so a second draw isn't a surprise.
+  const reasons = [
+    ...(hero.curses ?? []).filter((c) => c.card?.extraEncounter > 0).map((c) => `${c.name}: ${hero.name} draws an extra card every Villain Phase.`),
+    state.adventure?.extraEncounters > 0 && 'The adventure adds an extra card every Villain Phase.',
+    ...(state.turn.owedBecause ?? []),
+  ].filter(Boolean)
   return (
-    <Button
-      variant="danger"
-      className="mt-4 w-full px-5 py-4 text-xl font-bold"
-      onClick={() => dispatch({ type: 'DRAW_ENCOUNTER', heroId: hero.id, cards: encounters, random: randomNumbers(SHUFFLE_NUMBERS) })}
-    >
-      🃏 Draw {drawn > 0 ? 'another' : 'an'} encounter card
-      {left > 1 && <span className="ml-2 text-base font-normal opacity-80">({left} to draw)</span>}
-    </Button>
+    <>
+      {reasons.length > 0 && (
+        <ul className="mt-4 space-y-1 rounded-xl bg-zinc-950/50 p-3 text-lg text-amber-200">
+          {reasons.map((why) => (
+            <li key={why}>{why}</li>
+          ))}
+        </ul>
+      )}
+      <Button
+        variant="danger"
+        className="mt-4 w-full px-5 py-4 text-xl font-bold"
+        onClick={() => dispatch({ type: 'DRAW_ENCOUNTER', heroId: hero.id, cards: encounters, random: randomNumbers(SHUFFLE_NUMBERS) })}
+      >
+        🃏 Draw {drawn > 0 ? 'another' : 'an'} encounter card
+        {left > 1 && <span className="ml-2 text-base font-normal opacity-80">({left} to draw)</span>}
+      </Button>
+    </>
   )
 }
 
@@ -441,8 +465,8 @@ function TrapActivation({ state, hero, trap, dispatch, onDone }) {
 }
 
 export function TrapTurns({ state, hero, dispatch }) {
-  const [done, setDone] = useState([])
   const [activeId, setActiveId] = useState(null)
+  const done = state.turn.acted ?? []
   const traps = (state.traps ?? []).filter((t) => t.ownerId === hero.id && t.type === 'trap')
   if (traps.length === 0) return null
   const active = traps.find((t) => t.id === activeId)
@@ -458,7 +482,7 @@ export function TrapTurns({ state, hero, dispatch }) {
             trap={active}
             dispatch={dispatch}
             onDone={() => {
-              setDone((d) => [...d, active.id])
+              dispatch({ type: 'MARK_ACTED', id: active.id, name: active.name })
               setActiveId(null)
             }}
           />
@@ -578,7 +602,7 @@ export function EnvironmentBanner({ environment, className = '' }) {
   )
   return (
     <div className={`rounded-xl border border-emerald-800 bg-emerald-950/50 p-3 text-emerald-100 ${className}`}>
-      <span className="font-bold">🌋 Environment: {environment.name}.</span> <span className="text-emerald-200">{rule}</span>
+      <span className="font-bold">🌋 Environment: {environment.name}{/[.!?]$/.test(environment.name) ? '' : '.'}</span> <span className="text-emerald-200">{rule}</span>
     </div>
   )
 }

@@ -45,6 +45,15 @@ describe('adventures', () => {
     expect(gameReducer(state, { type: 'ADVENTURE_STORY_DONE', storyId: state.adventure.story.id }).adventure.story).toBeNull()
   })
 
+  it('takes the read-aloud text down when the turn passes', () => {
+    let state = lobbyGame(adventures[0])
+    for (let i = 0; i < 2; i++) state = gameReducer(state, { type: 'NEXT_PHASE', roll: 1 })
+    expect(state.adventure.story).not.toBeNull()
+    state = gameReducer(state, { type: 'NEXT_PHASE', roll: 1 })
+    expect(state.turn.heroIndex).toBe(1)
+    expect(state.adventure.story).toBeNull()
+  })
+
   it("won't pick an adventure that needs features the app doesn't have", () => {
     const state = gameReducer(initialState, { type: 'CHOOSE_ADVENTURE', adventure: adventures[2] })
     expect(state.lobbyAdventure).toBeNull()

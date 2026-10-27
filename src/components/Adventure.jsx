@@ -139,6 +139,24 @@ export function ChosenAdventure({ state }) {
   )
 }
 
+// Once nothing else stands in the way, the Hero Phase says the way out is open, so the
+// escape button isn't left hidden in the folded adventure bar.
+export function EscapeNote({ state, hero, dispatch }) {
+  const adventure = state.adventure
+  if (!adventure || adventure.escaped) return null
+  if (!(adventure.card.win.escape || adventure.chamber?.card.win.escape) || escapeBlockers(state).length > 0) return null
+  const rule = adventure.card.rules.find((r) => /victory/i.test(r.name))
+  return (
+    <div className="mt-4 rounded-xl border border-emerald-700 bg-emerald-950/60 p-3 text-lg text-emerald-100">
+      <p className="font-semibold">🚪 The way out is open! Get {hero.name} to the exit.</p>
+      {rule && <p className="mt-1 text-base text-emerald-200">{rule.text}</p>}
+      <Button variant="gold" className="mt-2 w-full" onClick={() => dispatch({ type: 'ADVENTURE_ESCAPED', escaped: true })}>
+        We escaped the dungeon!
+      </Button>
+    </div>
+  )
+}
+
 // Read-aloud text from the book, shown until someone taps "Got it".
 function Story({ story, dispatch, big = false }) {
   return (

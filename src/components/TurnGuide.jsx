@@ -2,10 +2,10 @@ import { HERO_COLORS, XP_TO_LEVEL_UP } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
 import { CurseNotes, PhaseChecks, DisableTraps, EncounterStep, EnvironmentBanner, PassMonsters, encountersLeft, TrapTurns } from './Encounters.jsx'
 import HeroAttack, { AttackAftermath } from './HeroAttack.jsx'
-import { Doors, RevealButtons } from './Adventure.jsx'
+import { Doors, EscapeNote, RevealButtons } from './Adventure.jsx'
 import MonsterTurns, { DrawMonsterButton, VillainTurns } from './MonsterTurns.jsx'
 import { rollD20 } from '../state/random.js'
-import { checksFor, phaseChecks, villagerRollDue } from '../state/game.js'
+import { checksFor, phaseChecks, phaseTodo, villagerRollDue } from '../state/game.js'
 import { VillagerTurn } from './Villagers.jsx'
 import { useCards } from '../state/useCards.js'
 import { treasurePending } from './Treasure.jsx'
@@ -97,6 +97,7 @@ function HeroPhase({ state, hero, dispatch }) {
       )}
       <DisableTraps state={state} hero={hero} dispatch={dispatch} />
       <Doors state={state} hero={hero} dispatch={dispatch} />
+      <EscapeNote state={state} hero={hero} dispatch={dispatch} />
       <ExtraAttacks state={state} dispatch={dispatch} />
 
       {hero.level === 1 && state.turn.natural20 === hero.id && (
@@ -226,14 +227,22 @@ export default function TurnGuide({ state, dispatch }) {
   const color = HERO_COLORS[hero.color]
   const stepKey = `${round}-${heroIndex}-${phase}`
 
-  const { treasures } = useCards()
+  const { treasures, encounters, monsters } = useCards()
   const isLastPhase = phase === PHASES.length - 1
-  // The turn can't pass while a treasure card waits to be drawn or handed out.
-  const waiting =
-    Boolean(state.encounter) ||
-    (isLastPhase && treasurePending(state, treasures)) ||
-    phaseChecks(state, checksFor(current.key)).length > 0 ||
-    villagerRollDue(state)
+  // What this phase still needs (questions, the monster draw, every monster's turn, the
+  // encounter card), so a quick tap doesn't skip something. Decks the table plays from
+  // the real cards aren't checked.
+  const todo = phaseTodo(state, { monsters: Boolean(state.monsterDeck) || monsters.length > 0, encounters: Boolean(state.encounterDeck) || encounters.length > 0 })
+  if (isLastPhase && treasurePending(state, treasures)) todo.push('the treasure card')
+  if (villagerRollDue(state)) todo.push('the villager roll')
+  // These can't be skipped at all: an open encounter card, a card's own questions, the villager roll.
+  const blocked =
+    Boolean(state.encounter) || Boolean(state.turn.startDamageDue) || phaseChecks(state, checksFor(current.key)).length > 0 || villagerRollDue(state)
+  const waiting = blocked || todo.length > 0
+  const next = () => dispatch({ type: 'NEXT_PHASE', roll: rollD20(), rolls: [rollD20(), rollD20(), rollD20()] })
+  const skip = () => {
+    if (window.confirm(`Still to do: ${todo.join(', ')}. Move on anyway?`)) next()
+  }
   const nextHero = state.heroes[(heroIndex + 1) % state.heroes.length]
 
   return (
@@ -264,6 +273,16 @@ export default function TurnGuide({ state, dispatch }) {
       {current.key === 'exploration' && <ExplorationPhase state={state} hero={hero} dispatch={dispatch} />}
       {current.key === 'villain' && <VillainPhase key={stepKey} state={state} hero={hero} dispatch={dispatch} />}
 
+      {waiting && todo.length > 0 && (
+        <p className="mt-4 text-right text-amber-300">
+          Still to do: {todo.join(', ')}.
+          {!blocked && (
+            <button type="button" className="ml-2 text-sm text-zinc-500 underline" onClick={skip}>
+              Skip
+            </button>
+          )}
+        </p>
+      )}
       <div className="mt-6 flex items-center justify-between gap-3">
         <Button variant="ghost" onClick={() => dispatch({ type: 'PREVIOUS_PHASE' })}>
           ← Back
@@ -273,7 +292,7 @@ export default function TurnGuide({ state, dispatch }) {
           variant="gold"
           className="px-6 py-3 text-lg"
           disabled={waiting}
-          onClick={() => dispatch({ type: 'NEXT_PHASE', roll: rollD20(), rolls: [rollD20(), rollD20(), rollD20()] })}
+          onClick={next}
         >
           {isLastPhase ? `Pass to ${nextHero.player || nextHero.name} →` : `On to ${PHASES[phase + 1].title} →`}
         </Button>

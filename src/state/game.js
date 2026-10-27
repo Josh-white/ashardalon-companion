@@ -531,6 +531,12 @@ function drawMonsterOfType(state, heroId, type, random, cards = []) {
   return withLog({ ...state, monsterDeck: deck }, `There's no ${type} monster card left to draw.`)
 }
 
+// One more encounter card this Villain Phase, with the reason shown on the button.
+const oweEncounter = (state, why) => ({
+  ...state,
+  turn: { ...state.turn, encountersOwed: (state.turn.encountersOwed ?? 0) + 1, owedBecause: [...(state.turn.owedBecause ?? []), why] },
+})
+
 // After the encounter card is read out (and any attack rolled), the app does what it
 // can and puts the card where it goes: on the hero (curse), in play (environment), on
 // the board (trap, hazard), or in the discards (event).
@@ -546,6 +552,9 @@ function resolveEncounter(state, action) {
 
   if (card.damageEach > 0) {
     ;({ next, downed } = damageHeroes(next, next.heroes.map((h) => h.id), card.damageEach, card.name))
+  }
+  if (card.damageIfMonsterOnTile > 0 && action.monsterOnTile && hero) {
+    ;({ next, downed } = damageHeroes(next, [hero.id], card.damageIfMonsterOnTile, card.name))
   }
   if (card.damagePoisoned > 0) {
     const poisoned = next.heroes.filter((h) => h.conditions.includes('Poisoned')).map((h) => h.id)
@@ -573,7 +582,7 @@ function resolveEncounter(state, action) {
     next = discardEncounterCard(next, card.id)
   }
   if (card.id === 'lost') next = bottomToTop(next)
-  if (card.drawAnother) next = { ...next, turn: { ...next.turn, encountersOwed: (next.turn.encountersOwed ?? 0) + 1 } }
+  if (card.drawAnother) next = oweEncounter(next, `${card.name} says to draw another encounter card.`)
   if (downed.length > 0) {
     next = withMoment(next, { kind: 'down', title: `${downed.join(' and ')} ${downed.length > 1 ? 'are' : 'is'} down!`, detail: card.name })
   }
@@ -1108,6 +1117,42 @@ function answerCheck(state, action) {
   return next
 }
 
+// What the phase still needs before the turn moves on, as short labels for the screen.
+// `cards` says which virtual decks are in use (the table may draw from the real ones).
+export function phaseTodo(state, cards = {}) {
+  const { phase, explored, triangle, monsterDrawn, acted = [] } = state.turn
+  const hero = state.heroes[state.turn.heroIndex]
+  if (!hero) return []
+  const todo = []
+  if (state.turn.startDamageDue) todo.push(`${hero.name}'s healing surge`)
+  const key = PHASES[phase]?.key
+  if (key === 'exploration') {
+    if (explored === undefined) todo.push('the unexplored edge question')
+    else if (explored === true && cards.monsters && !monsterDrawn) todo.push('the new monster')
+  }
+  if (key === 'villain') {
+    for (const villain of activeVillains(state)) if (!acted.includes(villain.id)) todo.push(`the ${villain.name}'s turn`)
+    if (cards.encounters) {
+      if (explored === true && triangle === undefined) todo.push('the black triangle question')
+      else if (state.encounter || encounterCount(state, hero) > 0) todo.push('the encounter card')
+    }
+    for (const monster of state.monsters.filter((m) => m.ownerId === hero.id)) if (!acted.includes(monster.id)) todo.push(`the ${monster.name}'s turn`)
+    for (const trap of (state.traps ?? []).filter((t) => t.ownerId === hero.id && t.type === 'trap')) if (!acted.includes(trap.id)) todo.push(`the ${trap.name}`)
+  }
+  return todo
+}
+
+// Encounter cards the Villain Phase still owes: one without a new tile (or with a black
+// triangle), plus curses (Bad Luck), the adventure's extras and "draw another" cards.
+export function encounterCount(state, hero) {
+  const { explored, triangle, encountersDrawn = 0, encountersOwed = 0 } = state.turn
+  const base = explored !== true || triangle === true ? 1 : 0
+  const badLuck = (hero.curses ?? []).reduce((sum, c) => sum + (c.card?.extraEncounter ?? 0), 0)
+  // Some adventures add an encounter to every Villain Phase (Roghar's Gear, once the Vault is found).
+  const adventure = state.adventure?.extraEncounters ?? 0
+  return Math.max(0, base + badLuck + adventure + encountersOwed - encountersDrawn)
+}
+
 // Poison (and Bloodlust) hurt at the start of the hero's turn, and a hero lost in a Time
 // Leap comes back.
 function startTurn(state) {
@@ -1117,7 +1162,18 @@ function startTurn(state) {
     state = removeCurse(state, hero.id, curse.id, `${hero.name} is back from the ${curse.name}. Put ${hero.name} on any tile.`)
     state = withMoment(state, { kind: 'encounter', heroId: hero.id, title: `${hero.name} is back!`, detail: `${curse.name} is over. Put ${hero.name} on any tile.` })
   }
-  if (!hero || hero.hp === 0) return state
+  if (!hero) return state
+  // A hero who starts the turn at 0 HP spends a healing surge first; the poison and curse
+  // damage comes after that (USE_SURGE), so getting back up doesn't skip it.
+  if (hero.hp === 0 && state.surges <= 0) {
+    return withLog({ ...state, status: 'lost' }, `${hero.name} is down at the start of the turn with no healing surges left.`)
+  }
+  if (hero.hp === 0) return { ...state, turn: { ...state.turn, startDamageDue: hero.id } }
+  return startDamage(state, hero)
+}
+
+// Poison and start-of-turn curse damage (Bloodlust).
+function startDamage(state, hero) {
   const poison = hero.conditions.includes('Poisoned') ? 1 : 0
   const curse = curseTotal(hero, 'startDamage')
   if (poison + curse === 0) return state
@@ -1265,7 +1321,7 @@ function dealStartingTreasure(state, cards, random) {
     if (!card) break
     const item = { id: newId('item'), cardId: card.id, name: card.name, used: false, card }
     next = updateHero({ ...next, treasureDeck: drawn.deck }, hero.id, (h) => ({ items: [...(h.items ?? []), item] }))
-    next = withLog(next, `${heroLabel(hero)} starts with ${article(card.name)} ${card.name}.`)
+    next = withLog(next, `${heroLabel(hero)} starts with ${/^\S+s'?(\s|$)/.test(card.name) ? '' : `${article(card.name)} `}${card.name}.`)
     found.push(`${hero.name}: ${card.name}`)
   }
   return withMoment(next, { kind: 'treasure', title: 'Starting treasure!', detail: found.join(' · ') })
@@ -1882,7 +1938,10 @@ function reduce(state, action) {
       const healed = updateHero({ ...state, surges: state.surges - 1 }, hero.id, (h) => ({
         hp: Math.min(h.maxHp, h.surgeValue),
       }))
-      return withLog(healed, `${hero.name} used a healing surge.`)
+      const logged = withLog(healed, `${hero.name} used a healing surge.`)
+      if (state.turn.startDamageDue !== hero.id) return logged
+      const { startDamageDue: _, ...turn } = logged.turn
+      return startDamage({ ...logged, turn }, logged.heroes.find((h) => h.id === hero.id))
     }
 
     case 'TOGGLE_POWER':
@@ -1986,6 +2045,14 @@ function reduce(state, action) {
         return { ...monsterFromCard(card, ownerId), id, hp: Math.min(hp, card.hp * (card.figures ?? 1)), maxHp: Math.max(maxHp, card.hp), conditions }
       })
       return changed ? { ...state, monsters } : state
+    }
+
+    case 'MARK_ACTED': {
+      // A monster, villain or trap finished its turn this Villain Phase. Kept in the game so
+      // every screen sees it, and the turn can't pass until they all have.
+      const acted = state.turn.acted ?? []
+      if (!action.id || acted.includes(action.id)) return state
+      return { ...state, turn: { ...state.turn, acted: [...acted, action.id] } }
     }
 
     case 'SET_EXPLORED': {
@@ -2108,7 +2175,7 @@ function reduce(state, action) {
       if (!encounter || encounter.attacked) return state
       const next = discardEncounterCard({ ...state, encounter: null }, encounter.cardId)
       return withLog(
-        { ...next, turn: { ...next.turn, encountersOwed: (next.turn.encountersOwed ?? 0) + 1 } },
+        oweEncounter(next, `${encounter.card.name} was discarded because the tile already had a marker, so draw a new card.`),
         `That tile already has a marker, so ${encounter.card.name} was discarded.`,
       )
     }
@@ -2248,6 +2315,8 @@ function reduce(state, action) {
       const { heroIndex, phase, round } = state.turn
       // The phase's questions (Walls of Magma, Dragon Fear...) have to be answered first.
       if (phaseChecks(state, checksFor(PHASES[phase].key)).length > 0) return state
+      // A hero who started the turn at 0 HP spends a healing surge before anything else.
+      if (state.turn.startDamageDue && state.status === 'playing') return state
       // With villagers in play, the Hero Phase ends with the roll for one of them.
       if (villagerRollDue(state)) return state
       if (phase < PHASES.length - 1) {
@@ -2258,8 +2327,10 @@ function reduce(state, action) {
       // An encounter or treasure card has to be finished before the turn moves on.
       if (state.encounter || state.treasure) return state
       const nextIndex = (heroIndex + 1) % state.heroes.length
+      // Read-aloud text belongs to the turn it came up in; it doesn't stay on the projector.
+      const told = state.adventure?.story ? { ...state, adventure: { ...state.adventure, story: null } } : state
       return startTurn({
-        ...endPhaseCurses(state, state.heroes[heroIndex], 'villain', action.rolls),
+        ...endPhaseCurses(told, state.heroes[heroIndex], 'villain', action.rolls),
         turn: { heroIndex: nextIndex, phase: 0, round: nextIndex === 0 ? round + 1 : round },
       })
     }

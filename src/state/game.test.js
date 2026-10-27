@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { normalizeCardFile } from '../data/cards.js'
 import { heroAc, heroAttackPenalty } from '../data/powerEffects.js'
-import { checksFor, createHero, encounterCardsOutdated, gameReducer, initialState, phaseChecks } from './game.js'
+import { checksFor, createHero, encounterCardsOutdated, gameReducer, initialState, phaseChecks, phaseTodo } from './game.js'
 
 const startGame = (count = 2) =>
   gameReducer(initialState, { type: 'START_GAME', heroes: HERO_TEMPLATES.slice(0, count).map((t) => createHero(t)) })
@@ -443,6 +443,35 @@ describe('conditions between phases', () => {
     expect(state.moment.kind).toBe('poison')
   })
 
+  it('hurts a poisoned hero who starts at 0 HP after the healing surge', () => {
+    let state = poisoned(startGame(), 1)
+    state = gameReducer(state, { type: 'ADJUST_HP', heroId: state.heroes[1].id, amount: -99 })
+    state = next(next(next(state)))
+    expect(state.heroes[1].hp).toBe(0)
+    state = gameReducer(state, { type: 'USE_SURGE', heroId: state.heroes[1].id })
+    expect(state.heroes[1].hp).toBe(state.heroes[1].surgeValue - 1)
+    // Only once: a second surge later in the turn doesn't hurt again.
+    state = gameReducer(state, { type: 'ADJUST_HP', heroId: state.heroes[1].id, amount: -99 })
+    state = gameReducer(state, { type: 'USE_SURGE', heroId: state.heroes[1].id })
+    expect(state.heroes[1].hp).toBe(state.heroes[1].surgeValue)
+  })
+
+  it('waits for the healing surge of a hero who starts at 0 HP', () => {
+    let state = startGame()
+    state = gameReducer(state, { type: 'ADJUST_HP', heroId: state.heroes[1].id, amount: -99 })
+    state = next(next(next(state)))
+    expect(next(state)).toBe(state)
+    state = gameReducer(state, { type: 'USE_SURGE', heroId: state.heroes[1].id })
+    expect(next(state).turn.phase).toBe(1)
+  })
+
+  it('ends the game when a hero starts at 0 HP with no surges left', () => {
+    let state = { ...startGame(), surges: 0 }
+    state = gameReducer(state, { type: 'ADJUST_HP', heroId: state.heroes[1].id, amount: -99 })
+    state = next(next(next(state)))
+    expect(state.status).toBe('lost')
+  })
+
   it('rolls 10 or more after the Hero Phase to end the poison', () => {
     const state = poisoned(startGame(), 0)
     expect(next(state, 9).heroes[0].conditions).toEqual(['Poisoned'])
@@ -457,6 +486,35 @@ describe('conditions between phases', () => {
   })
 })
 
+describe('what a phase still needs', () => {
+  const next = (state) => gameReducer(state, { type: 'NEXT_PHASE', roll: 1 })
+  const decks = { monsters: true, encounters: true }
+
+  it('asks about the edge, then for the monster draw', () => {
+    let state = next(startGame())
+    expect(phaseTodo(state, decks)).toEqual(['the unexplored edge question'])
+    state = gameReducer(state, { type: 'SET_EXPLORED', explored: true })
+    expect(phaseTodo(state, decks)).toEqual(['the new monster'])
+    expect(phaseTodo(state, { encounters: true })).toEqual([])
+    state = { ...state, turn: { ...state.turn, monsterDrawn: true } }
+    expect(phaseTodo(state, decks)).toEqual([])
+  })
+
+  it('waits for the encounter card and each monster turn', () => {
+    let state = startGame()
+    const hero = state.heroes[0]
+    state = { ...state, monsters: [{ id: 'm1', name: 'Rat', ownerId: hero.id }, { id: 'm2', name: 'Imp', ownerId: state.heroes[1].id }] }
+    state = next(next(state))
+    expect(phaseTodo(state, decks)).toEqual(['the encounter card', "the Rat's turn"])
+    expect(phaseTodo(state, {})).toEqual(["the Rat's turn"])
+    state = gameReducer(state, { type: 'MARK_ACTED', id: 'm1' })
+    expect(state.turn.acted).toEqual(['m1'])
+    expect(phaseTodo({ ...state, turn: { ...state.turn, encountersDrawn: 1 } }, decks)).toEqual([])
+    // The next hero's turn starts with nobody having gone.
+    expect(next(state).turn.acted).toBeUndefined()
+  })
+})
+
 describe('encounter deck', () => {
   // Made-up cards in the card file's format, normalized like the real ones.
   const { encounters, monsters, problems } = normalizeCardFile({
@@ -468,6 +526,7 @@ describe('encounter deck', () => {
     encounters: [
       { id: 'arrow', name: 'Arrow', type: 'event', attack: { bonus: 8, damage: 2, miss: 1, conditions: ['Poisoned'], targets: 'active' } },
       { id: 'heat', name: 'Heat', type: 'event', damageEach: 1, drawAnother: true },
+      { id: 'pounce', name: 'Pounce', type: 'event', damageIfMonsterOnTile: 2, drawMonster: true },
       { id: 'jinx', name: 'Jinx', type: 'curse', curse: { acPenalty: 4, attackPenalty: 2, removeRoll: { phase: 'hero', target: 10 } } },
       { id: 'bad-air', name: 'Bad Air', type: 'environment', trapPenalty: 4 },
       { id: 'still-air', name: 'Still Air', type: 'environment' },
@@ -529,6 +588,14 @@ describe('encounter deck', () => {
     const state = resolve(drawCard(startGame(), 'heat'))
     expect(state.heroes.every((h) => h.hp === h.maxHp - 1)).toBe(true)
     expect(state.turn.encountersOwed).toBe(1)
+    expect(state.turn.owedBecause).toEqual(['Heat says to draw another encounter card.'])
+  })
+
+  it('hurts the active hero only when a monster is on their tile', () => {
+    const state = drawCard(startGame(), 'pounce')
+    const hurt = gameReducer(state, { type: 'RESOLVE_ENCOUNTER', random: [], monsterCards: monsters, monsterOnTile: true })
+    expect(hurt.heroes.map((h) => h.maxHp - h.hp)).toEqual([2, 0])
+    expect(resolve(state).heroes.every((h) => h.hp === h.maxHp)).toBe(true)
   })
 
   it('keeps the turn from moving on while an encounter is out', () => {
