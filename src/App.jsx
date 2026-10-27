@@ -12,6 +12,7 @@ import UndoButton from './components/UndoButton.jsx'
 import { Button, HpBar } from './components/ui.jsx'
 import { HERO_COLORS } from './data/heroes.js'
 import { PHASES } from './data/phases.js'
+import { encounterCardsOutdated } from './state/game.js'
 import { randomNumbers } from './state/random.js'
 import { useCards } from './state/useCards.js'
 import { useDeviceId, useSeat, useSharedGame } from './state/useSharedGame.js'
@@ -225,6 +226,12 @@ export default function App() {
   useEffect(() => {
     if (needsCards) dispatch({ type: 'ATTACH_MONSTER_CARDS', cards: cards.monsters })
   }, [needsCards]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A game saved before the card file changed keeps old copies of its encounter cards.
+  const encountersOutdated = encounterCardsOutdated(state, cards.encounters)
+  useEffect(() => {
+    if (encountersOutdated) dispatch({ type: 'UPDATE_ENCOUNTER_CARDS', cards: cards.encounters })
+  }, [encountersOutdated]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!state) return <Connecting />
 

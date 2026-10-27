@@ -380,7 +380,7 @@ function resolveEncounter(state, action) {
   if (card.filterMonsters && !encounter.filtered) next = filterMonsterDeck(next, card.filterMonsters, action.random, action.monsterCards)
 
   if (card.type === 'curse' && hero) {
-    const curse = { id: newId('curse'), cardId: card.id, name: card.name, text: card.text, card: card.curse ?? {} }
+    const curse = { id: newId('curse'), cardId: card.id, name: card.name, text: card.text, card: card.curse ?? {}, checks: card.checks ?? [] }
     next = withLog(updateHero(next, hero.id, (h) => ({ curses: [...(h.curses ?? []), curse] })), `${hero.name} is cursed: ${card.name}.`)
   } else if (card.type === 'environment') {
     if (next.environment) next = discardEncounterCard(next, next.environment.cardId)
@@ -770,10 +770,90 @@ const removeCurse = (state, heroId, curseId, text) => {
   return withLog(discardEncounterCard(next, curse.cardId), text)
 }
 
-// Poison (and Bloodlust) hurt at the start of the hero's turn.
+// Which checks a phase shows. The Exploration Phase often ends early (no new tile), so
+// its checks are asked at the start of the Villain Phase instead.
+export const checksFor = (phaseKey) => (phaseKey === 'hero' ? 'hero' : phaseKey === 'villain' ? 'exploration' : null)
+
+// The questions a phase ends with, from the active hero's curses, the environment, and
+// hazards on the board. Each has a key so it's asked once per turn, on every device.
+export function phaseChecks(state, phaseKey) {
+  const hero = state.heroes[state.turn.heroIndex]
+  if (!hero) return []
+  const sources = [
+    ...(hero.curses ?? []).map((curse) => ({ id: curse.id, name: curse.name, checks: curse.checks, curseId: curse.id })),
+    ...(state.environment ? [{ id: `env-${state.environment.cardId}`, name: state.environment.name, checks: state.environment.card.checks }] : []),
+    ...(state.traps ?? []).map((trap) => ({ id: trap.id, name: trap.name, checks: trap.card.checks })),
+  ]
+  const done = state.turn.checksDone ?? []
+  return sources.flatMap((source) =>
+    (source.checks ?? [])
+      .map((check, i) => ({ ...check, key: `${source.id}-${i}`, source: source.name, curseId: source.curseId ?? null, heroId: hero.id }))
+      .filter((check) => check.phase === phaseKey && !done.includes(check.key)),
+  )
+}
+
+// True when the game's copies of encounter cards are older than the card file, such as
+// cards saved before the file gained its end-of-phase checks.
+export function encounterCardsOutdated(state, cards = []) {
+  const deck = state?.encounterDeck?.cards
+  if (!deck) return false
+  return cards.some((card) => deck[card.id] && JSON.stringify(deck[card.id]) !== JSON.stringify(card))
+}
+
+// Brings every saved copy of an encounter card up to date with the card file: the deck,
+// the card being read out, the environment, markers on the board, and curses on heroes.
+function updateEncounterCards(state, cards) {
+  const byId = Object.fromEntries((Array.isArray(cards) ? cards : []).map((c) => [c.id, c]))
+  if (!encounterCardsOutdated(state, cards)) return state
+  const fresh = (card) => byId[card?.id] ?? card
+  return {
+    ...state,
+    encounterDeck: { ...state.encounterDeck, cards: Object.fromEntries(Object.entries(state.encounterDeck.cards).map(([id, c]) => [id, fresh(c)])) },
+    encounter: state.encounter && { ...state.encounter, card: fresh(state.encounter.card) },
+    environment: state.environment && { ...state.environment, card: fresh(state.environment.card) },
+    traps: (state.traps ?? []).map((trap) => ({ ...trap, card: fresh(trap.card) })),
+    heroes: state.heroes.map((hero) => ({
+      ...hero,
+      curses: (hero.curses ?? []).map((curse) =>
+        byId[curse.cardId] ? { ...curse, card: byId[curse.cardId].curse ?? {}, checks: byId[curse.cardId].checks ?? [] } : curse,
+      ),
+    })),
+  }
+}
+
+function answerCheck(state, action) {
+  const check = phaseChecks(state, checksFor(PHASES[state.turn.phase]?.key)).find((c) => c.key === action.key)
+  if (!check) return state
+  const hero = state.heroes.find((h) => h.id === check.heroId)
+  let next = { ...state, turn: { ...state.turn, checksDone: [...(state.turn.checksDone ?? []), check.key] } }
+  const effect = check.ask ? (action.answer ? check.yes : check.no) : null
+  if (!effect) return next
+  if (effect.damage) {
+    const { next: hurt, downed } = damageHeroes(next, [hero.id], effect.damage, check.source)
+    next = hurt
+    next = withMoment(next, {
+      kind: downed.length > 0 ? 'down' : 'monster',
+      heroId: hero.id,
+      title: downed.length > 0 ? `${hero.name} is down!` : `${check.source}: ${effect.damage} damage`,
+      detail: downed.length > 0 ? 'Spend a healing surge to get back up.' : `${hero.name} takes ${effect.damage} damage.`,
+    })
+  }
+  if (effect.condition && !hero.conditions.includes(effect.condition)) {
+    next = withLog(updateHero(next, hero.id, (h) => ({ conditions: [...h.conditions, effect.condition] })), `${hero.name} is ${effect.condition} from ${check.source}.`)
+  }
+  if (effect.remove && check.curseId) next = removeCurse(next, hero.id, check.curseId, `${hero.name}'s ${check.source} curse is over.`)
+  return next
+}
+
+// Poison (and Bloodlust) hurt at the start of the hero's turn, and a hero lost in a Time
+// Leap comes back.
 function startTurn(state) {
   const hero = state.heroes[state.turn.heroIndex]
   state = returnFromPowers(state, hero)
+  for (const curse of (hero?.curses ?? []).filter((c) => c.card?.removeAtTurnStart)) {
+    state = removeCurse(state, hero.id, curse.id, `${hero.name} is back from the ${curse.name}. Put ${hero.name} on any tile.`)
+    state = withMoment(state, { kind: 'encounter', heroId: hero.id, title: `${hero.name} is back!`, detail: `${curse.name} is over. Put ${hero.name} on any tile.` })
+  }
   if (!hero || hero.hp === 0) return state
   const poison = hero.conditions.includes('Poisoned') ? 1 : 0
   const curse = curseTotal(hero, 'startDamage')
@@ -1573,6 +1653,12 @@ function reduce(state, action) {
       return item ? withLog(spendItem(state, hero.id, item.id, 'discard'), `${hero.name} discarded the ${item.name}.`) : state
     }
 
+    case 'UPDATE_ENCOUNTER_CARDS':
+      return updateEncounterCards(state, action.cards)
+
+    case 'ANSWER_CHECK':
+      return answerCheck(state, action)
+
     case 'SET_TRIANGLE':
       // The Villain Phase's question: does the new tile have a black triangle?
       return { ...state, turn: { ...state.turn, triangle: Boolean(action.triangle) } }
@@ -1583,6 +1669,8 @@ function reduce(state, action) {
 
     case 'NEXT_PHASE': {
       const { heroIndex, phase, round } = state.turn
+      // The phase's questions (Walls of Magma, Dragon Fear...) have to be answered first.
+      if (phaseChecks(state, checksFor(PHASES[phase].key)).length > 0) return state
       if (phase < PHASES.length - 1) {
         const ended = endPhaseCurses(state, state.heroes[heroIndex], PHASES[phase].key, action.rolls)
         const next = { ...ended, turn: { ...ended.turn, phase: phase + 1 } }

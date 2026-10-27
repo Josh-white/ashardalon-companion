@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { HERO_COLORS, XP_TO_CANCEL_ENCOUNTER } from '../data/heroes.js'
 import { itemTrapBonus, tileAcBonus } from '../data/items.js'
 import { heroAc, reactionsFor } from '../data/powerEffects.js'
-import { ENCOUNTER_LABELS } from '../state/game.js'
+import { ENCOUNTER_LABELS, phaseChecks } from '../state/game.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { DrawMonsterButton, HeroPicker } from './MonsterTurns.jsx'
@@ -519,6 +519,49 @@ export function EnvironmentBanner({ environment, className = '' }) {
   return (
     <div className={`rounded-xl border border-emerald-800 bg-emerald-950/50 p-3 text-emerald-100 ${className}`}>
       <span className="font-bold">🌋 Environment: {environment.name}.</span> <span className="text-emerald-200">{rule}</span>
+    </div>
+  )
+}
+
+const effectWords = (effect) =>
+  !effect
+    ? 'nothing happens'
+    : [effect.damage && `${effect.damage} damage`, effect.condition, effect.remove && 'the curse ends'].filter(Boolean).join(' and ')
+
+// The questions a phase ends with, one at a time, from curses, the environment and
+// hazards ("Did you end next to a wall?"). The turn can't move on until they're answered.
+export function PhaseChecks({ state, hero, phaseKey, dispatch }) {
+  const [check] = phaseChecks(state, phaseKey)
+  if (!check) return null
+  const fill = (text) => text.replaceAll('{hero}', hero.name)
+  return (
+    <div className="mt-4 rounded-2xl border-2 border-purple-700 bg-purple-950/60 p-4">
+      <p className="text-sm font-bold uppercase tracking-widest text-purple-300">
+        {phaseKey === 'hero' ? 'When you’re done with your Hero Phase' : 'Before the monsters'} · {check.source}
+      </p>
+      {check.ask ? (
+        <>
+          <p className="mt-1 text-2xl font-semibold text-zinc-100">{fill(check.ask)}</p>
+          <p className="mt-1 text-purple-200">
+            Yes: {effectWords(check.yes)}. No: {effectWords(check.no)}.
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <Button variant="gold" className="py-4 text-2xl" onClick={() => dispatch({ type: 'ANSWER_CHECK', key: check.key, answer: true })}>
+              Yes
+            </Button>
+            <Button className="py-4 text-2xl" onClick={() => dispatch({ type: 'ANSWER_CHECK', key: check.key, answer: false })}>
+              No
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="mt-1 text-xl text-zinc-100">{fill(check.note)}</p>
+          <Button variant="gold" className="mt-3 w-full py-3 text-lg" onClick={() => dispatch({ type: 'ANSWER_CHECK', key: check.key, answer: true })}>
+            Done
+          </Button>
+        </>
+      )}
     </div>
   )
 }

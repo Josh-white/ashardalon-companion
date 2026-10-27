@@ -169,6 +169,32 @@ export const ENCOUNTER_TYPES = ['event', 'curse', 'environment', 'hazard', 'trap
 // tile, the heroes within 1 tile of the active hero, every hero, or the heroes on the trap's tile.
 export const ENCOUNTER_TARGETS = ['active', 'activeTile', 'within1', 'all', 'trapTile']
 const CURSE_PHASES = ['hero', 'exploration', 'villain', 'action']
+const CHECK_PHASES = ['hero', 'exploration']
+
+// A check is a question the app asks at the end of a phase ("Did you end next to a
+// wall?"), with what happens on yes and on no. A check with a `note` and no `ask` is a
+// reminder to tap through. Effects: { damage }, { remove } (end the curse) or { condition }.
+function checkEffect(effect) {
+  if (!effect || typeof effect !== 'object') return null
+  const out = {}
+  if (wholeNumber(effect.damage, 1)) out.damage = effect.damage
+  if (effect.remove === true) out.remove = true
+  if (CONDITIONS.includes(effect.condition)) out.condition = effect.condition
+  return Object.keys(out).length > 0 ? out : null
+}
+
+function normalizeChecks(list) {
+  return (Array.isArray(list) ? list : [])
+    .filter((check) => CHECK_PHASES.includes(check?.phase) && (typeof check.ask === 'string' || typeof check.note === 'string'))
+    .map((check) => ({
+      phase: check.phase,
+      ask: typeof check.ask === 'string' ? check.ask : '',
+      note: typeof check.note === 'string' ? check.note : '',
+      yes: checkEffect(check.yes),
+      no: checkEffect(check.no),
+    }))
+}
+
 const conditionList = (list) => (Array.isArray(list) ? list : []).filter((c) => CONDITIONS.includes(c))
 
 function encounterAttack(attack) {
@@ -234,12 +260,15 @@ function normalizeEncounters(list, problems) {
       passMonsters: card.passMonsters === true,
       filterMonsters: typeof card.filterMonsters === 'string' ? card.filterMonsters : '',
       trapPenalty: count(card.trapPenalty),
+      checks: normalizeChecks(card.checks),
       curse: curse && {
         acPenalty: count(curse.acPenalty),
         attackPenalty: count(curse.attackPenalty),
         startDamage: count(curse.startDamage),
         extraEncounter: count(curse.extraEncounter),
         removeOnDefeat: curse.removeOnDefeat === true,
+        // Time Leap: the hero comes back at the start of their next turn.
+        removeAtTurnStart: curse.removeAtTurnStart === true,
         removeRoll: removeRoll
           ? { phase: removeRoll.phase, target: removeRoll.target, label: typeof removeRoll.label === 'string' ? removeRoll.label : '' }
           : null,

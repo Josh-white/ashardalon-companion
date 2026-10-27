@@ -120,6 +120,8 @@ Encounter cards make a virtual encounter deck. In the Villain Phase the app know
 - Events: `drawAnother`, `drawMonster` (shows the Draw a monster button), `damageEach` and `damagePoisoned` (damage with no roll), `healMonster`, `refreshDaily`, `passMonsters`, and `filterMonsters` (a monster `types` value: look at the top 5 monster cards and keep only that kind).
 - Curses (`curse`): `acPenalty`, `attackPenalty`, `startDamage` (at the start of the hero's turn), `extraEncounter` (more encounter draws), `removeOnDefeat`, and `removeRoll` with a `target` and a `phase`: `hero`, `exploration` or `villain` (the app rolls at the end of that phase) or `action` (a button the hero taps instead of attacking, with an optional `label`).
 - Environments: `trapPenalty` lowers rolls to disable traps.
+- `checks` (any type): questions the app asks before a phase can end, about the active hero. `phase` is `hero` (end of the Hero Phase) or `exploration` (shown at the start of the Villain Phase). `ask` is the question, with `{hero}` for the hero's name, and `yes` / `no` say what happens: `{ "damage": 1 }`, `{ "condition": "Poisoned" }` or `{ "remove": true }` (ends the curse). A check with a `note` instead of `ask` is a reminder to tap through. Example: `{ "phase": "hero", "ask": "Is {hero} next to a wall?", "yes": { "damage": 1 } }`.
+- Curses: `removeAtTurnStart` ends the curse at the start of the hero's next turn.
 - Traps (`trap`): an `attack` with `"targets": "trapTile"`, or `damage` with no roll, plus the `disable` roll. Traps take a turn in their owner's Villain Phase, and a hero can try to disable one in the Hero Phase.
 
 ### Treasure cards (optional)
