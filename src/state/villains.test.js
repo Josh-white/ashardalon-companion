@@ -95,3 +95,31 @@ describe('villains', () => {
     expect(state.villains).toEqual([])
   })
 })
+
+describe('Adventure 1 with a villain', () => {
+  const { adventures } = normalizeCardFile({
+    powers: [],
+    adventures: [
+      {
+        id: 'escape', title: 'Escape', goal: 'Beat the boss and get out.', needs: ['villains'],
+        reveals: [{ tile: 'Exit', story: 'The boss!', actions: [{ type: 'placeVillain', name: 'Big Boss' }] }],
+        win: { villains: ['Big Boss'], escape: true },
+      },
+    ],
+  })
+  const game = () => {
+    let state = gameReducer(initialState, { type: 'CHOOSE_ADVENTURE', adventure: adventures[0] })
+    state = gameReducer(state, { type: 'START_GAME', heroes: HERO_TEMPLATES.slice(0, 2).map((t) => createHero(t)) })
+    return gameReducer(state, { type: 'ADVENTURE_REVEAL', tile: 'Exit', cards: [], villains, random: [] })
+  }
+
+  it('places the villain on the reveal, and only lets the heroes escape once it is defeated', () => {
+    let state = game()
+    expect(state.villains.map((v) => v.name)).toEqual(['Big Boss'])
+    expect(gameReducer(state, { type: 'ADVENTURE_ESCAPED', escaped: true }).adventure.escaped).toBe(false)
+    state = gameReducer(state, { type: 'DEFEAT_MONSTER', monsterId: state.villains[0].id })
+    state = gameReducer(state, { type: 'ADVENTURE_ESCAPED', escaped: true })
+    expect(state.adventure.escaped).toBe(true)
+    expect(state.status).toBe('won')
+  })
+})
