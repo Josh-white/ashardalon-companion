@@ -259,7 +259,7 @@ export default function App() {
           Reconnecting to the game… changes won't be saved until it's back.
         </p>
       )}
-      {seat === PROJECTOR_SEAT && <Narrator state={state} />}
+      {seat === PROJECTOR_SEAT && <Narrator state={state} on={soundOn} />}
     </>
   )
 

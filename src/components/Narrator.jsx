@@ -1,10 +1,9 @@
 import { useNarrator } from '../audio/useNarrator.js'
 
-// The projector's narrator voice, with a small switch in the corner. Shows
-// nothing when the Pi has no ElevenLabs key.
-export default function Narrator({ state }) {
-  const narrator = useNarrator(state)
-  if (!narrator.available) return null
+// The projector's narrator voice. It follows the sound switch; the only thing it
+// ever shows is a tap button if the browser still blocks it.
+export default function Narrator({ state, on }) {
+  const narrator = useNarrator(state, on)
   if (narrator.blocked) {
     return (
       <button
@@ -16,13 +15,5 @@ export default function Narrator({ state }) {
       </button>
     )
   }
-  return (
-    <button
-      type="button"
-      className="fixed bottom-[2vh] right-[8vw] z-30 text-[1vw] text-zinc-700 hover:text-zinc-400"
-      onClick={narrator.toggle}
-    >
-      {narrator.on ? '🗣️ narrator on' : '🔇 narrator off'}
-    </button>
-  )
+  return null
 }
