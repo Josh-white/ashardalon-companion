@@ -7,8 +7,8 @@ const SHUFFLE_NUMBERS = 128
 
 // What a draw sends along, so a special tile can be revealed on the spot.
 export function useTileDraw() {
-  const { monsters, villains = [], chambers = [] } = useCards()
-  return { cards: monsters, villains, chambers, random: randomNumbers(SHUFFLE_NUMBERS) }
+  const { monsters, villains = [], chambers = [], villagers: villagerCards = [] } = useCards()
+  return { cards: monsters, villains, chambers, villagerCards, random: randomNumbers(SHUFFLE_NUMBERS) }
 }
 
 // What to do with the tile that was just drawn.

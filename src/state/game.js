@@ -12,7 +12,7 @@ import { PHASES } from '../data/phases.js'
 import { heroItems, itemAttackBonus, itemTrapBonus, tileAcBonus } from '../data/items.js'
 import { effectsOf, heroAc, heroAttackPenalty, maxRolls } from '../data/powerEffects.js'
 import { STARTING_TILES, MAX_TILES, MIN_TILES, bottomToTop, buildTileStack, takeTile } from './tiles.js'
-import { DOOR_KINDS, DOOR_UNLOCK_ROLL, MAX_SURGES, MIN_SURGES, checkVictory, countDefeat, escapeBlockers, isPlayable, newAdventure, onceOnlyDraw, playableChambers, revealsReady, showStory, takeToken } from './adventure.js'
+import { DOOR_KINDS, DOOR_UNLOCK_ROLL, MAX_SURGES, MIN_SURGES, aliveVillagers, checkVictory, countDefeat, escapeBlockers, isPlayable, newAdventure, objectiveInPlay, onceOnlyDraw, playableChambers, revealsReady, showStory, takeToken, villagerForRoll } from './adventure.js'
 import { trackStats } from './stats.js'
 
 export const SAVE_VERSION = 1
@@ -49,6 +49,14 @@ export const initialState = {
   // The virtual treasure deck, built on the first treasure draw.
   treasureDeck: null,
   treasure: null, // the treasure card just drawn, waiting for a hero to take it: { id, cardId, heroId, card }
+  // Villagers a chamber put on the board (Free the Captives). A villager killed by a
+  // monster stays here with removed: true, so its roll range activates no one.
+  villagers: [],
+  // Adventure encounter cards waiting to go into the encounter deck at the next draw:
+  // an id goes into the top 3 cards, { id, top: true } on top.
+  encounterAdds: [],
+  // Cards that go back on top of the deck right after the next draw (Ceremony Progresses!).
+  encounterAfter: [],
   // The dungeon tile stack (state/tiles.js): { stack: ['' | special tile name], drawn }, top first.
   tileStack: null,
   lobbyTiles: STARTING_TILES,
@@ -212,10 +220,11 @@ function monsterAttack(state, action) {
   const attack = table?.length
     ? table.find((a) => action.tableRoll >= a.roll[0] && action.tableRoll <= a.roll[1])
     : monster?.card?.attacks.find((a) => a.id === action.attackId)
-  let targets = (Array.isArray(action.targets) ? action.targets : []).filter(
-    (t) => state.heroes.some((h) => h.id === t.heroId) && validRoll(t.roll),
-  )
-  if (!attack || targets.length === 0) return state
+  const all = (Array.isArray(action.targets) ? action.targets : []).filter((t) => validRoll(t?.roll))
+  // Villagers count as heroes for monster tactics, so a monster can attack them too.
+  const villagerTargets = all.filter((t) => aliveVillagers(state).some((v) => v.id === t.heroId))
+  let targets = all.filter((t) => state.heroes.some((h) => h.id === t.heroId))
+  if (!attack || targets.length + villagerTargets.length === 0) return state
 
   let next = table?.length ? withLog(state, `The ${monster.name} rolled ${action.tableRoll} for its ${action.attackId.replace(/-/g, ' ')}: ${attack.name}!`) : state
   // Noble Shield: Keyleth takes an attack aimed at several heroes alone, and it rolls a 20.
@@ -256,9 +265,23 @@ function monsterAttack(state, action) {
       next = withLog(next, `One of ${hero.name}'s mirror images vanished.`)
     }
   }
+  for (const { heroId, roll } of villagerTargets) {
+    const villager = next.villagers.find((v) => v.id === heroId)
+    const total = roll + attack.bonus
+    const hit = total >= villager.ac
+    const damage = hit ? attack.damage : attack.miss
+    const hp = clamp(villager.hp - damage, 0, villager.maxHp)
+    const outcome = hit ? `Hit! ${damage} damage` : damage > 0 ? `Miss, but ${damage} damage` : 'Miss!'
+    rolls.push({ heroId: villager.id, value: roll, total, ac: villager.ac, hit, outcome })
+    results.push({ heroId: villager.id, villager: true, value: roll, total, ac: villager.ac, hit, dealt: villager.hp - hp, miss: attack.miss, conditions: [], effect: attack.effect })
+    next = withLog(next, `The ${monster.name} attacked the villager ${villager.name} with its ${attack.name}: rolled ${roll} + ${attack.bonus} = ${total} against AC ${villager.ac}. ${outcome}`)
+    next = hurtVillager(next, villager, hp)
+    if (hp === 0) downed.push(villager.name)
+  }
   // Remembered so Tumbling Escape can turn a hit into a miss.
   next = { ...next, turn: { ...next.turn, lastMonsterAttack: { monsterId: monster.id, attackId: attack.id, tableRoll: table?.length ? action.tableRoll : null, results } } }
   for (const name of downed) next = withLog(next, `${name} is down!`)
+  if (next.status === 'lost') return next
   return withMoment(next, {
     kind: downed.length > 0 ? 'monster-down' : 'monster',
     monsterId: monster.id,
@@ -266,6 +289,71 @@ function monsterAttack(state, action) {
     title: `${monster.name}: ${attack.name}!`,
     detail: downed.length > 0 ? `${downed.join(' and ')} ${downed.length > 1 ? 'are' : 'is'} down!` : '',
     rolls,
+  })
+}
+
+// A villager's HP after a hit. At 0 the villager is gone: its token comes off the board.
+// When the last villager is gone, the heroes lose (Free the Captives).
+function hurtVillager(state, villager, hp) {
+  let next = { ...state, villagers: state.villagers.map((v) => (v.id === villager.id ? { ...v, hp, removed: hp === 0 } : v)) }
+  if (hp > 0 || villager.removed) return next
+  next = withLog(next, `The villager ${villager.name} is gone. Take the token off the board.`)
+  if (aliveVillagers(next).length > 0) return next
+  const lost = withLog({ ...next, status: 'lost' }, 'The last villager is gone. The heroes lose.')
+  return withMoment(showStory(lost, 'The captives are lost', 'The last villager has fallen. There is no one left to rescue, and the heroes lose.'), {
+    kind: 'down',
+    title: 'The last villager is gone!',
+    detail: 'The heroes lose.',
+  })
+}
+
+// Puts villager tokens in a chamber: `n` villager cards drawn at random (all of them when n is 0).
+function placeVillagers(state, cards, n, random = []) {
+  const list = Array.isArray(cards) ? cards : []
+  if (list.length === 0) return withLog(state, 'The app has no villager cards, so place the villagers from the real cards.')
+  const drawn = shuffle(list, random).slice(0, n > 0 ? n : list.length)
+  const villagers = drawn.map((card) => ({ id: newId('villager'), cardId: card.id, name: card.name, hp: card.hp, maxHp: card.hp, ac: card.ac, removed: false, card }))
+  return withLog({ ...state, villagers: [...(state.villagers ?? []), ...villagers] }, `Villagers in the chamber: ${villagers.map((v) => v.name).join(', ')}.`)
+}
+
+// The end of a Hero Phase with villagers in play: the d20 says which one acts.
+function villagerRoll(state, action) {
+  const hero = state.heroes[state.turn.heroIndex]
+  if (!hero || PHASES[state.turn.phase]?.key !== 'hero' || state.turn.villagerRoll || aliveVillagers(state).length === 0 || !validRoll(action.roll)) return state
+  const villager = villagerForRoll(state, action.roll)
+  const next = withLog(
+    { ...state, turn: { ...state.turn, villagerRoll: { roll: action.roll, villagerId: villager?.id ?? null, attacked: false } } },
+    villager ? `${hero.name} rolled ${action.roll}: the villager ${villager.name} acts.` : `${hero.name} rolled ${action.roll}: no villager acts.`,
+  )
+  return withMoment(next, {
+    kind: 'roll',
+    heroId: hero.id,
+    value: action.roll,
+    title: villager ? `${villager.name} acts!` : 'No villager acts',
+    detail: villager ? 'Follow the villager card.' : 'That villager is no longer in play.',
+  })
+}
+
+// A villager's punch at a monster, rolled on the device.
+function villagerAttack(state, action) {
+  const turnRoll = state.turn.villagerRoll
+  const villager = aliveVillagers(state).find((v) => v.id === action.villagerId)
+  const monster = findFoe(state, action.monsterId)
+  const attack = villager?.card.attack
+  if (!turnRoll || turnRoll.attacked || turnRoll.villagerId !== villager?.id || !attack || !monster || monster.objective || !validRoll(action.roll)) return state
+  const total = action.roll + attack.bonus
+  const hit = total >= monster.ac
+  let next = withLog(
+    { ...state, turn: { ...state.turn, villagerRoll: { ...turnRoll, attacked: true } } },
+    `${villager.name} punched the ${monster.name}: rolled ${action.roll} + ${attack.bonus} = ${total} against AC ${monster.ac}. ${hit ? `Hit! ${attack.damage} damage` : 'Miss!'}`,
+  )
+  let defeated = false
+  if (hit) ({ state: next, defeated } = hurtMonster(next, monster, attack.damage))
+  return withMoment(next, {
+    kind: defeated ? 'defeat' : 'roll',
+    value: action.roll,
+    title: hit ? `${villager.name} hits the ${monster.name}!` : `${villager.name} misses`,
+    detail: defeated ? `The ${monster.name} is defeated!` : hit ? `${attack.damage} damage.` : `Needed ${monster.ac} or more.`,
   })
 }
 
@@ -357,23 +445,36 @@ function intoTopThree(deck, cardId, card, random = []) {
   return { ...deck, cards: { ...deck.cards, [cardId]: deck.cards[cardId] ?? card }, draw: [...draw.slice(0, slot), cardId, ...draw.slice(slot)], discard: deck.discard.filter((id) => id !== cardId) }
 }
 
+// Puts a card on top of the encounter deck.
+function ontoTop(deck, cardId, card) {
+  return { ...deck, cards: { ...deck.cards, [cardId]: deck.cards[cardId] ?? card }, draw: [cardId, ...deck.draw.filter((id) => id !== cardId)], discard: deck.discard.filter((id) => id !== cardId) }
+}
+
 function drawEncounter(state, action) {
   const hero = state.heroes.find((h) => h.id === action.heroId)
   if (!hero || state.encounter) return state
   let withDeck = state.encounterDeck ? state : { ...state, encounterDeck: buildDeck(action.cards, action.random) }
   // Cards waiting to go in, such as Ashardalon Breathes! once Ashardalon is on the board.
-  for (const cardId of withDeck.encounterAdds ?? []) {
-    const card = withDeck.encounterDeck.cards[cardId] ?? (action.cards ?? []).find((c) => c.id === cardId)
-    if (card) withDeck = { ...withDeck, encounterDeck: intoTopThree(withDeck.encounterDeck, cardId, card, action.random?.slice(-1)) }
+  const findCard = (cardId) => withDeck.encounterDeck.cards[cardId] ?? (action.cards ?? []).find((c) => c.id === cardId)
+  for (const add of withDeck.encounterAdds ?? []) {
+    const cardId = typeof add === 'string' ? add : add.id
+    const card = findCard(cardId)
+    if (!card) continue
+    const deck = add.top ? ontoTop(withDeck.encounterDeck, cardId, card) : intoTopThree(withDeck.encounterDeck, cardId, card, action.random?.slice(-1))
+    withDeck = { ...withDeck, encounterDeck: deck }
   }
   withDeck = { ...withDeck, encounterAdds: [] }
   const drawn = drawTop(withDeck.encounterDeck, action.random)
   if (!drawn) return withLog(state, 'There are no encounter cards left to draw.')
   const card = drawn.deck.cards[drawn.cardId]
   if (!card) return state
+  // Ceremony Progresses! goes back on top once the extra card it asked for is drawn.
+  let deckAfter = drawn.deck
+  for (const cardId of withDeck.encounterAfter ?? []) deckAfter = ontoTop(deckAfter, cardId, findCard(cardId))
   let next = {
     ...withDeck,
-    encounterDeck: drawn.deck,
+    encounterAfter: [],
+    encounterDeck: deckAfter,
     encounter: { id: newId('encounter'), cardId: card.id, heroId: hero.id, card, attacked: false },
     turn: { ...withDeck.turn, encountersDrawn: (withDeck.turn.encountersDrawn ?? 0) + 1 },
   }
@@ -401,8 +502,34 @@ function filterMonsterDeck(state, type, random, cards = []) {
   )
 }
 
-// A card about a villain (Ashardalon Breathes!) only does anything while that villain is in play.
-export const villainInPlay = (state, card) => !card.villain || activeVillains(state).some((v) => v.cardId === card.villain)
+// A card about a villain (Ashardalon Breathes!) or an objective (the Vast Gate) only does
+// anything while it is in play; otherwise the card is just discarded.
+export const villainInPlay = (state, card) =>
+  (!card.villain || activeVillains(state).some((v) => v.cardId === card.villain)) && (!card.objective || objectiveInPlay(state, card.objective))
+
+// Draws monster cards until one of a type turns up (The Vast Gate Flares!: an Aberrant) and
+// gives it to the hero. The others are discarded, and so is one the hero already has.
+function drawMonsterOfType(state, heroId, type, random, cards = []) {
+  const hero = state.heroes.find((h) => h.id === heroId)
+  let deck = state.monsterDeck ?? (cards.length > 0 ? buildDeck(cards, random) : null)
+  if (!hero || !deck) return state
+  const owned = new Set(state.monsters.filter((m) => m.ownerId === hero.id).map((m) => m.cardId))
+  const tossed = []
+  for (let tries = deck.draw.length + deck.discard.length; tries > 0; tries--) {
+    const drawn = drawTop(deck, random)
+    if (!drawn) break
+    deck = drawn.deck
+    const card = deck.cards[drawn.cardId]
+    if ((card?.types ?? []).some((t) => sameName(t, type)) && !owned.has(card.id)) {
+      const monster = monsterFromCard(card, hero.id)
+      const next = withLog({ ...state, monsterDeck: deck, monsters: [...state.monsters, monster] }, `${tossed.length} monster card${tossed.length === 1 ? '' : 's'} discarded before ${article(card.name)} ${card.name} turned up for ${hero.name}.`)
+      return withMoment(next, { kind: 'spawn', heroId: hero.id, title: `${article(card.name) === 'an' ? 'An' : 'A'} ${card.name} appears!`, detail: `It's ${hero.name}'s monster. Place its figure where the card says.` })
+    }
+    tossed.push(drawn.cardId)
+    deck = { ...deck, discard: [...deck.discard, drawn.cardId] }
+  }
+  return withLog({ ...state, monsterDeck: deck }, `There's no ${type} monster card left to draw.`)
+}
 
 // After the encounter card is read out (and any attack rolled), the app does what it
 // can and puts the card where it goes: on the hero (curse), in play (environment), on
@@ -414,6 +541,8 @@ function resolveEncounter(state, action) {
   const hero = state.heroes.find((h) => h.id === encounter.heroId)
   let next = { ...state, encounter: null }
   let downed = []
+  // Its villain or objective isn't in play: the card is just discarded.
+  if (!villainInPlay(state, card)) return withLog(discardEncounterCard(next, card.id), `${card.name} was discarded: it has nothing to do.`)
 
   if (card.damageEach > 0) {
     ;({ next, downed } = damageHeroes(next, next.heroes.map((h) => h.id), card.damageEach, card.name))
@@ -423,6 +552,9 @@ function resolveEncounter(state, action) {
     ;({ next, downed } = damageHeroes(next, poisoned, card.damagePoisoned, card.name))
   }
   if (card.filterMonsters && !encounter.filtered) next = filterMonsterDeck(next, card.filterMonsters, action.random, action.monsterCards)
+  if (card.placeVillain) next = reduce(next, { type: 'PLACE_VILLAIN', name: card.placeVillain, cards: action.villains ?? [] })
+  if (card.drawMonsterType && hero) next = drawMonsterOfType(next, hero.id, card.drawMonsterType, action.random, action.monsterCards)
+  if (card.timeToken) next = removeTimeToken(next, card.name)
 
   if (card.type === 'curse' && hero) {
     const curse = { id: newId('curse'), cardId: card.id, name: card.name, text: card.text, card: card.curse ?? {}, checks: card.checks ?? [] }
@@ -433,8 +565,10 @@ function resolveEncounter(state, action) {
   } else if (card.type === 'trap' || card.type === 'hazard') {
     const marker = { id: newId('trap'), cardId: card.id, name: card.name, type: card.type, ownerId: encounter.heroId, card }
     next = withLog({ ...next, traps: [...(next.traps ?? []), marker] }, `A ${card.name} marker goes on ${hero?.name ?? 'the hero'}'s tile.`)
-  } else if (card.returnToTop && villainInPlay(next, card)) {
+  } else if (card.returnToTop) {
     next = withLog({ ...next, encounterDeck: intoTopThree(next.encounterDeck, card.id, card, action.random?.slice(-1)) }, `${card.name} was shuffled back into the top of the encounter deck.`)
+  } else if (card.afterDrawTop) {
+    next = { ...next, encounterAfter: [...(next.encounterAfter ?? []).filter((id) => id !== card.id), card.id] }
   } else {
     next = discardEncounterCard(next, card.id)
   }
@@ -444,6 +578,24 @@ function resolveEncounter(state, action) {
     next = withMoment(next, { kind: 'down', title: `${downed.join(' and ')} ${downed.length > 1 ? 'are' : 'is'} down!`, detail: card.name })
   }
   return next
+}
+
+// Ceremony Progresses!: one Time token off the Vast Gate. When the last one goes, the gate
+// opens and the heroes lose.
+function removeTimeToken(state, why) {
+  const left = state.adventure?.timeTokens
+  if (!Number.isInteger(left) || left <= 0) return state
+  const next = withLog({ ...state, adventure: { ...state.adventure, timeTokens: left - 1 } }, `${why}: a Time token comes off the Vast Gate. ${left - 1} left.`)
+  if (left - 1 > 0) {
+    return withMoment(next, { kind: 'encounter', title: `${left - 1} Time token${left - 1 === 1 ? '' : 's'} left!`, detail: 'Take one Time token off the Vast Gate. Destroy it before they run out!' })
+  }
+  const lost = withLog({ ...next, status: 'lost' }, 'The last Time token is gone. The Vast Gate opens!')
+  const defeat = state.adventure.card.story.defeat
+  return withMoment(showStory(lost, 'The Vast Gate opens!', defeat || 'The last Time token is gone, and a horde of aberrant monsters pours out of the Far Realm. The heroes lose.'), {
+    kind: 'down',
+    title: 'The Vast Gate opens!',
+    detail: 'The last Time token is gone.',
+  })
 }
 
 // "+6" → 6, "2" → 2. A power without a number has no attack roll.
@@ -869,6 +1021,9 @@ const removeCurse = (state, heroId, curseId, text) => {
   return withLog(discardEncounterCard(next, curse.cardId), text)
 }
 
+// The end of the Hero Phase, with villagers in play and no villager roll yet.
+export const villagerRollDue = (state) => PHASES[state.turn.phase]?.key === 'hero' && !state.turn.villagerRoll && aliveVillagers(state).length > 0
+
 // Which checks a phase shows. The Villain Phase has none, so a card drawn there waits
 // for the next turn's Exploration Phase.
 export const checksFor = (phaseKey) => (phaseKey === 'hero' || phaseKey === 'exploration' ? phaseKey : null)
@@ -882,6 +1037,8 @@ export function phaseChecks(state, phaseKey) {
     ...(hero.curses ?? []).map((curse) => ({ id: curse.id, name: curse.name, checks: curse.checks, curseId: curse.id })),
     ...(state.environment ? [{ id: `env-${state.environment.cardId}`, name: state.environment.name, checks: state.environment.card.checks }] : []),
     ...(state.traps ?? []).map((trap) => ({ id: trap.id, name: trap.name, checks: trap.card.checks })),
+    // The adventure's own questions (the Vast Gate spitting out monsters), while their objective stands.
+    ...(state.adventure ? [{ id: 'adventure', name: state.adventure.card.title, checks: (state.adventure.card.checks ?? []).filter((c) => !c.whileObjective || objectiveInPlay(state, c.whileObjective)) }] : []),
   ]
   const done = state.turn.checksDone ?? []
   return sources.flatMap((source) =>
@@ -941,6 +1098,13 @@ function answerCheck(state, action) {
     next = withLog(updateHero(next, hero.id, (h) => ({ conditions: [...h.conditions, effect.condition] })), `${hero.name} is ${effect.condition} from ${check.source}.`)
   }
   if (effect.remove && check.curseId) next = removeCurse(next, hero.id, check.curseId, `${hero.name}'s ${check.source} curse is over.`)
+  if (effect.drawMonster) {
+    // Not the tile's monster, so the Exploration Phase's draw button stays as it was.
+    const { monsterDrawn } = next.turn
+    const withDeck = next.monsterDeck || !Array.isArray(action.cards) ? next : { ...next, monsterDeck: buildDeck(action.cards, action.random) }
+    next = drawMonster(withDeck, hero.id, action.random)
+    next = { ...next, turn: { ...next.turn, monsterDrawn } }
+  }
   return next
 }
 
@@ -1366,7 +1530,8 @@ function revealTile(state, action) {
         }
       }
     } else if (step.type === 'placeToken') {
-      next = { ...next, adventure: { ...next.adventure, tokens: [...next.adventure.tokens, { name: step.name, heldBy: null }] } }
+      const token = { name: step.name, heldBy: null, ask: step.ask ?? '', drawTreasure: Boolean(step.drawTreasure) }
+      next = { ...next, adventure: { ...next.adventure, tokens: [...next.adventure.tokens, token] } }
     } else if (step.type === 'extraEncounters') {
       next = { ...next, adventure: { ...next.adventure, extraEncounters: next.adventure.extraEncounters + step.count } }
     } else if (step.type === 'placeVillain') {
@@ -1374,10 +1539,14 @@ function revealTile(state, action) {
       next = reduce(next, { type: 'PLACE_VILLAIN', name: step.name, cards: action.villains ?? [] })
     } else if (step.type === 'chamber') {
       next = openChamber(next, step, action, hero)
+    } else if (step.type === 'chamberMonsters') {
+      // A chamber with no Chamber card (Sneaky Endeavor's treasure vault): just its monsters.
+      next = fillChamber(next, { perPlayer: step.count, types: [], redrawXp: [] }, action)
     }
   }
-  const chamber = !state.adventure.chamber && next.adventure.chamber
-  const steps = chamber ? [...reveal.steps, ...chamberSteps(next, chamber)] : reveal.steps
+  // A new chamber (Wrath of Ashardalon has two) adds its card's steps.
+  const chamber = next.adventure.chamber !== state.adventure.chamber && next.adventure.chamber
+  const steps = [...reveal.steps, ...(chamber ? chamberSteps(next, chamber, state) : monsterSteps(next, state))]
   return showStory(next, `The ${reveal.tile}!`, reveal.story, steps)
 }
 
@@ -1417,7 +1586,8 @@ function openChamber(state, step, action, hero) {
   const deck = playableChambers(action.chambers)
   const card = step.name ? deck.find((c) => c.id === step.name || sameName(c.name, step.name)) : deck.length > 0 ? pick(deck, random[0]) : null
   if (!card) return withLog(state, step.name ? `The app has no chamber card called "${step.name}".` : 'There are no chamber cards to draw.')
-  const villain = card.villain || (card.villainFrom.length > 0 ? pick(card.villainFrom, random[1]) : '')
+  const from = card.villainFrom.filter((name) => !(step.exclude ?? []).some((x) => sameName(x, name)))
+  const villain = card.villain || (from.length > 0 ? pick(from, random[1]) : '')
   let next = { ...state, adventure: { ...state.adventure, chamber: { card, villain, objectivePlaced: false, done: false } } }
   next = withLog(next, step.name ? `The chamber is the ${card.name}.` : `${hero.name} drew the ${card.name} chamber card!`)
   if (villain) next = reduce(next, { type: 'PLACE_VILLAIN', name: villain, cards: action.villains ?? [] })
@@ -1426,22 +1596,32 @@ function openChamber(state, step, action, hero) {
     const objective = { id: newId('monster'), name, maxHp: hp, hp, ac, xp: 0, ownerId: null, conditions: [], objective: true, card: { hp, figures: 1, special: '', types: [], attacks: [], tactics: [] } }
     next = { ...next, monsters: [...next.monsters, objective], adventure: { ...next.adventure, chamber: { ...next.adventure.chamber, objectivePlaced: true } } }
   }
-  // Filling the chamber isn't the hero's tile draw or an encounter's monster, so those buttons stay as they were.
-  const { monsterDrawn } = next.turn
-  const { encounter } = next
-  if (!next.monsterDeck && Array.isArray(action.cards)) next = { ...next, monsterDeck: buildDeck(action.cards, random) }
-  const start = state.turn.heroIndex
-  const order = state.heroes.map((_, i) => state.heroes[(start + i) % state.heroes.length])
-  for (let round = 0; round < card.monsters.perPlayer; round++) {
-    for (const player of order) next = drawChamberMonster(next, player, card.monsters, random)
-  }
-  next = { ...next, turn: { ...next.turn, monsterDrawn }, encounter }
+  if (card.timeTokens > 0) next = { ...next, adventure: { ...next.adventure, timeTokens: card.timeTokens } }
+  // Ceremony Progresses! goes on top of the encounter deck; Ashardalon Arrives! into the top 3.
+  if (card.addEncounter) next = { ...next, encounterAdds: [...(next.encounterAdds ?? []), card.encounterTop ? { id: card.addEncounter, top: true } : card.addEncounter] }
+  if (card.villagers) next = placeVillagers(next, action.villagerCards, step.villagers || state.heroes.length, random.slice(2))
+  next = fillChamber(next, card.monsters, action)
   const placed = next.monsters.filter((m) => m.chamber && !state.monsters.some((old) => old.id === m.id))
   return withMoment(next, {
     kind: 'spawn',
     title: `The ${card.name}!`,
     detail: [villain && `The ${villain}`, card.objective && `the ${card.objective.name}`, ...placed.map((m) => m.name)].filter(Boolean).join(', ') + ' wait in the chamber.',
   })
+}
+
+// Each player, starting with the active hero, draws monsters for a chamber.
+function fillChamber(state, rule, action) {
+  const random = Array.isArray(action.random) ? action.random : []
+  // Filling the chamber isn't the hero's tile draw or an encounter's monster, so those buttons stay as they were.
+  const { monsterDrawn } = state.turn
+  const { encounter } = state
+  let next = !state.monsterDeck && Array.isArray(action.cards) ? { ...state, monsterDeck: buildDeck(action.cards, random) } : state
+  const start = state.turn.heroIndex
+  const order = state.heroes.map((_, i) => state.heroes[(start + i) % state.heroes.length])
+  for (let round = 0; round < rule.perPlayer; round++) {
+    for (const player of order) next = drawChamberMonster(next, player, rule, random)
+  }
+  return { ...next, turn: { ...next.turn, monsterDrawn }, encounter }
 }
 
 // Does a drawn monster belong in this chamber? Elite Regiment wants no 1 XP monsters,
@@ -1464,15 +1644,23 @@ function drawChamberMonster(state, hero, rule, random) {
 }
 
 // What the players do on the board for the chamber card, added to the reveal's read-aloud box.
-function chamberSteps(state, chamber) {
-  const placed = state.monsters.filter((m) => m.chamber)
-  const owners = placed.map((m) => `${m.name} (${state.heroes.find((h) => h.id === m.ownerId)?.name ?? 'no one'})`)
+function chamberSteps(state, chamber, before) {
+  const villagers = (state.villagers ?? []).filter((v) => !(before.villagers ?? []).some((old) => old.id === v.id))
   return [
     `Chamber card: ${chamber.card.name}. ${chamber.card.goal}`,
+    villagers.length > 0 && `Place these villager tokens on Chamber tiles, one per tile before doubling up: ${villagers.map((v) => v.name).join(', ')}.`,
     chamber.villain && `Place the ${chamber.villain} on a Chamber tile${chamber.card.setup.some((line) => /Chamber Entrance tile/i.test(line)) ? ' (the card says where)' : ''}.`,
-    chamber.card.objective && `Place the ${chamber.card.objective.name} marker on any Chamber tile (${chamber.card.objective.hp} HP, AC ${chamber.card.objective.ac}).`,
-    placed.length > 0 && `Place these monsters on Chamber tiles, empty tiles first: ${owners.join(', ')}.`,
+    chamber.card.objective && `Place the ${chamber.card.objective.name} marker on any Chamber tile (${chamber.card.objective.hp} HP, AC ${chamber.card.objective.ac})${chamber.card.timeTokens ? ` with ${chamber.card.timeTokens} Time tokens on it` : ''}.`,
+    chamber.card.addEncounter && (chamber.card.encounterTop ? 'The app puts its adventure encounter card on top of the encounter deck.' : 'The app shuffles its adventure encounter card into the top 3 encounter cards.'),
+    ...monsterSteps(state, before),
   ].filter(Boolean)
+}
+
+// "Place these monsters on Chamber tiles": the chamber's new monsters and who they belong to.
+function monsterSteps(state, before) {
+  const placed = state.monsters.filter((m) => m.chamber && !before.monsters.some((old) => old.id === m.id))
+  const owners = placed.map((m) => `${m.name} (${state.heroes.find((h) => h.id === m.ownerId)?.name ?? 'no one'})`)
+  return placed.length > 0 ? [`Place these monsters on Chamber tiles, empty tiles first: ${owners.join(', ')}.`] : []
 }
 
 function reduce(state, action) {
@@ -1489,7 +1677,7 @@ function reduce(state, action) {
       const card = state.lobbyAdventure
       const surges = clamp(Number(state.lobbySurges) || STARTING_SURGES, MIN_SURGES, MAX_SURGES)
       const tiles = clamp(Number(state.lobbyTiles) || STARTING_TILES, MIN_TILES, MAX_TILES)
-      const started = {
+      let started = {
         ...initialState,
         status: 'playing',
         heroes,
@@ -1497,6 +1685,13 @@ function reduce(state, action) {
         adventure: card ? newAdventure(card) : null,
         tileStack: buildTileStack(tiles, card, action.tileRandom),
       }
+      // The Vast Gate Opens: the gate is on the Start tile, and its Flares! card is in the top 3 encounters.
+      const objective = card?.startObjective
+      if (objective) {
+        const { name, hp, ac } = objective
+        started = { ...started, monsters: [{ id: newId('monster'), name, maxHp: hp, hp, ac, xp: 0, ownerId: null, conditions: [], objective: true, card: { hp, figures: 1, special: '', types: [], attacks: [], tactics: [] } }] }
+      }
+      if (card?.startEncounters?.length > 0) started = { ...started, encounterAdds: [...card.startEncounters] }
       const names = heroes.map((h) => h.name).join(', ')
       return dealStartingTreasure(
         withLog(started, card ? `${card.title} begins with ${names}.` : `The adventure begins with ${names}.`),
@@ -1533,8 +1728,12 @@ function reduce(state, action) {
 
     case 'ADVENTURE_TAKE_TOKEN': {
       const hero = state.heroes.find((h) => h.id === action.heroId)
-      if (!hero || !state.adventure?.tokens.some((t) => t.name === action.name)) return state
-      return withLog(takeToken(state, action.name, hero.id), `${hero.name} picked up the ${action.name}!`)
+      const token = state.adventure?.tokens.find((t) => t.name === action.name && !t.heldBy)
+      if (!hero || !token) return state
+      const next = withLog(takeToken(state, action.name, hero.id), `${hero.name} picked up the ${action.name}!`)
+      // Sneaky Endeavor's stolen item: a treasure card says what it is.
+      if (!token.drawTreasure || next.turn.treasureOwed || next.treasure) return next
+      return withMoment({ ...next, turn: { ...next.turn, treasureOwed: hero.id } }, { kind: 'treasure', heroId: hero.id, title: `${hero.name} found the ${action.name}!`, detail: 'Draw a treasure card to see what it is.' })
     }
 
     case 'ADVENTURE_CHAMBER_DONE': {
@@ -1546,6 +1745,18 @@ function reduce(state, action) {
 
     case 'DOOR_REVEALED':
       return revealDoor(state, action)
+
+    case 'VILLAGER_ROLL':
+      return villagerRoll(state, action)
+
+    case 'VILLAGER_ATTACK':
+      return villagerAttack(state, action)
+
+    case 'ADJUST_VILLAGER_HP': {
+      const villager = aliveVillagers(state).find((v) => v.id === action.villagerId)
+      if (!villager) return state
+      return hurtVillager(state, villager, clamp(villager.hp + action.amount, 0, villager.maxHp))
+    }
 
     case 'DOOR_UNLOCK': {
       // Instead of attacking, a hero next to a Locked Door rolls to unlock it.
@@ -2037,6 +2248,8 @@ function reduce(state, action) {
       const { heroIndex, phase, round } = state.turn
       // The phase's questions (Walls of Magma, Dragon Fear...) have to be answered first.
       if (phaseChecks(state, checksFor(PHASES[phase].key)).length > 0) return state
+      // With villagers in play, the Hero Phase ends with the roll for one of them.
+      if (villagerRollDue(state)) return state
       if (phase < PHASES.length - 1) {
         const ended = endPhaseCurses(state, state.heroes[heroIndex], PHASES[phase].key, action.rolls)
         const next = { ...ended, turn: { ...ended.turn, phase: phase + 1 } }

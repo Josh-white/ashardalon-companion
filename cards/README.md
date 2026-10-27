@@ -121,6 +121,7 @@ Encounter cards make a virtual encounter deck. In the Villain Phase the app know
 - Curses (`curse`): `acPenalty`, `attackPenalty`, `startDamage` (at the start of the hero's turn), `extraEncounter` (more encounter draws), `removeOnDefeat`, and `removeRoll` with a `target` and a `phase`: `hero`, `exploration` or `villain` (the app rolls at the end of that phase) or `action` (a button the hero taps instead of attacking, with an optional `label`).
 - Environments: `trapPenalty` lowers rolls to disable traps.
 - Adventure cards: `adventure: true` keeps a card out of the deck until something adds it (a villain's `addEncounter`). `noCancel: true` hides the cancel button. `villain` (a villain's id) discards the card when that villain isn't in play, and its attack can target `villainWithin1`. `returnToTop: 3` shuffles it back among the top 3 cards instead of discarding it (Ashardalon Breathes!).
+- More adventure card fields: `objective` (an objective's name, such as the Vast Gate) discards the card when that objective isn't in play. `timeToken: true` takes a Time token off it, and the last one loses the game (Ceremony Progresses!). `afterDrawTop: true` puts the card back on top of the deck after the next card is drawn. `placeVillain` puts a villain on the board (Ashardalon Arrives!). `drawMonsterType` draws monster cards until one of that type turns up and discards the rest (The Vast Gate Flares!).
 - `checks` (any type): questions the app asks before a phase can end, about the active hero. `phase` is `hero` (end of the Hero Phase) or `exploration` (shown at the start of the Villain Phase). `ask` is the question, with `{hero}` for the hero's name, and `yes` / `no` say what happens: `{ "damage": 1 }`, `{ "condition": "Poisoned" }` or `{ "remove": true }` (ends the curse). A check with a `note` instead of `ask` is a reminder to tap through. Example: `{ "phase": "hero", "ask": "Is {hero} next to a wall?", "yes": { "damage": 1 } }`.
 - Curses: `removeAtTurnStart` ends the curse at the start of the hero's next turn.
 - Traps (`trap`): an `attack` with `"targets": "trapTile"`, or `damage` with no roll, plus the `disable` roll. Traps take a turn in their owner's Villain Phase, and a hero can try to disable one in the Hero Phase.
@@ -188,9 +189,12 @@ Adventures from the adventure book go in an `adventures` list. The projector pic
   - `placeToken`: a token to pick up, such as a lost bag.
   - `extraEncounters`: `count` more encounter cards every Villain Phase from now on.
   - `placeVillain`: puts the villain `name` in play.
-  - `chamber`: opens the chamber. With `name`, that Chamber card (Elite Regiment); without, the app draws one from the chamber cards it can run.
+  - `chamber`: opens the chamber. With `name`, that Chamber card (Elite Regiment); without, the app draws one from the chamber cards it can run. `exclude` lists villains the Unknown Overlord can't be; `villagers` sets how many villager tokens go in (instead of one per player).
+  - `chamberMonsters`: each player draws `count` monsters for a chamber that has no Chamber card.
+  - `placeToken` can also have `ask` (the question for picking it up) and `drawTreasure: true` (its finder draws a treasure card).
   - A reveal with `"door": true` happens when a door opens instead of when a tile turns up: its button is in the Hero Phase's door box. `after` names a reveal that has to happen first (the Secret Chamber door comes after its entrance tile).
-- `win`: every part listed has to be done. `chamber` (the chamber card's goal), `figures` (defeat that many monster figures; each figure of a group card counts), `guardians` (defeat the guardians), `tokens` (a hero picked each one up), `villains` (defeat each one by name), `escape` (the players tap "We escaped").
+- `startObjective`: something to destroy that's on the board from the start, such as `{ "name": "Vast Gate", "hp": 5, "ac": 12 }`. `startEncounters`: adventure encounter card ids shuffled into the top 3 encounter cards at the start. `checks`: end-of-phase questions like an encounter card's, with `whileObjective` to ask only while that objective stands and `{ "drawMonster": true }` as an effect. `story.defeat`: read out when a Time token loss ends the game.
+- `win`: every part listed has to be done. `chamber` (the chamber card's goal; add `chamberMonsters` to need its monsters too), `reveals` (tiles that have to turn up, as names or `{ tile, label }`), `figures` (defeat that many monster figures; each figure of a group card counts), `guardians` (defeat the guardians), `tokens` (a hero picked each one up), `villains` (defeat each one by name), `escape` (the players tap "We escaped").
 - `onceOnly`: monster names that can come out only once; later copies are discarded with no replacement.
 - `needs`: bigger features the adventure needs, such as `villains` or `chambers`. The picker shows it as coming soon until the app has them.
 
@@ -218,7 +222,8 @@ The 14 Chamber cards. When an adventure's chamber entrance turns up, the app put
 - `villain`: the villain the card places, by name. `villainFrom` instead: a list to pick one from at random (Unknown Overlord).
 - `monsters`: `perPlayer` monsters for each hero (Endless Horde: 2). A monster that isn't one of `types`, or is worth one of the `redrawXp` values, is discarded once and another drawn.
 - `objective`: something to destroy that isn't a monster, such as `{ "name": "Altar", "hp": 5, "ac": 12 }`. Heroes attack it like a monster; it gives no XP or treasure.
-- `win`: `chamberMonsters` (defeat the monsters the chamber placed), `villain`, `objective`, `escape`, or `manual` (a goal the players tap when it's done).
+- `timeTokens`: Time tokens on the objective (Gate Ceremony). `villagers: true`: villager tokens go in, one per player (Prison Guard). `addEncounter`: an adventure encounter card id added to the encounter deck, on top with `encounterTop: true` or into the top 3.
+- `win`: `villagers` (keep at least one villager alive; losing the last one loses the game), `chamberMonsters` (defeat the monsters the chamber placed), `villain`, `objective`, `escape`, or `manual` (a goal the players tap when it's done).
 - `needs`: features the card needs; until the app has them it stays out of the drawn Chamber deck.
 
 ### Doors
@@ -259,3 +264,22 @@ Villains are the bosses an adventure brings out. When one is on the board it sho
   - `then`: where it goes after attacking: `within1` (any square within 1 tile), `adjacent` (next to the hero it attacked) or `away` (the closest square not next to a hero).
   - With `"move": "toward"`, `toward` can be `mostHp`, and `tiles` how far (default 1).
 - `enraged`: the other side of the card (the Rage Drake), with its own `ac`, `hp`, `attacks`, `tactics` and optional `name`. The first time the villain drops to 0 HP it flips to this side instead of being defeated.
+
+### Villager cards (optional)
+
+The 5 Villager cards (Free the Captives). A chamber with `villagers` puts them in. At the end of every Hero Phase the active player rolls, and the villager whose `roll` range it lands in acts, one question at a time. Monsters can attack villagers (they count as heroes and come first); a villager at 0 HP is gone.
+
+```json
+{
+  "villagers": [
+    { "id": "donnel", "name": "Donnel", "roll": [13, 16], "ac": 15, "hp": 2,
+      "attack": { "name": "Wild punch", "bonus": 2, "damage": 1 },
+      "tactics": [
+        { "ask": "Is Donnel within 1 tile of a monster?", "say": "Move him next to the closest monster.", "attack": true },
+        { "say": "Move Donnel 1 tile toward the closest hero." }
+      ] }
+  ]
+}
+```
+
+- `tactics`: steps in order. `ask` is a yes/no question (a step without it is the "otherwise"), `say` what to do, `attack: true` lets the villager punch a monster, `draw: true` shows a Draw a monster button.

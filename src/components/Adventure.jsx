@@ -6,6 +6,7 @@ import { useCards } from '../state/useCards.js'
 import { tileSpots } from '../state/tiles.js'
 import { TileSetup } from './Tiles.jsx'
 import { Button, Chip } from './ui.jsx'
+import { VillagerList } from './Villagers.jsx'
 
 const SHUFFLE_NUMBERS = 128
 
@@ -163,7 +164,8 @@ function Story({ story, dispatch, big = false }) {
 
 function Goal({ state, big = false }) {
   const parts = goalParts(state)
-  if (parts.length === 0) return null
+  const time = state.adventure?.timeTokens
+  if (parts.length === 0 && time == null) return null
   return (
     <ul className={`mt-2 space-y-1 ${big ? '' : 'text-base'}`}>
       {parts.map((part) => (
@@ -172,6 +174,12 @@ function Goal({ state, big = false }) {
           {part.progress && <span className="text-zinc-400"> · {part.progress}</span>}
         </li>
       ))}
+      {time != null && (
+        <li className={`font-semibold ${time <= 2 ? 'text-red-300' : 'text-amber-300'}`}>
+          ⏳ {'●'.repeat(time)}
+          {'○'.repeat(Math.max(0, 5 - time))} {time} Time token{time === 1 ? '' : 's'} left on the Vast Gate
+        </li>
+      )}
     </ul>
   )
 }
@@ -208,9 +216,10 @@ export function AdventurePanel({ state, dispatch }) {
           <div className="border-t border-zinc-800 px-4 pb-4 pt-2">
             <p className="text-zinc-300">{card.goal}</p>
             <Goal state={state} />
+            <VillagerList state={state} dispatch={dispatch} />
             {loose.map((token) => (
               <div key={token.name} className="mt-3">
-                <p className="text-zinc-300">Who ended their Hero Phase next to the {token.name} and picked it up?</p>
+                <p className="text-zinc-300">{token.ask || `Who ended their Hero Phase next to the ${token.name} and picked it up?`}</p>
                 <div className="mt-1 flex flex-wrap gap-2">
                   {state.heroes.map((hero) => (
                     <Button key={hero.id} className={HERO_COLORS[hero.color].text} onClick={() => dispatch({ type: 'ADVENTURE_TAKE_TOKEN', name: token.name, heroId: hero.id })}>
@@ -272,7 +281,7 @@ export function AdventurePanel({ state, dispatch }) {
 
 // In the Exploration Phase: a button for each special tile the adventure is waiting for.
 export function RevealButtons({ state, dispatch }) {
-  const { monsters, villains = [], chambers = [] } = useCards()
+  const { monsters, villains = [], chambers = [], villagers: villagerCards = [] } = useCards()
   // With the tile stack, the app reveals special tiles itself when they're drawn.
   const tiles = state.tileStack ? [] : revealsReady(state.adventure)
   const doors = usesDoors(state.adventure) && (
@@ -289,7 +298,7 @@ export function RevealButtons({ state, dispatch }) {
             <Button
               key={reveal.tile}
               variant="gold"
-              onClick={() => dispatch({ type: 'ADVENTURE_REVEAL', tile: reveal.tile, cards: monsters, villains, chambers, random: randomNumbers(SHUFFLE_NUMBERS) })}
+              onClick={() => dispatch({ type: 'ADVENTURE_REVEAL', tile: reveal.tile, cards: monsters, villains, chambers, villagerCards, random: randomNumbers(SHUFFLE_NUMBERS) })}
             >
               It's the {reveal.tile}!
             </Button>
@@ -357,14 +366,14 @@ export function Doors({ state, hero, dispatch }) {
 
 // A door the adventure is waiting for, such as the Secret Chamber's: tapped once it's open.
 function SpecialDoors({ special, dispatch }) {
-  const { monsters, villains = [], chambers = [] } = useCards()
+  const { monsters, villains = [], chambers = [], villagers: villagerCards = [] } = useCards()
   return (
     <div className="mt-3 flex flex-wrap gap-2">
       {special.map((reveal) => (
         <Button
           key={reveal.tile}
           variant="gold"
-          onClick={() => dispatch({ type: 'ADVENTURE_REVEAL', tile: reveal.tile, door: true, cards: monsters, villains, chambers, random: randomNumbers(SHUFFLE_NUMBERS) })}
+          onClick={() => dispatch({ type: 'ADVENTURE_REVEAL', tile: reveal.tile, door: true, cards: monsters, villains, chambers, villagerCards, random: randomNumbers(SHUFFLE_NUMBERS) })}
         >
           We opened the {reveal.tile}!
         </Button>
@@ -384,6 +393,7 @@ export function ProjectorAdventure({ state }) {
         <span className="font-display text-[2.2vw] font-bold text-amber-400">{heading(adventure.card)}</span>
         {adventure.chamber && <span className="ml-[1vw] text-[1.4vw] text-zinc-400">Chamber: {adventure.chamber.card.name}</span>}
         <Goal state={state} big />
+        <VillagerList state={state} big />
       </div>
     </section>
   )
