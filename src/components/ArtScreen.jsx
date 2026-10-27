@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ART_SIZE, cardArt, heroArt } from '../data/art.js'
+import { ART_SIZE, CARD_ART_HEIGHT, cardArt, heroArt, heroCardArt } from '../data/art.js'
 import { HERO_COLORS, HERO_TEMPLATES } from '../data/heroes.js'
 import { artUrl, saveArt, useArt } from '../state/useArt.js'
 import { useCards } from '../state/useCards.js'
@@ -130,7 +130,27 @@ function Cropper({ file, title, onSave, onCancel }) {
   )
 }
 
-function ArtTile({ name, title, subtitle, titleClass = 'text-zinc-100', onPhoto }) {
+// A tall picture isn't cropped: it's scaled down to CARD_ART_HEIGHT and saved as a JPEG.
+function saveTall(name, file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      const scale = Math.min(1, CARD_ART_HEIGHT / img.naturalHeight)
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(img.naturalWidth * scale)
+      canvas.height = Math.round(img.naturalHeight * scale)
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+      URL.revokeObjectURL(url)
+      canvas.toBlob((blob) => saveArt(name, blob).then(resolve, reject), 'image/jpeg', 0.85)
+    }
+    img.onerror = () => reject(new Error("that file isn't a picture this iPad can open"))
+    img.src = url
+  })
+}
+
+// tall: the big hero card art, shown as it is instead of in a circle.
+function ArtTile({ name, title, subtitle, titleClass = 'text-zinc-100', onPhoto, tall = false }) {
   const art = useArt()
   const src = artUrl(art, name)
   const [removing, setRemoving] = useState(false)
@@ -144,9 +164,9 @@ function ArtTile({ name, title, subtitle, titleClass = 'text-zinc-100', onPhoto 
   return (
     <div className="flex flex-col gap-2 rounded-2xl border border-zinc-800 bg-zinc-900 p-3">
       {src ? (
-        <img src={src} alt="" className="aspect-square w-full rounded-full object-cover" />
+        <img src={src} alt="" className={`w-full object-cover ${tall ? 'aspect-[2/5] rounded-xl object-top' : 'aspect-square rounded-full'}`} />
       ) : (
-        <div className="flex aspect-square w-full items-center justify-center rounded-full border-2 border-dashed border-zinc-700 text-5xl text-zinc-700">
+        <div className={`flex w-full items-center justify-center border-2 border-dashed border-zinc-700 text-5xl text-zinc-700 ${tall ? 'aspect-[2/5] rounded-xl' : 'aspect-square rounded-full'}`}>
           📷
         </div>
       )}
@@ -163,7 +183,8 @@ function ArtTile({ name, title, subtitle, titleClass = 'text-zinc-100', onPhoto 
           onChange={(e) => {
             const file = e.target.files?.[0]
             e.target.value = ''
-            if (file) onPhoto({ file, name, title })
+            if (file && tall) saveTall(name, file).catch((err) => window.alert(`Couldn't save it: ${err.message}`))
+            else if (file) onPhoto({ file, name, title })
           }}
         />
       </label>
@@ -203,6 +224,16 @@ export default function ArtScreen({ onDone }) {
         <div className={GRID}>
           {HERO_TEMPLATES.map((t) => (
             <ArtTile key={t.key} name={heroArt(t.key)} title={t.name} subtitle={t.className} titleClass={HERO_COLORS[t.color].text} onPhoto={setCropping} />
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="font-display text-2xl font-bold text-zinc-200">Hero card art</h2>
+        <p className="mb-3 text-zinc-400">The big picture from each hero card. It shows faded behind that hero's card on the player's own iPad.</p>
+        <div className={GRID}>
+          {HERO_TEMPLATES.map((t) => (
+            <ArtTile key={t.key} tall name={heroCardArt(t.key)} title={t.name} subtitle={t.className} titleClass={HERO_COLORS[t.color].text} />
           ))}
         </div>
       </section>

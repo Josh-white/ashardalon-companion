@@ -163,6 +163,7 @@ function HeroView({ state, dispatch, hero }) {
         dispatch={dispatch}
         powersInTurnGuide={powersInTurnGuide}
         natural20={state.turn.natural20 === hero.id}
+        showCardArt
       />
       <VillainList state={state} dispatch={dispatch} />
       <MonsterList state={state} dispatch={dispatch} ownerId={hero.id} />
