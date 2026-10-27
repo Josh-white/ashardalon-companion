@@ -231,8 +231,12 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
     setChosen((list) => {
       if (effects.sameTarget) return Array(limit).fill(id)
       if (limit === 1) return [id]
-      // Tornado Strike: each tap is one more of its attacks.
-      if (effects.attacks) return list.length < limit ? [...list, id] : list
+      // Tornado Strike: each tap is one more of its attacks. With only one monster to hit,
+      // one tap takes all of them.
+      if (effects.attacks) {
+        if (targets.length === 1) return Array(limit).fill(id)
+        return list.length < limit ? [...list, id] : list
+      }
       if (list.includes(id)) return list.filter((x) => x !== id)
       return list.length < limit ? [...list, id] : list
     })
@@ -353,7 +357,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
               <Button
                 variant="gold"
                 className="w-full py-4 text-xl"
-                disabled={chosen.length === 0 || Boolean(unknownAc) || needsAnswer}
+                disabled={chosen.length === 0 || (effects.attacks && chosen.length < limit) || Boolean(unknownAc) || needsAnswer}
                 onClick={roll}
               >
                 🎲 Roll {power.name} ({power.card.attack}){chosen.length > 1 ? ` × ${chosen.length}` : ''}
