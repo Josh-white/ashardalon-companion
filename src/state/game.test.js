@@ -623,7 +623,7 @@ describe('encounter deck', () => {
     const heroId = state.heroes[0].id
     const missed = gameReducer(state, { type: 'CURSE_ROLL', heroId, curseId, roll: 9 })
     expect(missed.heroes[0].curses).toHaveLength(1)
-    expect(missed.turn.curseTried).toBe(heroId)
+    expect(missed.turn.attackSpent).toEqual({ heroId, on: 'the Cage' })
     expect(gameReducer(missed, { type: 'CURSE_ROLL', heroId, curseId, roll: 12 })).toBe(missed)
     const attacked = { ...state, turn: { ...state.turn, lastAttack: { heroId, bonus: false } } }
     expect(gameReducer(attacked, { type: 'CURSE_ROLL', heroId, curseId, roll: 12 })).toBe(attacked)
@@ -639,7 +639,7 @@ describe('encounter deck', () => {
     expect(state.turn.heroIndex).toBe(1)
     state = gameReducer(state, { type: 'CURSE_ROLL', heroId, curseId, roll: 15 })
     expect(state.heroes[0].curses).toHaveLength(0)
-    expect(state.turn.curseTried).toBe(state.heroes[1].id)
+    expect(state.turn.attackSpent.heroId).toBe(state.heroes[1].id)
     expect(state.log[0].text).toContain('helping')
   })
 
@@ -670,8 +670,16 @@ describe('encounter deck', () => {
     expect(trap).toMatchObject({ name: 'Darts', ownerId: state.heroes[0].id })
     state = gameReducer(state, { type: 'TRAP_ATTACK', trapId: trap.id, targets: [{ heroId: hero.id, roll: 19 }] })
     expect(state.heroes[1].hp).toBe(hero.hp - 1)
-    expect(gameReducer(state, { type: 'DISABLE_TRAP', trapId: trap.id, heroId: hero.id, roll: 9 }).traps).toHaveLength(1)
-    state = gameReducer(state, { type: 'DISABLE_TRAP', trapId: trap.id, heroId: hero.id, roll: 10 })
+    const active = state.heroes[0].id
+    const missed = gameReducer(state, { type: 'DISABLE_TRAP', trapId: trap.id, heroId: active, roll: 9 })
+    expect(missed.traps).toHaveLength(1)
+    // Disabling takes the place of the attack: one try a turn, and not after attacking.
+    expect(missed.turn.attackSpent).toEqual({ heroId: active, on: 'the Darts' })
+    expect(gameReducer(missed, { type: 'DISABLE_TRAP', trapId: trap.id, heroId: active, roll: 10 })).toBe(missed)
+    const attacked = { ...state, turn: { ...state.turn, lastAttack: { heroId: active, bonus: false } } }
+    expect(gameReducer(attacked, { type: 'DISABLE_TRAP', trapId: trap.id, heroId: active, roll: 10 })).toBe(attacked)
+    expect(gameReducer(state, { type: 'DISABLE_TRAP', trapId: trap.id, heroId: hero.id, roll: 10 })).toBe(state)
+    state = gameReducer(state, { type: 'DISABLE_TRAP', trapId: trap.id, heroId: active, roll: 10 })
     expect(state.traps).toHaveLength(0)
     expect(state.encounterDeck.discard).toContain('darts')
   })
