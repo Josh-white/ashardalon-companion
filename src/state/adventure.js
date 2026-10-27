@@ -3,7 +3,7 @@
 
 // Bigger features an adventure can need. The picker only offers an adventure once the
 // app has every feature it needs; the others show what they're waiting for.
-export const SUPPORTED_FEATURES = []
+export const SUPPORTED_FEATURES = ['villains']
 
 export const FEATURE_LABELS = {
   villains: 'villains',
@@ -99,6 +99,9 @@ export function goalParts(state) {
   if (win.escape) parts.push({ key: 'escape', label: 'Escape the dungeon', progress: adventure.escaped ? 'escaped' : '', done: adventure.escaped })
   return parts
 }
+
+// The goals still to do before the heroes can escape (escaping comes last).
+export const escapeBlockers = (state) => goalParts(state).filter((p) => p.key !== 'escape' && !p.done)
 
 export const goalMet = (state) => {
   const parts = goalParts(state)

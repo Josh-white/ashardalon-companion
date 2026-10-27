@@ -373,5 +373,41 @@
         ]
       }
     }
+  ],
+  "villains": [
+    {
+      "id": "example-villain",
+      "name": "Example Villain",
+      "fullName": "Grak, Example Villain",
+      "level": 5,
+      "ac": 15,
+      "hp": 6,
+      "attacks": [
+        {
+          "id": "club",
+          "name": "Club",
+          "bonus": 8,
+          "damage": 2,
+          "effect": "Placeholder: what else a hit does."
+        }
+      ],
+      "tactics": [
+        {
+          "when": "adjacent",
+          "attack": "club",
+          "text": "Placeholder. Put the real villain cards in cards/cards.json on your own server."
+        },
+        {
+          "when": "within1",
+          "move": "adjacent",
+          "attack": "club",
+          "text": "Placeholder."
+        },
+        {
+          "move": "toward",
+          "text": "Otherwise, it moves 1 tile toward the closest Hero."
+        }
+      ]
+    }
   ]
 }

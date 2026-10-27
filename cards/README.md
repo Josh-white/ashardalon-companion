@@ -188,3 +188,37 @@ Adventures from the adventure book go in an `adventures` list. The projector pic
 - `win`: every part listed has to be done. `figures` (defeat that many monster figures; each figure of a group card counts), `guardians` (defeat the guardians), `tokens` (a hero picked each one up), `villains` (defeat each one by name), `escape` (the players tap "We escaped").
 - `onceOnly`: monster names that can come out only once; later copies are discarded with no replacement.
 - `needs`: bigger features the adventure needs, such as `villains` or `chambers`. The picker shows it as coming soon until the app has them.
+
+### Villain cards (optional)
+
+Villains are the bosses an adventure brings out. When one is on the board it shows on every screen, heroes can attack it like a monster, and it takes its turn at the start of every Villain Phase, before anything else, with the same one-question-at-a-time guide as monsters. A defeated villain stays in the game's villain list marked defeated, so an adventure can check it. Until an adventure places its villain by itself, the table view has a **Put a villain on the board** button.
+
+```json
+{
+  "powers": [],
+  "villains": [
+    {
+      "id": "kobold-dragonlord",
+      "name": "Kobold Dragonlord",
+      "fullName": "Meerak, Kobold Dragonlord",
+      "level": 5,
+      "ac": 17,
+      "hp": 6,
+      "attacks": [{ "id": "short-sword", "name": "Short Sword", "bonus": 8, "damage": 2 }],
+      "tactics": [
+        { "when": "adjacent", "attack": "short-sword", "then": "within1", "text": "What the card says." },
+        { "move": "toward", "toward": "mostHp", "text": "Otherwise, ..." }
+      ]
+    }
+  ]
+}
+```
+
+- `name` is what an adventure uses to place it; `fullName` is shown on screen. `flavor`, `special` (rules shown on its card) and `onPlace` (what to do when it appears) are optional text.
+- `attacks` work like monster attacks, plus `effect`: what else a hit does that the players do on the board, such as "Move the Hero 1 tile away". Attacks that share a `group` and have a `roll` range (`[1, 4]`) are a table: a tactic that uses the group rolls a die to pick the row (the Gauth's eye ray).
+- `tactics` work like monster tactics, with more:
+  - `when` can also be `adjacentMany` (next to 2 or more heroes), `tileWithMany` (within 1 tile of a tile with 2 or more heroes) and `within3`.
+  - `target`: who it attacks when several heroes fit: `closest` (the default), `adjacent`, `mostHp` (the app picks from the heroes tapped) or `farthest`.
+  - `then`: where it goes after attacking: `within1` (any square within 1 tile), `adjacent` (next to the hero it attacked) or `away` (the closest square not next to a hero).
+  - With `"move": "toward"`, `toward` can be `mostHp`, and `tiles` how far (default 1).
+- `enraged`: the other side of the card (the Rage Drake), with its own `ac`, `hp`, `attacks`, `tactics` and optional `name`. The first time the villain drops to 0 HP it flips to this side instead of being defeated.

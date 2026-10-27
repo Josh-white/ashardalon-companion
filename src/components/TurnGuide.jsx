@@ -3,7 +3,7 @@ import { PHASES } from '../data/phases.js'
 import { CurseNotes, DisableTraps, EncounterStep, EnvironmentBanner, PassMonsters, encountersLeft, TrapTurns } from './Encounters.jsx'
 import HeroAttack, { AttackAftermath } from './HeroAttack.jsx'
 import { RevealButtons } from './Adventure.jsx'
-import MonsterTurns, { DrawMonsterButton } from './MonsterTurns.jsx'
+import MonsterTurns, { DrawMonsterButton, VillainTurns } from './MonsterTurns.jsx'
 import { rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { treasurePending } from './Treasure.jsx'
@@ -144,6 +144,7 @@ function VillainPhase({ state, hero, dispatch }) {
 
   return (
     <>
+      <VillainTurns state={state} dispatch={dispatch} hero={hero} />
       {surrounded && (
         <Note tone="warn">
           <p>Surrounded! {hero.name} has no monster, so draw one and put it on the closest unexplored edge.</p>

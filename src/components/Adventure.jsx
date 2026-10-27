@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { HERO_COLORS } from '../data/heroes.js'
-import { FEATURE_LABELS, MAX_SURGES, MIN_SURGES, goalParts, missingFeatures, tilesToCome } from '../state/adventure.js'
+import { FEATURE_LABELS, MAX_SURGES, MIN_SURGES, escapeBlockers, goalParts, missingFeatures, tilesToCome } from '../state/adventure.js'
 import { randomNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { Button } from './ui.jsx'
@@ -145,50 +146,78 @@ function Goal({ state, big = false }) {
   )
 }
 
-// The adventure's box on the iPads and the table: goal, progress, tokens to pick up,
-// escaping, the rules to remember, and any read-aloud text.
+// The adventure's box on the iPads and the table: a one-line bar that opens to show the
+// goal, progress, tokens to pick up, escaping and the rules. Read-aloud text always shows,
+// and the bar opens by itself when a token is waiting to be picked up.
 export function AdventurePanel({ state, dispatch }) {
+  const [open, setOpen] = useState(false)
   const adventure = state.adventure
   if (!adventure) return null
   const { card } = adventure
   const loose = adventure.tokens.filter((t) => !t.heldBy)
+  const parts = goalParts(state)
+  const done = parts.filter((p) => p.done).length
+  const blockers = escapeBlockers(state)
+  const shown = open || loose.length > 0
   return (
     <section className="space-y-3">
       {adventure.story && <Story story={adventure.story} dispatch={dispatch} />}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-        <p className="text-xs uppercase tracking-widest text-zinc-500">Adventure</p>
-        <h2 className="font-display text-2xl font-bold text-amber-400">{heading(card)}</h2>
-        <p className="text-zinc-300">{card.goal}</p>
-        <Goal state={state} />
-        {loose.map((token) => (
-          <div key={token.name} className="mt-3">
-            <p className="text-zinc-300">Who ended their Hero Phase next to the {token.name} and picked it up?</p>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {state.heroes.map((hero) => (
-                <Button key={hero.id} className={HERO_COLORS[hero.color].text} onClick={() => dispatch({ type: 'ADVENTURE_TAKE_TOKEN', name: token.name, heroId: hero.id })}>
-                  {hero.name}
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900">
+        <button type="button" className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left" onClick={() => setOpen(!shown)}>
+          <span className="min-w-0">
+            <span className="block truncate font-display text-lg font-bold text-amber-400">📜 {heading(card)}</span>
+            {parts.length > 0 && (
+              <span className="text-sm text-zinc-400">
+                {done} of {parts.length} goals done{loose.length > 0 ? ' · a token is waiting' : ''}
+              </span>
+            )}
+          </span>
+          <span className="shrink-0 text-zinc-400">{shown ? 'Hide ▲' : 'Show ▼'}</span>
+        </button>
+        {shown && (
+          <div className="border-t border-zinc-800 px-4 pb-4 pt-2">
+            <p className="text-zinc-300">{card.goal}</p>
+            <Goal state={state} />
+            {loose.map((token) => (
+              <div key={token.name} className="mt-3">
+                <p className="text-zinc-300">Who ended their Hero Phase next to the {token.name} and picked it up?</p>
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {state.heroes.map((hero) => (
+                    <Button key={hero.id} className={HERO_COLORS[hero.color].text} onClick={() => dispatch({ type: 'ADVENTURE_TAKE_TOKEN', name: token.name, heroId: hero.id })}>
+                      {hero.name}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {card.win.escape && (
+              <div className="mt-3">
+                <Button
+                  variant={adventure.escaped ? 'default' : 'gold'}
+                  disabled={!adventure.escaped && blockers.length > 0}
+                  onClick={() => dispatch({ type: 'ADVENTURE_ESCAPED', escaped: !adventure.escaped })}
+                >
+                  {adventure.escaped ? '✓ Escaped (tap to undo)' : 'We escaped the dungeon!'}
                 </Button>
-              ))}
-            </div>
+                {!adventure.escaped && blockers.length > 0 && (
+                  <p className="mt-1 text-sm text-zinc-400">Do this first: {blockers.map((b) => b.label).join(', ')}.</p>
+                )}
+              </div>
+            )}
+            {card.rules.length > 0 && (
+              <details className="mt-3 text-sm text-zinc-400">
+                <summary className="cursor-pointer text-zinc-300">Adventure rules</summary>
+                <ul className="mt-2 space-y-2">
+                  {card.rules.map((rule) => (
+                    <li key={rule.name + rule.text}>
+                      {rule.name && <span className="font-semibold text-amber-300">{rule.name}: </span>}
+                      {rule.text}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </div>
-        ))}
-        {card.win.escape && (
-          <Button className="mt-3" variant={adventure.escaped ? 'default' : 'gold'} onClick={() => dispatch({ type: 'ADVENTURE_ESCAPED', escaped: !adventure.escaped })}>
-            {adventure.escaped ? '✓ Escaped (tap to undo)' : 'We escaped the dungeon!'}
-          </Button>
-        )}
-        {card.rules.length > 0 && (
-          <details className="mt-3 text-sm text-zinc-400">
-            <summary className="cursor-pointer text-zinc-300">Adventure rules</summary>
-            <ul className="mt-2 space-y-2">
-              {card.rules.map((rule) => (
-                <li key={rule.name + rule.text}>
-                  {rule.name && <span className="font-semibold text-amber-300">{rule.name}: </span>}
-                  {rule.text}
-                </li>
-              ))}
-            </ul>
-          </details>
         )}
       </div>
     </section>

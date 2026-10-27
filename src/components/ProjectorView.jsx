@@ -4,6 +4,7 @@ import { EnvironmentBanner } from './Encounters.jsx'
 import { ProjectorTreasure } from './Treasure.jsx'
 import { heroItems } from '../data/items.js'
 import { heroAc } from '../data/powerEffects.js'
+import { activeVillains } from '../state/game.js'
 import { ProjectorAdventure } from './Adventure.jsx'
 import { HpBar } from './ui.jsx'
 
@@ -98,6 +99,22 @@ export default function ProjectorView({ state, onSwitchSeat }) {
           )
         })}
       </section>
+
+      {activeVillains(state).length > 0 && (
+        <section className="flex flex-wrap gap-[1.2vw]">
+          {activeVillains(state).map((villain) => (
+            <div key={villain.id} className="min-w-[30vw] rounded-[1.2vw] border-2 border-fuchsia-600 bg-fuchsia-950/40 p-[1vw]">
+              <div className="text-[1.2vw] font-semibold uppercase tracking-widest text-fuchsia-400">👑 Villain</div>
+              <div className="font-display text-[2.6vw] font-bold text-fuchsia-200">{villain.enraged ? `Enraged ${villain.name}` : villain.fullName}</div>
+              <div className="text-[2.4vw] font-bold text-zinc-100">
+                {villain.hp} / {villain.maxHp} HP <span className="text-[1.6vw] font-normal text-zinc-400">· AC {villain.ac}</span>
+              </div>
+              <HpBar hp={villain.hp} maxHp={villain.maxHp} />
+              {villain.conditions.length > 0 && <p className="mt-[0.5vh] text-amber-400">{villain.conditions.join(', ')}</p>}
+            </div>
+          ))}
+        </section>
+      )}
 
       <section className="flex-1">
         {state.monsters.length === 0 ? (

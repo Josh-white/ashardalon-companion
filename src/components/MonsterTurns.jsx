@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { HERO_COLORS } from '../data/heroes.js'
 import { itemsWithUse } from '../data/items.js'
 import { heroAc, reactionsFor } from '../data/powerEffects.js'
+import { activeVillains } from '../state/game.js'
 import { useCards } from '../state/useCards.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
 import { MonsterControl, TileGuardQuestion } from './Treasure.jsx'
@@ -34,9 +35,12 @@ export function DrawMonsterButton({ state, heroId, dispatch, className = '', lab
 // What each tactic asks about the board, in plain words.
 const QUESTIONS = {
   adjacent: (name) => `Is a hero right next to the ${name}?`,
+  adjacentMany: (name) => `Are two or more heroes right next to the ${name}?`,
   sameTile: (name) => `Is a hero on the same tile as the ${name}?`,
+  tileWithMany: (name) => `Is there a tile with 2 or more heroes on it, on the ${name}'s tile or a tile touching it?`,
   within1: (name) => `Is a hero on the ${name}'s tile, or on a tile touching it?`,
   within2: (name) => `Is a hero within 2 tiles of the ${name}?`,
+  within3: (name) => `Is a hero within 3 tiles of the ${name}?`,
   aloneByUnexploredEdge: (name) => `Is the ${name} on a tile with no heroes and an unexplored edge?`,
 }
 
@@ -45,12 +49,33 @@ const HINTS = {
   within1: 'That is "within 1 tile".',
 }
 
+const RANGES = { adjacent: 'next to it', adjacentMany: 'next to it', within1: 'within 1 tile of it', within2: 'within 2 tiles of it', within3: 'within 3 tiles of it' }
+
 function targetPrompt(step) {
   if (step.targets === 'all') {
-    return step.when === 'sameTile' ? 'Tap every hero on its tile.' : 'Tap every hero within 1 tile of it.'
+    if (step.when === 'sameTile') return 'Tap every hero on its tile.'
+    if (step.when === 'tileWithMany') return 'Tap every hero on that tile.'
+    if (step.when === 'adjacentMany' || step.target === 'adjacent') return 'Tap every hero next to it.'
+    return 'Tap every hero within 1 tile of it.'
   }
+  if (step.target === 'mostHp') return `Tap every hero ${RANGES[step.when] ?? 'it can reach'}. The app picks the one with the most HP.`
+  if (step.target === 'farthest') return `Which hero ${RANGES[step.when] ?? 'in range'} is farthest from it? If it’s a tie, pick one together.`
   if (step.when === 'adjacent') return 'Which hero is next to it? If there are more, pick one together.'
   return 'Which hero is closest? If it’s a tie, pick one together.'
+}
+
+// Where a villain goes after its attack.
+const THEN = {
+  within1: (name) => `Now move the ${name} to any square within 1 tile.`,
+  adjacent: (name, hero) => `Now move the ${name} next to ${hero}.`,
+  away: (name) => `Now move the ${name} to the closest square that isn't next to a hero.`,
+}
+
+// The hero with the most HP, or null when two or more are tied for it.
+function mostHp(heroes) {
+  const top = Math.max(...heroes.map((h) => h.hp))
+  const tied = heroes.filter((h) => h.hp === top)
+  return tied.length === 1 ? tied[0] : null
 }
 
 export function HeroPicker({ heroes, chosen, onToggle }) {
@@ -80,21 +105,24 @@ export function HeroPicker({ heroes, chosen, onToggle }) {
 
 // Walks one monster through its card's tactics: asks about the board one question at a
 // time, then rolls its attack against the hero's AC and applies the result.
-function MonsterActivation({ monster, state, dispatch, activeHeroId, onDone }) {
+export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDone }) {
   const { card, name } = monster
-  const figures = Math.max(1, Math.ceil(monster.hp / card.hp))
+  const figures = monster.villain ? 1 : Math.max(1, Math.ceil(monster.hp / card.hp))
   const [figure, setFigure] = useState(1)
   const [stepIndex, setStepIndex] = useState(0)
   const [answered, setAnswered] = useState(false) // "Yes" to this step's question
   const [chosen, setChosen] = useState([])
   const [guarded, setGuarded] = useState([])
   const [results, setResults] = useState(null)
+  const [tiePick, setTiePick] = useState(null) // the players' pick when heroes tie for the most HP
   const [controlling, setControlling] = useState(false)
   const step = card.tactics[stepIndex]
   // Scroll of Monster Control, read on the active hero's own turn.
   const activeHero = state.heroes.find((h) => h.id === activeHeroId)
   const [scroll] = itemsWithUse(activeHero ? [activeHero] : [], 'monsterControl')
-  const attack = card.attacks.find((a) => a.id === step?.attack)
+  // A table of attacks (the Gauth's eye ray) rolls to pick one; `table` is its rows.
+  const table = card.attacks.filter((a) => a.group && a.group === step?.attack)
+  const attack = card.attacks.find((a) => a.id === step?.attack) ?? (table.length > 0 ? { ...table[0], id: step.attack, name: step.attack.replace(/-/g, ' ') } : null)
   const asking = step?.when && !answered
 
   const nextFigure = () => {
@@ -107,28 +135,41 @@ function MonsterActivation({ monster, state, dispatch, activeHeroId, onDone }) {
   }
   const finish = figure < figures ? nextFigure : onDone
 
+  const many = step?.targets === 'all' || step?.target === 'mostHp'
   const toggle = (heroId) =>
-    setChosen((list) =>
-      step.targets === 'all' ? (list.includes(heroId) ? list.filter((id) => id !== heroId) : [...list, heroId]) : [heroId],
-    )
+    setChosen((list) => (many ? (list.includes(heroId) ? list.filter((id) => id !== heroId) : [...list, heroId]) : [heroId]))
+  // "The hero with the most HP": the app picks from the heroes tapped, unless there's a tie.
+  const tapped = state.heroes.filter((h) => chosen.includes(h.id))
+  const strongest = step?.target === 'mostHp' && tapped.length > 0 ? mostHp(tapped) : null
+  const top = Math.max(...tapped.map((h) => h.hp))
+  const tied = step?.target === 'mostHp' && !strongest ? tapped.filter((h) => h.hp === top) : []
+  const tieTarget = tied.find((h) => h.id === tiePick)
+  const targetIds = step?.target === 'mostHp' ? (strongest ? [strongest.id] : tieTarget ? [tieTarget.id] : []) : chosen
 
   const roll = (nobleShield) => {
-    const targets = chosen.map((heroId) => ({ heroId, roll: rollD20() }))
-    dispatch({ type: 'MONSTER_ATTACK', monsterId: monster.id, attackId: attack.id, targets, nobleShield, tileGuarded: guarded })
+    const targets = targetIds.map((heroId) => ({ heroId, roll: rollD20() }))
+    const tableRoll = table.length > 0 ? rollD20() : undefined
+    dispatch({ type: 'MONSTER_ATTACK', monsterId: monster.id, attackId: attack.id, tableRoll, targets, nobleShield, tileGuarded: guarded })
     setResults(true)
   }
   // Noble Shield: an attack on several heroes, one of them a paladin with the power unused.
-  const shield = chosen.length > 1 && reactionsFor(state.heroes.filter((h) => chosen.includes(h.id)), 'noble-shield')[0]
+  const shield = targetIds.length > 1 && reactionsFor(state.heroes.filter((h) => targetIds.includes(h.id)), 'noble-shield')[0]
   // The server's sums, so Mirror Image and Cleric's Shield are counted, and Tumbling Escape can change them.
   const last = state.turn.lastMonsterAttack
   const rows = results && last?.monsterId === monster.id ? last.results : []
 
-  const movedTo = state.heroes.find((h) => h.id === chosen[0])
+  const movedTo = state.heroes.find((h) => h.id === targetIds[0])
+  // The attack that was rolled: for a table, the row the die picked.
+  const used = (rows.length > 0 && card.attacks.find((a) => a.id === last.attackId)) || attack
   const effect = (hit) => {
-    const damage = hit ? attack.damage : attack.miss
-    const parts = [damage > 0 && `${damage} damage`, ...(hit ? attack.conditions : [])].filter(Boolean)
+    const damage = hit ? used.damage : used.miss
+    const parts = [damage > 0 && `${damage} damage`, ...(hit ? used.conditions : [])].filter(Boolean)
     return parts.length > 0 ? parts.join(' and ') : 'no damage'
   }
+  // The hero it moves toward when nobody is in reach.
+  const living = state.heroes.filter((h) => h.hp > 0)
+  const towardHero = step?.toward === 'mostHp' && living.length > 0 ? mostHp(living) : null
+  const tiles = step?.tiles > 1 ? `${step.tiles} tiles` : '1 tile'
 
   return (
     <div className="space-y-4 rounded-2xl border-2 border-red-700 bg-zinc-950/80 p-4">
@@ -190,21 +231,42 @@ function MonsterActivation({ monster, state, dispatch, activeHeroId, onDone }) {
           <p className="text-xl text-zinc-100">
             It attacks with its <b>{attack.name}</b>. {targetPrompt(step)}
           </p>
+          {step.move === 'adjacent' && step.targets === 'all' && (
+            <p className="rounded-lg bg-amber-950/60 p-3 text-lg text-amber-200">First, move the {name} next to the closest hero.</p>
+          )}
           <HeroPicker heroes={state.heroes} chosen={chosen} onToggle={toggle} />
+          {step.target === 'mostHp' && tapped.length > 1 && strongest && (
+            <p className="rounded-lg bg-zinc-900 p-3 text-lg text-zinc-200">{`${strongest.name} has the most HP, so it attacks ${strongest.name}.`}</p>
+          )}
+          {tied.length > 1 && (
+            <div className="space-y-2 rounded-lg bg-zinc-900 p-3">
+              <p className="text-lg text-zinc-200">They're tied with {top} HP. Pick together: which one does it attack?</p>
+              <div className="flex flex-wrap gap-2">
+                {tied.map((h) => (
+                  <Button key={h.id} variant={tiePick === h.id ? 'gold' : 'default'} onClick={() => setTiePick(h.id)}>
+                    {h.name}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
           <TileGuardQuestion
             state={state}
-            targets={chosen}
+            targets={targetIds}
             guarded={guarded}
             onToggle={(id) => setGuarded((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]))}
           />
-          {step.move === 'adjacent' && movedTo && (
+          {step.move === 'adjacent' && step.targets !== 'all' && movedTo && (
             <p className="rounded-lg bg-amber-950/60 p-3 text-lg text-amber-200">
               First, move the {name} next to {movedTo.name}.
             </p>
           )}
-          <Button variant="danger" className="w-full py-4 text-xl font-bold" disabled={chosen.length === 0} onClick={() => roll()}>
-            🎲 Roll the {attack.name} attack (+{attack.bonus})
+          <Button variant="danger" className="w-full py-4 text-xl font-bold" disabled={targetIds.length === 0} onClick={() => roll()}>
+            {table.length > 0 ? `🎲 Roll for the ${attack.name}` : `🎲 Roll the ${attack.name} attack (+${attack.bonus})`}
           </Button>
+          {table.length > 0 && (
+            <p className="text-sm text-zinc-400">The first die picks the ray: {table.map((a) => `${a.roll[0]}–${a.roll[1]} ${a.name}`).join(', ')}.</p>
+          )}
           {shield && (
             <Button className="w-full" onClick={() => roll({ heroId: shield.hero.id, powerId: shield.power.id })}>
               🛡️ {shield.hero.name} uses Noble Shield: only {shield.hero.name} is attacked, and it counts as a 20
@@ -215,6 +277,11 @@ function MonsterActivation({ monster, state, dispatch, activeHeroId, onDone }) {
 
       {results && (
         <>
+          {last?.tableRoll && rows.length > 0 && (
+            <p className="text-xl text-zinc-100">
+              The die says {last.tableRoll}: <b>{used.name}</b>!
+            </p>
+          )}
           <ul className="space-y-2">
             {rows.map((row) => {
               const hero = state.heroes.find((h) => h.id === row.heroId)
@@ -223,10 +290,11 @@ function MonsterActivation({ monster, state, dispatch, activeHeroId, onDone }) {
               const [bracers] = row.hit && !row.dodged && row.dealt > 0 ? itemsWithUse([hero], 'reduceDamage') : []
               return (
                 <li key={row.heroId} className={`rounded-xl p-3 text-lg ${hit ? 'bg-red-950' : 'bg-zinc-900'}`}>
-                  The {name} rolled {row.value} + {attack.bonus} = {row.total} against{' '}
+                  The {name} rolled {row.value} + {used.bonus} = {row.total} against{' '}
                   <span className={`font-bold ${HERO_COLORS[hero.color].text}`}>{hero.name}</span>'s AC {row.ac}.{' '}
                   <b className={hit ? 'text-red-300' : 'text-emerald-300'}>{row.dodged ? 'Tumbling Escape: a miss!' : hit ? 'Hit!' : 'Miss!'}</b>{' '}
                   {hero.name} takes {effect(hit)}.
+                  {hit && used.effect && <span className="mt-1 block font-semibold text-amber-200">{used.effect}</span>}
                   {escape && (
                     <Button className="mt-2 w-full" onClick={() => dispatch({ type: 'DODGE_HIT', heroId: hero.id, powerId: escape.power.id })}>
                       🤸 {hero.name} uses Tumbling Escape: the attack misses
@@ -241,6 +309,9 @@ function MonsterActivation({ monster, state, dispatch, activeHeroId, onDone }) {
               )
             })}
           </ul>
+          {step.then && rows.length > 0 && (
+            <p className="rounded-lg bg-amber-950/60 p-3 text-lg text-amber-200">{THEN[step.then](name, movedTo?.name ?? 'that hero')}</p>
+          )}
           <Button variant="gold" className="w-full py-3 text-lg" onClick={finish}>
             {figure < figures ? `Next ${name} →` : `Done with the ${name}`}
           </Button>
@@ -251,7 +322,9 @@ function MonsterActivation({ monster, state, dispatch, activeHeroId, onDone }) {
         <>
           <p className="text-xl text-zinc-100">
             {step?.move === 'toward' || !step
-              ? `Move the ${name} 1 tile toward the closest hero.`
+              ? step?.toward === 'mostHp'
+                ? `Move the ${name} ${tiles} toward ${towardHero ? `${towardHero.name}, the hero with the most HP` : 'the hero with the most HP (pick one if they’re tied)'}.`
+                : `Move the ${name} ${tiles} toward the closest hero.`
               : 'Do what the card says.'}
           </p>
           <Button variant="gold" className="w-full py-3 text-lg" onClick={finish}>
@@ -321,6 +394,51 @@ export default function MonsterTurns({ state, dispatch, hero }) {
                   Play it from its card
                   <Button onClick={() => markDone(monster)}>Done</Button>
                 </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+// Villains go first in every Villain Phase, whoever's turn it is: each takes its turn
+// from its card's tactics, the same way a monster does.
+export function VillainTurns({ state, dispatch, hero }) {
+  const [done, setDone] = useState({})
+  const [activeId, setActiveId] = useState(null)
+  const turnKey = `${state.turn.round}-${state.turn.heroIndex}`
+  const villains = activeVillains(state)
+  if (villains.length === 0) return null
+  const isDone = (villain) => done[turnKey]?.includes(villain.id)
+  const markDone = (villain) => {
+    setDone((d) => ({ ...d, [turnKey]: [...(d[turnKey] ?? []), villain.id] }))
+    setActiveId(null)
+  }
+  const active = villains.find((v) => v.id === activeId)
+
+  return (
+    <div className="mt-5">
+      <h3 className="font-display text-xl font-bold text-fuchsia-300">👑 Villain turn</h3>
+      <p className="text-zinc-400">Villains act at the start of every Villain Phase, before anything else.</p>
+      {active ? (
+        <div className="mt-2">
+          <MonsterActivation key={active.id} monster={active} state={state} dispatch={dispatch} activeHeroId={hero.id} onDone={() => markDone(active)} />
+        </div>
+      ) : (
+        <ul className="mt-2 space-y-2">
+          {villains.map((villain) => (
+            <li key={villain.id} className="flex items-center justify-between gap-3 rounded-xl border border-fuchsia-800 bg-zinc-950/50 p-3">
+              <span className={`text-lg font-semibold ${isDone(villain) ? 'text-zinc-500 line-through' : 'text-fuchsia-300'}`}>
+                {villain.enraged ? `Enraged ${villain.name}` : villain.name}
+              </span>
+              {isDone(villain) ? (
+                <span className="text-zinc-500">✓ Done</span>
+              ) : (
+                <Button variant="danger" className="font-bold" onClick={() => setActiveId(villain.id)}>
+                  Take its turn
+                </Button>
               )}
             </li>
           ))}
