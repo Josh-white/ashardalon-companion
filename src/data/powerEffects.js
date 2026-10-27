@@ -1,0 +1,124 @@
+// What each power does besides its attack roll, so the app can do it instead of the
+// players. Matched to a card by its name. These are short reminders in our own words;
+// the card's own text stays in cards.json.
+//
+// Attack powers:
+//   targets     how many different monsters it can hit: a number, or 'any' (every monster on a tile). Default 1.
+//   attacks     rolls in all, when one monster can be attacked more than once (Tornado Strike).
+//   sameTarget  every roll is against the one monster (Reaping Strike).
+//   before      a reminder shown before the roll.
+//   ask         a question before the roll: 'started-adjacent' (+1 damage on a hit) or 'adjacent-count' (+1 attack each).
+//   evenBonus   extra damage on a hit when the die shows an even number.
+//   onHit       { healSelf } or { heal, pick: 'tile' } (the attacker or one hero on their tile).
+//   after       hit or miss: 'heal-tile' (1 HP to each hero on the tile), 'shield', 'pass-monster', 'at-will'.
+//   note        a reminder shown after the roll.
+//   keepOnMiss  a daily that isn't used up when it misses.
+// Other powers have a `use`, done from the power's tile:
+//   healSelf, heal + pick ('other': one other hero), tokens, endCondition, refuge, invisible, causeFear, note.
+// `reaction` powers are offered where they happen: 'reroll', 'furious', 'dodge', 'noble-shield', 'perseverance'.
+const EFFECTS = {
+  // Quinn, the cleric
+  'Healing Hymn': { use: { healSelf: 2, heal: 2, pick: 'other', optional: true, prompt: 'Who else on your tile gets 2 HP?' } },
+  "Cleric's Shield": { after: 'shield' },
+  'Righteous Advance': { note: 'Hit or miss: move one hero on your tile 2 squares.' },
+  'Sacred Flame': { onHit: { heal: 1, pick: 'tile' } },
+  'Blade Barrier': {
+    use: { tokens: { bladeBarrier: 5 }, note: 'Put 5 Blade Barrier tokens on a tile within 2 tiles of you.' },
+  },
+  'Cause Fear': {
+    use: { causeFear: true, note: 'Afterwards, put each monster that is left on a tile within 2 tiles of you.' },
+  },
+  'Wrathful Thunder': { after: 'pass-monster' },
+  'Astral Refuge': { use: { refuge: true, pick: 'any', prompt: 'Which hero within 2 tiles goes to the Astral Refuge?' } },
+  Command: { use: { note: 'Put one monster on your tile onto a tile within 2 tiles of you.' } },
+  Perseverance: { reaction: 'perseverance' },
+
+  // Vistra, the fighter
+  'Dwarven Resilience': { use: { healSelf: 4, note: "That's instead of moving this turn." } },
+  Charge: { before: 'First move up to your speed.' },
+  'Reaping Strike': { attacks: 2, sameTarget: true },
+  'Sure Strike': {},
+  'Comeback Strike': { onHit: { healSelf: 2 }, keepOnMiss: true },
+  'Into the Fray': { before: 'First put your hero next to a hero within 2 tiles.' },
+  'Taunting Advance': { before: 'First move your speed, then pull a monster within 2 tiles next to you.' },
+  'Inspiring Advice': { reaction: 'reroll' },
+  'One for the Team': { use: { note: 'Take the encounter card and do it as if you drew it.' } },
+  'To Arms!': { use: { note: 'You and one hero on your tile can each move your speed.' } },
+
+  // Keyleth, the paladin
+  'Lay On Hands': { use: { heal: 2, pick: 'other', prompt: 'Who is next to you?' } },
+  'Divine Challenge': { before: 'First pull a monster within 1 tile next to you.' },
+  'Holy Strike': { ask: 'started-adjacent' },
+  'Valiant Strike': { ask: 'adjacent-count' },
+  'Arcing Smite': { targets: 2 },
+  'Benign Transposition': { before: 'First swap places with a hero within 2 tiles.' },
+  'Righteous Smite': { after: 'heal-tile' },
+  Bravery: { use: { healSelf: 1, note: 'Put your hero next to the monster.' } },
+  'Noble Shield': { reaction: 'noble-shield' },
+  "Virtue's Touch": { use: { endCondition: true, pick: 'other', prompt: 'Who is next to you?' } },
+
+  // Tarak, the rogue
+  'Furious Assault': { reaction: 'furious' },
+  'Distracting Jab': { note: 'On a hit, move the monster 1 square. Then move your speed.' },
+  'Lucky Strike': { evenBonus: 1 },
+  'Positioning Shot': { note: 'Hit or miss: put the monster on any square of your tile or a tile next to it.' },
+  'Acrobatic Onslaught': { after: 'at-will', note: 'Put your hero on a tile within 2 tiles of where you started.' },
+  "King's Castle": { before: 'First swap places with a hero within 1 tile.' },
+  'Tornado Strike': { attacks: 4, targets: 4, note: 'Then put your hero on any square of your tile.' },
+  'Distant Diversion': { use: { note: 'Move a monster within 3 tiles onto a tile next to it.' } },
+  'Practiced Evasion': { use: { note: 'The trap or event attack misses. If the app took HP off, tap Undo.' } },
+  'Tumbling Escape': { reaction: 'dodge' },
+
+  // Heskan, the wizard
+  'Hurled Breath': { targets: 'any', note: "This doesn't count as your attack this turn." },
+  'Arc Lightning': { targets: 2 },
+  Hypnotism: { before: 'First move a monster within 1 tile by 1 tile. It attacks a monster it ends next to.' },
+  'Ray of Frost': {},
+  'Flaming Sphere': {
+    use: { tokens: { flamingSphere: 3 }, note: 'Put the 3 Flaming Sphere tokens on a square within 1 tile of you.' },
+  },
+  'Shock Sphere': { targets: 'any' },
+  'Spectral Ram': { note: 'Hit or miss: put the monster on any tile within 2 tiles of where it was.' },
+  Invisibility: { use: { invisible: true } },
+  'Mirror Image': { use: { tokens: { mirrorImage: 3 } } },
+  'Wizard Eye': { use: { note: 'Put the Wizard Eye on a tile within 1 tile of you.' } },
+}
+
+const key = (name) => String(name ?? '').toLowerCase().replace(/[^a-z]/g, '')
+const BY_KEY = Object.fromEntries(Object.entries(EFFECTS).map(([name, effect]) => [key(name), effect]))
+// The old card list calls Arcing Smite "Arcing Strike".
+BY_KEY.arcingstrike = BY_KEY.arcingsmite
+
+const entryFor = (powerOrCard) => BY_KEY[key(powerOrCard?.card?.name ?? powerOrCard?.name)]
+
+// The effects of a power slot (or a card), or {} for a plain power.
+export const effectsOf = (powerOrCard) => entryFor(powerOrCard) ?? {}
+
+// How many rolls one use of an attack power gets. A card the app doesn't know
+// (someone's own cards.json) can hit as many monsters as the player taps.
+export function maxRolls(power) {
+  const effects = entryFor(power)
+  if (!effects) return Infinity
+  if (effects.attacks) return effects.attacks
+  if (effects.targets === 'any') return Infinity
+  return effects.targets ?? 1
+}
+
+export const POWER_EFFECT_NAMES = Object.keys(EFFECTS)
+
+// An unused power with this reaction, on any hero: [{ hero, power }].
+export function reactionsFor(heroes, reaction) {
+  return heroes.flatMap((hero) =>
+    hero.powers.filter((p) => !p.used && effectsOf(p).reaction === reaction).map((power) => ({ hero, power })),
+  )
+}
+
+// A hero's AC with Cleric's Shield and Mirror Image counted.
+// Curses (encounter cards) can lower a hero's AC or attack rolls while they last.
+const curseTotal = (hero, field) => (hero.curses ?? []).reduce((sum, curse) => sum + (curse.card?.[field] ?? 0), 0)
+export const heroAttackPenalty = (hero) => curseTotal(hero, 'attackPenalty')
+
+export function heroAc(hero) {
+  const tokens = hero.tokens ?? {}
+  return hero.ac + (hero.shieldedBy ? 2 : 0) + 2 * (tokens.mirrorImage ?? 0) - curseTotal(hero, 'acPenalty')
+}

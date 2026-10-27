@@ -1,7 +1,7 @@
 import { HERO_COLORS, XP_TO_LEVEL_UP } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
 import { CurseNotes, DisableTraps, EncounterStep, EnvironmentBanner, PassMonsters, TrapTurns } from './Encounters.jsx'
-import HeroAttack from './HeroAttack.jsx'
+import HeroAttack, { AttackAftermath } from './HeroAttack.jsx'
 import MonsterTurns, { DrawMonsterButton } from './MonsterTurns.jsx'
 import { rollD20 } from '../state/random.js'
 import { Button } from './ui.jsx'
@@ -34,6 +34,27 @@ function YesNo({ question, onYes, onNo }) {
   )
 }
 
+// Free at-will attacks from Cause Fear or Acrobatic Onslaught, and how the last one went.
+// `onlyHeroId` shows just one hero's, on that hero's own iPad.
+export function ExtraAttacks({ state, dispatch, onlyHeroId = null }) {
+  const extras = (state.turn.bonusAttacks ?? []).filter((b) => !onlyHeroId || b.heroId === onlyHeroId)
+  const last = state.turn.lastAttack
+  const showLast = last?.bonus && (!onlyHeroId || last.heroId === onlyHeroId)
+  return (
+    <>
+      {showLast && (
+        <div className="mt-5 rounded-2xl border-2 border-amber-600/60 bg-zinc-950/60 p-4">
+          <AttackAftermath state={state} last={last} dispatch={dispatch} />
+        </div>
+      )}
+      {extras.map((extra, i) => {
+        const hero = state.heroes.find((h) => h.id === extra.heroId)
+        return hero ? <HeroAttack key={`${extra.heroId}-${extra.source}-${i}`} state={state} hero={hero} dispatch={dispatch} extra={extra} /> : null
+      })}
+    </>
+  )
+}
+
 function HeroPhase({ state, hero, dispatch }) {
   return (
     <>
@@ -62,6 +83,7 @@ function HeroPhase({ state, hero, dispatch }) {
 
       <HeroAttack state={state} hero={hero} dispatch={dispatch} />
       <DisableTraps state={state} hero={hero} dispatch={dispatch} />
+      <ExtraAttacks state={state} dispatch={dispatch} />
 
       {hero.level === 1 && state.turn.natural20 === hero.id && (
         <Note tone="good">

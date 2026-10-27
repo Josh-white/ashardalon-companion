@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { HERO_COLORS, XP_TO_CANCEL_ENCOUNTER } from '../data/heroes.js'
-import { ENCOUNTER_LABELS, heroAc } from '../state/game.js'
+import { heroAc, reactionsFor } from '../data/powerEffects.js'
+import { ENCOUNTER_LABELS } from '../state/game.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { DrawMonsterButton, HeroPicker } from './MonsterTurns.jsx'
@@ -166,6 +167,34 @@ export function PassMonsters({ state, dispatch, only }) {
   )
 }
 
+// Perseverance: cancelling costs 1 XP less for each hero on the cleric's tile.
+export function Perseverance({ state, dispatch }) {
+  const [offer] = reactionsFor(state.heroes, 'perseverance')
+  if (!offer) return null
+  const { hero, power } = offer
+  return (
+    <div className="mt-3">
+      <p className="text-base text-zinc-300">
+        {hero.name}'s Perseverance makes it cheaper. How many heroes are on {hero.name}'s tile, counting {hero.name}?
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {state.heroes.map((_, i) => {
+          const cost = Math.max(0, XP_TO_CANCEL_ENCOUNTER - (i + 1))
+          return (
+            <Button
+              key={i}
+              disabled={state.xp < cost}
+              onClick={() => dispatch({ type: 'CANCEL_ENCOUNTER', perseverance: { heroId: hero.id, powerId: power.id, heroesOnTile: i + 1 } })}
+            >
+              {i + 1} → {cost} XP
+            </Button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 const RESOLVE_LABELS = {
   curse: (hero) => `Put the curse on ${hero.name}`,
   environment: () => 'Put it in play',
@@ -207,6 +236,7 @@ function EncounterCard({ state, hero, dispatch }) {
           Spend {XP_TO_CANCEL_ENCOUNTER} XP to cancel it (party has {state.xp})
         </Button>
       )}
+      {!attacked && <Perseverance state={state} dispatch={dispatch} />}
 
       {placesMarker && !markerChecked && !attacked ? (
         <div>
@@ -285,6 +315,7 @@ export function EncounterStep({ state, hero, dispatch }) {
         <Button className="mt-2" disabled={state.xp < XP_TO_CANCEL_ENCOUNTER} onClick={() => dispatch({ type: 'CANCEL_ENCOUNTER' })}>
           Spend {XP_TO_CANCEL_ENCOUNTER} XP to cancel the encounter
         </Button>
+        <Perseverance state={state} dispatch={dispatch} />
       </div>
     )
   }

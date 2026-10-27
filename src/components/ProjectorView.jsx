@@ -1,7 +1,7 @@
 import { HERO_COLORS } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
 import { EnvironmentBanner } from './Encounters.jsx'
-import { heroAc } from '../state/game.js'
+import { heroAc } from '../data/powerEffects.js'
 import { HpBar } from './ui.jsx'
 
 // A read-only screen for the projector: big enough to read across the room,

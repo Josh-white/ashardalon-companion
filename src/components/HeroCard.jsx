@@ -1,11 +1,102 @@
+import { useState } from 'react'
 import { CONDITIONS, HERO_COLORS, XP_TO_LEVEL_UP } from '../data/heroes.js'
-import { heroAc } from '../state/game.js'
+import { heroAc } from '../data/powerEffects.js'
 import { useCards } from '../state/useCards.js'
+import { MonsterChoice } from './Pickers.jsx'
 import PowerList from './PowerList.jsx'
 import { Button, Chip, HpBar } from './ui.jsx'
 
+// Blade Barrier and Flaming Sphere tokens deal 1 damage to the monsters you tap.
+function TokenDamage({ state, hero, source, label, prompt, many, disabled, dispatch }) {
+  const [open, setOpen] = useState(false)
+  const [chosen, setChosen] = useState([])
+  const tap = (id) => setChosen((list) => (many ? (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]) : [id]))
+  const close = () => {
+    setOpen(false)
+    setChosen([])
+  }
+  if (!open) {
+    return (
+      <Button className="w-full text-left" disabled={disabled || state.monsters.length === 0} onClick={() => setOpen(true)}>
+        {label}
+      </Button>
+    )
+  }
+  return (
+    <div className="space-y-2 rounded-xl border border-red-700 bg-zinc-950/80 p-3">
+      <p className="text-zinc-200">{prompt}</p>
+      <MonsterChoice state={state} chosen={chosen} onToggle={tap} />
+      <div className="flex gap-2">
+        <Button
+          variant="danger"
+          className="flex-1"
+          disabled={chosen.length === 0}
+          onClick={() => {
+            dispatch({ type: 'POWER_DAMAGE', source, heroId: hero.id, monsterIds: chosen })
+            close()
+          }}
+        >
+          1 damage{chosen.length > 1 ? ' each' : ''}
+        </Button>
+        <Button variant="ghost" onClick={close}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+// What the hero's powers have left on them: shields, mirror images, tokens on the board.
+function PowerMarkers({ state, hero, dispatch }) {
+  const tokens = hero.tokens ?? {}
+  const caster = state.heroes.find((h) => h.id === hero.shieldedBy)
+  const lines = [
+    caster && `🛡️ +2 AC from ${caster.name}'s Cleric's Shield`,
+    tokens.mirrorImage > 0 && `🪞 ${tokens.mirrorImage} mirror image${tokens.mirrorImage > 1 ? 's' : ''}: +${2 * tokens.mirrorImage} AC. A miss pops one.`,
+    tokens.invisible && "👻 Invisible: monsters don't count you as the closest hero until your next turn.",
+    tokens.refuge && '✨ In the Astral Refuge: off the board until your next turn.',
+  ].filter(Boolean)
+  if (lines.length === 0 && !(tokens.bladeBarrier > 0) && !(tokens.flamingSphere > 0)) return null
+  return (
+    <div className="mt-3 space-y-2">
+      {lines.map((line) => (
+        <p key={line} className="rounded-lg bg-zinc-950/60 px-3 py-2 text-sm text-sky-200">
+          {line}
+        </p>
+      ))}
+      {tokens.bladeBarrier > 0 && (
+        <TokenDamage
+          state={state}
+          hero={hero}
+          dispatch={dispatch}
+          source="bladeBarrier"
+          label={`🗡️ Blade Barrier (${tokens.bladeBarrier} left): a monster was put on one`}
+          prompt="Which monster landed on a Blade Barrier token? Take that token off the board."
+        />
+      )}
+      {tokens.flamingSphere > 0 && (
+        <TokenDamage
+          state={state}
+          hero={hero}
+          dispatch={dispatch}
+          source="flamingSphere"
+          many
+          disabled={state.turn.sphereBurned}
+          label={
+            state.turn.sphereBurned
+              ? `🔥 Flaming Sphere (${tokens.flamingSphere} left): already burned this turn`
+              : `🔥 Flaming Sphere (${tokens.flamingSphere} left): burn its tile`
+          }
+          prompt="Tap every monster on the Flaming Sphere's tile. Take 1 sphere token off. Do this at the end of your Hero Phase."
+        />
+      )}
+    </div>
+  )
+}
+
 // natural20: this hero rolled a natural 20 on an attack this turn, the one time it can level up.
-export default function HeroCard({ hero, isActive, xp, surges, dispatch, powersInTurnGuide = false, natural20 = false }) {
+// state: the whole game, for powers that pick another hero or a monster. Optional.
+export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, powersInTurnGuide = false, natural20 = false }) {
   const color = HERO_COLORS[hero.color]
   const down = hero.hp === 0
   const abilities = (useCards().abilities ?? []).filter((a) => a.hero === hero.key && a.level <= hero.level)
@@ -28,7 +119,7 @@ export default function HeroCard({ hero, isActive, xp, surges, dispatch, powersI
           </p>
         </div>
         <div className="text-right text-sm text-zinc-400">
-          <div>AC {heroAc(hero)}{heroAc(hero) !== hero.ac && <span className="text-red-400"> (cursed)</span>}</div>
+          <div>AC {heroAc(hero)}{(hero.curses ?? []).some((c) => c.card?.acPenalty) && <span className="text-red-400"> (cursed)</span>}</div>
           <div>Speed {hero.speed}</div>
         </div>
       </div>
@@ -84,7 +175,9 @@ export default function HeroCard({ hero, isActive, xp, surges, dispatch, powersI
         </ul>
       )}
 
-      <PowerList hero={hero} dispatch={dispatch} tilesHidden={powersInTurnGuide} />
+      {state && <PowerMarkers state={state} hero={hero} dispatch={dispatch} />}
+
+      <PowerList state={state} hero={hero} dispatch={dispatch} tilesHidden={powersInTurnGuide} />
 
       <div className="mt-3 flex flex-wrap gap-2">
         {CONDITIONS.map((condition) => (

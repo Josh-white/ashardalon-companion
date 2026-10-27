@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { normalizeCardFile } from '../data/cards.js'
-import { createHero, gameReducer, heroAc, heroAttackPenalty, initialState } from './game.js'
+import { heroAc, heroAttackPenalty } from '../data/powerEffects.js'
+import { createHero, gameReducer, initialState } from './game.js'
 
 const startGame = (count = 2) =>
   gameReducer(initialState, { type: 'START_GAME', heroes: HERO_TEMPLATES.slice(0, count).map((t) => createHero(t)) })

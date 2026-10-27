@@ -36,6 +36,10 @@ Changes show up the next time an iPad reloads the page; no restart needed. Cards
 - `suggested`: optional, `true` for the rulebook's suggested picks. They're filled in on the setup screen, and players can swap them.
 - `always`: optional, `true` for a power the hero card always gives (Keyleth's Lay on Hands). It's filled in and can't be swapped.
 
+### What powers do
+
+The app knows what each of the 50 powers in the box does besides its attack roll (healing, Cleric's Shield, Inspiring Advice, Mirror Image and so on) and does it for you. It finds a power by its `name`, so keep the names as they are on the cards. The list is in `src/data/powerEffects.js`, in short words of our own. A power the app doesn't know still works; it just flips over when used.
+
 ### Hero abilities (optional)
 
 Abilities printed on a hero card show under the hero's name. Use `"level": 2` for ones only on the 2nd-level side.
