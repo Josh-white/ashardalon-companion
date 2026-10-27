@@ -10,6 +10,7 @@ import UndoButton from './components/UndoButton.jsx'
 import { Button, HpBar } from './components/ui.jsx'
 import { HERO_COLORS } from './data/heroes.js'
 import { PHASES } from './data/phases.js'
+import { randomNumbers } from './state/random.js'
 import { useDeviceId, useSeat, useSharedGame } from './state/useSharedGame.js'
 
 const TABLE_SEAT = 'table'
@@ -234,7 +235,7 @@ export default function App() {
           dispatch={dispatch}
           deviceId={deviceId}
           onClaim={setSeat}
-          onDemo={(picks) => dispatch({ type: 'START_DEMO', picks })}
+          onDemo={(picks, monsterCards) => dispatch({ type: 'START_DEMO', picks, monsterCards, random: randomNumbers(128) })}
           watchOnly={seat === PROJECTOR_SEAT}
           onProjector={() => setSeat(PROJECTOR_SEAT)}
           onLeaveProjector={() => setSeat(null)}

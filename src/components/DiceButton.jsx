@@ -1,10 +1,5 @@
+import { rollD20 } from '../state/random.js'
 import { Button } from './ui.jsx'
-
-function rollD20() {
-  const values = new Uint32Array(1)
-  crypto.getRandomValues(values)
-  return (values[0] % 20) + 1
-}
 
 export default function DiceButton({ heroId, dispatch, className = '' }) {
   return (

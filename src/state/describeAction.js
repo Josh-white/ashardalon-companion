@@ -28,6 +28,10 @@ export function describeAction(state, action) {
       return hero ? `${hero.name}'s level up` : 'Level up'
     case 'ADD_MONSTER':
       return `Adding ${action.name}`
+    case 'DRAW_MONSTER':
+      return 'Drawing a monster'
+    case 'MONSTER_ATTACK':
+      return monster ? `${monster.name}'s attack` : 'Monster attack'
     case 'DEFEAT_MONSTER':
       return monster ? `Defeating ${monster.name}` : 'Defeated monster'
     case 'REMOVE_MONSTER':

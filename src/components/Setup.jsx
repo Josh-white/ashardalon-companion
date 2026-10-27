@@ -251,7 +251,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
       {!watchOnly && (
         <p className="text-center text-sm text-zinc-500">
           Just trying things out?{' '}
-          <button type="button" className="font-semibold text-amber-400 underline" onClick={() => onDemo(demoPicks(cards.powers))}>
+          <button type="button" className="font-semibold text-amber-400 underline" onClick={() => onDemo(demoPicks(cards.powers), cards.monsters)}>
             Start a demo game
           </button>{' '}
           with all five heroes and a few monsters.

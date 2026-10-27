@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { HERO_COLORS, XP_TO_CANCEL_ENCOUNTER } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
+import MonsterTurns, { DrawMonsterButton } from './MonsterTurns.jsx'
 import { PowerTile } from './PowerList.jsx'
 import { Button } from './ui.jsx'
 
@@ -83,15 +84,22 @@ export default function TurnGuide({ state, dispatch }) {
         </div>
       )}
 
+      {current.key === 'exploration' && (
+        <DrawMonsterButton state={state} heroId={hero.id} dispatch={dispatch} className="mt-4 w-full" />
+      )}
+
       {current.key === 'villain' && (
-        <div className="mt-3">
-          <Button
-            disabled={state.xp < XP_TO_CANCEL_ENCOUNTER}
-            onClick={() => dispatch({ type: 'CANCEL_ENCOUNTER' })}
-          >
-            Spend {XP_TO_CANCEL_ENCOUNTER} XP to cancel the encounter
-          </Button>
-        </div>
+        <>
+          <div className="mt-3">
+            <Button
+              disabled={state.xp < XP_TO_CANCEL_ENCOUNTER}
+              onClick={() => dispatch({ type: 'CANCEL_ENCOUNTER' })}
+            >
+              Spend {XP_TO_CANCEL_ENCOUNTER} XP to cancel the encounter
+            </Button>
+          </div>
+          <MonsterTurns key={stepKey} state={state} dispatch={dispatch} hero={hero} />
+        </>
       )}
 
       <div className="mt-6 flex items-center justify-between gap-3">

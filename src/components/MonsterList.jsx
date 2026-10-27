@@ -63,8 +63,13 @@ function MonsterRow({ monster, owner, isActiveOwner, dispatch }) {
         <div>
           <h3 className="font-display text-xl font-bold text-red-300">{monster.name}</h3>
           <p className="text-sm text-zinc-400">
-            {owner ? `${owner.name}'s card` : 'No owner'} · worth {monster.xp} XP
+            {owner ? `${owner.name}'s card` : 'No owner'} · {monster.ac ? `AC ${monster.ac} · ` : ''}worth {monster.xp} XP
           </p>
+          {monster.card?.figures > 1 && (
+            <p className="text-sm text-amber-400">
+              {monster.card.figures} figures with {monster.card.hp} HP each. XP comes when the last one falls.
+            </p>
+          )}
         </div>
         <Button variant="ghost" className="text-sm" onClick={() => dispatch({ type: 'REMOVE_MONSTER', monsterId: monster.id })}>
           Remove

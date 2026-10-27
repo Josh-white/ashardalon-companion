@@ -26,6 +26,8 @@ export const initialState = {
   moment: null, // the latest big moment, shown on every screen for a few seconds
   // Before the game starts, each iPad claims one hero and picks its powers here.
   lobby: [], // { deviceId, heroKey, player, picks: [card | null] per power slot, ready }
+  // The virtual monster deck, built from the monster cards on the first draw.
+  monsterDeck: null, // { cards: { [cardId]: card }, draw: [cardId], discard: [cardId] }
 }
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
@@ -55,6 +57,113 @@ const updateMonster = (state, monsterId, change) => ({
 })
 
 const toggle = (list, item) => (list.includes(item) ? list.filter((x) => x !== item) : [...list, item])
+
+// Shuffles with random numbers the device sent along (0 ≤ n < 1), so every
+// device and the server agree on the result and Undo puts the deck back.
+export function shuffle(list, random = []) {
+  const out = [...list]
+  for (let i = out.length - 1; i > 0; i--) {
+    const r = Number(random[i])
+    const j = Number.isFinite(r) && r >= 0 && r < 1 ? Math.floor(r * (i + 1)) : i
+    ;[out[i], out[j]] = [out[j], out[i]]
+  }
+  return out
+}
+
+function buildMonsterDeck(cards = [], random) {
+  const byId = Object.fromEntries(cards.map((card) => [card.id, card]))
+  const ids = cards.flatMap((card) => Array.from({ length: card.copies ?? 1 }, () => card.id))
+  return { cards: byId, draw: shuffle(ids, random), discard: [] }
+}
+
+// A monster in play, with the card copied in so its tactics and attacks travel with it.
+function monsterFromCard(card, ownerId) {
+  const figures = card.figures ?? 1
+  return {
+    id: newId('monster'),
+    cardId: card.id,
+    name: card.name,
+    maxHp: card.hp * figures,
+    hp: card.hp * figures,
+    ac: card.ac,
+    xp: card.xp,
+    ownerId,
+    conditions: [],
+    card: { hp: card.hp, figures, special: card.special ?? '', attacks: card.attacks, tactics: card.tactics },
+  }
+}
+
+// Draws the top monster card for a hero, reshuffling the discards when the pile runs out.
+function drawMonster(state, heroId, random) {
+  const hero = state.heroes.find((h) => h.id === heroId)
+  const deck = state.monsterDeck
+  if (!hero || !deck) return state
+  let { draw, discard } = deck
+  let next = state
+  if (draw.length === 0) {
+    if (discard.length === 0) return withLog(state, 'Every monster card is already in play.')
+    draw = shuffle(discard, random)
+    discard = []
+    next = withLog(next, 'The monster discards were shuffled into a new deck.')
+  }
+  const card = deck.cards[draw[0]]
+  if (!card) return state
+  const monster = monsterFromCard(card, hero.id)
+  const figures = monster.card.figures
+  next = {
+    ...next,
+    monsterDeck: { ...deck, draw: draw.slice(1), discard },
+    monsters: [...next.monsters, monster],
+  }
+  return withMoment(withLog(next, `${heroLabel(hero)} drew a ${card.name}!`), {
+    kind: 'spawn',
+    heroId: hero.id,
+    title: figures > 1 ? `${figures} ${card.name}s appear!` : `A ${card.name} appears!`,
+    detail: figures > 1 ? `Place ${figures} ${card.name} figures on the new tile.` : 'Place its figure on the new tile.',
+  })
+}
+
+const discardMonsterCard = (state, monster) =>
+  monster.cardId && state.monsterDeck
+    ? { ...state, monsterDeck: { ...state.monsterDeck, discard: [...state.monsterDeck.discard, monster.cardId] } }
+    : state
+
+// One monster attack against one or more heroes. Each target comes with the d20 the
+// device rolled for it. A hit deals the damage and conditions; a miss deals the miss damage.
+function monsterAttack(state, action) {
+  const monster = state.monsters.find((m) => m.id === action.monsterId)
+  const attack = monster?.card?.attacks.find((a) => a.id === action.attackId)
+  const targets = (Array.isArray(action.targets) ? action.targets : []).filter(
+    (t) => state.heroes.some((h) => h.id === t.heroId) && Number.isInteger(t.roll) && t.roll >= 1 && t.roll <= 20,
+  )
+  if (!attack || targets.length === 0) return state
+
+  let next = state
+  const rolls = []
+  const downed = []
+  for (const { heroId, roll } of targets) {
+    const hero = next.heroes.find((h) => h.id === heroId)
+    const total = roll + attack.bonus
+    const hit = total >= hero.ac
+    const damage = hit ? attack.damage : attack.miss
+    const conditions = hit ? attack.conditions.filter((c) => !hero.conditions.includes(c)) : []
+    const hp = clamp(hero.hp - damage, 0, hero.maxHp)
+    next = updateHero(next, hero.id, (h) => ({ hp, conditions: [...h.conditions, ...conditions] }))
+    if (hero.hp > 0 && hp === 0) downed.push(hero.name)
+    const result = [damage > 0 && `${damage} damage`, ...conditions].filter(Boolean).join(' and ')
+    const outcome = hit ? `Hit! ${result || 'No damage'}` : damage > 0 ? `Miss, but ${result}` : 'Miss!'
+    rolls.push({ heroId: hero.id, value: roll, total, ac: hero.ac, hit, outcome })
+    next = withLog(next, `${monster.name}'s ${attack.name} vs ${hero.name}: ${roll} + ${attack.bonus} = ${total} vs AC ${hero.ac}. ${outcome}`)
+  }
+  for (const name of downed) next = withLog(next, `${name} is down!`)
+  return withMoment(next, {
+    kind: downed.length > 0 ? 'monster-down' : 'monster',
+    monsterId: monster.id,
+    title: `${monster.name}: ${attack.name}!`,
+    detail: downed.length > 0 ? `${downed.join(' and ')} ${downed.length > 1 ? 'are' : 'is'} down!` : '',
+    rolls,
+  })
+}
 
 // Each hero card names one power the hero always has (Keyleth's Lay on Hands, Tarak's
 // Furious Assault), plus 1 utility, 2 at-wills, and 1 daily to choose. Most fixed powers
@@ -185,13 +294,19 @@ export function gameReducer(state, action) {
       const monster = (name, hp, xp, owner) => ({
         id: newId('monster'), name, maxHp: hp, hp, xp, ownerId: heroes[owner].id, conditions: [],
       })
-      const demo = {
+      let demo = {
         ...initialState,
         status: 'playing',
         heroes,
         monsters: [monster('Kobold Dragonshield', 2, 1, 0), monster('Orc Smasher', 2, 2, 2), monster('Grell', 2, 2, 4)],
         xp: 3,
         turn: { ...initialState.turn, round: 2 },
+      }
+      // With monster cards, the demo's monsters come off the virtual deck instead.
+      if (action.monsterCards?.length > 0) {
+        demo = { ...demo, monsters: [], monsterDeck: buildMonsterDeck(action.monsterCards, action.random) }
+        for (const owner of [0, 2, 4]) demo = drawMonster(demo, heroes[owner].id, action.random)
+        demo = { ...demo, log: [], moment: null }
       }
       return withLog(demo, 'A demo game begins. Nothing here is your real game.')
     }
@@ -301,6 +416,15 @@ export function gameReducer(state, action) {
       return withLog({ ...state, monsters: [...state.monsters, monster] }, `${monster.name} appeared!`)
     }
 
+    case 'DRAW_MONSTER': {
+      // The deck is built from the card file the first time anyone draws.
+      const withDeck = state.monsterDeck ? state : { ...state, monsterDeck: buildMonsterDeck(action.cards, action.random) }
+      return drawMonster(withDeck, action.heroId, action.random)
+    }
+
+    case 'MONSTER_ATTACK':
+      return monsterAttack(state, action)
+
     case 'ADJUST_MONSTER_HP':
       return updateMonster(state, action.monsterId, (m) => ({ hp: clamp(m.hp + action.amount, 0, m.maxHp) }))
 
@@ -310,11 +434,10 @@ export function gameReducer(state, action) {
     case 'DEFEAT_MONSTER': {
       const monster = state.monsters.find((m) => m.id === action.monsterId)
       if (!monster) return state
-      const next = {
-        ...state,
-        xp: state.xp + monster.xp,
-        monsters: state.monsters.filter((m) => m.id !== monster.id),
-      }
+      const next = discardMonsterCard(
+        { ...state, xp: state.xp + monster.xp, monsters: state.monsters.filter((m) => m.id !== monster.id) },
+        monster,
+      )
       return withMoment(withLog(next, `The ${monster.name} was defeated! +${monster.xp} XP`), {
         kind: 'defeat',
         title: `${monster.name} defeated!`,
@@ -322,8 +445,11 @@ export function gameReducer(state, action) {
       })
     }
 
-    case 'REMOVE_MONSTER':
-      return { ...state, monsters: state.monsters.filter((m) => m.id !== action.monsterId) }
+    case 'REMOVE_MONSTER': {
+      const monster = state.monsters.find((m) => m.id === action.monsterId)
+      if (!monster) return state
+      return discardMonsterCard({ ...state, monsters: state.monsters.filter((m) => m.id !== monster.id) }, monster)
+    }
 
     case 'ADJUST_XP':
       return { ...state, xp: Math.max(0, state.xp + action.amount) }

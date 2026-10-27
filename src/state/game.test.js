@@ -221,3 +221,92 @@ describe('hero lobby', () => {
     expect(gameReducer(state, { type: 'CLAIM_HERO', deviceId: 'a', heroKey: 'paladin' })).toBe(state)
   })
 })
+
+describe('monster deck', () => {
+  // Made-up cards in the card file's shape, so the tests don't need the real ones.
+  const snake = {
+    id: 'snake', name: 'Snake', copies: 2, ac: 13, hp: 1, xp: 1, figures: 1,
+    attacks: [{ id: 'bite', name: 'Bite', bonus: 7, damage: 0, miss: 0, conditions: ['Poisoned'] }],
+    tactics: [{ when: 'within1', move: 'adjacent', attack: 'bite', targets: 'one' }, { move: 'toward' }],
+  }
+  const devils = {
+    id: 'devil', name: 'Devil', copies: 1, ac: 16, hp: 1, xp: 3, figures: 3,
+    attacks: [{ id: 'sword', name: 'Sword', bonus: 11, damage: 2, miss: 1, conditions: [] }],
+    tactics: [{ move: 'toward' }],
+  }
+  // With no random numbers the deck isn't shuffled, so the cards come off in file order.
+  const draw = (state, heroIndex = 0, cards = [snake, devils]) =>
+    gameReducer(state, { type: 'DRAW_MONSTER', heroId: state.heroes[heroIndex].id, cards, random: [] })
+
+  it('builds the deck on the first draw and gives the card to the hero who drew it', () => {
+    const state = draw(startGame(), 1)
+    expect(state.monsterDeck.draw).toHaveLength(2)
+    expect(state.monsters).toHaveLength(1)
+    expect(state.monsters[0]).toMatchObject({ ownerId: state.heroes[1].id, cardId: expect.any(String) })
+    expect(state.moment.kind).toBe('spawn')
+  })
+
+  it('makes one monster with every figure for a group card', () => {
+    const state = draw(startGame(), 0, [devils])
+    expect(state.monsters[0]).toMatchObject({ name: 'Devil', hp: 3, maxHp: 3, ac: 16, xp: 3 })
+  })
+
+  it('discards defeated monsters and reshuffles them when the deck runs out', () => {
+    let state = startGame()
+    for (let i = 0; i < 3; i++) state = draw(state)
+    expect(state.monsterDeck.draw).toEqual([])
+    expect(draw(state).log[0].text).toMatch(/already in play/)
+    state = gameReducer(state, { type: 'DEFEAT_MONSTER', monsterId: state.monsters[0].id })
+    state = gameReducer(state, { type: 'REMOVE_MONSTER', monsterId: state.monsters[0].id })
+    expect(state.monsterDeck.discard).toHaveLength(2)
+    state = draw(state)
+    expect(state.monsters).toHaveLength(2)
+    expect(state.monsterDeck).toMatchObject({ discard: [] })
+    expect(state.monsterDeck.draw).toHaveLength(1)
+  })
+
+  it('rolls monster attacks against hero AC and applies damage and conditions', () => {
+    let state = draw(startGame(), 0, [devils])
+    const [quinn, vistra] = state.heroes
+    const devil = state.monsters[0]
+    state = gameReducer(state, {
+      type: 'MONSTER_ATTACK',
+      monsterId: devil.id,
+      attackId: 'sword',
+      // 5 + 11 = 16 hits Quinn (AC 16); 5 + 11 misses Vistra (AC 17) but still deals the miss damage.
+      targets: [{ heroId: quinn.id, roll: 5 }, { heroId: vistra.id, roll: 5 }],
+    })
+    expect(state.heroes[0].hp).toBe(quinn.hp - 2)
+    expect(state.heroes[1].hp).toBe(vistra.hp - 1)
+    expect(state.moment.rolls.map((r) => r.hit)).toEqual([true, false])
+  })
+
+  it('adds a condition on a hit', () => {
+    let state = draw(startGame())
+    expect(state.monsters[0].name).toBe('Snake')
+    state = gameReducer(state, { type: 'MONSTER_ATTACK', monsterId: state.monsters[0].id, attackId: 'bite', targets: [{ heroId: state.heroes[0].id, roll: 20 }] })
+    expect(state.heroes[0].conditions).toEqual(['Poisoned'])
+  })
+
+  it('says when a monster attack knocks a hero down', () => {
+    let state = draw(startGame(), 0, [devils])
+    state = gameReducer(state, { type: 'ADJUST_HP', heroId: state.heroes[0].id, amount: -7 })
+    state = gameReducer(state, { type: 'MONSTER_ATTACK', monsterId: state.monsters[0].id, attackId: 'sword', targets: [{ heroId: state.heroes[0].id, roll: 19 }] })
+    expect(state.heroes[0].hp).toBe(0)
+    expect(state.moment.kind).toBe('monster-down')
+  })
+
+  it('ignores attacks with bad rolls or unknown attacks', () => {
+    const state = draw(startGame())
+    const monsterId = state.monsters[0].id
+    expect(gameReducer(state, { type: 'MONSTER_ATTACK', monsterId, attackId: 'nope', targets: [{ heroId: state.heroes[0].id, roll: 5 }] })).toBe(state)
+    expect(gameReducer(state, { type: 'MONSTER_ATTACK', monsterId, attackId: 'bite', targets: [{ heroId: state.heroes[0].id, roll: 21 }] })).toBe(state)
+  })
+
+  it('starts the demo with monsters from the deck when it has cards', () => {
+    const state = gameReducer(initialState, { type: 'START_DEMO', monsterCards: [snake, devils], random: [] })
+    expect(state.monsters).toHaveLength(3)
+    expect(state.monsters.every((m) => m.card)).toBe(true)
+    expect(state.monsterDeck.draw).toHaveLength(0)
+  })
+})
