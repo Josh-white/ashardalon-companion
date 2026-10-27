@@ -3,6 +3,7 @@ import { aliveVillagers } from '../state/adventure.js'
 import { foes } from '../state/game.js'
 import { rollD20 } from '../state/random.js'
 import { DrawMonsterButton } from './MonsterTurns.jsx'
+import { DrawTileButton } from './Tiles.jsx'
 import { Button, HpBar } from './ui.jsx'
 
 const rollRange = (card) => `${card.roll[0]}–${card.roll[1]}`
@@ -81,6 +82,7 @@ function VillagerSteps({ state, villager, hero, dispatch }) {
       ) : (
         <>
           <p className="text-xl text-zinc-100">{step.say}</p>
+          {step.draw && <DrawTileButton state={state} dispatch={dispatch} drawKey={`villager-${villager.id}`} from="bottom" />}
           {step.draw && <DrawMonsterButton state={state} heroId={hero.id} dispatch={dispatch} className="w-full" label="🐉 Draw a monster for that tile" />}
           {step.attack && !turnRoll.attacked && (
             <div className="space-y-2">

@@ -3,6 +3,8 @@ import { HERO_COLORS } from '../data/heroes.js'
 import { DOOR_UNLOCK_ROLL, FEATURE_LABELS, MAX_SURGES, MIN_SURGES, escapeBlockers, goalParts, missingFeatures, playableChambers, revealsReady, usesDoors } from '../state/adventure.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
+import { tileSpots } from '../state/tiles.js'
+import { TileSetup } from './Tiles.jsx'
 import { Button, Chip } from './ui.jsx'
 import { VillagerList } from './Villagers.jsx'
 
@@ -49,6 +51,8 @@ export function AdventurePicker({ state, dispatch }) {
         ))}
       </div>
 
+      <TileSetup state={state} dispatch={dispatch} />
+
       {chosen && <AdventureSetup adventure={chosen} />}
     </section>
   )
@@ -71,6 +75,12 @@ function AdventureOption({ active, disabled, title, detail, players, onClick }) 
   )
 }
 
+const TILE_STACK_STEP = /dungeon tile stack|into the stack|the stack after/i
+function tileStackStep(adventure) {
+  const special = tileSpots(adventure).map((s) => s.tile)
+  return `Shuffle the ordinary dungeon tiles into a stack.${special.length > 0 ? ` Keep the ${special.join(' and the ')} to the side. The app says when ${special.length > 1 ? 'each one turns' : 'it turns'} up.` : ''}`
+}
+
 // What to put on the table before entering the dungeon.
 function AdventureSetup({ adventure }) {
   return (
@@ -83,9 +93,14 @@ function AdventureSetup({ adventure }) {
         <>
           <h3 className="mt-3 font-semibold text-amber-400">Set up the table</h3>
           <ol className="mt-1 list-decimal space-y-1 pl-6 text-zinc-300">
-            {adventure.setup.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
+            {adventure.setup.map((step) =>
+              // The app runs the tile stack, so the book's tile-shuffling step changes.
+              TILE_STACK_STEP.test(step) ? (
+                <li key={step}>{tileStackStep(adventure)}</li>
+              ) : (
+                <li key={step}>{step}</li>
+              ),
+            )}
           </ol>
         </>
       )}
@@ -267,7 +282,8 @@ export function AdventurePanel({ state, dispatch }) {
 // In the Exploration Phase: a button for each special tile the adventure is waiting for.
 export function RevealButtons({ state, dispatch }) {
   const { monsters, villains = [], chambers = [], villagers: villagerCards = [] } = useCards()
-  const tiles = revealsReady(state.adventure)
+  // With the tile stack, the app reveals special tiles itself when they're drawn.
+  const tiles = state.tileStack ? [] : revealsReady(state.adventure)
   const doors = usesDoors(state.adventure) && (
     <p className="mt-4 text-sm text-zinc-400">🚪 New tile with an open door symbol? Put the top Closed Door token on it, face down.</p>
   )

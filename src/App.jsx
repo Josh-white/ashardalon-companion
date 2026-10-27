@@ -11,6 +11,7 @@ import Recap from './components/Recap.jsx'
 import SeatPicker from './components/SeatPicker.jsx'
 import Setup from './components/Setup.jsx'
 import { TreasureStep } from './components/Treasure.jsx'
+import { TilesLeft } from './components/Tiles.jsx'
 import TurnGuide, { ExtraAttacks } from './components/TurnGuide.jsx'
 import UndoButton from './components/UndoButton.jsx'
 import { SoundToggle, TapForSound } from './components/SoundToggle.jsx'
@@ -50,6 +51,7 @@ function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitchSeat, s
           </span>
           <Button className="!px-2 !py-0" onClick={() => dispatch({ type: 'ADJUST_SURGES', amount: 1 })}>+</Button>
         </div>
+        <TilesLeft state={state} className="text-lg" />
         <div className="ml-auto flex flex-wrap gap-2">
           <UndoButton undo={undo} depth={undoDepth} dispatch={dispatch} className="max-w-56 truncate" />
           <SoundToggle on={sound.on} setOn={sound.setOn} className="text-sm" />
