@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { effectsOf, heroAc, maxRolls, POWER_EFFECT_NAMES } from '../data/powerEffects.js'
-import { createHero, gameReducer, initialState } from './game.js'
+import { canSpendAttack, createHero, gameReducer, initialState } from './game.js'
 import { heroStats } from './stats.js'
 
 // Quinn, Vistra, Keyleth, Tarak, Heskan, in turn order.
@@ -277,5 +277,57 @@ describe('Hypnotism', () => {
     const hit = (target) => attack(state, 4, 'at-will', [[target, 10]], { movedId: moved.id })
     expect(hit(moved)).toBe(state)
     expect(hit(other).monsters.map((m) => m.name)).toEqual(['Ogre'])
+  })
+})
+
+describe('hero card abilities', () => {
+  const withCondition = (state, i, condition) => ({
+    ...state,
+    heroes: state.heroes.map((h, n) => (n === i ? { ...h, conditions: [condition] } : h)),
+  })
+
+  it("Vistra's Cast-Iron Stomach adds 5 to the poison roll", () => {
+    const poisoned = (i) => ({ ...withCondition(start(), i, 'Poisoned'), turn: { heroIndex: i, phase: 0, round: 1 } })
+    expect(heroAt(gameReducer(poisoned(1), { type: 'NEXT_PHASE', roll: 6 }), 1).conditions).toEqual([])
+    expect(heroAt(gameReducer(poisoned(0), { type: 'NEXT_PHASE', roll: 6 }), 0).conditions).toEqual(['Poisoned'])
+  })
+
+  it("Quinn's Saving Grace lets a healed hero end a condition", () => {
+    let state = give(withCondition(hurt(start(), 1, 3), 1, 'Dazed'), 2, { name: 'Lay On Hands' }, 'utility')
+    const grace = (s) => gameReducer(s, { type: 'SAVING_GRACE', heroId: heroAt(s, 1).id, condition: 'Dazed' })
+    expect(grace(state)).toBe(state)
+    state = gameReducer(state, { type: 'USE_POWER', heroId: heroAt(state, 2).id, powerId: slot(state, 2, 'utility').id, heroIds: [heroAt(state, 1).id] })
+    state = grace(state)
+    expect(heroAt(state, 1).conditions).toEqual([])
+    expect(state.turn.abilityOffers.savingGrace).toEqual([])
+  })
+
+  it("Keyleth's Healing Hands adds 1 HP to a healing surge", () => {
+    const down = (s, i) => ({ ...s, heroes: s.heroes.map((h, n) => (n === i ? { ...h, hp: 0 } : h)) })
+    let state = down(start(), 2)
+    state = gameReducer(state, { type: 'USE_SURGE', heroId: heroAt(state, 2).id })
+    expect(heroAt(state, 2).hp).toBe(5)
+    state = gameReducer(down(state, 0), { type: 'USE_SURGE', heroId: heroAt(state, 0).id })
+    expect(heroAt(state, 0).hp).toBe(4)
+    state = gameReducer(state, { type: 'HEALING_HANDS', heroId: heroAt(state, 0).id })
+    expect(heroAt(state, 0).hp).toBe(5)
+    expect(gameReducer(state, { type: 'HEALING_HANDS', heroId: heroAt(state, 0).id })).toBe(state)
+  })
+
+  it("Tarak's Brutal Recovery flips Furious Assault back after a natural 20", () => {
+    let state = withMonsters(give(give(start(), 3, { name: 'Lucky Strike', attack: '+7', damage: '1' }), 3, { name: 'Furious Assault' }, 'utility'), [ogre])
+    state = give(state, 0, { name: 'Sacred Flame', attack: '+6', damage: '1' })
+    state = gameReducer(state, { type: 'TOGGLE_POWER', heroId: heroAt(state, 3).id, powerId: slot(state, 3, 'utility').id })
+    expect(gameReducer(attack(state, 0, 'at-will', [[state.monsters[0], 19]]), { type: 'BRUTAL_RECOVERY' }).heroes[3]).toEqual(heroAt(state, 3))
+    state = gameReducer(attack(state, 0, 'at-will', [[state.monsters[0], 20]]), { type: 'BRUTAL_RECOVERY' })
+    expect(slot(state, 3, 'utility').used).toBe(false)
+  })
+
+  it("Hurled Breath doesn't use up Heskan's attack", () => {
+    let state = withMonsters({ ...start(), turn: { heroIndex: 4, phase: 0, round: 1 } }, [ogre])
+    state = give(state, 4, { name: 'Hurled Breath', attack: '+5', damage: '1' }, 'daily')
+    state = attack(state, 4, 'daily', [[state.monsters[0], 2]])
+    expect(state.turn.lastAttack.free).toBe(true)
+    expect(canSpendAttack(state, heroAt(state, 4))).toBe(true)
   })
 })

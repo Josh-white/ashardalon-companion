@@ -16,9 +16,11 @@ import { itemAc } from './items.js'
 //   after       hit or miss: 'heal-tile' (1 HP to each hero on the tile), 'shield', 'pass-monster', 'at-will'.
 //   note        a reminder shown after the roll.
 //   keepOnMiss  a daily that isn't used up when it misses.
+//   free        doesn't use up the hero's attack (a trap can still be disabled after it).
 // Other powers have a `use`, done from the power's tile:
 //   healSelf, heal + pick ('other': one other hero), tokens, endCondition, refuge, invisible, causeFear, note.
-// `reaction` powers are offered where they happen: 'reroll', 'furious', 'dodge', 'evade', 'noble-shield', 'perseverance'.
+// `reaction` powers are offered where they happen: 'reroll', 'furious', 'dodge', 'evade', 'noble-shield', 'perseverance',
+// 'bravery' (offered when a monster activates, and still usable from its tile).
 const EFFECTS = {
   // Quinn, the cleric
   'Healing Hymn': { use: { healSelf: 2, heal: 2, pick: 'other', optional: true, prompt: 'Who else on your tile gets 2 HP?' } },
@@ -56,7 +58,7 @@ const EFFECTS = {
   'Arcing Smite': { targets: 2 },
   'Benign Transposition': { before: 'First swap places with a hero within 2 tiles.' },
   'Righteous Smite': { after: 'heal-tile' },
-  Bravery: { use: { healSelf: 1, note: 'Put your hero next to the monster.' } },
+  Bravery: { use: { healSelf: 1, note: 'Put your hero next to the monster.' }, reaction: 'bravery' },
   'Noble Shield': { reaction: 'noble-shield' },
   "Virtue's Touch": { use: { endCondition: true, pick: 'other', prompt: 'Who is next to you?' } },
 
@@ -73,7 +75,7 @@ const EFFECTS = {
   'Tumbling Escape': { reaction: 'dodge' },
 
   // Heskan, the wizard
-  'Hurled Breath': { targets: 'any', note: "This doesn't count as your attack this turn." },
+  'Hurled Breath': { targets: 'any', free: true, note: "This doesn't count as your attack this turn." },
   'Arc Lightning': { targets: 2 },
   // The monster Heskan moves isn't hurt: the attack is against a monster it ends up next to.
   Hypnotism: { ask: 'moved-monster' },

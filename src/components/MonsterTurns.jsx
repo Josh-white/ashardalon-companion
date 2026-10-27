@@ -12,6 +12,15 @@ import { MonsterControl, TileGuardQuestion } from './Treasure.jsx'
 import { DrawTileButton } from './Tiles.jsx'
 import { Button } from './ui.jsx'
 
+// Keyleth's Bravery: when a monster within 1 tile of her activates, she can step next to it and heal 1.
+function Bravery({ state, name, dispatch }) {
+  return reactionsFor(state.heroes.filter((h) => !h.tokens?.refuge && h.hp > 0), 'bravery').map(({ hero, power }) => (
+    <Button key={power.id} className="w-full text-left" onClick={() => dispatch({ type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: [] })}>
+      🦁 {hero.name} uses Bravery (the {name} is within 1 tile of {hero.name}): put {hero.name} next to it and heal 1 HP
+    </Button>
+  ))
+}
+
 // Enough random numbers to shuffle the whole monster deck.
 const SHUFFLE_NUMBERS = 128
 
@@ -215,6 +224,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
           {nobody ? `No hero is on the board for the ${name} to go after.` : `Leave ${away.length > 1 ? 'them' : away[0].name} out when you answer.`}
         </p>
       )}
+      {!results && stepIndex === 0 && !answered && <Bravery state={state} name={name} dispatch={dispatch} />}
       {card.special && figure === 1 && stepIndex === 0 && !answered && (
         <p className="rounded-lg bg-zinc-900 p-2 text-sm text-zinc-400">{card.special}</p>
       )}
