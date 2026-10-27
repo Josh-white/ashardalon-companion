@@ -3,7 +3,7 @@
 
 // Bigger features an adventure can need. The picker only offers an adventure once the
 // app has every feature it needs; the others show what they're waiting for.
-export const SUPPORTED_FEATURES = []
+export const SUPPORTED_FEATURES = ['villains', 'chambers', 'doors']
 
 export const FEATURE_LABELS = {
   villains: 'villains',
@@ -18,6 +18,13 @@ export const FEATURE_LABELS = {
 
 export const missingFeatures = (adventure) => adventure.needs.filter((f) => !SUPPORTED_FEATURES.includes(f))
 export const isPlayable = (adventure) => missingFeatures(adventure).length === 0
+// Chamber cards work the same way: a card whose rules the app can't run yet stays out of the Chamber deck.
+export const playableChambers = (chambers) => (chambers ?? []).filter(isPlayable)
+
+// Adventures that use the door rules (Rulebook p. 15).
+export const usesDoors = (adventure) => Boolean(adventure?.card.needs.includes('doors'))
+export const DOOR_KINDS = ['unlocked', 'trapped', 'locked']
+export const DOOR_UNLOCK_ROLL = 10
 
 export const MIN_SURGES = 1
 export const MAX_SURGES = 3
@@ -37,6 +44,8 @@ export function newAdventure(card) {
     escaped: false,
     extraEncounters: 0, // encounter cards every Villain Phase on top of the usual ones
     onceSeen: [], // onceOnly monsters already drawn
+    lockedDoors: [], // Locked Doors still shut: { id }
+    chamber: null, // the chamber card once its entrance is revealed: { card, villain, objectivePlaced, done }
     won: false,
     story: story(card.title, card.story.start),
   }
@@ -69,6 +78,10 @@ export function onceOnlyDraw(state, card) {
 // The adventure's special tiles that haven't turned up yet.
 export const tilesToCome = (adventure) => (adventure ? adventure.card.reveals.filter((r) => !adventure.revealed.includes(r.tile)) : [])
 
+// The ones that can happen now: tiles in the Exploration Phase, doors (Secret Chamber) in the Hero Phase.
+export const revealsReady = (adventure, door = false) =>
+  tilesToCome(adventure).filter((r) => Boolean(r.door) === door && (!r.after || adventure.revealed.includes(r.after)))
+
 // The goal, split into the parts the app checks, each with whether it's done.
 export function goalParts(state) {
   const adventure = state.adventure
@@ -96,9 +109,38 @@ export function goalParts(state) {
     const villain = (state.villains ?? []).find((v) => sameName(v.name, name))
     parts.push({ key: `villain-${name}`, label: `Defeat the ${name}`, progress: villain?.defeated ? 'defeated' : villain ? 'in play' : 'not found yet', done: Boolean(villain?.defeated) })
   }
-  if (win.escape) parts.push({ key: 'escape', label: 'Escape the dungeon', progress: adventure.escaped ? 'escaped' : '', done: adventure.escaped })
+  if (win.chamber) parts.push(...chamberParts(state))
+  if (win.escape || adventure.chamber?.card.win.escape) {
+    parts.push({ key: 'escape', label: 'Escape the dungeon', progress: adventure.escaped ? 'escaped' : '', done: adventure.escaped })
+  }
   return parts
 }
+
+// The chamber card's goal, once the chamber is found.
+function chamberParts(state) {
+  const chamber = state.adventure.chamber
+  if (!chamber) return [{ key: 'chamber', label: 'Find the chamber', progress: 'not found yet', done: false }]
+  const { win } = chamber.card
+  const parts = []
+  if (win.chamberMonsters) {
+    const left = state.monsters.filter((m) => m.chamber).length
+    parts.push({ key: 'chamber-monsters', label: 'Defeat the monsters in the chamber', progress: left > 0 ? `${left} left` : 'all defeated', done: left === 0 })
+  }
+  if (win.villain && chamber.villain) {
+    const villain = (state.villains ?? []).find((v) => sameName(v.name, chamber.villain))
+    parts.push({ key: 'chamber-villain', label: `Defeat the ${chamber.villain}`, progress: villain?.defeated ? 'defeated' : 'in the chamber', done: Boolean(villain?.defeated) })
+  }
+  if (win.objective && chamber.card.objective) {
+    const { name } = chamber.card.objective
+    const standing = state.monsters.some((m) => m.objective)
+    parts.push({ key: 'chamber-objective', label: `Destroy the ${name}`, progress: standing ? 'still standing' : 'destroyed', done: chamber.objectivePlaced && !standing })
+  }
+  if (win.manual) parts.push({ key: 'chamber-manual', label: win.manual, progress: '', done: chamber.done })
+  return parts
+}
+
+// The goals still to do before the heroes can escape (escaping comes last).
+export const escapeBlockers = (state) => goalParts(state).filter((p) => p.key !== 'escape' && !p.done)
 
 export const goalMet = (state) => {
   const parts = goalParts(state)

@@ -2,8 +2,8 @@ import { HERO_COLORS, XP_TO_LEVEL_UP } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
 import { CurseNotes, PhaseChecks, DisableTraps, EncounterStep, EnvironmentBanner, PassMonsters, encountersLeft, TrapTurns } from './Encounters.jsx'
 import HeroAttack, { AttackAftermath } from './HeroAttack.jsx'
-import { RevealButtons } from './Adventure.jsx'
-import MonsterTurns, { DrawMonsterButton } from './MonsterTurns.jsx'
+import { Doors, RevealButtons } from './Adventure.jsx'
+import MonsterTurns, { DrawMonsterButton, VillainTurns } from './MonsterTurns.jsx'
 import { rollD20 } from '../state/random.js'
 import { checksFor, phaseChecks } from '../state/game.js'
 import { useCards } from '../state/useCards.js'
@@ -87,6 +87,7 @@ function HeroPhase({ state, hero, dispatch }) {
 
       <HeroAttack state={state} hero={hero} dispatch={dispatch} />
       <DisableTraps state={state} hero={hero} dispatch={dispatch} />
+      <Doors state={state} hero={hero} dispatch={dispatch} />
       <ExtraAttacks state={state} dispatch={dispatch} />
 
       {hero.level === 1 && state.turn.natural20 === hero.id && (
@@ -147,6 +148,7 @@ function VillainPhase({ state, hero, dispatch }) {
   return (
     <>
       <PhaseChecks state={state} hero={hero} phaseKey="exploration" dispatch={dispatch} />
+      <VillainTurns state={state} dispatch={dispatch} hero={hero} />
       {surrounded && (
         <Note tone="warn">
           <p>Surrounded! {hero.name} has no monster, so draw one and put it on the closest unexplored edge.</p>

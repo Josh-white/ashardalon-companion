@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { asksIfStayed, attackItems, distanceChoices, heroItems, itemsWithUse } from '../data/items.js'
 import { effectsOf, maxRolls, reactionsFor } from '../data/powerEffects.js'
 import { rollD20 } from '../state/random.js'
-import { powerNumber } from '../state/game.js'
+import { foes, powerNumber } from '../state/game.js'
 import { HeroChoice, MonsterChoice, monsterName } from './Pickers.jsx'
 import { Button } from './ui.jsx'
 
@@ -63,7 +63,7 @@ export function AttackAftermath({ state, last, dispatch }) {
   const item = heroItems(hero).find((i) => i.id === last.itemId)
   if (!hero || !(power || item)) return null
   const effects = effectsOf(power)
-  const alive = (row) => state.monsters.some((m) => m.id === row.monsterId)
+  const alive = (row) => foes(state).some((m) => m.id === row.monsterId)
   const advice = reactionsFor(state.heroes, 'reroll')
   // A Lucky Charm rerolls its owner's own miss.
   const charms = itemsWithUse([hero], 'reroll')
@@ -210,13 +210,14 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   const power = powers.find((p) => p.id === powerId) ?? (item && { ...item, type: 'item', card: { attack: `+${item.card.attack.bonus}`, damage: String(item.card.attack.damage), text: item.card.text } })
   const effects = effectsOf(item ? null : power)
   const limit = item ? 1 : power ? maxRolls(power) : 1
-  const unknownAc = state.monsters.find((m) => chosen.includes(m.id) && !m.ac)
+  const targets = foes(state)
+  const unknownAc = targets.find((m) => chosen.includes(m.id) && !m.ac)
   const needsAnswer =
     (effects.ask && Object.keys(answers).length === 0) || (distanceChoices(hero) && chosen.some((id) => !distances[id]))
   const last = state.turn.lastAttack
   const showResults = rolled && last && !last.bonus && last.heroId === hero.id
 
-  if (state.monsters.length === 0 && !showResults) {
+  if (targets.length === 0 && !showResults) {
     return extra ? null : <p className="mt-4 rounded-xl bg-zinc-950/50 p-3 text-zinc-400">No monsters to attack right now.</p>
   }
 
@@ -324,7 +325,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
                   </Button>
                 )}
               </div>
-              <MonsterChoice state={state} chosen={chosen} onToggle={tap} />
+              <MonsterChoice state={state} monsters={targets} chosen={chosen} onToggle={tap} />
               <BeforeQuestion hero={hero} effects={effects} answers={answers} setAnswers={setAnswers} />
               {chosen.length > 0 && (
                 <DistanceQuestion

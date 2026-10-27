@@ -15,7 +15,7 @@ export function normalizeCardFile(data) {
   const powers = []
   const seen = new Set()
   const list = Array.isArray(data?.powers) ? data.powers : null
-  if (!list) return { powers, abilities: [], monsters: [], encounters: [], adventures: [], treasures: [], problems: ['The file needs a "powers" list.'] }
+  if (!list) return { powers, abilities: [], monsters: [], villains: [], encounters: [], adventures: [], chambers: [], treasures: [], problems: ['The file needs a "powers" list.'] }
 
   list.forEach((card, i) => {
     const label = card?.name ? `"${card.name}"` : `power #${i + 1}`
@@ -48,8 +48,10 @@ export function normalizeCardFile(data) {
     powers,
     abilities: normalizeAbilities(data?.heroes, problems),
     monsters: normalizeMonsters(data?.monsters, problems),
+    villains: normalizeVillains(data?.villains, problems),
     encounters: normalizeEncounters(data?.encounters, problems),
     adventures: normalizeAdventures(data?.adventures, problems),
+    chambers: normalizeChambers(data?.chambers, problems),
     treasures: normalizeTreasures(data?.treasures, problems),
     problems,
   }
@@ -84,14 +86,89 @@ function normalizeAbilities(list, problems) {
   return abilities
 }
 
-// What a monster's tactics can ask about the board, in the order a card checks them.
-export const TACTIC_CHECKS = ['adjacent', 'sameTile', 'within1', 'within2', 'aloneByUnexploredEdge']
+// What a monster's (or villain's) tactics can ask about the board, in the order a card checks them.
+export const TACTIC_CHECKS = ['adjacent', 'adjacentMany', 'sameTile', 'tileWithMany', 'within1', 'within2', 'within3', 'aloneByUnexploredEdge']
 const MOVES = ['adjacent', 'toward']
+// Who a tactic attacks, or moves toward, when more than one hero fits.
+const TARGETS = ['closest', 'adjacent', 'mostHp', 'farthest']
+// Where a villain goes after its attack.
+const THEN_MOVES = ['within1', 'adjacent', 'away']
 const wholeNumber = (value, min = 0) => Number.isInteger(value) && value >= min
 
+// A card's attacks. Returns null (and notes the problem) if one is broken. Attacks that
+// share a `group` are one table: the Gauth's eye ray rolls a die to pick which one it uses.
+function parseAttacks(card, label, problems) {
+  const attacks = []
+  for (const attack of Array.isArray(card.attacks) ? card.attacks : []) {
+    if (!attack?.id || !attack.name || !wholeNumber(attack.bonus) || !wholeNumber(attack.damage ?? 0)) {
+      problems.push(`${label} has an attack that needs an "id", a "name", a "bonus" and a "damage".`)
+      return null
+    }
+    const roll = Array.isArray(attack.roll) && attack.roll.length === 2 && attack.roll.every((n) => wholeNumber(n, 1)) ? attack.roll : null
+    attacks.push({
+      id: String(attack.id),
+      name: String(attack.name),
+      bonus: attack.bonus,
+      damage: attack.damage ?? 0,
+      miss: wholeNumber(attack.miss) ? attack.miss : 0,
+      conditions: (Array.isArray(attack.conditions) ? attack.conditions : []).filter((c) => CONDITIONS.includes(c)),
+      // What else a hit does that the app leaves to the players, such as moving the hero.
+      effect: typeof attack.effect === 'string' ? attack.effect : '',
+      ...(typeof attack.group === 'string' && roll ? { group: attack.group, roll } : {}),
+    })
+  }
+  return attacks
+}
+
+// A card's tactics, as steps: the first step whose `when` is true happens, and a step
+// without `when` is the "Otherwise". Returns null (and notes the problem) if one is broken.
+function parseTactics(card, attacks, label, problems) {
+  const tactics = []
+  for (const step of Array.isArray(card.tactics) ? card.tactics : []) {
+    const fail = (text) => {
+      problems.push(`${label} has a tactic ${text}`)
+      return null
+    }
+    if (step?.when !== undefined && !TACTIC_CHECKS.includes(step.when)) return fail(`with when "${step.when}"; use one of ${TACTIC_CHECKS.join(', ')}.`)
+    if (step.attack !== undefined && !attacks.some((a) => a.id === step.attack || a.group === step.attack)) {
+      return fail(`that uses the attack "${step.attack}", which isn't on the card.`)
+    }
+    if (step.move !== undefined && !MOVES.includes(step.move)) return fail(`with move "${step.move}"; use one of ${MOVES.join(', ')}.`)
+    if (step.target !== undefined && !TARGETS.includes(step.target)) return fail(`with target "${step.target}"; use one of ${TARGETS.join(', ')}.`)
+    if (step.then !== undefined && !THEN_MOVES.includes(step.then)) return fail(`with then "${step.then}"; use one of ${THEN_MOVES.join(', ')}.`)
+    tactics.push({
+      when: step.when ?? null,
+      move: step.move ?? null,
+      attack: step.attack ?? null,
+      targets: step.targets === 'all' ? 'all' : 'one',
+      target: step.target ?? null,
+      then: step.then ?? null,
+      toward: step.toward === 'mostHp' ? 'mostHp' : 'closest',
+      tiles: wholeNumber(step.tiles, 1) ? step.tiles : 1,
+      explore: step.explore === true,
+      text: typeof step.text === 'string' ? step.text : '',
+    })
+  }
+  if (tactics.length === 0) {
+    problems.push(`${label} needs a "tactics" list.`)
+    return null
+  }
+  return tactics
+}
+
+// Checks the parts every monster and villain card has: an id, a name and its numbers.
+function checkCard(card, label, seen, fields, problems) {
+  if (!card || typeof card !== 'object') return problems.push(`${label} is not a card.`) && false
+  if (!card.id || typeof card.id !== 'string') return problems.push(`${label} needs an "id".`) && false
+  if (seen.has(card.id)) return problems.push(`${label} reuses the id "${card.id}".`) && false
+  if (!card.name || typeof card.name !== 'string') return problems.push(`${label} needs a "name".`) && false
+  for (const field of fields) {
+    if (!wholeNumber(card[field], field === 'xp' ? 0 : 1)) return problems.push(`${label} needs a number for "${field}".`) && false
+  }
+  return true
+}
+
 // Monster cards, for the virtual monster deck and the guided Villain Phase. Optional.
-// Each card lists its attacks and its tactics as steps: the first step whose `when`
-// is true happens, and a step without `when` is the "Otherwise".
 function normalizeMonsters(list, problems) {
   if (list === undefined) return []
   if (!Array.isArray(list)) {
@@ -102,48 +179,10 @@ function normalizeMonsters(list, problems) {
   const seen = new Set()
   list.forEach((card, i) => {
     const label = card?.name ? `"${card.name}"` : `monster #${i + 1}`
-    if (!card || typeof card !== 'object') return problems.push(`${label} is not a card.`)
-    if (!card.id || typeof card.id !== 'string') return problems.push(`${label} needs an "id".`)
-    if (seen.has(card.id)) return problems.push(`${label} reuses the id "${card.id}".`)
-    if (!card.name || typeof card.name !== 'string') return problems.push(`${label} needs a "name".`)
-    for (const field of ['ac', 'hp', 'xp']) {
-      if (!wholeNumber(card[field], field === 'xp' ? 0 : 1)) return problems.push(`${label} needs a number for "${field}".`)
-    }
-    const attacks = []
-    for (const attack of Array.isArray(card.attacks) ? card.attacks : []) {
-      if (!attack?.id || !attack.name || !wholeNumber(attack.bonus) || !wholeNumber(attack.damage ?? 0)) {
-        return problems.push(`${label} has an attack that needs an "id", a "name", a "bonus" and a "damage".`)
-      }
-      attacks.push({
-        id: String(attack.id),
-        name: String(attack.name),
-        bonus: attack.bonus,
-        damage: attack.damage ?? 0,
-        miss: wholeNumber(attack.miss) ? attack.miss : 0,
-        conditions: (Array.isArray(attack.conditions) ? attack.conditions : []).filter((c) => CONDITIONS.includes(c)),
-      })
-    }
-    const tactics = []
-    for (const step of Array.isArray(card.tactics) ? card.tactics : []) {
-      if (step?.when !== undefined && !TACTIC_CHECKS.includes(step.when)) {
-        return problems.push(`${label} has a tactic with when "${step.when}"; use one of ${TACTIC_CHECKS.join(', ')}.`)
-      }
-      if (step.attack !== undefined && !attacks.some((a) => a.id === step.attack)) {
-        return problems.push(`${label} has a tactic that uses the attack "${step.attack}", which isn't on the card.`)
-      }
-      if (step.move !== undefined && !MOVES.includes(step.move)) {
-        return problems.push(`${label} has a tactic with move "${step.move}"; use one of ${MOVES.join(', ')}.`)
-      }
-      tactics.push({
-        when: step.when ?? null,
-        move: step.move ?? null,
-        attack: step.attack ?? null,
-        targets: step.targets === 'all' ? 'all' : 'one',
-        explore: step.explore === true,
-        text: typeof step.text === 'string' ? step.text : '',
-      })
-    }
-    if (tactics.length === 0) return problems.push(`${label} needs a "tactics" list.`)
+    if (!checkCard(card, label, seen, ['ac', 'hp', 'xp'], problems)) return
+    const attacks = parseAttacks(card, label, problems)
+    const tactics = attacks && parseTactics(card, attacks, label, problems)
+    if (!tactics) return
     seen.add(card.id)
     monsters.push({
       id: card.id,
@@ -162,6 +201,55 @@ function normalizeMonsters(list, problems) {
     })
   })
   return monsters
+}
+
+// Villain cards. Optional. An adventure puts a villain on the board, and it takes a turn
+// at the start of every Villain Phase. `enraged` is the other side of the card (the
+// Rage Drake), which it flips to instead of being defeated the first time.
+function normalizeVillains(list, problems) {
+  if (list === undefined) return []
+  if (!Array.isArray(list)) {
+    problems.push('"villains" should be a list.')
+    return []
+  }
+  const villains = []
+  const seen = new Set()
+  const text = (value) => (typeof value === 'string' ? value : '')
+  list.forEach((card, i) => {
+    const label = card?.name ? `"${card.name}"` : `villain #${i + 1}`
+    if (!checkCard(card, label, seen, ['ac', 'hp'], problems)) return
+    const attacks = parseAttacks(card, label, problems)
+    const tactics = attacks && parseTactics(card, attacks, label, problems)
+    if (!tactics) return
+    let enraged = null
+    if (card.enraged !== undefined) {
+      const side = card.enraged
+      const sideLabel = `${label}'s enraged side`
+      if (!wholeNumber(side?.ac, 1) || !wholeNumber(side?.hp, 1)) return problems.push(`${sideLabel} needs an "ac" and an "hp".`)
+      const sideAttacks = parseAttacks(side, sideLabel, problems)
+      const sideTactics = sideAttacks && parseTactics(side, sideAttacks, sideLabel, problems)
+      if (!sideTactics) return
+      enraged = { name: text(side.name) || `Enraged ${card.name}`, ac: side.ac, hp: side.hp, attacks: sideAttacks, tactics: sideTactics }
+    }
+    seen.add(card.id)
+    villains.push({
+      id: card.id,
+      name: card.name,
+      fullName: text(card.fullName) || card.name,
+      level: wholeNumber(card.level, 1) ? card.level : null,
+      ac: card.ac,
+      hp: card.hp,
+      flavor: text(card.flavor),
+      special: text(card.special),
+      // What to do when it's put on the board (Ashardalon's breath card).
+      onPlace: text(card.onPlace),
+      types: (Array.isArray(card.types) ? card.types : []).filter((t) => typeof t === 'string'),
+      attacks,
+      tactics,
+      enraged,
+    })
+  })
+  return villains
 }
 
 export const ENCOUNTER_TYPES = ['event', 'curse', 'environment', 'hazard', 'trap']
@@ -355,7 +443,7 @@ function normalizeTreasures(list, problems) {
 
 // What an adventure can do when its special tile is revealed. "placeVillain" is
 // handled by the villain rules (PLACE_VILLAIN); the rest by the adventure rules in state/adventure.js.
-export const REVEAL_ACTIONS = ['drawGuardians', 'placeToken', 'extraEncounters', 'placeVillain']
+export const REVEAL_ACTIONS = ['drawGuardians', 'placeToken', 'extraEncounters', 'placeVillain', 'chamber']
 const strings = (list) => (Array.isArray(list) ? list : []).filter((s) => typeof s === 'string' && s.trim() !== '')
 const text = (value) => (typeof value === 'string' ? value : '')
 
@@ -385,7 +473,9 @@ function normalizeAdventures(list, problems) {
         }
         actions.push({ type: action.type, count: wholeNumber(action.count, 1) ? action.count : 1, name: text(action.name) })
       }
-      reveals.push({ tile: reveal.tile, story: text(reveal.story), steps: strings(reveal.steps), actions })
+      // `door`: it happens when a door opens (the Hero Phase), not when a tile turns up.
+      // `after`: it can't happen until that other reveal has.
+      reveals.push({ tile: reveal.tile, story: text(reveal.story), steps: strings(reveal.steps), actions, door: reveal.door === true, after: text(reveal.after) })
     }
     const win = adv.win ?? {}
     seen.add(adv.id)
@@ -411,6 +501,7 @@ function normalizeAdventures(list, problems) {
         tokens: strings(win.tokens),
         villains: strings(win.villains),
         escape: win.escape === true,
+        chamber: win.chamber === true,
       },
       // Monster cards that come out once per game; later copies are discarded with no replacement.
       onceOnly: strings(adv.onceOnly),
@@ -419,4 +510,57 @@ function normalizeAdventures(list, problems) {
     })
   })
   return adventures
+}
+
+// Chamber cards: what fills a chamber when its entrance turns up, and the goal that
+// wins the adventure. Optional; the card text stays in cards.json like the rest.
+function normalizeChambers(list, problems) {
+  if (list === undefined) return []
+  if (!Array.isArray(list)) {
+    problems.push('"chambers" should be a list.')
+    return []
+  }
+  const chambers = []
+  const seen = new Set()
+  list.forEach((card, i) => {
+    const label = card?.name ? `"${card.name}"` : `chamber #${i + 1}`
+    if (!card || typeof card !== 'object') return problems.push(`${label} is not a chamber card.`)
+    if (!card.id || typeof card.id !== 'string') return problems.push(`${label} needs an "id".`)
+    if (seen.has(card.id)) return problems.push(`${label} reuses the id "${card.id}".`)
+    if (!card.name || typeof card.name !== 'string') return problems.push(`${label} needs a "name".`)
+    const objective = card.objective
+    if (objective !== undefined && !(typeof objective?.name === 'string' && wholeNumber(objective.hp, 1) && wholeNumber(objective.ac, 1))) {
+      return problems.push(`${label} has an "objective" that needs a "name", "hp" and "ac".`)
+    }
+    const monsters = card.monsters ?? {}
+    const win = card.win ?? {}
+    seen.add(card.id)
+    chambers.push({
+      id: card.id,
+      name: card.name,
+      setup: strings(card.setup),
+      goal: text(card.goal),
+      villain: text(card.villain),
+      // Unknown Overlord: one of these, picked at random.
+      villainFrom: strings(card.villainFrom),
+      monsters: {
+        perPlayer: wholeNumber(monsters.perPlayer, 0) ? monsters.perPlayer : 1,
+        // A monster without one of these types is discarded once and another drawn.
+        types: strings(monsters.types),
+        // Same for a monster worth one of these XP values.
+        redrawXp: (Array.isArray(monsters.redrawXp) ? monsters.redrawXp : []).filter((n) => wholeNumber(n, 0)),
+      },
+      objective: objective ? { name: objective.name, hp: objective.hp, ac: objective.ac } : null,
+      win: {
+        chamberMonsters: win.chamberMonsters === true,
+        villain: win.villain === true,
+        objective: win.objective === true,
+        escape: win.escape === true,
+        // A goal the app can't check: the players tap when it's done.
+        manual: text(win.manual),
+      },
+      needs: strings(card.needs),
+    })
+  })
+  return chambers
 }

@@ -1,8 +1,9 @@
+import { useState } from 'react'
 import { HERO_COLORS } from '../data/heroes.js'
-import { FEATURE_LABELS, MAX_SURGES, MIN_SURGES, goalParts, missingFeatures, tilesToCome } from '../state/adventure.js'
-import { randomNumbers } from '../state/random.js'
+import { DOOR_UNLOCK_ROLL, FEATURE_LABELS, MAX_SURGES, MIN_SURGES, escapeBlockers, goalParts, missingFeatures, playableChambers, revealsReady, usesDoors } from '../state/adventure.js'
+import { randomNumbers, rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
-import { Button } from './ui.jsx'
+import { Button, Chip } from './ui.jsx'
 
 const SHUFFLE_NUMBERS = 128
 
@@ -87,7 +88,22 @@ function AdventureSetup({ adventure }) {
           </ol>
         </>
       )}
+      <ChamberDeck adventure={adventure} />
     </div>
+  )
+}
+
+// An adventure that draws its chamber card at random: which cards the app shuffles.
+function ChamberDeck({ adventure }) {
+  const { chambers } = useCards()
+  const draws = adventure.reveals.some((r) => r.actions.some((a) => a.type === 'chamber' && !a.name))
+  if (!draws) return null
+  const left = chambers.filter((c) => !playableChambers(chambers).includes(c))
+  return (
+    <p className="mt-3 text-sm text-zinc-400">
+      The app draws the Chamber card when the entrance turns up, so leave the Chamber deck in the box.
+      {left.length > 0 && ` Not in the app's deck yet: ${left.map((c) => c.name).join(', ')}.`}
+    </p>
   )
 }
 
@@ -145,50 +161,94 @@ function Goal({ state, big = false }) {
   )
 }
 
-// The adventure's box on the iPads and the table: goal, progress, tokens to pick up,
-// escaping, the rules to remember, and any read-aloud text.
+// The adventure's box on the iPads and the table: a one-line bar that opens to show the
+// goal, progress, tokens to pick up, escaping and the rules. Read-aloud text always shows,
+// and the bar opens by itself when a token is waiting to be picked up.
 export function AdventurePanel({ state, dispatch }) {
+  const [open, setOpen] = useState(false)
   const adventure = state.adventure
   if (!adventure) return null
-  const { card } = adventure
+  const { card, chamber } = adventure
   const loose = adventure.tokens.filter((t) => !t.heldBy)
+  const parts = goalParts(state)
+  const done = parts.filter((p) => p.done).length
+  const blockers = escapeBlockers(state)
+  const shown = open || loose.length > 0
   return (
     <section className="space-y-3">
       {adventure.story && <Story story={adventure.story} dispatch={dispatch} />}
-      <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-        <p className="text-xs uppercase tracking-widest text-zinc-500">Adventure</p>
-        <h2 className="font-display text-2xl font-bold text-amber-400">{heading(card)}</h2>
-        <p className="text-zinc-300">{card.goal}</p>
-        <Goal state={state} />
-        {loose.map((token) => (
-          <div key={token.name} className="mt-3">
-            <p className="text-zinc-300">Who ended their Hero Phase next to the {token.name} and picked it up?</p>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {state.heroes.map((hero) => (
-                <Button key={hero.id} className={HERO_COLORS[hero.color].text} onClick={() => dispatch({ type: 'ADVENTURE_TAKE_TOKEN', name: token.name, heroId: hero.id })}>
-                  {hero.name}
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900">
+        <button type="button" className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left" onClick={() => setOpen(!shown)}>
+          <span className="min-w-0">
+            <span className="block truncate font-display text-lg font-bold text-amber-400">📜 {heading(card)}</span>
+            {parts.length > 0 && (
+              <span className="text-sm text-zinc-400">
+                {done} of {parts.length} goals done{loose.length > 0 ? ' · a token is waiting' : ''}
+              </span>
+            )}
+          </span>
+          <span className="shrink-0 text-zinc-400">{shown ? 'Hide ▲' : 'Show ▼'}</span>
+        </button>
+        {shown && (
+          <div className="border-t border-zinc-800 px-4 pb-4 pt-2">
+            <p className="text-zinc-300">{card.goal}</p>
+            <Goal state={state} />
+            {loose.map((token) => (
+              <div key={token.name} className="mt-3">
+                <p className="text-zinc-300">Who ended their Hero Phase next to the {token.name} and picked it up?</p>
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {state.heroes.map((hero) => (
+                    <Button key={hero.id} className={HERO_COLORS[hero.color].text} onClick={() => dispatch({ type: 'ADVENTURE_TAKE_TOKEN', name: token.name, heroId: hero.id })}>
+                      {hero.name}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {chamber && (
+              <details className="mt-3 text-sm text-zinc-400">
+                <summary className="cursor-pointer text-zinc-300">Chamber card: {chamber.card.name}</summary>
+                <p className="mt-2 text-zinc-300">{chamber.card.goal}</p>
+                <ul className="mt-1 space-y-1">
+                  {chamber.card.setup.map((line) => (
+                    <li key={line}>• {line}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+            {chamber?.card.win.manual && (
+              <Button className="mt-3" variant={chamber.done ? 'default' : 'gold'} onClick={() => dispatch({ type: 'ADVENTURE_CHAMBER_DONE', done: !chamber.done })}>
+                {chamber.done ? `✓ ${chamber.card.win.manual} (tap to undo)` : `${chamber.card.win.manual}!`}
+              </Button>
+            )}
+            {(card.win.escape || chamber?.card.win.escape) && (
+              <div className="mt-3">
+                <Button
+                  variant={adventure.escaped ? 'default' : 'gold'}
+                  disabled={!adventure.escaped && blockers.length > 0}
+                  onClick={() => dispatch({ type: 'ADVENTURE_ESCAPED', escaped: !adventure.escaped })}
+                >
+                  {adventure.escaped ? '✓ Escaped (tap to undo)' : 'We escaped the dungeon!'}
                 </Button>
-              ))}
-            </div>
+                {!adventure.escaped && blockers.length > 0 && (
+                  <p className="mt-1 text-sm text-zinc-400">Do this first: {blockers.map((b) => b.label).join(', ')}.</p>
+                )}
+              </div>
+            )}
+            {card.rules.length > 0 && (
+              <details className="mt-3 text-sm text-zinc-400">
+                <summary className="cursor-pointer text-zinc-300">Adventure rules</summary>
+                <ul className="mt-2 space-y-2">
+                  {card.rules.map((rule) => (
+                    <li key={rule.name + rule.text}>
+                      {rule.name && <span className="font-semibold text-amber-300">{rule.name}: </span>}
+                      {rule.text}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </div>
-        ))}
-        {card.win.escape && (
-          <Button className="mt-3" variant={adventure.escaped ? 'default' : 'gold'} onClick={() => dispatch({ type: 'ADVENTURE_ESCAPED', escaped: !adventure.escaped })}>
-            {adventure.escaped ? '✓ Escaped (tap to undo)' : 'We escaped the dungeon!'}
-          </Button>
-        )}
-        {card.rules.length > 0 && (
-          <details className="mt-3 text-sm text-zinc-400">
-            <summary className="cursor-pointer text-zinc-300">Adventure rules</summary>
-            <ul className="mt-2 space-y-2">
-              {card.rules.map((rule) => (
-                <li key={rule.name + rule.text}>
-                  {rule.name && <span className="font-semibold text-amber-300">{rule.name}: </span>}
-                  {rule.text}
-                </li>
-              ))}
-            </ul>
-          </details>
         )}
       </div>
     </section>
@@ -197,23 +257,102 @@ export function AdventurePanel({ state, dispatch }) {
 
 // In the Exploration Phase: a button for each special tile the adventure is waiting for.
 export function RevealButtons({ state, dispatch }) {
-  const { monsters, villains = [] } = useCards()
-  const tiles = tilesToCome(state.adventure)
-  if (tiles.length === 0) return null
+  const { monsters, villains = [], chambers = [] } = useCards()
+  const tiles = revealsReady(state.adventure)
+  const doors = usesDoors(state.adventure) && (
+    <p className="mt-4 text-sm text-zinc-400">🚪 New tile with an open door symbol? Put the top Closed Door token on it, face down.</p>
+  )
+  if (tiles.length === 0) return doors || null
   return (
-    <div className="mt-4 rounded-xl bg-zinc-950/50 p-3">
-      <p className="text-zinc-300">Is the new tile a special one?</p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {tiles.map((reveal) => (
-          <Button
-            key={reveal.tile}
-            variant="gold"
-            onClick={() => dispatch({ type: 'ADVENTURE_REVEAL', tile: reveal.tile, cards: monsters, villains, random: randomNumbers(SHUFFLE_NUMBERS) })}
-          >
-            It's the {reveal.tile}!
-          </Button>
-        ))}
+    <>
+      {doors}
+      <div className="mt-4 rounded-xl bg-zinc-950/50 p-3">
+        <p className="text-zinc-300">Is the new tile a special one?</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {tiles.map((reveal) => (
+            <Button
+              key={reveal.tile}
+              variant="gold"
+              onClick={() => dispatch({ type: 'ADVENTURE_REVEAL', tile: reveal.tile, cards: monsters, villains, chambers, random: randomNumbers(SHUFFLE_NUMBERS) })}
+            >
+              It's the {reveal.tile}!
+            </Button>
+          ))}
+        </div>
       </div>
+    </>
+  )
+}
+
+// Hero Phase, in an adventure with doors: turning over a Closed Door token next to the
+// hero, and rolling to unlock a Locked Door instead of attacking.
+export function Doors({ state, hero, dispatch }) {
+  const [trapped, setTrapped] = useState(null) // heroes next to a Trapped Door, while picking them
+  if (!usesDoors(state.adventure)) return null
+  const locked = state.adventure.lockedDoors ?? []
+  const reveal = (kind, heroIds) => dispatch({ type: 'DOOR_REVEALED', kind, heroId: hero.id, heroIds })
+  const special = revealsReady(state.adventure, true)
+  return (
+    <details className="mt-4 rounded-xl bg-zinc-950/50 p-3" open={special.length > 0 || undefined}>
+      <summary className="cursor-pointer text-lg text-zinc-100">
+        🚪 Next to a Closed Door?{locked.length > 0 && <span className="text-amber-300"> · {locked.length} locked</span>}
+      </summary>
+      {trapped ? (
+        <div className="mt-2">
+          <p className="text-zinc-300">Trapped! Who is next to the door? Each takes 1 damage.</p>
+          <div className="mt-1 flex flex-wrap gap-2">
+            {state.heroes.map((h) => (
+              <Chip key={h.id} active={trapped.includes(h.id)} onClick={() => setTrapped(trapped.includes(h.id) ? trapped.filter((id) => id !== h.id) : [...trapped, h.id])}>
+                {h.name}
+              </Chip>
+            ))}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <Button variant="gold" onClick={() => { reveal('trapped', trapped); setTrapped(null) }}>Spring the trap</Button>
+            <Button variant="ghost" onClick={() => setTrapped(null)}>Back</Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <p className="mt-2 text-zinc-300">Turn the token over. What kind of door is it?</p>
+          <div className="mt-1 grid grid-cols-3 gap-2">
+            <Button onClick={() => reveal('unlocked')}>Unlocked</Button>
+            <Button onClick={() => setTrapped([hero.id])}>Trapped</Button>
+            <Button onClick={() => reveal('locked')}>Locked</Button>
+          </div>
+        </>
+      )}
+      {special.length > 0 && <SpecialDoors special={special} dispatch={dispatch} />}
+      {locked.length > 0 && (
+        <div className="mt-3">
+          <p className="text-zinc-300">Next to a Locked Door? Instead of attacking, try to unlock it.</p>
+          <div className="mt-1 flex flex-wrap gap-2">
+            {locked.map((door, i) => (
+              <Button key={door.id} onClick={() => dispatch({ type: 'DOOR_UNLOCK', doorId: door.id, heroId: hero.id, roll: rollD20() })}>
+                🎲 Unlock {locked.length > 1 ? `door ${i + 1}` : 'the door'} ({DOOR_UNLOCK_ROLL}+)
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
+    </details>
+  )
+}
+
+// A door the adventure is waiting for, such as the Secret Chamber's: tapped once it's open.
+function SpecialDoors({ special, dispatch }) {
+  const { monsters, villains = [], chambers = [] } = useCards()
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {special.map((reveal) => (
+        <Button
+          key={reveal.tile}
+          variant="gold"
+          onClick={() => dispatch({ type: 'ADVENTURE_REVEAL', tile: reveal.tile, door: true, cards: monsters, villains, chambers, random: randomNumbers(SHUFFLE_NUMBERS) })}
+        >
+          We opened the {reveal.tile}!
+        </Button>
+      ))}
     </div>
   )
 }
@@ -227,6 +366,7 @@ export function ProjectorAdventure({ state }) {
       {adventure.story && <Story story={adventure.story} big />}
       <div className="rounded-[1.2vw] border border-zinc-800 bg-zinc-900 p-[1vw]">
         <span className="font-display text-[2.2vw] font-bold text-amber-400">{heading(adventure.card)}</span>
+        {adventure.chamber && <span className="ml-[1vw] text-[1.4vw] text-zinc-400">Chamber: {adventure.chamber.card.name}</span>}
         <Goal state={state} big />
       </div>
     </section>

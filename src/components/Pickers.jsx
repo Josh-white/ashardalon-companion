@@ -3,6 +3,7 @@ import { heroAc } from '../data/powerEffects.js'
 
 // "Snake 2" when one hero has two Snakes, so they can be told apart.
 export function monsterName(state, monster) {
+  if (monster.villain) return monster.name
   const twins = state.monsters.filter((m) => m.ownerId === monster.ownerId && m.name === monster.name)
   return twins.length > 1 ? `${monster.name} ${twins.indexOf(monster) + 1}` : monster.name
 }
@@ -53,9 +54,13 @@ export function MonsterChoice({ state, monsters = state.monsters, chosen, onTogg
               {monsterName(state, monster)}
               {count > 1 && <span className="ml-2 text-amber-300">×{count}</span>}
             </span>
-            <span className={`block text-sm ${owner ? HERO_COLORS[owner.color].text : 'text-zinc-400'}`}>
-              {owner ? `${owner.name}'s monster` : 'No owner'}
-            </span>
+            {monster.villain ? (
+              <span className="block text-sm font-semibold text-fuchsia-300">👑 Villain</span>
+            ) : (
+              <span className={`block text-sm ${owner ? HERO_COLORS[owner.color].text : 'text-zinc-400'}`}>
+                {owner ? `${owner.name}'s monster` : 'No owner'}
+              </span>
+            )}
             <span className="text-sm text-zinc-400">
               {monster.ac ? `AC ${monster.ac} · ` : ''}
               {monster.hp} HP
