@@ -15,7 +15,7 @@ export function normalizeCardFile(data) {
   const powers = []
   const seen = new Set()
   const list = Array.isArray(data?.powers) ? data.powers : null
-  if (!list) return { powers, abilities: [], monsters: [], encounters: [], treasures: [], problems: ['The file needs a "powers" list.'] }
+  if (!list) return { powers, abilities: [], monsters: [], encounters: [], adventures: [], treasures: [], problems: ['The file needs a "powers" list.'] }
 
   list.forEach((card, i) => {
     const label = card?.name ? `"${card.name}"` : `power #${i + 1}`
@@ -49,6 +49,7 @@ export function normalizeCardFile(data) {
     abilities: normalizeAbilities(data?.heroes, problems),
     monsters: normalizeMonsters(data?.monsters, problems),
     encounters: normalizeEncounters(data?.encounters, problems),
+    adventures: normalizeAdventures(data?.adventures, problems),
     treasures: normalizeTreasures(data?.treasures, problems),
     problems,
   }
@@ -321,4 +322,72 @@ function normalizeTreasures(list, problems) {
     })
   })
   return treasures
+}
+
+// What an adventure can do when its special tile is revealed. "placeVillain" is
+// handled by the villain rules (PLACE_VILLAIN); the rest by the adventure rules in state/adventure.js.
+export const REVEAL_ACTIONS = ['drawGuardians', 'placeToken', 'extraEncounters', 'placeVillain']
+const strings = (list) => (Array.isArray(list) ? list : []).filter((s) => typeof s === 'string' && s.trim() !== '')
+const text = (value) => (typeof value === 'string' ? value : '')
+
+// Adventures from the adventure book, for the adventure picker. Optional. The book's
+// words stay in cards.json on your own server, like the card text.
+function normalizeAdventures(list, problems) {
+  if (list === undefined) return []
+  if (!Array.isArray(list)) {
+    problems.push('"adventures" should be a list.')
+    return []
+  }
+  const adventures = []
+  const seen = new Set()
+  list.forEach((adv, i) => {
+    const label = adv?.title ? `"${adv.title}"` : `adventure #${i + 1}`
+    if (!adv || typeof adv !== 'object') return problems.push(`${label} is not an adventure.`)
+    if (!adv.id || typeof adv.id !== 'string') return problems.push(`${label} needs an "id".`)
+    if (seen.has(adv.id)) return problems.push(`${label} reuses the id "${adv.id}".`)
+    if (!adv.title || typeof adv.title !== 'string') return problems.push(`${label} needs a "title".`)
+    const reveals = []
+    for (const reveal of Array.isArray(adv.reveals) ? adv.reveals : []) {
+      if (!reveal?.tile || typeof reveal.tile !== 'string') return problems.push(`${label} has a reveal that needs a "tile".`)
+      const actions = []
+      for (const action of Array.isArray(reveal.actions) ? reveal.actions : []) {
+        if (!REVEAL_ACTIONS.includes(action?.type)) {
+          return problems.push(`${label} has a reveal action "${action?.type}"; use one of ${REVEAL_ACTIONS.join(', ')}.`)
+        }
+        actions.push({ type: action.type, count: wholeNumber(action.count, 1) ? action.count : 1, name: text(action.name) })
+      }
+      reveals.push({ tile: reveal.tile, story: text(reveal.story), steps: strings(reveal.steps), actions })
+    }
+    const win = adv.win ?? {}
+    seen.add(adv.id)
+    adventures.push({
+      id: adv.id,
+      number: wholeNumber(adv.number, 1) ? adv.number : null,
+      title: adv.title,
+      blurb: text(adv.blurb),
+      goal: text(adv.goal),
+      players: text(adv.players),
+      setup: strings(adv.setup),
+      rules: (Array.isArray(adv.rules) ? adv.rules : [])
+        .filter((r) => typeof r?.text === 'string')
+        .map((r) => ({ name: text(r.name), text: r.text })),
+      victoryText: text(adv.victoryText),
+      defeatText: text(adv.defeatText),
+      story: { start: text(adv.story?.start), victory: text(adv.story?.victory) },
+      reveals,
+      // What the app checks to call the victory. Every listed part has to be done.
+      win: {
+        figures: wholeNumber(win.figures, 1) ? win.figures : 0,
+        guardians: win.guardians === true,
+        tokens: strings(win.tokens),
+        villains: strings(win.villains),
+        escape: win.escape === true,
+      },
+      // Monster cards that come out once per game; later copies are discarded with no replacement.
+      onceOnly: strings(adv.onceOnly),
+      // Bigger features the adventure needs, such as "villains" or "chambers".
+      needs: strings(adv.needs),
+    })
+  })
+  return adventures
 }

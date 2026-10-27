@@ -3,6 +3,7 @@ import { HERO_COLORS, HERO_TEMPLATES } from '../data/heroes.js'
 import { powerSlotsFor } from '../state/game.js'
 import { randomNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
+import { AdventurePicker, ChosenAdventure } from './Adventure.jsx'
 import { Button } from './ui.jsx'
 
 const templateFor = (key) => HERO_TEMPLATES.find((t) => t.key === key)
@@ -178,6 +179,8 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
           {watchOnly ? 'Waiting for the heroes to get ready…' : mine ? 'Get your hero ready.' : 'Pick your hero on this iPad.'}
         </p>
       </header>
+
+      {watchOnly ? <AdventurePicker state={state} dispatch={dispatch} /> : <ChosenAdventure state={state} />}
 
       {mine && !watchOnly && <MyHero claim={mine} cards={cards} deviceId={deviceId} dispatch={dispatch} />}
 
