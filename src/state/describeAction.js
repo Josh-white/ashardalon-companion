@@ -89,6 +89,10 @@ export function describeAction(state, action) {
       const item = hero?.items?.find((i) => i.id === action.itemId)
       return item ? `${hero.name}'s ${item.name}` : 'Item'
     }
+    case 'ANSWER_CHECK':
+      return 'Answering a question'
+    case 'UPDATE_ENCOUNTER_CARDS':
+      return 'Encounter cards'
     case 'SET_TRIANGLE':
       return 'Black triangle'
     case 'ADJUST_SURGES':

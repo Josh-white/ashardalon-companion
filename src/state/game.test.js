@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { normalizeCardFile } from '../data/cards.js'
 import { heroAc, heroAttackPenalty } from '../data/powerEffects.js'
-import { createHero, gameReducer, initialState } from './game.js'
+import { createHero, encounterCardsOutdated, gameReducer, initialState, phaseChecks } from './game.js'
 
 const startGame = (count = 2) =>
   gameReducer(initialState, { type: 'START_GAME', heroes: HERO_TEMPLATES.slice(0, count).map((t) => createHero(t)) })
@@ -475,6 +475,10 @@ describe('encounter deck', () => {
       { id: 'orcs', name: 'Orcs', type: 'event', filterMonsters: 'Orc' },
       { id: 'cage', name: 'Cage', type: 'curse', curse: { removeRoll: { phase: 'action', target: 10 } } },
       { id: 'thirst', name: 'Thirst', type: 'curse', curse: { startDamage: 1, removeOnDefeat: true } },
+      { id: 'hot-walls', name: 'Hot Walls', type: 'environment', checks: [{ phase: 'hero', ask: 'Is {hero} next to a wall?', yes: { damage: 1 } }] },
+      { id: 'creaky', name: 'Creaky', type: 'curse', checks: [{ phase: 'hero', ask: 'Did {hero} move?', no: { remove: true } }] },
+      { id: 'leap', name: 'Leap', type: 'curse', curse: { removeAtTurnStart: true } },
+      { id: 'grudge', name: 'Grudge', type: 'curse', checks: [{ phase: 'exploration', note: 'Move a monster next to {hero}.' }] },
     ],
   })
   const card = (id) => encounters.find((c) => c.id === id)
@@ -618,6 +622,61 @@ describe('encounter deck', () => {
     expect(state.monsters.at(-1).name).toBe('Orc')
     state = resolve(state)
     expect(state.monsterDeck.draw).toEqual(['rat'])
+  })
+
+  it('asks the end-of-phase questions before the Hero Phase can end', () => {
+    let state = resolve(drawCard(startGame(), 'hot-walls'))
+    const [check] = phaseChecks(state, 'hero')
+    expect(check).toMatchObject({ ask: 'Is {hero} next to a wall?', source: 'Hot Walls' })
+    expect(gameReducer(state, { type: 'NEXT_PHASE' })).toBe(state)
+    state = gameReducer(state, { type: 'ANSWER_CHECK', key: check.key, answer: true })
+    expect(state.heroes[0].hp).toBe(state.heroes[0].maxHp - 1)
+    expect(phaseChecks(state, 'hero')).toEqual([])
+    expect(gameReducer(state, { type: 'NEXT_PHASE' }).turn.phase).toBe(1)
+  })
+
+  it('ends a curse when the answer says so', () => {
+    let state = resolve(drawCard(startGame(), 'creaky'))
+    const [check] = phaseChecks(state, 'hero')
+    expect(gameReducer(state, { type: 'ANSWER_CHECK', key: check.key, answer: true }).heroes[0].curses).toHaveLength(1)
+    state = gameReducer(state, { type: 'ANSWER_CHECK', key: check.key, answer: false })
+    expect(state.heroes[0].curses).toHaveLength(0)
+  })
+
+  it('holds the Villain Phase for a reminder from the Exploration Phase', () => {
+    let state = resolve(drawCard(startGame(), 'grudge'))
+    for (let i = 0; i < 2; i++) state = gameReducer(state, { type: 'NEXT_PHASE' })
+    const [check] = phaseChecks(state, 'exploration')
+    expect(check.note).toBe('Move a monster next to {hero}.')
+    expect(gameReducer(state, { type: 'NEXT_PHASE' })).toBe(state)
+    state = gameReducer(state, { type: 'ANSWER_CHECK', key: check.key, answer: true })
+    expect(gameReducer(state, { type: 'NEXT_PHASE' }).turn.heroIndex).toBe(1)
+  })
+
+  it('brings a hero back from a Time Leap at the start of their next turn', () => {
+    let state = startGame()
+    for (let i = 0; i < 2; i++) state = gameReducer(state, { type: 'NEXT_PHASE' })
+    state = resolve(drawCard(state, 'leap'))
+    expect(state.heroes[0].curses).toHaveLength(1)
+    for (let i = 0; i < 3; i++) state = gameReducer(state, { type: 'NEXT_PHASE' })
+    expect(state.turn.heroIndex).toBe(1)
+    expect(state.heroes[0].curses).toHaveLength(1)
+    for (let i = 0; i < 3; i++) state = gameReducer(state, { type: 'NEXT_PHASE' })
+    expect(state.turn.heroIndex).toBe(0)
+    expect(state.heroes[0].curses).toHaveLength(0)
+  })
+
+  it('updates saved copies of encounter cards from a newer card file', () => {
+    const old = encounters.map((c) => (c.id === 'hot-walls' ? { ...c, checks: [] } : c))
+    let state = startGame()
+    state = { ...state, encounterDeck: { cards: Object.fromEntries(old.map((c) => [c.id, c])), draw: ['hot-walls'], discard: [] } }
+    state = resolve(gameReducer(state, { type: 'DRAW_ENCOUNTER', heroId: state.heroes[0].id, cards: old, random: [] }))
+    expect(phaseChecks(state, 'hero')).toEqual([])
+    expect(encounterCardsOutdated(state, old)).toBe(false)
+    expect(encounterCardsOutdated(state, encounters)).toBe(true)
+    state = gameReducer(state, { type: 'UPDATE_ENCOUNTER_CARDS', cards: encounters })
+    expect(state.environment.card.checks).toHaveLength(1)
+    expect(encounterCardsOutdated(state, encounters)).toBe(false)
   })
 
   it('passes a monster card to another hero', () => {
