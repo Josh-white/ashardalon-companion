@@ -9,7 +9,8 @@ import { itemAc } from './items.js'
 //   attacks     rolls in all, when one monster can be attacked more than once (Tornado Strike).
 //   sameTarget  every roll is against the one monster (Reaping Strike).
 //   before      a reminder shown before the roll.
-//   ask         a question before the roll: 'started-adjacent' (+1 damage on a hit) or 'adjacent-count' (+1 attack each).
+//   ask         a question before the roll: 'started-adjacent' (+1 damage on a hit), 'adjacent-count' (+1 attack each),
+//               or 'moved-monster' (Hypnotism: which monster was moved, so it can't be the one attacked).
 //   evenBonus   extra damage on a hit when the die shows an even number.
 //   onHit       { healSelf } or { heal, pick: 'tile' } (the attacker or one hero on their tile).
 //   after       hit or miss: 'heal-tile' (1 HP to each hero on the tile), 'shield', 'pass-monster', 'at-will'.
@@ -74,7 +75,8 @@ const EFFECTS = {
   // Heskan, the wizard
   'Hurled Breath': { targets: 'any', note: "This doesn't count as your attack this turn." },
   'Arc Lightning': { targets: 2 },
-  Hypnotism: { before: 'First move a monster within 1 tile by 1 tile. It attacks a monster it ends next to.' },
+  // The monster Heskan moves isn't hurt: the attack is against a monster it ends up next to.
+  Hypnotism: { ask: 'moved-monster' },
   'Ray of Frost': {},
   'Flaming Sphere': {
     use: { tokens: { flamingSphere: 3 }, note: 'Put the 3 Flaming Sphere tokens on a square within 1 tile of you.' },

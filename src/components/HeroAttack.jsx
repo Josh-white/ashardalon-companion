@@ -210,14 +210,16 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   const power = powers.find((p) => p.id === powerId) ?? (item && { ...item, type: 'item', card: { attack: `+${item.card.attack.bonus}`, damage: String(item.card.attack.damage), text: item.card.text } })
   const effects = effectsOf(item ? null : power)
   const limit = item ? 1 : power ? maxRolls(power) : 1
-  const targets = foes(state)
+  // Hypnotism attacks the monster the moved one ends up next to, never the moved one.
+  const moving = effects.ask === 'moved-monster'
+  const targets = foes(state).filter((m) => !moving || m.id !== answers.movedId)
   const unknownAc = targets.find((m) => chosen.includes(m.id) && !m.ac)
   const needsAnswer =
     (effects.ask && Object.keys(answers).length === 0) || (distanceChoices(hero) && chosen.some((id) => !distances[id]))
   const last = state.turn.lastAttack
   const showResults = rolled && last && !last.bonus && last.heroId === hero.id
 
-  if (targets.length === 0 && !showResults) {
+  if (foes(state).length === 0 && !showResults) {
     return extra ? null : <p className="mt-4 rounded-xl bg-zinc-950/50 p-3 text-zinc-400">No monsters to attack right now.</p>
   }
 
@@ -321,8 +323,28 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
           {power && (
             <>
               {effects.before && <p className="rounded-lg bg-amber-950/60 p-3 text-amber-200">{effects.before}</p>}
+              {moving && (
+                <>
+                  <p className="text-zinc-200">
+                    Which monster within 1 tile did {hero.name} hypnotize? Move it 1 tile. It doesn't get hurt.
+                  </p>
+                  <MonsterChoice
+                    state={state}
+                    monsters={foes(state)}
+                    chosen={answers.movedId ? [answers.movedId] : []}
+                    onToggle={(id) => {
+                      setAnswers({ movedId: id })
+                      setChosen([])
+                    }}
+                  />
+                </>
+              )}
+              {moving && !answers.movedId ? null : moving && targets.length === 0 ? (
+                <p className="text-zinc-400">There's no other monster for it to attack, so nothing happens.</p>
+              ) : (
+              <>
               <div className="flex items-baseline justify-between gap-2">
-                <p className="text-zinc-300">{pickHint}</p>
+                <p className="text-zinc-300">{moving ? 'Which monster is it next to now? That one gets attacked.' : pickHint}</p>
                 {chosen.length > 0 && limit > 1 && (
                   <Button variant="ghost" className="text-sm" onClick={() => setChosen([])}>
                     Clear
@@ -330,6 +352,8 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
                 )}
               </div>
               <MonsterChoice state={state} monsters={targets} chosen={chosen} onToggle={tap} />
+              </>
+              )}
               <BeforeQuestion hero={hero} effects={effects} answers={answers} setAnswers={setAnswers} />
               {chosen.length > 0 && (
                 <DistanceQuestion
