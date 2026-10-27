@@ -15,7 +15,7 @@ export function normalizeCardFile(data) {
   const powers = []
   const seen = new Set()
   const list = Array.isArray(data?.powers) ? data.powers : null
-  if (!list) return { powers, abilities: [], monsters: [], villains: [], encounters: [], adventures: [], chambers: [], treasures: [], problems: ['The file needs a "powers" list.'] }
+  if (!list) return { powers, abilities: [], monsters: [], villains: [], encounters: [], adventures: [], chambers: [], treasures: [], villagers: [], problems: ['The file needs a "powers" list.'] }
 
   list.forEach((card, i) => {
     const label = card?.name ? `"${card.name}"` : `power #${i + 1}`
@@ -53,6 +53,7 @@ export function normalizeCardFile(data) {
     adventures: normalizeAdventures(data?.adventures, problems),
     chambers: normalizeChambers(data?.chambers, problems),
     treasures: normalizeTreasures(data?.treasures, problems),
+    villagers: normalizeVillagers(data?.villagers, problems),
     problems,
   }
 }
@@ -264,12 +265,14 @@ const CHECK_PHASES = ['hero', 'exploration']
 
 // A check is a question the app asks at the end of a phase ("Did you end next to a
 // wall?"), with what happens on yes and on no. A check with a `note` and no `ask` is a
-// reminder to tap through. Effects: { damage }, { remove } (end the curse) or { condition }.
+// reminder to tap through. Effects: { damage }, { remove } (end the curse), { condition }
+// or { drawMonster } (the hero draws a monster: the Vast Gate spitting one out).
 function checkEffect(effect) {
   if (!effect || typeof effect !== 'object') return null
   const out = {}
   if (wholeNumber(effect.damage, 1)) out.damage = effect.damage
   if (effect.remove === true) out.remove = true
+  if (effect.drawMonster === true) out.drawMonster = true
   if (CONDITIONS.includes(effect.condition)) out.condition = effect.condition
   return Object.keys(out).length > 0 ? out : null
 }
@@ -283,6 +286,8 @@ function normalizeChecks(list) {
       note: typeof check.note === 'string' ? check.note : '',
       yes: checkEffect(check.yes),
       no: checkEffect(check.no),
+      // Asked only while this objective (the Vast Gate) is still standing.
+      whileObjective: typeof check.whileObjective === 'string' ? check.whileObjective : '',
     }))
 }
 
@@ -360,6 +365,16 @@ function normalizeEncounters(list, problems) {
       villain: typeof card.villain === 'string' ? card.villain : '',
       // Shuffled back in among the top cards of the deck instead of discarded.
       returnToTop: count(card.returnToTop),
+      // The objective the card is about (the Vast Gate): when it isn't in play, the card is just discarded.
+      objective: typeof card.objective === 'string' ? card.objective : '',
+      // Takes a Time token off the chamber's objective; the last one loses the game.
+      timeToken: card.timeToken === true,
+      // Goes back on top of the deck after the extra card is drawn (Ceremony Progresses!).
+      afterDrawTop: card.afterDrawTop === true,
+      // A villain (by id or name) the card puts on the board (Ashardalon Arrives!).
+      placeVillain: typeof card.placeVillain === 'string' ? card.placeVillain : '',
+      // Draws monster cards until one of this type turns up (The Vast Gate Flares!).
+      drawMonsterType: typeof card.drawMonsterType === 'string' ? card.drawMonsterType : '',
       checks: normalizeChecks(card.checks),
       curse: curse && {
         acPenalty: count(curse.acPenalty),
@@ -455,7 +470,7 @@ function normalizeTreasures(list, problems) {
 
 // What an adventure can do when its special tile is revealed. "placeVillain" is
 // handled by the villain rules (PLACE_VILLAIN); the rest by the adventure rules in state/adventure.js.
-export const REVEAL_ACTIONS = ['drawGuardians', 'placeToken', 'extraEncounters', 'placeVillain', 'chamber']
+export const REVEAL_ACTIONS = ['drawGuardians', 'placeToken', 'extraEncounters', 'placeVillain', 'chamber', 'chamberMonsters']
 const strings = (list) => (Array.isArray(list) ? list : []).filter((s) => typeof s === 'string' && s.trim() !== '')
 const text = (value) => (typeof value === 'string' ? value : '')
 
@@ -483,13 +498,31 @@ function normalizeAdventures(list, problems) {
         if (!REVEAL_ACTIONS.includes(action?.type)) {
           return problems.push(`${label} has a reveal action "${action?.type}"; use one of ${REVEAL_ACTIONS.join(', ')}.`)
         }
-        actions.push({ type: action.type, count: wholeNumber(action.count, 1) ? action.count : 1, name: text(action.name) })
+        actions.push({
+          type: action.type,
+          count: wholeNumber(action.count, 1) ? action.count : 1,
+          name: text(action.name),
+          // chamber: villains the Unknown Overlord can't be here (Ashardalon waits in his own lair).
+          exclude: strings(action.exclude),
+          // chamber: how many villager tokens go in, instead of one per player (Free the Captives: all 5).
+          villagers: wholeNumber(action.villagers, 1) ? action.villagers : 0,
+          // placeToken: a face-down token. `ask` is the question for picking it up, and
+          // `drawTreasure` gives its finder a treasure card.
+          ask: text(action.ask),
+          drawTreasure: action.drawTreasure === true,
+        })
       }
       // `door`: it happens when a door opens (the Hero Phase), not when a tile turns up.
       // `after`: it can't happen until that other reveal has.
-      reveals.push({ tile: reveal.tile, story: text(reveal.story), steps: strings(reveal.steps), actions, door: reveal.door === true, after: text(reveal.after) })
+      // `drawn`: [first, last], the draws the tile can turn up on (the 1st tile drawn is 1).
+      const drawn = Array.isArray(reveal.drawn) && reveal.drawn.length === 2 && reveal.drawn.every((n) => wholeNumber(n, 1)) && reveal.drawn[0] <= reveal.drawn[1] ? [...reveal.drawn] : null
+      reveals.push({ tile: reveal.tile, story: text(reveal.story), steps: strings(reveal.steps), actions, door: reveal.door === true, after: text(reveal.after), drawn })
     }
     const win = adv.win ?? {}
+    const objective = adv.startObjective
+    if (objective !== undefined && !(typeof objective?.name === 'string' && wholeNumber(objective.hp, 1) && wholeNumber(objective.ac, 1))) {
+      return problems.push(`${label} has a "startObjective" that needs a "name", "hp" and "ac".`)
+    }
     seen.add(adv.id)
     adventures.push({
       id: adv.id,
@@ -504,7 +537,7 @@ function normalizeAdventures(list, problems) {
         .map((r) => ({ name: text(r.name), text: r.text })),
       victoryText: text(adv.victoryText),
       defeatText: text(adv.defeatText),
-      story: { start: text(adv.story?.start), victory: text(adv.story?.victory) },
+      story: { start: text(adv.story?.start), victory: text(adv.story?.victory), defeat: text(adv.story?.defeat) },
       reveals,
       // What the app checks to call the victory. Every listed part has to be done.
       win: {
@@ -514,7 +547,19 @@ function normalizeAdventures(list, problems) {
         villains: strings(win.villains),
         escape: win.escape === true,
         chamber: win.chamber === true,
+        // With chamber: the chamber's monsters too, on top of the chamber card's own goal (The Vast Gate Ritual).
+        chamberMonsters: win.chamberMonsters === true,
+        // Special tiles that have to turn up: a tile name, or { tile, label }.
+        reveals: (Array.isArray(win.reveals) ? win.reveals : [])
+          .map((r) => (typeof r === 'string' ? { tile: r, label: '' } : { tile: text(r?.tile), label: text(r?.label) }))
+          .filter((r) => r.tile),
       },
+      // Something to destroy that's on the board from the start (the Vast Gate).
+      startObjective: objective ? { name: objective.name, hp: objective.hp, ac: objective.ac } : null,
+      // Adventure encounter cards shuffled into the top 3 of the encounter deck at the start.
+      startEncounters: strings(adv.startEncounters),
+      // Questions the adventure asks at the end of a phase, like an encounter card's checks.
+      checks: normalizeChecks(adv.checks),
       // Monster cards that come out once per game; later copies are discarded with no replacement.
       onceOnly: strings(adv.onceOnly),
       // Bigger features the adventure needs, such as "villains" or "chambers".
@@ -563,7 +608,17 @@ function normalizeChambers(list, problems) {
         redrawXp: (Array.isArray(monsters.redrawXp) ? monsters.redrawXp : []).filter((n) => wholeNumber(n, 0)),
       },
       objective: objective ? { name: objective.name, hp: objective.hp, ac: objective.ac } : null,
+      // Time tokens on the objective (the Gate Ceremony's 5). Ceremony Progresses! takes them off.
+      timeTokens: count(card.timeTokens),
+      // Villager tokens: one per player (Prison Guard).
+      villagers: card.villagers === true,
+      // An adventure encounter card (by id) the chamber adds to the encounter deck: on top with
+      // `encounterTop`, or shuffled into the top 3.
+      addEncounter: text(card.addEncounter),
+      encounterTop: card.encounterTop === true,
       win: {
+        // Keep at least one villager alive.
+        villagers: win.villagers === true,
         chamberMonsters: win.chamberMonsters === true,
         villain: win.villain === true,
         objective: win.objective === true,
@@ -575,4 +630,43 @@ function normalizeChambers(list, problems) {
     })
   })
   return chambers
+}
+
+// Villager cards (Free the Captives). Optional. A villager acts when the d20 at the end of
+// a Hero Phase lands in its `roll` range. Monsters treat villagers as heroes, and go for
+// them first. Each tactic is a step: `ask` is a yes/no question (no `ask` means
+// "otherwise"), `say` what the players do, `attack` its punch at a monster, `draw` a monster
+// for a new tile.
+function normalizeVillagers(list, problems) {
+  if (list === undefined) return []
+  if (!Array.isArray(list)) {
+    problems.push('"villagers" should be a list.')
+    return []
+  }
+  const villagers = []
+  const seen = new Set()
+  list.forEach((card, i) => {
+    const label = card?.name ? `"${card.name}"` : `villager #${i + 1}`
+    if (!checkCard(card, label, seen, ['ac', 'hp'], problems)) return
+    const roll = Array.isArray(card.roll) && card.roll.length === 2 && card.roll.every((n) => wholeNumber(n, 1)) ? card.roll : null
+    if (!roll) return problems.push(`${label} needs a "roll" range, such as [13, 16].`)
+    const attack = card.attack
+    if (attack !== undefined && !(wholeNumber(attack?.bonus) && wholeNumber(attack?.damage, 1))) {
+      return problems.push(`${label} has an "attack" that needs a "bonus" and a "damage".`)
+    }
+    seen.add(card.id)
+    villagers.push({
+      id: card.id,
+      name: card.name,
+      ac: card.ac,
+      hp: card.hp,
+      roll,
+      text: text(card.text),
+      attack: attack ? { name: text(attack.name) || 'Punch', bonus: attack.bonus, damage: attack.damage } : null,
+      tactics: (Array.isArray(card.tactics) ? card.tactics : [])
+        .filter((step) => typeof step?.say === 'string')
+        .map((step) => ({ ask: text(step.ask), say: step.say, attack: step.attack === true && Boolean(attack), draw: step.draw === true })),
+    })
+  })
+  return villagers
 }

@@ -7,6 +7,7 @@ import { randomNumbers, rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { DrawMonsterButton, HeroPicker } from './MonsterTurns.jsx'
 import { TileGuardQuestion } from './Treasure.jsx'
+import { DrawTileButton } from './Tiles.jsx'
 import { Button } from './ui.jsx'
 
 // Enough random numbers to shuffle the whole encounter deck.
@@ -234,14 +235,14 @@ const RESOLVE_LABELS = {
 
 // The encounter card being read out, and what the app can do for it.
 function EncounterCard({ state, hero, dispatch }) {
-  const { monsters: monsterCards } = useCards()
+  const { monsters: monsterCards, villains } = useCards()
   const { card, attacked } = state.encounter
   const [markerChecked, setMarkerChecked] = useState(false)
   // Frenzied Leap: null until the table says whether a monster is on the active hero's tile.
   const [monsterOnTile, setMonsterOnTile] = useState(null)
   const asksTile = card.damageIfMonsterOnTile > 0 && monsterOnTile === null
   const resolve = (extra = {}) =>
-    dispatch({ type: 'RESOLVE_ENCOUNTER', monsterCards, random: randomNumbers(SHUFFLE_NUMBERS), monsterOnTile: monsterOnTile === true, ...extra })
+    dispatch({ type: 'RESOLVE_ENCOUNTER', monsterCards, villains, random: randomNumbers(SHUFFLE_NUMBERS), monsterOnTile: monsterOnTile === true, ...extra })
   const placesMarker = card.type === 'hazard' || card.type === 'trap'
   // Ashardalon Breathes! does nothing (and is discarded) when Ashardalon isn't in play.
   const villainHere = villainInPlay(state, card)
@@ -251,9 +252,13 @@ function EncounterCard({ state, hero, dispatch }) {
     card.damageEach > 0 && `Every hero takes ${card.damageEach} damage when you tap the button.`,
     card.damagePoisoned > 0 && `Every Poisoned hero takes ${card.damagePoisoned} damage when you tap the button.`,
     card.filterMonsters && !state.encounter.filtered && `The app looks at the top 5 monster cards, keeps the ${card.filterMonsters}s on top and discards the rest.`,
-    card.drawAnother && 'Then you draw another encounter card.',
-    !villainHere && 'Its villain isn’t in play, so it’s just discarded.',
+    card.drawAnother && villainHere && 'Then you draw another encounter card.',
+    !villainHere && (card.villain ? 'Its villain isn’t in play, so it’s just discarded.' : `The ${card.objective} isn’t in play, so it’s just discarded.`),
+    villainHere && card.placeVillain && 'The app puts the villain on the board when you tap the button.',
+    villainHere && card.drawMonsterType && `The app draws monster cards until ${/^[AEIOU]/.test(card.drawMonsterType) ? 'an' : 'a'} ${card.drawMonsterType} turns up, and discards the rest.`,
+    villainHere && card.timeToken && `The app takes a Time token off the ${card.objective || 'Vast Gate'} (${state.adventure?.timeTokens ?? 0} left now).`,
     villainHere && card.returnToTop > 0 && 'Then the app shuffles it back into the top 3 encounter cards.',
+    villainHere && card.afterDrawTop && 'It goes back on top of the encounter deck after the next card is drawn.',
   ].filter(Boolean)
 
   return (
@@ -316,6 +321,9 @@ function EncounterCard({ state, hero, dispatch }) {
           )}
           {!needsAttack && !asksTile && (
             <>
+              {card.id === 'occupied-lair' && (
+                <DrawTileButton state={state} dispatch={dispatch} drawKey={`encounter-${state.encounter.id}`} from="bottom" />
+              )}
               {card.drawMonster && card.filterMonsters && !state.encounter.filtered ? (
                 <Button
                   variant="danger"
@@ -341,7 +349,7 @@ function EncounterCard({ state, hero, dispatch }) {
                 className="w-full py-3 text-lg"
                 onClick={() => resolve()}
               >
-                {villainHere && card.returnToTop > 0 ? 'Done, shuffle it back in' : RESOLVE_LABELS[card.type](hero)}
+                {!villainHere ? 'Discard it' : card.returnToTop > 0 ? 'Done, shuffle it back in' : card.afterDrawTop ? 'Done' : RESOLVE_LABELS[card.type](hero)}
               </Button>
             </>
           )}
@@ -602,11 +610,12 @@ export function EnvironmentBanner({ environment, className = '' }) {
 const effectWords = (effect) =>
   !effect
     ? 'nothing happens'
-    : [effect.damage && `${effect.damage} damage`, effect.condition, effect.remove && 'the curse ends'].filter(Boolean).join(' and ')
+    : [effect.damage && `${effect.damage} damage`, effect.condition, effect.remove && 'the curse ends', effect.drawMonster && 'draw a monster'].filter(Boolean).join(' and ')
 
 // The questions a phase ends with, one at a time, from curses, the environment and
 // hazards ("Did you end next to a wall?"). The turn can't move on until they're answered.
 export function PhaseChecks({ state, hero, phaseKey, dispatch }) {
+  const { monsters: cards } = useCards()
   const [check] = phaseChecks(state, phaseKey)
   if (!check) return null
   const fill = (text) => text.replaceAll('{hero}', hero.name)
@@ -622,10 +631,10 @@ export function PhaseChecks({ state, hero, phaseKey, dispatch }) {
             Yes: {effectWords(check.yes)}. No: {effectWords(check.no)}.
           </p>
           <div className="mt-3 grid grid-cols-2 gap-3">
-            <Button variant="gold" className="py-4 text-2xl" onClick={() => dispatch({ type: 'ANSWER_CHECK', key: check.key, answer: true })}>
+            <Button variant="gold" className="py-4 text-2xl" onClick={() => dispatch({ type: 'ANSWER_CHECK', key: check.key, answer: true, cards, random: randomNumbers(SHUFFLE_NUMBERS) })}>
               Yes
             </Button>
-            <Button className="py-4 text-2xl" onClick={() => dispatch({ type: 'ANSWER_CHECK', key: check.key, answer: false })}>
+            <Button className="py-4 text-2xl" onClick={() => dispatch({ type: 'ANSWER_CHECK', key: check.key, answer: false, cards, random: randomNumbers(SHUFFLE_NUMBERS) })}>
               No
             </Button>
           </div>

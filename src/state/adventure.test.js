@@ -18,7 +18,7 @@ const { adventures, monsters, problems } = normalizeCardFile({
       reveals: [{ tile: 'Vault', story: 'A vault!', steps: ['Put the bag on the desk.'], actions: [{ type: 'placeToken', name: 'Bag' }, { type: 'drawGuardians', count: 2 }, { type: 'extraEncounters', count: 1 }] }],
       win: { guardians: true, tokens: ['Bag'] },
     },
-    { id: 'big', title: 'Big', goal: 'Later.', needs: ['villagers'] },
+    { id: 'big', title: 'Big', goal: 'Later.', needs: ['campaign'] },
   ],
 })
 
