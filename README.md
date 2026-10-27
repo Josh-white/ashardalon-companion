@@ -33,6 +33,24 @@ Then open `http://piserver.local:8081` (or https://ashardalon.codebasehome.com) 
 
 To update after pulling new changes: `git pull && docker compose up -d --build`. The current game lives in the `game-data` Docker volume, so updates don't wipe it.
 
+## Back up the saved game
+
+`scripts/backup-game.sh` copies the saved game out of the app into `~/ashardalon-backups` and keeps the newest 14 copies. It skips a copy when nothing changed, so a quiet week doesn't push out older saves. To run it every night at 3:15, add it to cron on the Pi:
+
+```sh
+mkdir -p ~/ashardalon-backups
+(crontab -l 2>/dev/null; echo "15 3 * * * $HOME/ashardalon-companion/scripts/backup-game.sh >> $HOME/ashardalon-backups/backup.log 2>&1") | crontab -
+```
+
+To put a backup back:
+
+```sh
+scripts/restore-game.sh                                         # lists the backups
+scripts/restore-game.sh ~/ashardalon-backups/game-2026-10-27-031500.json
+```
+
+The restore saves the current game first (as a `-before-restore` copy), so it can be undone, then restarts the app with the backup. It refuses a backup saved by a different version of the app, which would otherwise open as a new game. For the test copy, put `CONTAINER=ashardalon-test BACKUP_DIR=~/ashardalon-test-backups` in front of either command.
+
 ## A test copy
 
 A second copy of the app, with its own saved game, is handy for trying new features without touching the real game. Clone the repo into another folder and give it its own `.env`:
