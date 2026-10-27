@@ -10,7 +10,7 @@ import {
 import { PHASES } from '../data/phases.js'
 import { heroItems, itemAttackBonus, itemTrapBonus, tileAcBonus } from '../data/items.js'
 import { effectsOf, heroAc, heroAttackPenalty, maxRolls } from '../data/powerEffects.js'
-import { MAX_SURGES, MIN_SURGES, checkVictory, countDefeat, escapeBlockers, isPlayable, newAdventure, onceOnlyDraw, showStory, takeToken, tilesToCome } from './adventure.js'
+import { DOOR_KINDS, DOOR_UNLOCK_ROLL, MAX_SURGES, MIN_SURGES, checkVictory, countDefeat, escapeBlockers, isPlayable, newAdventure, onceOnlyDraw, playableChambers, revealsReady, showStory, takeToken } from './adventure.js'
 
 export const SAVE_VERSION = 1
 
@@ -463,10 +463,10 @@ function figuresLeft(monster, hp) {
 }
 
 // The first monster defeated in a turn earns a treasure card for the hero who defeated
-// it (a villain doesn't). Returns the moment's words.
+// it (a villain or a chamber's Altar doesn't). Returns the moment's words.
 function defeatDetails(state, defeated, heroId) {
   if (defeated.length === 0) return { state, details: [] }
-  if (defeated.every((m) => m.villain)) return { state, details: [`${defeated.map((m) => m.name).join(' and ')} defeated!`] }
+  if (defeated.every((m) => m.villain || m.objective)) return { state, details: [`${defeated.map((m) => m.name).join(' and ')} defeated!`] }
   const treasure = !state.turn.treasureDrawn
   const next = treasure ? { ...state, turn: { ...state.turn, treasureDrawn: true, treasureOwed: heroId ?? null } } : state
   const xp = defeated.reduce((sum, m) => sum + (m.xp ?? 0), 0)
@@ -1165,7 +1165,7 @@ export const gameReducer = (state, action) => checkVictory(reduce(state, action)
 
 // A special tile turned up: read its text, then do what the adventure says.
 function revealTile(state, action) {
-  const reveal = tilesToCome(state.adventure).find((r) => r.tile === action.tile)
+  const reveal = revealsReady(state.adventure, Boolean(action.door)).find((r) => r.tile === action.tile)
   const hero = state.heroes[state.turn.heroIndex]
   if (!reveal || !hero) return state
   let next = { ...state, adventure: { ...state.adventure, revealed: [...state.adventure.revealed, reveal.tile] } }
@@ -1190,9 +1190,107 @@ function revealTile(state, action) {
     } else if (step.type === 'placeVillain') {
       // The villain rules take it from here, with the villain cards the device sent along.
       next = reduce(next, { type: 'PLACE_VILLAIN', name: step.name, cards: action.villains ?? [] })
+    } else if (step.type === 'chamber') {
+      next = openChamber(next, step, action, hero)
     }
   }
-  return showStory(next, `The ${reveal.tile}!`, reveal.story, reveal.steps)
+  const chamber = !state.adventure.chamber && next.adventure.chamber
+  const steps = chamber ? [...reveal.steps, ...chamberSteps(next, chamber)] : reveal.steps
+  return showStory(next, `The ${reveal.tile}!`, reveal.story, steps)
+}
+
+// A hero next to a Closed Door token turned it over (Rulebook p. 15).
+function revealDoor(state, action) {
+  const hero = state.heroes.find((h) => h.id === action.heroId) ?? state.heroes[state.turn.heroIndex]
+  if (!state.adventure || !DOOR_KINDS.includes(action.kind) || !hero) return state
+  if (action.kind === 'unlocked') {
+    return withMoment(withLog(state, `${hero.name} opened an Unlocked Door.`), { kind: 'roll', heroId: hero.id, title: 'The door swings open!', detail: 'Discard the Closed Door token.' })
+  }
+  if (action.kind === 'trapped') {
+    // Each hero next to the door takes 1 damage.
+    const ids = Array.isArray(action.heroIds) ? action.heroIds : [hero.id]
+    const { next } = damageHeroes(state, ids, 1, 'a Trapped Door')
+    const names = state.heroes.filter((h) => ids.includes(h.id)).map((h) => h.name)
+    return withMoment(next, { kind: 'fumble', heroId: hero.id, title: 'A Trapped Door!', detail: `${names.join(', ') || 'No one'} took 1 damage. Discard the Closed Door token.` })
+  }
+  const next = { ...state, adventure: { ...state.adventure, lockedDoors: [...(state.adventure.lockedDoors ?? []), { id: newId('door') }] } }
+  return withMoment(withLog(next, `${hero.name} found a Locked Door.`), {
+    kind: 'roll',
+    heroId: hero.id,
+    title: 'A Locked Door!',
+    detail: `Put the token back face up. A hero next to it can try to unlock it instead of attacking: ${DOOR_UNLOCK_ROLL} or more.`,
+  })
+}
+
+// One of the list, picked with a random number the device sent along.
+const pick = (list, r) => list[Math.min(list.length - 1, Math.floor((Number.isFinite(Number(r)) ? Number(r) : 0) * list.length))]
+
+const sameName = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase()
+
+// A chamber's entrance turned up. The chamber card (named by the adventure, or drawn
+// from the Chamber deck) puts its villain or objective in the chamber, then each
+// player, starting with the active hero, draws monsters for it.
+function openChamber(state, step, action, hero) {
+  const random = Array.isArray(action.random) ? action.random : []
+  const deck = playableChambers(action.chambers)
+  const card = step.name ? deck.find((c) => c.id === step.name || sameName(c.name, step.name)) : deck.length > 0 ? pick(deck, random[0]) : null
+  if (!card) return withLog(state, step.name ? `The app has no chamber card called "${step.name}".` : 'There are no chamber cards to draw.')
+  const villain = card.villain || (card.villainFrom.length > 0 ? pick(card.villainFrom, random[1]) : '')
+  let next = { ...state, adventure: { ...state.adventure, chamber: { card, villain, objectivePlaced: false, done: false } } }
+  next = withLog(next, step.name ? `The chamber is the ${card.name}.` : `${hero.name} drew the ${card.name} chamber card!`)
+  if (villain) next = reduce(next, { type: 'PLACE_VILLAIN', name: villain, cards: action.villains ?? [] })
+  if (card.objective) {
+    const { name, hp, ac } = card.objective
+    const objective = { id: newId('monster'), name, maxHp: hp, hp, ac, xp: 0, ownerId: null, conditions: [], objective: true, card: { hp, figures: 1, special: '', types: [], attacks: [], tactics: [] } }
+    next = { ...next, monsters: [...next.monsters, objective], adventure: { ...next.adventure, chamber: { ...next.adventure.chamber, objectivePlaced: true } } }
+  }
+  // Filling the chamber isn't the hero's tile draw or an encounter's monster, so those buttons stay as they were.
+  const { monsterDrawn } = next.turn
+  const { encounter } = next
+  if (!next.monsterDeck && Array.isArray(action.cards)) next = { ...next, monsterDeck: buildDeck(action.cards, random) }
+  const start = state.turn.heroIndex
+  const order = state.heroes.map((_, i) => state.heroes[(start + i) % state.heroes.length])
+  for (let round = 0; round < card.monsters.perPlayer; round++) {
+    for (const player of order) next = drawChamberMonster(next, player, card.monsters, random)
+  }
+  next = { ...next, turn: { ...next.turn, monsterDrawn }, encounter }
+  const placed = next.monsters.filter((m) => m.chamber && !state.monsters.some((old) => old.id === m.id))
+  return withMoment(next, {
+    kind: 'spawn',
+    title: `The ${card.name}!`,
+    detail: [villain && `The ${villain}`, card.objective && `the ${card.objective.name}`, ...placed.map((m) => m.name)].filter(Boolean).join(', ') + ' wait in the chamber.',
+  })
+}
+
+// Does a drawn monster belong in this chamber? Elite Regiment wants no 1 XP monsters,
+// the clan lairs want their kind. A misfit is discarded once and another drawn.
+const fitsChamber = (monster, rule) =>
+  (rule.types.length === 0 || (monster.card?.types ?? []).some((t) => rule.types.some((want) => sameName(t, want)))) && !rule.redrawXp.includes(monster.xp)
+
+function drawChamberMonster(state, hero, rule, random) {
+  const draw = (current) => {
+    const after = drawMonster(current, hero.id, random)
+    return { state: after, monster: after.monsters.length > current.monsters.length ? after.monsters[after.monsters.length - 1] : null }
+  }
+  let { state: next, monster } = draw(state)
+  if (monster && !fitsChamber(monster, rule)) {
+    next = discardMonsterCard({ ...next, monsters: next.monsters.filter((m) => m.id !== monster.id) }, monster)
+    next = withLog(next, `The ${monster.name} doesn't belong in this chamber, so it's discarded and ${hero.name} draws again.`)
+    ;({ state: next, monster } = draw(next))
+  }
+  return monster ? updateMonster(next, monster.id, () => ({ chamber: true })) : next
+}
+
+// What the players do on the board for the chamber card, added to the reveal's read-aloud box.
+function chamberSteps(state, chamber) {
+  const placed = state.monsters.filter((m) => m.chamber)
+  const owners = placed.map((m) => `${m.name} (${state.heroes.find((h) => h.id === m.ownerId)?.name ?? 'no one'})`)
+  return [
+    `Chamber card: ${chamber.card.name}. ${chamber.card.goal}`,
+    chamber.villain && `Place the ${chamber.villain} on a Chamber tile${chamber.card.setup.some((line) => /Chamber Entrance tile/i.test(line)) ? ' (the card says where)' : ''}.`,
+    chamber.card.objective && `Place the ${chamber.card.objective.name} marker on any Chamber tile (${chamber.card.objective.hp} HP, AC ${chamber.card.objective.ac}).`,
+    placed.length > 0 && `Place these monsters on Chamber tiles, empty tiles first: ${owners.join(', ')}.`,
+  ].filter(Boolean)
 }
 
 function reduce(state, action) {
@@ -1240,6 +1338,33 @@ function reduce(state, action) {
       const hero = state.heroes.find((h) => h.id === action.heroId)
       if (!hero || !state.adventure?.tokens.some((t) => t.name === action.name)) return state
       return withLog(takeToken(state, action.name, hero.id), `${hero.name} picked up the ${action.name}!`)
+    }
+
+    case 'ADVENTURE_CHAMBER_DONE': {
+      // A chamber goal the app can't check (Treasure Hoard): the players say when it's done.
+      const chamber = state.adventure?.chamber
+      if (!chamber?.card.win.manual) return state
+      return { ...state, adventure: { ...state.adventure, chamber: { ...chamber, done: Boolean(action.done) } } }
+    }
+
+    case 'DOOR_REVEALED':
+      return revealDoor(state, action)
+
+    case 'DOOR_UNLOCK': {
+      // Instead of attacking, a hero next to a Locked Door rolls to unlock it.
+      const door = (state.adventure?.lockedDoors ?? []).find((d) => d.id === action.doorId)
+      const hero = state.heroes.find((h) => h.id === action.heroId)
+      if (!door || !hero || !validRoll(action.roll)) return state
+      const unlocked = action.roll >= DOOR_UNLOCK_ROLL
+      let next = withLog(state, `${hero.name} rolled ${action.roll} to unlock the door (needed ${DOOR_UNLOCK_ROLL}).${unlocked ? ' Unlocked!' : ''}`)
+      if (unlocked) next = { ...next, adventure: { ...next.adventure, lockedDoors: next.adventure.lockedDoors.filter((d) => d.id !== door.id) } }
+      return withMoment(next, {
+        kind: unlocked ? 'defeat' : 'roll',
+        heroId: hero.id,
+        value: action.roll,
+        title: unlocked ? 'The door is unlocked!' : 'Still locked',
+        detail: unlocked ? 'Discard the Closed Door token.' : `${hero.name} needed ${DOOR_UNLOCK_ROLL} or more.`,
+      })
     }
 
     case 'ADVENTURE_ESCAPED':
@@ -1476,6 +1601,11 @@ function reduce(state, action) {
       }
       const monster = state.monsters.find((m) => m.id === action.monsterId)
       if (!monster) return state
+      if (monster.objective) {
+        // The Altar isn't a monster: no XP and no treasure, but it counts for the chamber's goal.
+        const next = { ...state, monsters: state.monsters.filter((m) => m.id !== monster.id) }
+        return withMoment(withLog(next, `The ${monster.name} was destroyed!`), { kind: 'defeat', title: `The ${monster.name} is destroyed!`, detail: '' })
+      }
       // One treasure card per turn, for the first monster defeated.
       const treasure = !state.turn.treasureDrawn
       const counted = countDefeat(state, monster, figuresLeft(monster, monster.hp), true)
