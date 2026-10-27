@@ -197,7 +197,7 @@ export function AdventurePanel({ state, dispatch }) {
 
 // In the Exploration Phase: a button for each special tile the adventure is waiting for.
 export function RevealButtons({ state, dispatch }) {
-  const { monsters } = useCards()
+  const { monsters, villains = [] } = useCards()
   const tiles = tilesToCome(state.adventure)
   if (tiles.length === 0) return null
   return (
@@ -208,7 +208,7 @@ export function RevealButtons({ state, dispatch }) {
           <Button
             key={reveal.tile}
             variant="gold"
-            onClick={() => dispatch({ type: 'ADVENTURE_REVEAL', tile: reveal.tile, cards: monsters, random: randomNumbers(SHUFFLE_NUMBERS) })}
+            onClick={() => dispatch({ type: 'ADVENTURE_REVEAL', tile: reveal.tile, cards: monsters, villains, random: randomNumbers(SHUFFLE_NUMBERS) })}
           >
             It's the {reveal.tile}!
           </Button>

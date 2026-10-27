@@ -254,7 +254,7 @@ function normalizeEncounters(list, problems) {
 }
 
 // What an adventure can do when its special tile is revealed. "placeVillain" is
-// handled by the villain rules; the rest by the adventure rules in state/adventure.js.
+// handled by the villain rules (PLACE_VILLAIN); the rest by the adventure rules in state/adventure.js.
 export const REVEAL_ACTIONS = ['drawGuardians', 'placeToken', 'extraEncounters', 'placeVillain']
 const strings = (list) => (Array.isArray(list) ? list : []).filter((s) => typeof s === 'string' && s.trim() !== '')
 const text = (value) => (typeof value === 'string' ? value : '')

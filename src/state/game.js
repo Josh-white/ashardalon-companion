@@ -902,7 +902,8 @@ function revealTile(state, action) {
     } else if (step.type === 'extraEncounters') {
       next = { ...next, adventure: { ...next.adventure, extraEncounters: next.adventure.extraEncounters + step.count } }
     } else if (step.type === 'placeVillain') {
-      next = reduce(next, { type: 'placeVillain', name: step.name })
+      // The villain rules take it from here, with the villain cards the device sent along.
+      next = reduce(next, { type: 'PLACE_VILLAIN', name: step.name, cards: action.villains ?? [] })
     }
   }
   return showStory(next, `The ${reveal.tile}!`, reveal.story, reveal.steps)
