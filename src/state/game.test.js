@@ -605,6 +605,21 @@ describe('encounter deck', () => {
     expect(state.monsterDeck.discard).toEqual(['rat', 'rat', 'rat'])
   })
 
+  it('stacks the monster deck before a card like Spotted! draws its monster', () => {
+    let state = startGame()
+    const cards = Object.fromEntries(monsters.map((m) => [m.id, m]))
+    state = { ...state, monsterDeck: { cards, draw: ['rat', 'rat', 'orc', 'rat', 'rat', 'rat'], discard: [] } }
+    state = drawCard(state, 'orcs')
+    state = { ...state, encounter: { ...state.encounter, card: { ...state.encounter.card, drawMonster: true } } }
+    state = gameReducer(state, { type: 'FILTER_ENCOUNTER_MONSTERS', random: [], monsterCards: monsters })
+    expect(state.monsterDeck.draw).toEqual(['orc', 'rat'])
+    expect(gameReducer(state, { type: 'CANCEL_ENCOUNTER' })).toBe(state)
+    state = gameReducer(state, { type: 'DRAW_MONSTER', heroId: state.heroes[0].id, cards: monsters, random: [] })
+    expect(state.monsters.at(-1).name).toBe('Orc')
+    state = resolve(state)
+    expect(state.monsterDeck.draw).toEqual(['rat'])
+  })
+
   it('passes a monster card to another hero', () => {
     let state = startGame()
     state = gameReducer(state, { type: 'ADD_MONSTER', name: 'Rat', hp: 1, xp: 1, ownerId: state.heroes[0].id })

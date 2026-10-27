@@ -214,7 +214,7 @@ function EncounterCard({ state, hero, dispatch }) {
   const autoNotes = [
     card.damageEach > 0 && `Every hero takes ${card.damageEach} damage when you tap the button.`,
     card.damagePoisoned > 0 && `Every Poisoned hero takes ${card.damagePoisoned} damage when you tap the button.`,
-    card.filterMonsters && `The app looks at the top 5 monster cards, keeps the ${card.filterMonsters}s on top and discards the rest.`,
+    card.filterMonsters && !state.encounter.filtered && `The app looks at the top 5 monster cards, keeps the ${card.filterMonsters}s on top and discards the rest.`,
     card.drawAnother && 'Then you draw another encounter card.',
   ].filter(Boolean)
 
@@ -263,7 +263,17 @@ function EncounterCard({ state, hero, dispatch }) {
           )}
           {!needsAttack && (
             <>
-              {card.drawMonster &&
+              {card.drawMonster && card.filterMonsters && !state.encounter.filtered ? (
+                <Button
+                  variant="danger"
+                  className="w-full py-3 text-lg font-bold"
+                  onClick={() =>
+                    dispatch({ type: 'FILTER_ENCOUNTER_MONSTERS', monsterCards, random: randomNumbers(SHUFFLE_NUMBERS) })
+                  }
+                >
+                  First, stack the monster deck with {card.filterMonsters}s
+                </Button>
+              ) : card.drawMonster &&
                 (state.encounter.monsterDrawn ? (
                   <p className="text-emerald-300">✓ Monster drawn. Put its figure where the card says.</p>
                 ) : (
