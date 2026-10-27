@@ -60,6 +60,7 @@ export function ExtraAttacks({ state, dispatch, onlyHeroId = null }) {
 }
 
 function HeroPhase({ state, hero, dispatch }) {
+  const caged = (hero.curses ?? []).some((c) => c.cardId === 'cage')
   return (
     <>
       {hero.hp === 0 && (
@@ -74,7 +75,9 @@ function HeroPhase({ state, hero, dispatch }) {
           </Button>
         </Note>
       )}
-      {hero.conditions.includes('Dazed') ? (
+      {caged ? (
+        <Note tone="warn">{hero.name} is in a cage and can't move. Attack, or try to open the cage instead.</Note>
+      ) : hero.conditions.includes('Dazed') ? (
         <Note tone="warn">{hero.name} is Dazed: move <b>or</b> attack this turn, not both. Dazed wears off after this phase.</Note>
       ) : (
         <Note>Move and attack, attack and move, or move twice.</Note>
@@ -83,9 +86,13 @@ function HeroPhase({ state, hero, dispatch }) {
         <Note tone="warn">{hero.name} is Poisoned. When you end the Hero Phase, the app rolls: 10 or more shakes it off.</Note>
       )}
 
-      <CurseNotes hero={hero} dispatch={dispatch} />
+      <CurseNotes state={state} hero={hero} dispatch={dispatch} />
 
-      <HeroAttack state={state} hero={hero} dispatch={dispatch} />
+      {state.turn.curseTried === hero.id ? (
+        <Note>{hero.name} used this turn's attack on the cage.</Note>
+      ) : (
+        <HeroAttack state={state} hero={hero} dispatch={dispatch} />
+      )}
       <DisableTraps state={state} hero={hero} dispatch={dispatch} />
       <Doors state={state} hero={hero} dispatch={dispatch} />
       <ExtraAttacks state={state} dispatch={dispatch} />
