@@ -322,6 +322,7 @@ function normalizeTreasures(list, problems) {
     })
   })
   return treasures
+}
 
 // What an adventure can do when its special tile is revealed. "placeVillain" is
 // handled by the villain rules (PLACE_VILLAIN); the rest by the adventure rules in state/adventure.js.
