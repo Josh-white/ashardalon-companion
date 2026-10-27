@@ -223,7 +223,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
         {/* Only the projector starts the game, once every hero is ready. */}
         {watchOnly && (
           <Button variant="gold" className="px-10 py-4 text-xl" disabled={!ready}
-            onClick={() => dispatch({ type: 'START_GAME', treasureCards: cards.treasures, random: randomNumbers(128) })}
+            onClick={() => dispatch({ type: 'START_GAME', treasureCards: cards.treasures, random: randomNumbers(128), tileRandom: randomNumbers(8) })}
           >
             Enter the dungeon
           </Button>

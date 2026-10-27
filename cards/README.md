@@ -183,7 +183,7 @@ Adventures from the adventure book go in an `adventures` list. The projector pic
 }
 ```
 
-- `reveals`: special tiles. In the Exploration Phase each one gets an "It's the Vault!" button that shows its story and steps and does its `actions`:
+- `reveals`: special tiles. The app counts the dungeon tile stack and reveals each one when it's drawn, then shows its story and steps and does its `actions`. `drawn` is `[first, last]`, the draws it can turn up on, counting the first tile drawn as 1: `[7, 7]` for "after the 6th tile". Without it, `[9, 12]`, the book's usual "after the 8th tile":
   - `drawGuardians`: draws `count` monster cards for the hero who found the tile; they're the guardians.
   - `placeToken`: a token to pick up, such as a lost bag.
   - `extraEncounters`: `count` more encounter cards every Villain Phase from now on.

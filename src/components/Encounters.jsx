@@ -7,6 +7,7 @@ import { randomNumbers, rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { DrawMonsterButton, HeroPicker } from './MonsterTurns.jsx'
 import { TileGuardQuestion } from './Treasure.jsx'
+import { DrawTileButton } from './Tiles.jsx'
 import { Button } from './ui.jsx'
 
 // Enough random numbers to shuffle the whole encounter deck.
@@ -279,6 +280,9 @@ function EncounterCard({ state, hero, dispatch }) {
           )}
           {!needsAttack && (
             <>
+              {card.id === 'occupied-lair' && (
+                <DrawTileButton state={state} dispatch={dispatch} drawKey={`encounter-${state.encounter.id}`} from="bottom" />
+              )}
               {card.drawMonster && card.filterMonsters && !state.encounter.filtered ? (
                 <Button
                   variant="danger"

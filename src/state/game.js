@@ -10,6 +10,7 @@ import {
 import { PHASES } from '../data/phases.js'
 import { heroItems, itemAttackBonus, itemTrapBonus, tileAcBonus } from '../data/items.js'
 import { effectsOf, heroAc, heroAttackPenalty, maxRolls } from '../data/powerEffects.js'
+import { STARTING_TILES, MAX_TILES, MIN_TILES, bottomToTop, buildTileStack, takeTile } from './tiles.js'
 import { DOOR_KINDS, DOOR_UNLOCK_ROLL, MAX_SURGES, MIN_SURGES, checkVictory, countDefeat, escapeBlockers, isPlayable, newAdventure, onceOnlyDraw, playableChambers, revealsReady, showStory, takeToken } from './adventure.js'
 
 export const SAVE_VERSION = 1
@@ -46,6 +47,9 @@ export const initialState = {
   // The virtual treasure deck, built on the first treasure draw.
   treasureDeck: null,
   treasure: null, // the treasure card just drawn, waiting for a hero to take it: { id, cardId, heroId, card }
+  // The dungeon tile stack (state/tiles.js): { stack: ['' | special tile name], drawn }, top first.
+  tileStack: null,
+  lobbyTiles: STARTING_TILES,
 }
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
@@ -425,6 +429,7 @@ function resolveEncounter(state, action) {
   } else {
     next = discardEncounterCard(next, card.id)
   }
+  if (card.id === 'lost') next = bottomToTop(next)
   if (card.drawAnother) next = { ...next, turn: { ...next.turn, encountersOwed: (next.turn.encountersOwed ?? 0) + 1 } }
   if (downed.length > 0) {
     next = withMoment(next, { kind: 'down', title: `${downed.join(' and ')} ${downed.length > 1 ? 'are' : 'is'} down!`, detail: card.name })
@@ -1288,6 +1293,21 @@ function placeVillain(state, action) {
 // Every action, then a check for an adventure's victory.
 export const gameReducer = (state, action) => checkVictory(reduce(state, action))
 
+// A dungeon tile drawn from the stack, from the top when exploring or the bottom for a
+// card that says so. `key` says what it was for (explore, a monster, an encounter), so
+// each thing draws once. A special tile is revealed straight away.
+function drawDungeonTile(state, action) {
+  const key = action.key ?? 'explore'
+  if (!state.tileStack || state.turn.tiles?.[key] !== undefined) return state
+  const { state: drawn, tile } = takeTile(state, action.from === 'bottom' ? 'bottom' : 'top')
+  let next = { ...drawn, turn: { ...drawn.turn, tiles: { ...drawn.turn.tiles, [key]: tile ?? 'none' } } }
+  if (tile === null) return next
+  const left = next.tileStack.stack.length
+  next = withLog(next, `Dungeon tile drawn${action.from === 'bottom' ? ' from the bottom' : ''}; ${left} left.`)
+  if (tile) next = revealTile(next, { ...action, tile, door: false })
+  return next
+}
+
 // A special tile turned up: read its text, then do what the adventure says.
 function revealTile(state, action) {
   const reveal = revealsReady(state.adventure, Boolean(action.door)).find((r) => r.tile === action.tile)
@@ -1431,7 +1451,15 @@ function reduce(state, action) {
       if (state.status !== 'setup' || heroes.length === 0) return state
       const card = state.lobbyAdventure
       const surges = clamp(Number(state.lobbySurges) || STARTING_SURGES, MIN_SURGES, MAX_SURGES)
-      const started = { ...initialState, status: 'playing', heroes, surges, adventure: card ? newAdventure(card) : null }
+      const tiles = clamp(Number(state.lobbyTiles) || STARTING_TILES, MIN_TILES, MAX_TILES)
+      const started = {
+        ...initialState,
+        status: 'playing',
+        heroes,
+        surges,
+        adventure: card ? newAdventure(card) : null,
+        tileStack: buildTileStack(tiles, card, action.tileRandom),
+      }
       const names = heroes.map((h) => h.name).join(', ')
       return dealStartingTreasure(
         withLog(started, card ? `${card.title} begins with ${names}.` : `The adventure begins with ${names}.`),
@@ -1452,8 +1480,15 @@ function reduce(state, action) {
       if (state.status !== 'setup') return state
       return { ...state, lobbySurges: clamp(Number(action.surges) || STARTING_SURGES, MIN_SURGES, MAX_SURGES) }
 
+    case 'SET_LOBBY_TILES':
+      if (state.status !== 'setup') return state
+      return { ...state, lobbyTiles: clamp(Number(action.tiles) || STARTING_TILES, MIN_TILES, MAX_TILES) }
+
     case 'ADVENTURE_REVEAL':
       return revealTile(state, action)
+
+    case 'DRAW_TILE':
+      return drawDungeonTile(state, action)
 
     case 'ADVENTURE_STORY_DONE':
       if (!state.adventure?.story || state.adventure.story.id !== action.storyId) return state
@@ -1550,6 +1585,7 @@ function reduce(state, action) {
         monsters: [monster('Kobold Dragonshield', 2, 1, 0), monster('Orc Smasher', 2, 2, 2), monster('Grell', 2, 2, 4)],
         xp: 3,
         turn: { ...initialState.turn, round: 2 },
+        tileStack: buildTileStack(STARTING_TILES - 4, null),
       }
       // With monster cards, the demo's monsters come off the virtual deck instead.
       if (action.monsterCards?.length > 0) {
@@ -1705,7 +1741,17 @@ function reduce(state, action) {
       // The Exploration Phase's question: is the hero on an unexplored edge? With no
       // new tile the phase is over, and the Villain Phase knows to draw an encounter.
       if (PHASES[state.turn.phase]?.key !== 'exploration') return state
-      const explored = Boolean(action.explored)
+      let explored = Boolean(action.explored)
+      // With the tile stack, saying yes draws the tile. An empty stack means no new tile.
+      if (explored && state.tileStack) {
+        if (state.tileStack.stack.length === 0) {
+          explored = false
+          state = { ...state, turn: { ...state.turn, noTiles: true } }
+        } else {
+          const drawn = drawDungeonTile(state, { ...action, key: 'explore', from: 'top' })
+          return { ...drawn, turn: { ...drawn.turn, explored: true } }
+        }
+      }
       // A card's end-of-Exploration question (Wrath of the Enemy) holds the phase open.
       if (!explored && phaseChecks(state, 'exploration').length > 0) return { ...state, turn: { ...state.turn, explored } }
       // Skipping ahead ends the Exploration Phase, so its curse rolls happen now.

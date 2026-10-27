@@ -485,7 +485,9 @@ function normalizeAdventures(list, problems) {
       }
       // `door`: it happens when a door opens (the Hero Phase), not when a tile turns up.
       // `after`: it can't happen until that other reveal has.
-      reveals.push({ tile: reveal.tile, story: text(reveal.story), steps: strings(reveal.steps), actions, door: reveal.door === true, after: text(reveal.after) })
+      // `drawn`: [first, last], the draws the tile can turn up on (the 1st tile drawn is 1).
+      const drawn = Array.isArray(reveal.drawn) && reveal.drawn.length === 2 && reveal.drawn.every((n) => wholeNumber(n, 1)) && reveal.drawn[0] <= reveal.drawn[1] ? [...reveal.drawn] : null
+      reveals.push({ tile: reveal.tile, story: text(reveal.story), steps: strings(reveal.steps), actions, door: reveal.door === true, after: text(reveal.after), drawn })
     }
     const win = adv.win ?? {}
     seen.add(adv.id)

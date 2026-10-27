@@ -6,6 +6,7 @@ import { heroItems } from '../data/items.js'
 import { heroAc } from '../data/powerEffects.js'
 import { activeVillains } from '../state/game.js'
 import { ProjectorAdventure } from './Adventure.jsx'
+import { TilesLeft } from './Tiles.jsx'
 import { HpBar } from './ui.jsx'
 
 // A read-only screen for the projector: big enough to read across the room,
@@ -23,6 +24,7 @@ export default function ProjectorView({ state, onSwitchSeat }) {
         <div className="flex items-baseline justify-between">
           <p className="uppercase tracking-widest text-zinc-400">Round {round}</p>
           <div className="flex items-baseline gap-[3vw]">
+            <TilesLeft state={state} />
             <span className="text-amber-400">
               <span className="font-bold">{state.xp}</span> XP
             </span>
