@@ -664,6 +664,16 @@ describe('treasure deck', () => {
     expect(treasures).toHaveLength(11)
   })
 
+  it('gives each hero one treasure card before the adventure starts', () => {
+    const heroes = HERO_TEMPLATES.slice(0, 3).map((t) => createHero(t))
+    const state = gameReducer(initialState, { type: 'START_GAME', heroes, treasureCards: treasures, random: [] })
+    expect(state.heroes.map((h) => h.items.map((i) => i.name))).toEqual([['Sword'], ['Amulet'], ['Shield']])
+    expect(state.treasureDeck.draw).toHaveLength(8)
+    expect(state.moment).toMatchObject({ kind: 'treasure', title: 'Starting treasure!' })
+    // Without treasure cards, nobody gets one.
+    expect(startGame().heroes[0].items).toBeUndefined()
+  })
+
   it('owes the defeating hero one treasure card a turn, and draws it from the deck', () => {
     let state = attack(setup(), 10) // 10 + 6 beats the Ogre's AC 14
     expect(state.turn.treasureOwed).toBe(state.heroes[0].id)

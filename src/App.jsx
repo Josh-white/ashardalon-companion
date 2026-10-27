@@ -135,6 +135,9 @@ function PartyStrip({ heroes, exceptId }) {
             </div>
             <HpBar hp={hero.hp} maxHp={hero.maxHp} />
             {hero.conditions.length > 0 && <p className="mt-1 text-sm text-amber-400">{hero.conditions.join(', ')}</p>}
+            {(hero.items ?? []).length > 0 && (
+              <p className="mt-1 text-sm text-yellow-300">💰 {hero.items.map((i) => (i.used ? `${i.name} (used)` : i.name)).join(', ')}</p>
+            )}
           </div>
         ))}
       </div>
@@ -152,8 +155,6 @@ function HeroView({ state, dispatch, hero }) {
       {myTurn ? <TurnGuide state={state} dispatch={dispatch} /> : <WaitingBanner state={state} />}
       {/* Cause Fear gives other heroes an attack during someone else's turn. */}
       {!myTurn && <ExtraAttacks state={state} dispatch={dispatch} onlyHeroId={hero.id} />}
-      {/* A monster defeated on someone else's turn earns this hero the treasure. */}
-      {!myTurn && <TreasureStep state={state} dispatch={dispatch} heroId={hero.id} />}
       <HeroCard
         state={state}
         hero={hero}
@@ -167,6 +168,7 @@ function HeroView({ state, dispatch, hero }) {
       <MonsterList state={state} dispatch={dispatch} ownerId={hero.id} />
       <PartyStrip heroes={state.heroes} exceptId={hero.id} />
       <GameLog log={state.log} />
+      <TreasureStep state={state} dispatch={dispatch} heroId={hero.id} />
     </div>
   )
 }
@@ -195,6 +197,7 @@ function TableView({ state, dispatch }) {
       </section>
       <MonsterList state={state} dispatch={dispatch} />
       <GameLog log={state.log} />
+      <TreasureStep state={state} dispatch={dispatch} />
     </div>
   )
 }
@@ -250,7 +253,9 @@ export default function App() {
           dispatch={dispatch}
           deviceId={deviceId}
           onClaim={setSeat}
-          onDemo={(picks, monsterCards) => dispatch({ type: 'START_DEMO', picks, monsterCards, random: randomNumbers(128) })}
+          onDemo={(picks, monsterCards, treasureCards) =>
+            dispatch({ type: 'START_DEMO', picks, monsterCards, treasureCards, random: randomNumbers(128) })
+          }
           watchOnly={seat === PROJECTOR_SEAT}
           onProjector={() => setSeat(PROJECTOR_SEAT)}
           onLeaveProjector={() => setSeat(null)}

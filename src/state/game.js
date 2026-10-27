@@ -874,6 +874,23 @@ function drawTreasure(state, action) {
   })
 }
 
+// Before the adventure, each hero draws one treasure card to start with.
+function dealStartingTreasure(state, cards, random) {
+  if (!Array.isArray(cards) || cards.length === 0) return state
+  let next = { ...state, treasureDeck: buildDeck(cards, random) }
+  const found = []
+  for (const hero of next.heroes) {
+    const drawn = drawTop(next.treasureDeck, random)
+    const card = drawn && drawn.deck.cards[drawn.cardId]
+    if (!card) break
+    const item = { id: newId('item'), cardId: card.id, name: card.name, used: false, card }
+    next = updateHero({ ...next, treasureDeck: drawn.deck }, hero.id, (h) => ({ items: [...(h.items ?? []), item] }))
+    next = withLog(next, `${heroLabel(hero)} starts with ${article(card.name)} ${card.name}.`)
+    found.push(`${hero.name}: ${card.name}`)
+  }
+  return withMoment(next, { kind: 'treasure', title: 'Starting treasure!', detail: found.join(' · ') })
+}
+
 // The treasure card goes in front of a hero: the one who found it, or one they hand it to.
 function keepTreasure(state, action) {
   const treasure = state.treasure
@@ -1055,7 +1072,11 @@ export function gameReducer(state, action) {
       const heroes = action.heroes ?? heroesFromLobby(state.lobby ?? [])
       if (state.status !== 'setup' || heroes.length === 0) return state
       const started = { ...initialState, status: 'playing', heroes }
-      return withLog(started, `The adventure begins with ${heroes.map((h) => h.name).join(', ')}.`)
+      return dealStartingTreasure(
+        withLog(started, `The adventure begins with ${heroes.map((h) => h.name).join(', ')}.`),
+        action.treasureCards,
+        action.random,
+      )
     }
 
     case 'CLAIM_HERO': {
@@ -1117,7 +1138,7 @@ export function gameReducer(state, action) {
         for (const owner of [0, 2, 4]) demo = drawMonster(demo, heroes[owner].id, action.random)
         demo = { ...demo, log: [], moment: null }
       }
-      return withLog(demo, 'A demo game begins. Nothing here is your real game.')
+      return dealStartingTreasure(withLog(demo, 'A demo game begins. Nothing here is your real game.'), action.treasureCards, action.random)
     }
 
     case 'ADJUST_HP': {

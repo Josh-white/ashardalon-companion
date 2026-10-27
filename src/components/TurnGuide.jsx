@@ -5,7 +5,7 @@ import HeroAttack, { AttackAftermath } from './HeroAttack.jsx'
 import MonsterTurns, { DrawMonsterButton } from './MonsterTurns.jsx'
 import { rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
-import { TreasureStep, treasurePending } from './Treasure.jsx'
+import { treasurePending } from './Treasure.jsx'
 import { Button } from './ui.jsx'
 
 // Each phase asks only what the app can't see for itself. The checklist each phase
@@ -218,7 +218,6 @@ export default function TurnGuide({ state, dispatch }) {
       {current.key === 'hero' && <HeroPhase key={stepKey} state={state} hero={hero} dispatch={dispatch} />}
       {current.key === 'exploration' && <ExplorationPhase state={state} hero={hero} dispatch={dispatch} />}
       {current.key === 'villain' && <VillainPhase key={stepKey} state={state} hero={hero} dispatch={dispatch} />}
-      <TreasureStep state={state} dispatch={dispatch} />
 
       <div className="mt-6 flex items-center justify-between gap-3">
         <Button variant="ghost" onClick={() => dispatch({ type: 'PREVIOUS_PHASE' })}>

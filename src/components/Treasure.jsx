@@ -49,7 +49,7 @@ function TreasureCard({ state, dispatch }) {
   const finder = state.heroes.find((h) => h.id === treasure.heroId)
   const owner = state.heroes.find((h) => h.id === ownerId) ?? finder
   return (
-    <div className="mt-4 space-y-4 rounded-2xl border-2 border-amber-500 bg-amber-950/40 p-4">
+    <div className="space-y-4 rounded-2xl border-2 border-amber-500 bg-amber-950/40 p-4">
       <TreasureCardFace card={treasure.card} />
       <p className="text-lg text-zinc-200">
         {finder?.name} found it. Who keeps it?
@@ -63,27 +63,35 @@ function TreasureCard({ state, dispatch }) {
 }
 
 // After the first monster of a turn is defeated: draw the treasure card, then hand it out.
-// `heroId` shows it only on that hero's own iPad.
+// It sits at the bottom of the screen until it's done, so nobody has to scroll to find it.
+// `heroId` shows it on one hero's iPad only when it's their turn or their treasure.
 export function TreasureStep({ state, dispatch, heroId = null }) {
   const { treasures } = useCards()
   const owed = state.turn.treasureOwed
+  const active = state.heroes[state.turn.heroIndex]?.id
+  const finderId = state.treasure?.heroId ?? owed
+  if (!finderId || (heroId && heroId !== active && heroId !== finderId)) return null
+  const finder = state.heroes.find((h) => h.id === finderId)
+  let body
   if (state.treasure) {
-    if (heroId && state.treasure.heroId !== heroId) return null
-    return <TreasureCard key={state.treasure.id} state={state} dispatch={dispatch} />
-  }
-  if (!owed || (heroId && owed !== heroId)) return null
-  const finder = state.heroes.find((h) => h.id === owed)
-  if (!state.treasureDeck && treasures.length === 0) {
-    return <div className="mt-4 rounded-xl bg-amber-950/60 p-3 text-lg text-amber-100">💰 {finder?.name} draws a treasure card from the deck.</div>
+    body = <TreasureCard key={state.treasure.id} state={state} dispatch={dispatch} />
+  } else if (!state.treasureDeck && treasures.length === 0) {
+    body = <div className="rounded-xl bg-amber-950/60 p-3 text-lg text-amber-100">💰 {finder?.name} draws a treasure card from the deck.</div>
+  } else {
+    body = (
+      <Button
+        variant="gold"
+        className="w-full px-5 py-4 text-xl font-bold"
+        onClick={() => dispatch({ type: 'DRAW_TREASURE', cards: treasures, random: randomNumbers(SHUFFLE_NUMBERS) })}
+      >
+        💰 Draw a treasure card for {finder?.name}
+      </Button>
+    )
   }
   return (
-    <Button
-      variant="gold"
-      className="mt-4 w-full px-5 py-4 text-xl font-bold"
-      onClick={() => dispatch({ type: 'DRAW_TREASURE', cards: treasures, random: randomNumbers(SHUFFLE_NUMBERS) })}
-    >
-      💰 Draw a treasure card for {finder?.name}
-    </Button>
+    <div className="fixed inset-x-0 bottom-0 z-30 max-h-[85vh] overflow-y-auto border-t-4 border-amber-500 bg-zinc-950/95 p-4 shadow-2xl">
+      <div className="mx-auto max-w-3xl">{body}</div>
+    </div>
   )
 }
 
