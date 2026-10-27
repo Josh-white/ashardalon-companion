@@ -51,7 +51,7 @@ function targetPrompt(step) {
   return 'Which hero is closest? If it’s a tie, pick one together.'
 }
 
-function HeroPicker({ heroes, chosen, onToggle }) {
+export function HeroPicker({ heroes, chosen, onToggle }) {
   return (
     <div className="grid grid-cols-2 gap-2">
       {heroes.map((hero) => {

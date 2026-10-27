@@ -15,7 +15,7 @@ export function normalizeCardFile(data) {
   const powers = []
   const seen = new Set()
   const list = Array.isArray(data?.powers) ? data.powers : null
-  if (!list) return { powers, abilities: [], monsters: [], problems: ['The file needs a "powers" list.'] }
+  if (!list) return { powers, abilities: [], monsters: [], encounters: [], problems: ['The file needs a "powers" list.'] }
 
   list.forEach((card, i) => {
     const label = card?.name ? `"${card.name}"` : `power #${i + 1}`
@@ -48,6 +48,7 @@ export function normalizeCardFile(data) {
     powers,
     abilities: normalizeAbilities(data?.heroes, problems),
     monsters: normalizeMonsters(data?.monsters, problems),
+    encounters: normalizeEncounters(data?.encounters, problems),
     problems,
   }
 }
@@ -152,9 +153,101 @@ function normalizeMonsters(list, problems) {
       // Legion Devils come in threes: one card, three figures.
       figures: wholeNumber(card.figures, 1) ? card.figures : 1,
       special: typeof card.special === 'string' ? card.special : '',
+      // Kinds of monster, such as Orc or Sentry, that some encounter cards look for.
+      types: (Array.isArray(card.types) ? card.types : []).filter((t) => typeof t === 'string'),
       attacks,
       tactics,
     })
   })
   return monsters
+}
+
+export const ENCOUNTER_TYPES = ['event', 'curse', 'environment', 'hazard', 'trap']
+// Who an encounter or trap attacks: the active hero, the heroes on the active hero's
+// tile, the heroes within 1 tile of the active hero, every hero, or the heroes on the trap's tile.
+export const ENCOUNTER_TARGETS = ['active', 'activeTile', 'within1', 'all', 'trapTile']
+const CURSE_PHASES = ['hero', 'exploration', 'villain', 'action']
+const conditionList = (list) => (Array.isArray(list) ? list : []).filter((c) => CONDITIONS.includes(c))
+
+function encounterAttack(attack) {
+  if (!attack || !wholeNumber(attack.bonus) || !ENCOUNTER_TARGETS.includes(attack.targets)) return null
+  return {
+    bonus: attack.bonus,
+    damage: wholeNumber(attack.damage) ? attack.damage : 0,
+    miss: wholeNumber(attack.miss) ? attack.miss : 0,
+    conditions: conditionList(attack.conditions),
+    missConditions: conditionList(attack.missConditions),
+    targets: attack.targets,
+  }
+}
+
+const count = (value) => (wholeNumber(value, 1) ? value : 0)
+
+// Encounter cards, for the virtual encounter deck. Optional. Every card is read out to
+// the table; the extra fields say which parts the app can do itself.
+function normalizeEncounters(list, problems) {
+  if (list === undefined) return []
+  if (!Array.isArray(list)) {
+    problems.push('"encounters" should be a list.')
+    return []
+  }
+  const encounters = []
+  const seen = new Set()
+  list.forEach((card, i) => {
+    const label = card?.name ? `"${card.name}"` : `encounter #${i + 1}`
+    if (!card || typeof card !== 'object') return problems.push(`${label} is not a card.`)
+    if (!card.id || typeof card.id !== 'string') return problems.push(`${label} needs an "id".`)
+    if (seen.has(card.id)) return problems.push(`${label} reuses the id "${card.id}".`)
+    if (!card.name || typeof card.name !== 'string') return problems.push(`${label} needs a "name".`)
+    if (!ENCOUNTER_TYPES.includes(card.type)) {
+      return problems.push(`${label} has type "${card.type}"; use one of ${ENCOUNTER_TYPES.join(', ')}.`)
+    }
+    const attack = card.attack === undefined ? null : encounterAttack(card.attack)
+    if (card.attack !== undefined && !attack) {
+      return problems.push(`${label} has an attack that needs a "bonus" and "targets" (one of ${ENCOUNTER_TARGETS.join(', ')}).`)
+    }
+    const curse = card.type === 'curse' ? card.curse ?? {} : null
+    const removeRoll = curse?.removeRoll
+    if (removeRoll && (!CURSE_PHASES.includes(removeRoll.phase) || !wholeNumber(removeRoll.target, 1))) {
+      return problems.push(`${label} has a removeRoll that needs a "phase" (${CURSE_PHASES.join(', ')}) and a "target".`)
+    }
+    const trap = card.type === 'trap' ? card.trap ?? {} : null
+    const trapAttack = trap?.attack === undefined ? null : encounterAttack(trap.attack)
+    if (trap?.attack !== undefined && !trapAttack) return problems.push(`${label} has a trap attack that needs a "bonus" and "targets".`)
+    seen.add(card.id)
+    encounters.push({
+      id: card.id,
+      name: card.name,
+      type: card.type,
+      copies: wholeNumber(card.copies, 1) ? card.copies : 1,
+      flavor: typeof card.flavor === 'string' ? card.flavor : '',
+      text: typeof card.text === 'string' ? card.text : '',
+      attack,
+      drawAnother: card.drawAnother === true,
+      drawMonster: card.drawMonster === true,
+      damageEach: count(card.damageEach),
+      damagePoisoned: count(card.damagePoisoned),
+      healMonster: count(card.healMonster),
+      refreshDaily: card.refreshDaily === true,
+      passMonsters: card.passMonsters === true,
+      filterMonsters: typeof card.filterMonsters === 'string' ? card.filterMonsters : '',
+      trapPenalty: count(card.trapPenalty),
+      curse: curse && {
+        acPenalty: count(curse.acPenalty),
+        attackPenalty: count(curse.attackPenalty),
+        startDamage: count(curse.startDamage),
+        extraEncounter: count(curse.extraEncounter),
+        removeOnDefeat: curse.removeOnDefeat === true,
+        removeRoll: removeRoll
+          ? { phase: removeRoll.phase, target: removeRoll.target, label: typeof removeRoll.label === 'string' ? removeRoll.label : '' }
+          : null,
+      },
+      trap: trap && {
+        attack: trapAttack,
+        damage: count(trap.damage),
+        disable: wholeNumber(trap.disable, 1) ? trap.disable : 10,
+      },
+    })
+  })
+  return encounters
 }

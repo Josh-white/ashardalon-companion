@@ -60,6 +60,25 @@ export function describeAction(state, action) {
       return `XP ${signed(action.amount)}`
     case 'CANCEL_ENCOUNTER':
       return 'Cancelling the encounter'
+    case 'DRAW_ENCOUNTER':
+      return 'Drawing an encounter'
+    case 'ENCOUNTER_ATTACK':
+      return state.encounter ? `${state.encounter.card.name}'s attack` : 'Encounter attack'
+    case 'RESOLVE_ENCOUNTER':
+    case 'REDRAW_ENCOUNTER':
+      return state.encounter ? state.encounter.card.name : 'Encounter'
+    case 'TRAP_ATTACK':
+    case 'TRAP_DAMAGE':
+    case 'DISABLE_TRAP':
+    case 'REMOVE_TRAP':
+      return (state.traps ?? []).find((t) => t.id === action.trapId)?.name ?? 'Trap'
+    case 'CURSE_ROLL':
+    case 'REMOVE_CURSE':
+      return hero?.curses?.find((c) => c.id === action.curseId)?.name ?? 'Curse'
+    case 'SET_MONSTER_OWNER':
+      return monster ? `Passing ${monster.name}` : 'Passing a monster'
+    case 'SET_TRIANGLE':
+      return 'Black triangle'
     case 'ADJUST_SURGES':
       return `Healing surges ${signed(action.amount)}`
     case 'NEXT_PHASE':

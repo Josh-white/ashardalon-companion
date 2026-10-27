@@ -114,7 +114,11 @@ export function reactionsFor(heroes, reaction) {
 }
 
 // A hero's AC with Cleric's Shield and Mirror Image counted.
+// Curses (encounter cards) can lower a hero's AC or attack rolls while they last.
+const curseTotal = (hero, field) => (hero.curses ?? []).reduce((sum, curse) => sum + (curse.card?.[field] ?? 0), 0)
+export const heroAttackPenalty = (hero) => curseTotal(hero, 'attackPenalty')
+
 export function heroAc(hero) {
   const tokens = hero.tokens ?? {}
-  return hero.ac + (hero.shieldedBy ? 2 : 0) + 2 * (tokens.mirrorImage ?? 0)
+  return hero.ac + (hero.shieldedBy ? 2 : 0) + 2 * (tokens.mirrorImage ?? 0) - curseTotal(hero, 'acPenalty')
 }

@@ -1,7 +1,6 @@
-import { useState } from 'react'
-import { HERO_COLORS, XP_TO_CANCEL_ENCOUNTER, XP_TO_LEVEL_UP } from '../data/heroes.js'
+import { HERO_COLORS, XP_TO_LEVEL_UP } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
-import { reactionsFor } from '../data/powerEffects.js'
+import { CurseNotes, DisableTraps, EncounterStep, EnvironmentBanner, PassMonsters, TrapTurns } from './Encounters.jsx'
 import HeroAttack, { AttackAftermath } from './HeroAttack.jsx'
 import MonsterTurns, { DrawMonsterButton } from './MonsterTurns.jsx'
 import { rollD20 } from '../state/random.js'
@@ -80,7 +79,10 @@ function HeroPhase({ state, hero, dispatch }) {
         <Note tone="warn">{hero.name} is Poisoned. When you end the Hero Phase, the app rolls: 10 or more shakes it off.</Note>
       )}
 
+      <CurseNotes hero={hero} dispatch={dispatch} />
+
       <HeroAttack state={state} hero={hero} dispatch={dispatch} />
+      <DisableTraps state={state} hero={hero} dispatch={dispatch} />
       <ExtraAttacks state={state} dispatch={dispatch} />
 
       {hero.level === 1 && state.turn.natural20 === hero.id && (
@@ -112,7 +114,7 @@ function ExplorationPhase({ state, hero, dispatch }) {
       <YesNo
         question={`Is ${hero.name} standing on an unexplored edge?`}
         onYes={() => dispatch({ type: 'SET_EXPLORED', explored: true })}
-        onNo={() => dispatch({ type: 'SET_EXPLORED', explored: false })}
+        onNo={() => dispatch({ type: 'SET_EXPLORED', explored: false, rolls: [rollD20(), rollD20()] })}
       />
     )
   }
@@ -131,64 +133,45 @@ function ExplorationPhase({ state, hero, dispatch }) {
   )
 }
 
-// Perseverance: cancelling costs 1 XP less for each hero on the cleric's tile.
-function Perseverance({ state, dispatch }) {
-  const [offer] = reactionsFor(state.heroes, 'perseverance')
-  if (!offer) return null
-  const { hero, power } = offer
-  return (
-    <div className="mt-3">
-      <p className="text-base text-zinc-300">
-        {hero.name}'s Perseverance makes it cheaper. How many heroes are on {hero.name}'s tile, counting {hero.name}?
-      </p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {state.heroes.map((_, i) => {
-          const cost = Math.max(0, XP_TO_CANCEL_ENCOUNTER - (i + 1))
-          return (
-            <Button
-              key={i}
-              disabled={state.xp < cost}
-              onClick={() => dispatch({ type: 'CANCEL_ENCOUNTER', perseverance: { heroId: hero.id, powerId: power.id, heroesOnTile: i + 1 } })}
-            >
-              {i + 1} → {cost} XP
-            </Button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
 function VillainPhase({ state, hero, dispatch }) {
-  const explored = state.turn.explored === true
-  // Only a new tile can skip the encounter, and only when it has no black triangle.
-  const [triangle, setTriangle] = useState(null)
-  const needEncounter = !explored || triangle === true
+  const { explored, triangle } = state.turn
+  const highAlert = state.environment?.cardId === 'high-alert'
+  const surrounded = state.environment?.cardId === 'surrounded' && !state.monsters.some((m) => m.ownerId === hero.id)
 
   return (
     <>
-      {explored && triangle === null ? (
+      {surrounded && (
+        <Note tone="warn">
+          <p>Surrounded! {hero.name} has no monster, so draw one and put it on the closest unexplored edge.</p>
+          <DrawMonsterButton state={state} heroId={hero.id} dispatch={dispatch} className="mt-2 w-full" />
+        </Note>
+      )}
+      {explored === true && triangle === undefined ? (
         <YesNo
           question="Does the new tile have a black triangle?"
-          onYes={() => setTriangle(true)}
-          onNo={() => setTriangle(false)}
+          onYes={() => dispatch({ type: 'SET_TRIANGLE', triangle: true })}
+          onNo={() => dispatch({ type: 'SET_TRIANGLE', triangle: false })}
         />
-      ) : needEncounter ? (
-        <Note>
-          <p>{explored ? 'The new tile has a black triangle,' : 'No new tile this turn,'} so draw an encounter card and do what it says.</p>
-          <Button
-            className="mt-2"
-            disabled={state.xp < XP_TO_CANCEL_ENCOUNTER}
-            onClick={() => dispatch({ type: 'CANCEL_ENCOUNTER' })}
-          >
-            Spend {XP_TO_CANCEL_ENCOUNTER} XP to cancel the encounter
-          </Button>
-          <Perseverance state={state} dispatch={dispatch} />
-        </Note>
       ) : (
-        <Note tone="good">No encounter card this turn.</Note>
+        <>
+          {explored === true && triangle === false && !state.encounter && (state.turn.encountersDrawn ?? 0) === 0 && (
+            <Note tone="good">No black triangle, so no encounter card this turn.</Note>
+          )}
+          <EncounterStep state={state} hero={hero} dispatch={dispatch} />
+        </>
       )}
-      <MonsterTurns state={state} dispatch={dispatch} hero={hero} />
+      {!state.encounter && (
+        <>
+          <MonsterTurns state={state} dispatch={dispatch} hero={hero} />
+          <TrapTurns state={state} hero={hero} dispatch={dispatch} />
+          {highAlert && state.monsters.some((m) => m.ownerId === hero.id) && (
+            <Note>
+              <p className="mb-2">High Alert: pass one of your monster cards to the player on your right.</p>
+              <PassMonsters state={state} dispatch={dispatch} only={hero.id} />
+            </Note>
+          )}
+        </>
+      )}
     </>
   )
 }
@@ -225,6 +208,8 @@ export default function TurnGuide({ state, dispatch }) {
         ))}
       </div>
 
+      <EnvironmentBanner environment={state.environment} className="mt-4" />
+
       {current.key === 'hero' && <HeroPhase key={stepKey} state={state} hero={hero} dispatch={dispatch} />}
       {current.key === 'exploration' && <ExplorationPhase state={state} hero={hero} dispatch={dispatch} />}
       {current.key === 'villain' && <VillainPhase key={stepKey} state={state} hero={hero} dispatch={dispatch} />}
@@ -233,8 +218,13 @@ export default function TurnGuide({ state, dispatch }) {
         <Button variant="ghost" onClick={() => dispatch({ type: 'PREVIOUS_PHASE' })}>
           ← Back
         </Button>
-        {/* The die is for a poisoned hero's roll to shake off the poison after the Hero Phase. */}
-        <Button variant="gold" className="px-6 py-3 text-lg" onClick={() => dispatch({ type: 'NEXT_PHASE', roll: rollD20() })}>
+        {/* The dice are for shaking off poison after the Hero Phase and for curses that end on a roll. */}
+        <Button
+          variant="gold"
+          className="px-6 py-3 text-lg"
+          disabled={Boolean(state.encounter)}
+          onClick={() => dispatch({ type: 'NEXT_PHASE', roll: rollD20(), rolls: [rollD20(), rollD20(), rollD20()] })}
+        >
           {isLastPhase ? `Pass to ${nextHero.player || nextHero.name} →` : `On to ${PHASES[phase + 1].title} →`}
         </Button>
       </div>

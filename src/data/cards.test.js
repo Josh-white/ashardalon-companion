@@ -11,6 +11,21 @@ describe('card files', () => {
     expect(monsters.map((m) => m.copies)).toEqual([3, 2])
   })
 
+  it('skips encounter cards with a bad type, attack or curse roll', () => {
+    const { encounters, problems } = normalizeCardFile({
+      powers: [],
+      encounters: [
+        { id: 'ok', name: 'Fine', type: 'event', attack: { bonus: 8, damage: 1, targets: 'all' } },
+        { id: 'bad-type', name: 'Bad type', type: 'surprise' },
+        { id: 'bad-targets', name: 'Bad targets', type: 'event', attack: { bonus: 8, targets: 'someone' } },
+        { id: 'bad-roll', name: 'Bad roll', type: 'curse', curse: { removeRoll: { phase: 'lunch', target: 10 } } },
+      ],
+    })
+    expect(encounters.map((e) => e.name)).toEqual(['Fine'])
+    expect(encounters[0]).toMatchObject({ copies: 1, attack: { miss: 0, conditions: [], missConditions: [] }, curse: null })
+    expect(problems).toHaveLength(3)
+  })
+
   it('skips monster cards whose tactics or attacks are broken', () => {
     const tactics = [{ move: 'toward' }]
     const { monsters, problems } = normalizeCardFile({

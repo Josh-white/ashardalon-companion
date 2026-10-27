@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-const EMPTY = { source: 'loading', powers: [], abilities: [], monsters: [], problems: [] }
+const EMPTY = { source: 'loading', powers: [], abilities: [], monsters: [], encounters: [], problems: [] }
 let request = null
 
 // Loads the power cards from the Pi once per page load and shares them with
@@ -13,7 +13,7 @@ export function useCards() {
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
       .catch((error) => {
         request = null
-        return { source: 'error', powers: [], abilities: [], monsters: [], problems: [`Could not load power cards: ${error.message}`] }
+        return { source: 'error', powers: [], abilities: [], monsters: [], encounters: [], problems: [`Could not load power cards: ${error.message}`] }
       })
     request.then((data) => active && setCards(data))
     return () => {

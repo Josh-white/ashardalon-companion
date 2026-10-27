@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
+import { normalizeCardFile } from '../data/cards.js'
+import { heroAc, heroAttackPenalty } from '../data/powerEffects.js'
 import { createHero, gameReducer, initialState } from './game.js'
 
 const startGame = (count = 2) =>
@@ -452,5 +454,161 @@ describe('conditions between phases', () => {
     const state = gameReducer(start, { type: 'TOGGLE_HERO_CONDITION', heroId: start.heroes[0].id, condition: 'Dazed' })
     expect(state.heroes[0].conditions).toEqual(['Dazed'])
     expect(next(state).heroes[0].conditions).toEqual([])
+  })
+})
+
+describe('encounter deck', () => {
+  // Made-up cards in the card file's format, normalized like the real ones.
+  const { encounters, monsters, problems } = normalizeCardFile({
+    powers: [],
+    monsters: [
+      { id: 'orc', name: 'Orc', copies: 2, ac: 13, hp: 1, xp: 1, types: ['Orc'], attacks: [], tactics: [{ move: 'toward' }] },
+      { id: 'rat', name: 'Rat', copies: 3, ac: 12, hp: 1, xp: 1, types: ['Animal'], attacks: [], tactics: [{ move: 'toward' }] },
+    ],
+    encounters: [
+      { id: 'arrow', name: 'Arrow', type: 'event', attack: { bonus: 8, damage: 2, miss: 1, conditions: ['Poisoned'], targets: 'active' } },
+      { id: 'heat', name: 'Heat', type: 'event', damageEach: 1, drawAnother: true },
+      { id: 'jinx', name: 'Jinx', type: 'curse', curse: { acPenalty: 4, attackPenalty: 2, removeRoll: { phase: 'hero', target: 10 } } },
+      { id: 'bad-air', name: 'Bad Air', type: 'environment', trapPenalty: 4 },
+      { id: 'still-air', name: 'Still Air', type: 'environment' },
+      { id: 'darts', name: 'Darts', type: 'trap', trap: { attack: { bonus: 8, damage: 1, targets: 'trapTile' }, disable: 10 } },
+      { id: 'orcs', name: 'Orcs', type: 'event', filterMonsters: 'Orc' },
+      { id: 'cage', name: 'Cage', type: 'curse', curse: { removeRoll: { phase: 'action', target: 10 } } },
+      { id: 'thirst', name: 'Thirst', type: 'curse', curse: { startDamage: 1, removeOnDefeat: true } },
+    ],
+  })
+  const card = (id) => encounters.find((c) => c.id === id)
+  // Draws the given card by putting it alone in the deck.
+  const drawCard = (state, id, heroIndex = 0) =>
+    gameReducer(
+      { ...state, encounterDeck: { cards: Object.fromEntries(encounters.map((c) => [c.id, c])), draw: [id], discard: state.encounterDeck?.discard ?? [] } },
+      { type: 'DRAW_ENCOUNTER', heroId: state.heroes[heroIndex].id, cards: encounters, random: [] },
+    )
+  const resolve = (state) => gameReducer(state, { type: 'RESOLVE_ENCOUNTER', random: [], monsterCards: monsters })
+
+  it('reads the made-up cards without problems', () => {
+    expect(problems).toEqual([])
+    expect(card('jinx').curse).toMatchObject({ acPenalty: 4, removeRoll: { phase: 'hero', target: 10 } })
+  })
+
+  it('builds the deck on the first draw and shows the card', () => {
+    const game = startGame()
+    const state = gameReducer(game, { type: 'DRAW_ENCOUNTER', heroId: game.heroes[0].id, cards: encounters, random: [] })
+    expect(state.encounter.card.name).toBeTruthy()
+    expect(state.encounterDeck.draw).toHaveLength(encounters.length - 1)
+    expect(state.turn.encountersDrawn).toBe(1)
+    expect(state.moment.kind).toBe('encounter')
+  })
+
+  it('rolls an encounter attack once against the active hero', () => {
+    let state = drawCard(startGame(), 'arrow')
+    const hero = state.heroes[0]
+    state = gameReducer(state, { type: 'ENCOUNTER_ATTACK', targets: [{ heroId: hero.id, roll: 20 }] })
+    expect(state.heroes[0].hp).toBe(hero.hp - 2)
+    expect(state.heroes[0].conditions).toContain('Poisoned')
+    expect(gameReducer(state, { type: 'ENCOUNTER_ATTACK', targets: [{ heroId: hero.id, roll: 20 }] })).toBe(state)
+    expect(gameReducer(state, { type: 'CANCEL_ENCOUNTER' })).toBe(state)
+    state = resolve(state)
+    expect(state.encounter).toBeNull()
+    expect(state.encounterDeck.discard).toEqual(['arrow'])
+  })
+
+  it('cancels an encounter for 5 XP before it happens', () => {
+    let state = drawCard({ ...startGame(), xp: 6 }, 'heat')
+    state = gameReducer(state, { type: 'CANCEL_ENCOUNTER' })
+    expect(state.xp).toBe(1)
+    expect(state.encounter).toBeNull()
+    expect(state.heroes[0].hp).toBe(state.heroes[0].maxHp)
+  })
+
+  it('deals damage to every hero and owes another draw', () => {
+    const state = resolve(drawCard(startGame(), 'heat'))
+    expect(state.heroes.every((h) => h.hp === h.maxHp - 1)).toBe(true)
+    expect(state.turn.encountersOwed).toBe(1)
+  })
+
+  it('keeps the turn from moving on while an encounter is out', () => {
+    let state = startGame()
+    for (let i = 0; i < 2; i++) state = gameReducer(state, { type: 'NEXT_PHASE' })
+    state = drawCard(state, 'heat')
+    expect(gameReducer(state, { type: 'NEXT_PHASE' })).toBe(state)
+  })
+
+  it('puts a curse on the hero that lowers AC and attacks, and a roll can end it', () => {
+    let state = resolve(drawCard(startGame(), 'jinx'))
+    const hero = state.heroes[0]
+    expect(hero.curses).toHaveLength(1)
+    expect(heroAc(hero)).toBe(hero.ac - 4)
+    expect(heroAttackPenalty(hero)).toBe(2)
+    expect(gameReducer(state, { type: 'NEXT_PHASE', rolls: [9] }).heroes[0].curses).toHaveLength(1)
+    state = gameReducer(state, { type: 'NEXT_PHASE', rolls: [10] })
+    expect(state.heroes[0].curses).toHaveLength(0)
+    expect(state.encounterDeck.discard).toContain('jinx')
+  })
+
+  it('opens the cage on a 10 or more', () => {
+    let state = resolve(drawCard(startGame(), 'cage'))
+    const curseId = state.heroes[0].curses[0].id
+    const heroId = state.heroes[0].id
+    expect(gameReducer(state, { type: 'CURSE_ROLL', heroId, curseId, roll: 9 }).heroes[0].curses).toHaveLength(1)
+    state = gameReducer(state, { type: 'CURSE_ROLL', heroId, curseId, roll: 12 })
+    expect(state.heroes[0].curses).toHaveLength(0)
+  })
+
+  it('hurts at the start of the turn until the hero defeats a monster', () => {
+    let state = resolve(drawCard(startGame(), 'thirst', 1))
+    for (let i = 0; i < 3; i++) state = gameReducer(state, { type: 'NEXT_PHASE' })
+    expect(state.turn.heroIndex).toBe(1)
+    expect(state.heroes[1].hp).toBe(state.heroes[1].maxHp - 1)
+  })
+
+  it('replaces the environment and discards the old one', () => {
+    let state = resolve(drawCard(startGame(), 'bad-air'))
+    expect(state.environment.name).toBe('Bad Air')
+    state = resolve(drawCard(state, 'still-air'))
+    expect(state.environment.name).toBe('Still Air')
+    expect(state.encounterDeck.discard).toContain('bad-air')
+  })
+
+  it('places a trap that attacks on its turn and can be disabled', () => {
+    let state = resolve(drawCard(startGame(), 'darts'))
+    const trap = state.traps[0]
+    const hero = state.heroes[1]
+    expect(trap).toMatchObject({ name: 'Darts', ownerId: state.heroes[0].id })
+    state = gameReducer(state, { type: 'TRAP_ATTACK', trapId: trap.id, targets: [{ heroId: hero.id, roll: 19 }] })
+    expect(state.heroes[1].hp).toBe(hero.hp - 1)
+    expect(gameReducer(state, { type: 'DISABLE_TRAP', trapId: trap.id, heroId: hero.id, roll: 9 }).traps).toHaveLength(1)
+    state = gameReducer(state, { type: 'DISABLE_TRAP', trapId: trap.id, heroId: hero.id, roll: 10 })
+    expect(state.traps).toHaveLength(0)
+    expect(state.encounterDeck.discard).toContain('darts')
+  })
+
+  it('makes traps harder to disable in a trapper environment', () => {
+    let state = resolve(drawCard(startGame(), 'darts'))
+    state = resolve(drawCard(state, 'bad-air'))
+    expect(gameReducer(state, { type: 'DISABLE_TRAP', trapId: state.traps[0].id, heroId: state.heroes[0].id, roll: 13 }).traps).toHaveLength(1)
+  })
+
+  it('discards a trap drawn for a tile that already has a marker and owes a new draw', () => {
+    const state = gameReducer(drawCard(startGame(), 'darts'), { type: 'REDRAW_ENCOUNTER' })
+    expect(state.encounter).toBeNull()
+    expect(state.traps).toHaveLength(0)
+    expect(state.turn.encountersOwed).toBe(1)
+  })
+
+  it('keeps only the monsters of one kind on top of the monster deck', () => {
+    let state = startGame()
+    const cards = Object.fromEntries(monsters.map((m) => [m.id, m]))
+    state = { ...state, monsterDeck: { cards, draw: ['rat', 'orc', 'rat', 'orc', 'rat', 'rat'], discard: [] } }
+    state = resolve(drawCard(state, 'orcs'))
+    expect(state.monsterDeck.draw).toEqual(['orc', 'orc', 'rat'])
+    expect(state.monsterDeck.discard).toEqual(['rat', 'rat', 'rat'])
+  })
+
+  it('passes a monster card to another hero', () => {
+    let state = startGame()
+    state = gameReducer(state, { type: 'ADD_MONSTER', name: 'Rat', hp: 1, xp: 1, ownerId: state.heroes[0].id })
+    state = gameReducer(state, { type: 'SET_MONSTER_OWNER', monsterId: state.monsters[0].id, ownerId: state.heroes[1].id })
+    expect(state.monsters[0].ownerId).toBe(state.heroes[1].id)
   })
 })
