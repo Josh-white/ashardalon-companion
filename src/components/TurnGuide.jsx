@@ -1,7 +1,8 @@
 import { HERO_COLORS, XP_TO_LEVEL_UP } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
-import { CurseNotes, DisableTraps, EncounterStep, EnvironmentBanner, PassMonsters, TrapTurns } from './Encounters.jsx'
+import { CurseNotes, DisableTraps, EncounterStep, EnvironmentBanner, PassMonsters, encountersLeft, TrapTurns } from './Encounters.jsx'
 import HeroAttack, { AttackAftermath } from './HeroAttack.jsx'
+import { RevealButtons } from './Adventure.jsx'
 import MonsterTurns, { DrawMonsterButton } from './MonsterTurns.jsx'
 import { rollD20 } from '../state/random.js'
 import { Button } from './ui.jsx'
@@ -122,6 +123,7 @@ function ExplorationPhase({ state, hero, dispatch }) {
   return (
     <>
       <Note>Draw a dungeon tile and put it on that edge.</Note>
+      <RevealButtons state={state} dispatch={dispatch} />
       {monsterDrawn ? (
         <Note tone="good">
           ✓ {newest ? `${/^[AEIOU]/.test(newest.name) ? 'An' : 'A'} ${newest.name} was drawn.` : 'Monster drawn.'} Put its figure on the new tile.
@@ -154,7 +156,7 @@ function VillainPhase({ state, hero, dispatch }) {
         />
       ) : (
         <>
-          {explored === true && triangle === false && !state.encounter && (state.turn.encountersDrawn ?? 0) === 0 && (
+          {explored === true && triangle === false && !state.encounter && (state.turn.encountersDrawn ?? 0) === 0 && encountersLeft(state, hero) === 0 && (
             <Note tone="good">No black triangle, so no encounter card this turn.</Note>
           )}
           <EncounterStep state={state} hero={hero} dispatch={dispatch} />

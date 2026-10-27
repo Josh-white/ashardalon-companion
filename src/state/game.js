@@ -9,6 +9,7 @@ import {
 } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
 import { effectsOf, heroAc, heroAttackPenalty, maxRolls } from '../data/powerEffects.js'
+import { MAX_SURGES, MIN_SURGES, checkVictory, countDefeat, isPlayable, newAdventure, onceOnlyDraw, showStory, takeToken, tilesToCome } from './adventure.js'
 
 export const SAVE_VERSION = 1
 
@@ -34,6 +35,10 @@ export const initialState = {
   encounter: null, // the encounter card being read out: { id, cardId, heroId, card, attacked }
   environment: null, // the Environment card in play: { cardId, name, card }
   traps: [], // trap and hazard markers on the board: { id, cardId, name, type, ownerId, card }
+  adventure: null, // the adventure being played (state/adventure.js), or null for a free game
+  // Chosen on the projector before the game: the adventure card and how many healing surges.
+  lobbyAdventure: null,
+  lobbySurges: STARTING_SURGES,
 }
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
@@ -136,6 +141,14 @@ function drawMonster(state, heroId, random) {
   }
   const card = deck.cards[cardId]
   if (!card) return state
+  // Some adventures allow a monster card only once; a later copy is discarded with no replacement.
+  const once = onceOnlyDraw(next, card)
+  next = once.state
+  if (once.discard) {
+    const exploring = PHASES[next.turn.phase]?.key === 'exploration' && next.heroes[next.turn.heroIndex]?.id === hero.id
+    next = { ...next, monsterDeck: { ...deck, draw, discard }, turn: exploring ? { ...next.turn, monsterDrawn: true } : next.turn }
+    return withLog(next, `Drew another ${card.name} card. This adventure has just one, so it's discarded and no monster comes this time.`)
+  }
   const monster = monsterFromCard(card, hero.id)
   const figures = monster.card.figures
   // One monster per new tile: the Exploration Phase's draw button locks after this.
@@ -393,9 +406,17 @@ function damageMonster(monster, damage) {
 // Takes `dealt` HP off a monster. At 0 HP it is defeated: off the board, and its XP to the party.
 function hurtMonster(state, monster, dealt) {
   const hp = dealt > 0 ? damageMonster(monster, dealt) : monster.hp
-  if (hp > 0) return { state: updateMonster(state, monster.id, () => ({ hp })), defeated: false }
-  const next = { ...state, xp: state.xp + monster.xp, monsters: state.monsters.filter((m) => m.id !== monster.id) }
+  // Figures taken off the board count toward adventures such as Monster Hunt.
+  const counted = countDefeat(state, monster, figuresLeft(monster, monster.hp) - figuresLeft(monster, hp), hp === 0)
+  if (hp > 0) return { state: updateMonster(counted, monster.id, () => ({ hp })), defeated: false }
+  const next = { ...counted, xp: state.xp + monster.xp, monsters: state.monsters.filter((m) => m.id !== monster.id) }
   return { state: withLog(next, `The ${monster.name} was defeated! +${monster.xp} XP`), defeated: true }
+}
+
+// Figures still on the board for a monster card at this HP (three for a full group of Legion Devils).
+function figuresLeft(monster, hp) {
+  const perFigure = monster.card?.figures > 1 ? monster.card.hp : monster.maxHp
+  return Math.ceil(hp / perFigure)
 }
 
 // The first monster defeated in a turn earns a treasure card. Returns the moment's words.
@@ -853,7 +874,41 @@ export function createHero(template, overrides = {}) {
   }
 }
 
-export function gameReducer(state, action) {
+// Every action, then a check for an adventure's victory.
+export const gameReducer = (state, action) => checkVictory(reduce(state, action))
+
+// A special tile turned up: read its text, then do what the adventure says.
+function revealTile(state, action) {
+  const reveal = tilesToCome(state.adventure).find((r) => r.tile === action.tile)
+  const hero = state.heroes[state.turn.heroIndex]
+  if (!reveal || !hero) return state
+  let next = { ...state, adventure: { ...state.adventure, revealed: [...state.adventure.revealed, reveal.tile] } }
+  next = withLog(next, `${hero.name} revealed the ${reveal.tile}!`)
+  for (const step of reveal.actions) {
+    if (step.type === 'drawGuardians') {
+      // The guardians come off the monster deck and go to the hero who found them.
+      if (!next.monsterDeck && Array.isArray(action.cards)) next = { ...next, monsterDeck: buildDeck(action.cards, action.random) }
+      for (let i = 0; i < step.count; i++) {
+        const before = next.monsters.length
+        next = drawMonster(next, hero.id, action.random)
+        if (next.monsters.length > before) {
+          const guardian = next.monsters[next.monsters.length - 1]
+          next = updateMonster(next, guardian.id, () => ({ guardian: true }))
+          next = { ...next, adventure: { ...next.adventure, guardians: next.adventure.guardians + 1 } }
+        }
+      }
+    } else if (step.type === 'placeToken') {
+      next = { ...next, adventure: { ...next.adventure, tokens: [...next.adventure.tokens, { name: step.name, heldBy: null }] } }
+    } else if (step.type === 'extraEncounters') {
+      next = { ...next, adventure: { ...next.adventure, extraEncounters: next.adventure.extraEncounters + step.count } }
+    } else if (step.type === 'placeVillain') {
+      next = reduce(next, { type: 'placeVillain', name: step.name })
+    }
+  }
+  return showStory(next, `The ${reveal.tile}!`, reveal.story, reveal.steps)
+}
+
+function reduce(state, action) {
   switch (action.type) {
     case 'NEW_GAME':
       return initialState
@@ -864,9 +919,41 @@ export function gameReducer(state, action) {
       if (!action.heroes && !(state.lobby ?? []).every((c) => c.ready)) return state
       const heroes = action.heroes ?? heroesFromLobby(state.lobby ?? [])
       if (state.status !== 'setup' || heroes.length === 0) return state
-      const started = { ...initialState, status: 'playing', heroes }
-      return withLog(started, `The adventure begins with ${heroes.map((h) => h.name).join(', ')}.`)
+      const card = state.lobbyAdventure
+      const surges = clamp(Number(state.lobbySurges) || STARTING_SURGES, MIN_SURGES, MAX_SURGES)
+      const started = { ...initialState, status: 'playing', heroes, surges, adventure: card ? newAdventure(card) : null }
+      const names = heroes.map((h) => h.name).join(', ')
+      return withLog(started, card ? `${card.title} begins with ${names}.` : `The adventure begins with ${names}.`)
     }
+
+    case 'CHOOSE_ADVENTURE': {
+      // Only before the game, and only an adventure the app can run.
+      if (state.status !== 'setup') return state
+      const card = action.adventure ?? null
+      if (card && !isPlayable(card)) return state
+      return { ...state, lobbyAdventure: card }
+    }
+
+    case 'SET_LOBBY_SURGES':
+      if (state.status !== 'setup') return state
+      return { ...state, lobbySurges: clamp(Number(action.surges) || STARTING_SURGES, MIN_SURGES, MAX_SURGES) }
+
+    case 'ADVENTURE_REVEAL':
+      return revealTile(state, action)
+
+    case 'ADVENTURE_STORY_DONE':
+      if (!state.adventure?.story || state.adventure.story.id !== action.storyId) return state
+      return { ...state, adventure: { ...state.adventure, story: null } }
+
+    case 'ADVENTURE_TAKE_TOKEN': {
+      const hero = state.heroes.find((h) => h.id === action.heroId)
+      if (!hero || !state.adventure?.tokens.some((t) => t.name === action.name)) return state
+      return withLog(takeToken(state, action.name, hero.id), `${hero.name} picked up the ${action.name}!`)
+    }
+
+    case 'ADVENTURE_ESCAPED':
+      if (!state.adventure) return state
+      return withLog({ ...state, adventure: { ...state.adventure, escaped: Boolean(action.escaped) } }, action.escaped ? 'The heroes escaped the dungeon!' : 'Not escaped after all.')
 
     case 'CLAIM_HERO': {
       const template = HERO_TEMPLATES.find((t) => t.key === action.heroKey)
@@ -1098,8 +1185,9 @@ export function gameReducer(state, action) {
       if (!monster) return state
       // One treasure card per turn, for the first monster defeated.
       const treasure = !state.turn.treasureDrawn
+      const counted = countDefeat(state, monster, figuresLeft(monster, monster.hp), true)
       const next = {
-        ...state,
+        ...counted,
         xp: state.xp + monster.xp,
         monsters: state.monsters.filter((m) => m.id !== monster.id),
         turn: { ...state.turn, treasureDrawn: true },

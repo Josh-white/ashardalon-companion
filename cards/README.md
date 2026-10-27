@@ -121,3 +121,48 @@ Encounter cards make a virtual encounter deck. In the Villain Phase the app know
 - Curses (`curse`): `acPenalty`, `attackPenalty`, `startDamage` (at the start of the hero's turn), `extraEncounter` (more encounter draws), `removeOnDefeat`, and `removeRoll` with a `target` and a `phase`: `hero`, `exploration` or `villain` (the app rolls at the end of that phase) or `action` (a button the hero taps instead of attacking, with an optional `label`).
 - Environments: `trapPenalty` lowers rolls to disable traps.
 - Traps (`trap`): an `attack` with `"targets": "trapTile"`, or `damage` with no roll, plus the `disable` roll. Traps take a turn in their owner's Villain Phase, and a hero can try to disable one in the Hero Phase.
+
+## Adventures (optional)
+
+Adventures from the adventure book go in an `adventures` list. The projector picks one before the game, and the app shows its setup, reads its story text, and calls the victory when the goal is done.
+
+```json
+{
+  "adventures": [
+    {
+      "id": "rogues-bag",
+      "number": 3,
+      "title": "The Lost Bag",
+      "players": "2-5",
+      "blurb": "One line about the adventure.",
+      "goal": "What the heroes have to do.",
+      "setup": ["Each setup step, in order."],
+      "rules": [{ "name": "Vault", "text": "A special rule to remember." }],
+      "story": { "start": "Read when the game starts.", "victory": "Read when the heroes win." },
+      "reveals": [
+        {
+          "tile": "Vault",
+          "story": "Read when the tile turns up.",
+          "steps": ["What to put on the board."],
+          "actions": [
+            { "type": "placeToken", "name": "Bag" },
+            { "type": "drawGuardians", "count": 2 },
+            { "type": "extraEncounters", "count": 1 }
+          ]
+        }
+      ],
+      "win": { "guardians": true, "tokens": ["Bag"] },
+      "needs": []
+    }
+  ]
+}
+```
+
+- `reveals`: special tiles. In the Exploration Phase each one gets an "It's the Vault!" button that shows its story and steps and does its `actions`:
+  - `drawGuardians`: draws `count` monster cards for the hero who found the tile; they're the guardians.
+  - `placeToken`: a token to pick up, such as a lost bag.
+  - `extraEncounters`: `count` more encounter cards every Villain Phase from now on.
+  - `placeVillain`: puts the villain `name` in play.
+- `win`: every part listed has to be done. `figures` (defeat that many monster figures; each figure of a group card counts), `guardians` (defeat the guardians), `tokens` (a hero picked each one up), `villains` (defeat each one by name), `escape` (the players tap "We escaped").
+- `onceOnly`: monster names that can come out only once; later copies are discarded with no replacement.
+- `needs`: bigger features the adventure needs, such as `villains` or `chambers`. The picker shows it as coming soon until the app has them.

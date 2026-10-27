@@ -295,7 +295,9 @@ export function encountersLeft(state, hero) {
   const { explored, triangle, encountersDrawn = 0, encountersOwed = 0 } = state.turn
   const base = explored !== true || triangle === true ? 1 : 0
   const badLuck = (hero.curses ?? []).reduce((sum, c) => sum + (c.card?.extraEncounter ?? 0), 0)
-  return Math.max(0, base + badLuck + encountersOwed - encountersDrawn)
+  // Some adventures add an encounter to every Villain Phase (Roghar's Gear, once the Vault is found).
+  const adventure = state.adventure?.extraEncounters ?? 0
+  return Math.max(0, base + badLuck + adventure + encountersOwed - encountersDrawn)
 }
 
 // The Villain Phase's encounter step: draw from the virtual deck, read it out, resolve it.
