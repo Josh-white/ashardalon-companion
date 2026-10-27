@@ -6,11 +6,12 @@ import { heroItems } from '../data/items.js'
 import { heroAc } from '../data/powerEffects.js'
 import { activeVillains } from '../state/game.js'
 import { ProjectorAdventure } from './Adventure.jsx'
+import { SoundToggle } from './SoundToggle.jsx'
 import { HpBar } from './ui.jsx'
 
 // A read-only screen for the projector: big enough to read across the room,
 // with no buttons to tap. Everything changes from the players' iPads.
-export default function ProjectorView({ state, onSwitchSeat }) {
+export default function ProjectorView({ state, onSwitchSeat, sound }) {
   const { heroIndex, phase, round } = state.turn
   const activeHero = state.heroes[heroIndex]
   const current = PHASES[phase]
@@ -151,9 +152,12 @@ export default function ProjectorView({ state, onSwitchSeat }) {
 
       <footer className="flex items-center justify-between text-zinc-500">
         <span>{latest ? latest.text : ''}</span>
-        <button type="button" className="text-[1vw] text-zinc-700 hover:text-zinc-400" onClick={onSwitchSeat}>
-          switch view
-        </button>
+        <span className="flex items-center gap-[1vw]">
+          <SoundToggle on={sound.on} setOn={sound.setOn} className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />
+          <button type="button" className="text-[1vw] text-zinc-700 hover:text-zinc-400" onClick={onSwitchSeat}>
+            switch view
+          </button>
+        </span>
       </footer>
     </div>
   )

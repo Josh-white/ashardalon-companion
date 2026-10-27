@@ -21,6 +21,17 @@ Starting hero stats are prefilled on the setup screen and can be adjusted there,
 
 Each hero has two at-will, one utility, and one daily power slot. Tap **Choose powers** to pick each one from a dropdown, tap a used daily or utility power to flip it, and tap **Read** to see the card text. The cards come from `cards/cards.json`, a file that stays on your server and is ignored by git. See [cards/README.md](cards/README.md) for the format.
 
+## Narrator voice
+
+The projector can read the game out loud in a dungeon-master voice: monsters arriving, encounter cards, new tiles, whose turn it is, natural 20s and 1s, defeats and treasure. It uses [ElevenLabs](https://elevenlabs.io). Put your API key in the `.env` file next to `compose.yaml` on the Pi (never in the repo), then rebuild:
+
+```sh
+read -rsp "Paste ElevenLabs key: " K; echo; printf 'ELEVENLABS_API_KEY=%s\n' "$K" >> .env; chmod 600 .env; unset K
+docker compose up -d --build
+```
+
+Only the Pi talks to ElevenLabs, and every line it has spoken is saved in the `game-data` volume, so repeats are free. Optional `.env` settings: `ELEVENLABS_VOICE_ID` (default: George) and `ELEVENLABS_MODEL` (default: `eleven_multilingual_v2`; `eleven_flash_v2_5` costs half as much). Browsers only play sound after a tap, so the projector shows **Tap to hear the narrator** if it needs one, and a small *narrator on/off* switch in the corner.
+
 ## Run it on the Raspberry Pi
 
 ```sh
@@ -32,6 +43,24 @@ docker compose up -d --build
 Then open `http://piserver.local:8081` (or https://ashardalon.codebasehome.com) on any device on your network. To use another port, put `HOST_PORT=8090` in a `.env` file next to `compose.yaml`.
 
 To update after pulling new changes: `git pull && docker compose up -d --build`. The current game lives in the `game-data` Docker volume, so updates don't wipe it.
+
+## Back up the saved game
+
+`scripts/backup-game.sh` copies the saved game out of the app into `~/ashardalon-backups` and keeps the newest 14 copies. It skips a copy when nothing changed, so a quiet week doesn't push out older saves. To run it every night at 3:15, add it to cron on the Pi:
+
+```sh
+mkdir -p ~/ashardalon-backups
+(crontab -l 2>/dev/null; echo "15 3 * * * $HOME/ashardalon-companion/scripts/backup-game.sh >> $HOME/ashardalon-backups/backup.log 2>&1") | crontab -
+```
+
+To put a backup back:
+
+```sh
+scripts/restore-game.sh                                         # lists the backups
+scripts/restore-game.sh ~/ashardalon-backups/game-2026-10-27-031500.json
+```
+
+The restore saves the current game first (as a `-before-restore` copy), so it can be undone, then restarts the app with the backup. It refuses a backup saved by a different version of the app, which would otherwise open as a new game. For the test copy, put `CONTAINER=ashardalon-test BACKUP_DIR=~/ashardalon-test-backups` in front of either command.
 
 ## A test copy
 
@@ -62,4 +91,3 @@ npm test
 
 - Tile, encounter, and treasure deck trackers
 - Adventure picker
-- Narration with ElevenLabs voices. The API key must stay out of this repo; it will be supplied on the Pi as an environment variable.

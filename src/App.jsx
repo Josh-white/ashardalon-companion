@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { AdventurePanel } from './components/Adventure.jsx'
 import HeroCard from './components/HeroCard.jsx'
 import MomentOverlay from './components/MomentOverlay.jsx'
+import Narrator from './components/Narrator.jsx'
 import MonsterList, { VillainList } from './components/MonsterList.jsx'
 import ProjectorView from './components/ProjectorView.jsx'
 import Recap from './components/Recap.jsx'
@@ -10,7 +11,10 @@ import Setup from './components/Setup.jsx'
 import { TreasureStep } from './components/Treasure.jsx'
 import TurnGuide, { ExtraAttacks } from './components/TurnGuide.jsx'
 import UndoButton from './components/UndoButton.jsx'
+import { SoundToggle, TapForSound } from './components/SoundToggle.jsx'
 import { Button, HpBar } from './components/ui.jsx'
+import { useSoundEffects } from './audio/sfx.js'
+import { useAudioLocked, useSoundSetting } from './audio/soundSetting.js'
 import { HERO_COLORS } from './data/heroes.js'
 import { PHASES } from './data/phases.js'
 import { encounterCardsOutdated } from './state/game.js'
@@ -21,7 +25,7 @@ import { useDeviceId, useSeat, useSharedGame } from './state/useSharedGame.js'
 const TABLE_SEAT = 'table'
 const PROJECTOR_SEAT = 'projector'
 
-function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitchSeat }) {
+function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitchSeat, sound }) {
   const newGame = () => {
     if (window.confirm('Start a new game? This clears the current one for everyone.')) dispatch({ type: 'NEW_GAME' })
   }
@@ -45,6 +49,7 @@ function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitchSeat })
         </div>
         <div className="ml-auto flex flex-wrap gap-2">
           <UndoButton undo={undo} depth={undoDepth} dispatch={dispatch} className="max-w-56 truncate" />
+          <SoundToggle on={sound.on} setOn={sound.setOn} className="text-sm" />
           <Button variant="ghost" className="text-sm" onClick={onSwitchSeat}>
             {seatLabel} · switch
           </Button>
@@ -219,6 +224,11 @@ export default function App() {
     if (encountersOutdated) dispatch({ type: 'UPDATE_ENCOUNTER_CARDS', cards: cards.encounters })
   }, [encountersOutdated]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const [soundOn, setSoundOn] = useSoundSetting(seat)
+  const sound = { on: soundOn, setOn: setSoundOn }
+  const soundLocked = useAudioLocked(soundOn)
+  useSoundEffects(state?.moment, soundOn)
+
   if (!state) return <Connecting />
 
   const banners = (
@@ -233,6 +243,7 @@ export default function App() {
           Reconnecting to the game… changes won't be saved until it's back.
         </p>
       )}
+      {seat === PROJECTOR_SEAT && <Narrator state={state} />}
     </>
   )
 
@@ -266,8 +277,9 @@ export default function App() {
     return (
       <main className="min-h-screen bg-zinc-950 text-zinc-100">
         {banners}
-        <ProjectorView state={state} onSwitchSeat={() => setSeat(null)} />
+        <ProjectorView state={state} onSwitchSeat={() => setSeat(null)} sound={sound} />
         <MomentOverlay moment={state.moment} heroes={state.heroes} big />
+        <TapForSound locked={soundLocked} big />
         {(state.status === 'won' || state.status === 'lost') && <Recap state={state} big />}
       </main>
     )
@@ -291,9 +303,11 @@ export default function App() {
         dispatch={dispatch}
         seatLabel={myHero ? myHero.name : 'Table'}
         onSwitchSeat={() => setSeat(null)}
+        sound={sound}
       />
       {myHero ? <HeroView state={state} dispatch={dispatch} hero={myHero} /> : <TableView state={state} dispatch={dispatch} />}
       <MomentOverlay moment={state.moment} heroes={state.heroes} />
+      <TapForSound locked={soundLocked} />
       {(state.status === 'won' || state.status === 'lost') && <Recap state={state} dispatch={dispatch} />}
     </main>
   )
