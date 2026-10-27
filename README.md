@@ -36,7 +36,7 @@ read -rsp "Paste ElevenLabs key: " K; echo; printf 'ELEVENLABS_API_KEY=%s\n' "$K
 docker compose up -d --build
 ```
 
-Only the Pi talks to ElevenLabs, and every line it has spoken is saved in the `game-data` volume, so repeats are free. Optional `.env` settings: `ELEVENLABS_VOICE_ID` (default: George) and `ELEVENLABS_MODEL` (default: `eleven_multilingual_v2`; `eleven_flash_v2_5` costs half as much). Browsers only play sound after a tap, so the projector shows **Tap to hear the narrator** if it needs one, and a small *narrator on/off* switch in the corner.
+Only the Pi talks to ElevenLabs, and every line it has spoken is saved in the `game-data` volume, so repeats are free. Optional `.env` settings: `ELEVENLABS_VOICE_ID` (default: George) and `ELEVENLABS_MODEL` (default: `eleven_multilingual_v2`; `eleven_flash_v2_5` costs half as much). The narrator follows the projector's sound switch and waits for the sound effects to finish before it speaks. Browsers only play sound after a tap, so the projector asks for one if it needs it.
 
 ## Run it on the Raspberry Pi
 
