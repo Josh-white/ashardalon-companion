@@ -131,3 +131,51 @@ describe('loading cards', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 })
+
+describe('card art', () => {
+  let dir
+  let server
+  const url = (path) => `http://localhost:${server.port}${path}`
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3])
+
+  beforeEach(async () => {
+    dir = mkdtempSync(join(tmpdir(), 'ashardalon-'))
+    server = await startServer({ port: 0, saveFile: join(dir, 'game.json'), staticDir: dir, artDir: join(dir, 'art') })
+  })
+
+  afterEach(async () => {
+    await server.close()
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('saves a picture, lists it, serves it, and tells every screen', async () => {
+    expect(await (await fetch(url('/art.json'))).json()).toEqual({})
+    const screen = connect(server.port)
+    await screen.nextState(1)
+
+    const saved = await fetch(url('/art/monster-human-cultist.jpg'), { method: 'PUT', body: jpeg })
+    expect(saved.status).toBe(200)
+    expect(Object.keys(await saved.json())).toEqual(['monster-human-cultist'])
+    expect(readFileSync(join(dir, 'art', 'monster-human-cultist.jpg'))).toEqual(jpeg)
+    await screen.nextState(2)
+    expect(screen.messages[1]).toEqual({ type: 'art' })
+
+    const served = await fetch(url('/art/monster-human-cultist.jpg?v=1'))
+    expect(served.headers.get('content-type')).toBe('image/jpeg')
+    expect(Buffer.from(await served.arrayBuffer())).toEqual(jpeg)
+
+    expect((await fetch(url('/art/monster-human-cultist.jpg'), { method: 'DELETE' })).status).toBe(200)
+    expect(await (await fetch(url('/art.json'))).json()).toEqual({})
+    expect((await fetch(url('/art/monster-human-cultist.jpg'))).status).toBe(404)
+    screen.socket.close()
+  })
+
+  it('turns away odd names and files that are not JPEGs', async () => {
+    expect((await fetch(url('/art/..%2Fgame.jpg'), { method: 'PUT', body: jpeg })).status).toBe(404)
+    expect((await fetch(url('/art/cards.jpg'), { method: 'PUT', body: jpeg })).status).toBe(404)
+    expect((await fetch(url('/art/hero-cleric.jpg'), { method: 'PUT', body: 'hello' })).status).toBe(400)
+    const huge = Buffer.concat([jpeg, Buffer.alloc(3 * 1024 * 1024)])
+    expect((await fetch(url('/art/hero-cleric.jpg'), { method: 'PUT', body: huge }).catch(() => ({ status: 413 }))).status).toBe(413)
+    expect(await (await fetch(url('/art.json'))).json()).toEqual({})
+  })
+})

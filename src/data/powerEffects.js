@@ -18,7 +18,7 @@ import { itemAc } from './items.js'
 //   keepOnMiss  a daily that isn't used up when it misses.
 // Other powers have a `use`, done from the power's tile:
 //   healSelf, heal + pick ('other': one other hero), tokens, endCondition, refuge, invisible, causeFear, note.
-// `reaction` powers are offered where they happen: 'reroll', 'furious', 'dodge', 'noble-shield', 'perseverance'.
+// `reaction` powers are offered where they happen: 'reroll', 'furious', 'dodge', 'evade', 'noble-shield', 'perseverance'.
 const EFFECTS = {
   // Quinn, the cleric
   'Healing Hymn': { use: { healSelf: 2, heal: 2, pick: 'other', optional: true, prompt: 'Who else on your tile gets 2 HP?' } },
@@ -69,7 +69,7 @@ const EFFECTS = {
   "King's Castle": { before: 'First swap places with a hero within 1 tile.' },
   'Tornado Strike': { attacks: 4, targets: 4, note: 'Then put your hero on any square of your tile.' },
   'Distant Diversion': { use: { note: 'Move a monster within 3 tiles onto a tile next to it.' } },
-  'Practiced Evasion': { use: { note: 'The trap or event attack misses. If the app took HP off, tap Undo.' } },
+  'Practiced Evasion': { reaction: 'evade' },
   'Tumbling Escape': { reaction: 'dodge' },
 
   // Heskan, the wizard
@@ -125,4 +125,15 @@ export const heroAttackPenalty = (hero) => curseTotal(hero, 'attackPenalty')
 export function heroAc(hero) {
   const tokens = hero.tokens ?? {}
   return hero.ac + (hero.shieldedBy ? 2 : 0) + 2 * (tokens.mirrorImage ?? 0) + itemAc(hero) - curseTotal(hero, 'acPenalty')
+}
+
+// The hit a hero could still turn into a miss: Tumbling Escape (a monster's attack) or
+// Practiced Evasion (an encounter card's or trap's attack). Returns the action, or null.
+export function pendingDodge(state, hero, power) {
+  const reaction = effectsOf(power).reaction
+  if (power.used || (reaction !== 'dodge' && reaction !== 'evade')) return null
+  const last = reaction === 'dodge' ? state.turn.lastMonsterAttack : state.turn.lastEventAttack
+  const flag = reaction === 'dodge' ? 'dodged' : 'evaded'
+  if (!last?.results.some((r) => r.heroId === hero.id && r.hit && !r[flag])) return null
+  return { type: reaction === 'dodge' ? 'DODGE_HIT' : 'EVADE_HIT', heroId: hero.id, powerId: power.id }
 }

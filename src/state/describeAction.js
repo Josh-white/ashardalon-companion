@@ -46,6 +46,8 @@ export function describeAction(state, action) {
       return 'Inspiring Advice reroll'
     case 'POWER_DAMAGE':
       return { furious: 'Furious Assault', bladeBarrier: 'Blade Barrier', flamingSphere: 'Flaming Sphere' }[action.source] ?? 'Power damage'
+    case 'EVADE_HIT':
+      return hero ? `${hero.name}'s Practiced Evasion` : 'Practiced Evasion'
     case 'DODGE_HIT':
       return hero ? `${hero.name}'s Tumbling Escape` : 'Tumbling Escape'
     case 'ATTACH_MONSTER_CARDS':

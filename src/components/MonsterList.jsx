@@ -1,15 +1,18 @@
 import { useState } from 'react'
+import { monsterArt } from '../data/art.js'
 import { CONDITIONS } from '../data/heroes.js'
 import { activeVillains } from '../state/game.js'
 import { useCards } from '../state/useCards.js'
+import Art from './Art.jsx'
 import { Button, Chip, HpBar } from './ui.jsx'
 
 function VillainRow({ villain, dispatch }) {
   const { card } = villain
   return (
     <div className="rounded-2xl border-2 border-fuchsia-700 bg-zinc-900 p-4">
-      <div className="flex items-start justify-between gap-2">
-        <div>
+      <div className="flex items-start gap-3">
+        <Art name={monsterArt(villain)} className="w-24" />
+        <div className="mr-auto">
           <p className="text-sm font-semibold uppercase tracking-widest text-fuchsia-400">
             👑 Villain{card.level ? ` · level ${card.level}` : ''}
           </p>
@@ -120,8 +123,9 @@ export function VillainList({ state, dispatch, canPlace = false }) {
 function MonsterRow({ monster, owner, isActiveOwner, dispatch }) {
   return (
     <div className={`rounded-2xl border bg-zinc-900 p-4 ${isActiveOwner ? 'border-red-500/70' : 'border-zinc-800'}`}>
-      <div className="flex items-start justify-between gap-2">
-        <div>
+      <div className="flex items-start gap-3">
+        <Art name={monsterArt(monster)} className="w-20" />
+        <div className="mr-auto">
           <h3 className="font-display text-xl font-bold text-red-300">{monster.name}</h3>
           <p className="text-sm text-zinc-400">
             {monster.objective ? 'In the chamber' : owner ? `${owner.name}'s card` : 'No owner'} · {monster.ac ? `AC ${monster.ac}` : ''}

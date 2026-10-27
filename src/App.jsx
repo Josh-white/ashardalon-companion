@@ -1,16 +1,24 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { AdventurePanel } from './components/Adventure.jsx'
+import Art from './components/Art.jsx'
+import ArtScreen from './components/ArtScreen.jsx'
 import HeroCard from './components/HeroCard.jsx'
 import MomentOverlay from './components/MomentOverlay.jsx'
+import Narrator from './components/Narrator.jsx'
 import MonsterList, { VillainList } from './components/MonsterList.jsx'
 import ProjectorView from './components/ProjectorView.jsx'
+import Recap from './components/Recap.jsx'
 import SeatPicker from './components/SeatPicker.jsx'
 import Setup from './components/Setup.jsx'
 import { TreasureStep } from './components/Treasure.jsx'
 import { TilesLeft } from './components/Tiles.jsx'
 import TurnGuide, { ExtraAttacks } from './components/TurnGuide.jsx'
 import UndoButton from './components/UndoButton.jsx'
+import { SoundToggle, TapForSound } from './components/SoundToggle.jsx'
 import { Button, HpBar } from './components/ui.jsx'
+import { heroArt } from './data/art.js'
+import { useSoundEffects } from './audio/sfx.js'
+import { useAudioLocked, useSoundSetting } from './audio/soundSetting.js'
 import { HERO_COLORS } from './data/heroes.js'
 import { PHASES } from './data/phases.js'
 import { encounterCardsOutdated } from './state/game.js'
@@ -21,7 +29,7 @@ import { useDeviceId, useSeat, useSharedGame } from './state/useSharedGame.js'
 const TABLE_SEAT = 'table'
 const PROJECTOR_SEAT = 'projector'
 
-function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitchSeat }) {
+function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitchSeat, sound }) {
   const newGame = () => {
     if (window.confirm('Start a new game? This clears the current one for everyone.')) dispatch({ type: 'NEW_GAME' })
   }
@@ -46,11 +54,19 @@ function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitchSeat })
         <TilesLeft state={state} className="text-lg" />
         <div className="ml-auto flex flex-wrap gap-2">
           <UndoButton undo={undo} depth={undoDepth} dispatch={dispatch} className="max-w-56 truncate" />
+          <SoundToggle on={sound.on} setOn={sound.setOn} className="text-sm" />
           <Button variant="ghost" className="text-sm" onClick={onSwitchSeat}>
             {seatLabel} · switch
           </Button>
           <Button variant="ghost" className="text-sm" onClick={() => dispatch({ type: 'END_GAME', result: 'won' })}>
             We won!
+          </Button>
+          <Button
+            variant="ghost"
+            className="text-sm"
+            onClick={() => window.confirm('Did the party lose? This shows the end-of-game recap.') && dispatch({ type: 'END_GAME', result: 'lost' })}
+          >
+            We lost
           </Button>
           <Button variant="ghost" className="text-sm" onClick={newGame}>
             New game
@@ -63,30 +79,6 @@ function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitchSeat })
         </p>
       )}
     </header>
-  )
-}
-
-function GameOver({ state, dispatch }) {
-  const won = state.status === 'won'
-  return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-zinc-950/90 p-6">
-      <div className="max-w-md rounded-3xl border border-zinc-800 bg-zinc-900 p-8 text-center">
-        <div className="text-6xl">{won ? '🏆' : '💀'}</div>
-        <h2 className={`mt-4 font-display text-4xl font-bold ${won ? 'text-amber-400' : 'text-red-400'}`}>
-          {won ? 'Victory!' : 'The party has fallen'}
-        </h2>
-        {won && state.adventure?.card.story.victory && <p className="mt-3 italic text-zinc-200">{state.adventure.card.story.victory}</p>}
-        <p className="mt-2 text-zinc-400">
-          {state.turn.round} rounds · {state.xp} XP left in the pool
-        </p>
-        <div className="mt-6 flex justify-center gap-3">
-          <Button onClick={() => dispatch({ type: 'RESUME' })}>Back to the game</Button>
-          <Button variant="gold" onClick={() => dispatch({ type: 'NEW_GAME' })}>
-            New game
-          </Button>
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -132,8 +124,9 @@ function PartyStrip({ heroes, exceptId }) {
       <div className="grid gap-3 sm:grid-cols-2">
         {others.map((hero) => (
           <div key={hero.id} className={`rounded-xl p-3 ${HERO_COLORS[hero.color].bg}`}>
-            <div className="flex justify-between">
-              <span className={`font-display text-lg font-bold ${HERO_COLORS[hero.color].text}`}>{hero.name}</span>
+            <div className="flex items-center justify-between gap-2">
+              <Art name={heroArt(hero.key)} className="w-10" />
+              <span className={`mr-auto font-display text-lg font-bold ${HERO_COLORS[hero.color].text}`}>{hero.name}</span>
               <span className="text-zinc-300">
                 {hero.hp} / {hero.maxHp} HP
               </span>
@@ -224,6 +217,7 @@ export default function App() {
   const [seat, setSeat] = useSeat()
   const deviceId = useDeviceId()
   const cards = useCards()
+  const [artOpen, setArtOpen] = useState(false)
 
   // A game from before the monster deck has monsters without their card; give them one.
   const needsCards = state?.monsters.some((m) => !m.card && cards.monsters.some((c) => c.name.toLowerCase() === m.name.toLowerCase()))
@@ -236,6 +230,11 @@ export default function App() {
   useEffect(() => {
     if (encountersOutdated) dispatch({ type: 'UPDATE_ENCOUNTER_CARDS', cards: cards.encounters })
   }, [encountersOutdated]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const [soundOn, setSoundOn] = useSoundSetting(seat)
+  const sound = { on: soundOn, setOn: setSoundOn }
+  const soundLocked = useAudioLocked(soundOn)
+  useSoundEffects(state?.moment, soundOn)
 
   if (!state) return <Connecting />
 
@@ -251,8 +250,18 @@ export default function App() {
           Reconnecting to the game… changes won't be saved until it's back.
         </p>
       )}
+      {seat === PROJECTOR_SEAT && <Narrator state={state} />}
     </>
   )
+
+  if (artOpen) {
+    return (
+      <main className="min-h-screen bg-zinc-950 text-zinc-100">
+        {banners}
+        <ArtScreen onDone={() => setArtOpen(false)} />
+      </main>
+    )
+  }
 
   if (state.status === 'setup') {
     return (
@@ -274,6 +283,7 @@ export default function App() {
           watchOnly={seat === PROJECTOR_SEAT}
           onProjector={() => setSeat(PROJECTOR_SEAT)}
           onLeaveProjector={() => setSeat(null)}
+          onArt={() => setArtOpen(true)}
         />
       </main>
     )
@@ -284,9 +294,10 @@ export default function App() {
     return (
       <main className="min-h-screen bg-zinc-950 text-zinc-100">
         {banners}
-        <ProjectorView state={state} onSwitchSeat={() => setSeat(null)} />
+        <ProjectorView state={state} onSwitchSeat={() => setSeat(null)} sound={sound} />
         <MomentOverlay moment={state.moment} heroes={state.heroes} big />
-        {(state.status === 'won' || state.status === 'lost') && <GameOver state={state} dispatch={dispatch} />}
+        <TapForSound locked={soundLocked} big />
+        {(state.status === 'won' || state.status === 'lost') && <Recap state={state} big />}
       </main>
     )
   }
@@ -294,7 +305,7 @@ export default function App() {
     return (
       <main className="min-h-screen bg-zinc-950 text-zinc-100">
         {banners}
-        <SeatPicker heroes={state.heroes} onPick={setSeat} tableSeat={TABLE_SEAT} projectorSeat={PROJECTOR_SEAT} />
+        <SeatPicker heroes={state.heroes} onPick={setSeat} tableSeat={TABLE_SEAT} projectorSeat={PROJECTOR_SEAT} onArt={() => setArtOpen(true)} />
       </main>
     )
   }
@@ -309,10 +320,12 @@ export default function App() {
         dispatch={dispatch}
         seatLabel={myHero ? myHero.name : 'Table'}
         onSwitchSeat={() => setSeat(null)}
+        sound={sound}
       />
       {myHero ? <HeroView state={state} dispatch={dispatch} hero={myHero} /> : <TableView state={state} dispatch={dispatch} />}
       <MomentOverlay moment={state.moment} heroes={state.heroes} />
-      {(state.status === 'won' || state.status === 'lost') && <GameOver state={state} dispatch={dispatch} />}
+      <TapForSound locked={soundLocked} />
+      {(state.status === 'won' || state.status === 'lost') && <Recap state={state} dispatch={dispatch} />}
     </main>
   )
 }

@@ -1,9 +1,11 @@
+import { heroArt } from '../data/art.js'
 import { cardStats } from '../data/cards.js'
 import { HERO_COLORS, HERO_TEMPLATES } from '../data/heroes.js'
 import { powerSlotsFor } from '../state/game.js'
 import { randomNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { AdventurePicker, ChosenAdventure } from './Adventure.jsx'
+import Art from './Art.jsx'
 import { Button } from './ui.jsx'
 
 const templateFor = (key) => HERO_TEMPLATES.find((t) => t.key === key)
@@ -65,8 +67,9 @@ function MyHero({ claim, cards, deviceId, dispatch }) {
 
   return (
     <section className={`rounded-2xl border border-zinc-800 p-4 ring-2 ${color.ring} ${color.bg}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
+      <div className="flex items-start gap-3">
+        <Art name={heroArt(template.key)} className="w-20" />
+        <div className="mr-auto">
           <h2 className={`font-display text-3xl font-bold ${color.text}`}>{template.name}</h2>
           <p className="text-zinc-400">{template.className}</p>
         </div>
@@ -160,7 +163,7 @@ function MyHero({ claim, cards, deviceId, dispatch }) {
   )
 }
 
-export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watchOnly, onProjector, onLeaveProjector }) {
+export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watchOnly, onProjector, onLeaveProjector, onArt }) {
   const cards = useCards()
   const lobby = state.lobby ?? []
   const mine = lobby.find((c) => c.deviceId === deviceId)
@@ -201,8 +204,13 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
                 taken ? color.bg : 'bg-zinc-900'
               } ${canPick ? 'active:scale-95' : 'cursor-default'} ${!taken && mine ? 'opacity-50' : ''}`}
             >
-              <span className={`block font-display text-2xl font-bold ${color.text}`}>{template.name}</span>
-              <span className="text-zinc-400">{template.className}</span>
+              <span className="flex items-center gap-3">
+                <Art name={heroArt(template.key)} className="w-14" />
+                <span>
+                  <span className={`block font-display text-2xl font-bold ${color.text}`}>{template.name}</span>
+                  <span className="text-zinc-400">{template.className}</span>
+                </span>
+              </span>
               <span className="mt-1 block text-sm">
                 {taken ? (
                   <span className={owner.ready ? 'text-emerald-400' : 'text-amber-400'}>
@@ -263,6 +271,12 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
           with all five heroes and a few monsters.
         </p>
       )}
+
+      <p className="text-center text-sm">
+        <button type="button" className="text-zinc-500 underline" onClick={onArt}>
+          📷 Add photos of your cards
+        </button>
+      </p>
     </div>
   )
 }

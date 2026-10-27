@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { refreshArt } from './useArt.js'
 
 const RECONNECT_DELAY_MS = 1500
 
@@ -32,6 +33,9 @@ export function useSharedGame() {
           setUndo(message.undo ?? null)
           setUndoDepth(message.undoDepth ?? 0)
           setInstance(message.instance ?? null)
+        } else if (message.type === 'art') {
+          // Someone saved a card picture: show it here too.
+          refreshArt()
         }
       }
       socket.onclose = () => {

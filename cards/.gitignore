@@ -1,1 +1,4 @@
 cards.json
+# Your card photos stay on the Pi too.
+art/*
+!art/README.md
