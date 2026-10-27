@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { audioContext } from './soundSetting.js'
 
 // The 3D die lands this long after a roll's moment starts (ROLL_MS in Die3D.jsx).
@@ -24,6 +24,52 @@ const LENGTH_MS = {
   poison: 1000,
   down: 1900,
   chime: 900,
+  tile: 4300,
+  bear: 2000,
+  hiss: 1500,
+  bow: 900,
+  smasher: 1100,
+  chant: 2000,
+  duergar: 1200,
+  devil: 1700,
+  gibber: 1600,
+  grell: 1300,
+  kobold: 900,
+  dragonlord: 1500,
+  warhorn: 1700,
+  thunder: 1800,
+  otyugh: 1600,
+  drake: 1300,
+  dragon: 2800,
+  gauth: 1900,
+}
+
+// Each monster's own sound when it's drawn, matched by name in the moment's title.
+// Anything not listed (a chamber, a monster from a newer card file) gets the plain roar.
+const MONSTER_VOICES = {
+  'cave bear': 'bear',
+  snake: 'hiss',
+  'orc archer': 'bow',
+  'orc smasher': 'smasher',
+  'human cultist': 'chant',
+  'duergar guard': 'duergar',
+  'legion devil': 'devil',
+  'gibbering mouther': 'gibber',
+  grell: 'grell',
+  'kobold dragonshield': 'kobold',
+  'kobold dragonlord': 'dragonlord',
+  'duergar captain': 'warhorn',
+  'orc storm shaman': 'thunder',
+  otyugh: 'otyugh',
+  'rage drake': 'drake',
+  ashardalon: 'dragon',
+  gauth: 'gauth',
+}
+
+export function monsterVoice(title = '') {
+  const lower = title.toLowerCase()
+  const name = Object.keys(MONSTER_VOICES).find((n) => lower.includes(n))
+  return name ? MONSTER_VOICES[name] : 'roar'
 }
 
 // What a moment sounds like, as [sound, delay in ms] pairs. Rolls clatter straight
@@ -56,8 +102,9 @@ export function momentSounds(moment) {
     return sounds
   }
 
+  if (moment.kind === 'spawn') return [[monsterVoice(moment.title), 0]]
+
   const sound = {
-    spawn: 'roar',
     monster: 'roar',
     'monster-down': 'down',
     down: 'down',
@@ -78,15 +125,38 @@ export function momentSoundMs(moment) {
   return Math.max(0, ...momentSounds(moment).map(([sound, delay]) => delay + LENGTH_MS[sound]))
 }
 
-// Plays each big moment's sounds on this device while sound is on.
-export function useSoundEffects(moment, on) {
+// Whether a dungeon tile was just turned over: exploring, or the tile tracker drawing
+// one. Each turn's draws are kept in turn.tiles by key; 'none' means the stack was empty.
+export function tileRevealed(before, after) {
+  if (!before || !after || before.status !== 'playing' || after.status !== 'playing') return false
+  if (!before.turn.explored && after.turn.explored) return true
+  const old = before.turn.tiles ?? {}
+  return Object.entries(after.turn.tiles ?? {}).some(([key, tile]) => tile !== 'none' && old[key] === undefined)
+}
+
+function play(sounds) {
+  const ctx = audioContext()
+  if (!ctx || ctx.state !== 'running') return
+  const start = ctx.currentTime + 0.02
+  for (const [sound, delay] of sounds) SOUNDS[sound](ctx, start + delay / 1000, output(ctx))
+}
+
+// Plays each big moment's sounds, and music when a new tile is revealed, on this
+// device while sound is on.
+export function useSoundEffects(state, on) {
+  const moment = state?.moment
   useEffect(() => {
     if (!on || !moment || Date.now() - moment.at > STALE_MS) return
-    const ctx = audioContext()
-    if (!ctx || ctx.state !== 'running') return
-    const start = ctx.currentTime + 0.02
-    for (const [sound, delay] of momentSounds(moment)) SOUNDS[sound](ctx, start + delay / 1000, output(ctx))
+    play(momentSounds(moment))
   }, [moment?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The first state a device sees is catching up, not news, so it's only remembered.
+  const last = useRef(null)
+  useEffect(() => {
+    const before = last.current
+    last.current = state
+    if (on && tileRevealed(before, state)) play([['tile', 0]])
+  }, [state, on])
 }
 
 // Every sound goes through one gentle compressor so a fanfare on top of a clang
@@ -309,19 +379,176 @@ export const SOUNDS = {
     tone(ctx, out, { at, freq: NOTE(81), peak: 0.3, decay: 0.5 })
     tone(ctx, out, { at: at + 0.12, freq: NOTE(88), peak: 0.25, decay: 0.7 })
   },
+
+  // A new part of the dungeon: a low drone, a hollow minor chord swelling in, and a
+  // music-box tune drifting over it.
+  tile(ctx, at, out) {
+    const tune = TILE_TUNES[Math.floor(Math.random() * TILE_TUNES.length)]
+    pad(ctx, out, { at, freq: NOTE(45), length: 4.2, peak: 0.16, type: 'sine' })
+    pad(ctx, out, { at, freq: NOTE(45), length: 4.2, peak: 0.05, type: 'sawtooth', detune: 7, tremolo: 0.7 })
+    for (const note of [57, 60, 64]) pad(ctx, out, { at: at + 0.2, freq: NOTE(note), length: 3.8, peak: 0.045, detune: (note % 3) * 4, tremolo: 3 })
+    tune.forEach((note, i) => {
+      const t = at + 0.5 + i * 0.7
+      tone(ctx, out, { at: t, freq: NOTE(note), peak: 0.13, decay: i === tune.length - 1 ? 1.4 : 0.9 })
+      tone(ctx, out, { at: t, freq: NOTE(note + 12), peak: 0.03, decay: 0.5 })
+    })
+    burst(ctx, out, { at, freq: 300, q: 1, peak: 0.12, attack: 1.5, decay: 2.5, sweepTo: 900 })
+  },
+
+  // --- Monsters, when they're drawn.
+
+  // Cave Bear: a huge, deep roar with a heavy breath.
+  bear(ctx, at, out) {
+    snarl(ctx, out, at, 1.9, 48, { rise: 1.8, fall: 0.7, rattle: 17, cutoff: 700, peak: 0.4, breath: 0.4 })
+    snarl(ctx, out, at + 0.05, 1.8, 97, { rise: 1.6, fall: 0.6, rattle: 29, cutoff: 1200, peak: 0.12, breath: 0 })
+  },
+
+  // Snake: a long hiss with a dry rattle under it.
+  hiss(ctx, at, out) {
+    burst(ctx, out, { at, type: 'highpass', freq: 4500, peak: 0.35, attack: 0.15, decay: 1.25 })
+    for (let i = 0; i < 14; i++) burst(ctx, out, { at: at + 0.1 + i * 0.06, freq: 6000, q: 6, peak: 0.12, decay: 0.02 })
+  },
+
+  // Orc Archer: a bowstring twang and an arrow flying past.
+  bow(ctx, at, out) {
+    tone(ctx, out, { at, freq: 180, slideTo: 150, type: 'sawtooth', peak: 0.3, decay: 0.35, filter: 1500 })
+    burst(ctx, out, { at: at + 0.12, freq: 1200, q: 3, peak: 0.6, attack: 0.25, decay: 0.15, sweepTo: 3500 })
+    tone(ctx, out, { at: at + 0.6, freq: 900, slideTo: 300, peak: 0.25, decay: 0.12 })
+    burst(ctx, out, { at: at + 0.6, type: 'lowpass', freq: 1200, peak: 0.5, decay: 0.12 })
+  },
+
+  // Orc Smasher: two war drum hits and a battle grunt.
+  smasher(ctx, at, out) {
+    for (const t of [0, 0.25]) tone(ctx, out, { at: at + t, freq: 90, slideTo: 45, peak: 0.8, decay: 0.3 })
+    snarl(ctx, out, at + 0.45, 0.6, 110, { rise: 1.5, fall: 0.6, rattle: 35, cutoff: 1400, peak: 0.35, breath: 0.15 })
+  },
+
+  // Human Cultist: a low, wordless chant.
+  chant(ctx, at, out) {
+    for (const [note, start] of [[43, 0], [50, 0.05], [46, 0.9]]) {
+      const osc = ctx.createOscillator()
+      osc.type = 'sawtooth'
+      osc.frequency.value = NOTE(note)
+      // A vowel-like resonance turns the buzz into "ohhh".
+      const vowel = ctx.createBiquadFilter()
+      vowel.type = 'bandpass'
+      vowel.frequency.value = 500
+      vowel.Q.value = 5
+      const length = start > 0.5 ? 1.0 : 1.9
+      const gain = ctx.createGain()
+      gain.gain.setValueAtTime(0.0001, at + start)
+      gain.gain.linearRampToValueAtTime(0.5, at + start + 0.3)
+      gain.gain.linearRampToValueAtTime(0.0001, at + start + length)
+      osc.connect(vowel).connect(gain).connect(out)
+      osc.start(at + start)
+      osc.stop(at + start + length + 0.05)
+    }
+  },
+
+  // Duergar Guard: armored boots clanking closer, then a gruff grunt.
+  duergar(ctx, at, out) {
+    for (let i = 0; i < 3; i++) {
+      const t = at + i * 0.22
+      burst(ctx, out, { at: t, type: 'lowpass', freq: 500, peak: 0.5 + i * 0.15, decay: 0.08 })
+      tone(ctx, out, { at: t, freq: 1800 + i * 150, peak: 0.08, decay: 0.2 })
+    }
+    snarl(ctx, out, at + 0.7, 0.45, 85, { rise: 1.2, fall: 0.8, rattle: 30, cutoff: 800, peak: 0.3, breath: 0.1 })
+  },
+
+  // Legion Devil: a burst of hellfire and a deep, falling snarl.
+  devil(ctx, at, out) {
+    burst(ctx, out, { at, freq: 300, q: 0.8, peak: 0.5, attack: 0.05, decay: 0.8, sweepTo: 1800 })
+    for (let i = 0; i < 10; i++) burst(ctx, out, { at: at + Math.random() * 1.2, freq: 2500, q: 2, peak: 0.15, decay: 0.03 })
+    snarl(ctx, out, at + 0.25, 1.4, 120, { rise: 1.1, fall: 0.35, rattle: 40, cutoff: 1100, peak: 0.3, breath: 0 })
+  },
+
+  // Gibbering Mouther: many mouths babbling at once.
+  gibber(ctx, at, out) {
+    for (let i = 0; i < 22; i++) {
+      const freq = 180 + Math.random() * 500
+      const t = at + i * 0.065 + Math.random() * 0.03
+      tone(ctx, out, { at: t, freq, slideTo: freq * (0.6 + Math.random()), type: 'sawtooth', peak: 0.22, decay: 0.08, filter: 1500 })
+    }
+    for (let i = 0; i < 6; i++) tone(ctx, out, { at: at + i * 0.22, freq: 200, slideTo: 500, peak: 0.25, decay: 0.07 })
+  },
+
+  // Grell: fast chittering clicks and a wet squelch.
+  grell(ctx, at, out) {
+    for (let i = 0; i < 16; i++) burst(ctx, out, { at: at + i * 0.045, freq: 3500 + (i % 3) * 800, q: 8, peak: 0.5, decay: 0.015 })
+    burst(ctx, out, { at: at + 0.8, freq: 400, q: 3, peak: 0.45, attack: 0.02, decay: 0.3, sweepTo: 150 })
+    tone(ctx, out, { at: at + 0.8, freq: 300, slideTo: 120, peak: 0.2, decay: 0.3 })
+  },
+
+  // Kobold Dragonshield: a yappy little snarl, twice.
+  kobold(ctx, at, out) {
+    snarl(ctx, out, at, 0.3, 260, { rise: 1.3, fall: 0.9, rattle: 45, cutoff: 2500, peak: 0.22, breath: 0.05 })
+    snarl(ctx, out, at + 0.4, 0.4, 300, { rise: 1.3, fall: 0.7, rattle: 45, cutoff: 2500, peak: 0.22, breath: 0.05 })
+  },
+
+  // Kobold Dragonlord: a kobold's yap and a squeaky horn call.
+  dragonlord(ctx, at, out) {
+    SOUNDS.kobold(ctx, at, out)
+    brass(ctx, out, { at: at + 0.75, freq: NOTE(62), length: 0.2, peak: 0.16 })
+    brass(ctx, out, { at: at + 0.97, freq: NOTE(69), length: 0.5, peak: 0.16, wobble: 5 })
+  },
+
+  // Duergar Captain: a low war horn.
+  warhorn(ctx, at, out) {
+    brass(ctx, out, { at, freq: NOTE(41), length: 0.6, peak: 0.25 })
+    brass(ctx, out, { at: at + 0.65, freq: NOTE(46), length: 1.0, peak: 0.25, wobble: 2, slideTo: NOTE(45) })
+    brass(ctx, out, { at: at + 0.65, freq: NOTE(34), length: 1.0, peak: 0.15 })
+  },
+
+  // Orc Storm Shaman: a crack of lightning and rolling thunder.
+  thunder(ctx, at, out) {
+    burst(ctx, out, { at, type: 'highpass', freq: 1500, peak: 0.7, decay: 0.12 })
+    burst(ctx, out, { at: at + 0.05, type: 'lowpass', freq: 250, peak: 1.4, attack: 0.05, decay: 1.6 })
+    burst(ctx, out, { at: at + 0.4, type: 'lowpass', freq: 160, peak: 1, attack: 0.2, decay: 1.1 })
+  },
+
+  // Otyugh: a slimy gurgle from deep in a filthy pit.
+  otyugh(ctx, at, out) {
+    for (let i = 0; i < 12; i++) {
+      const freq = 80 + Math.random() * 120
+      tone(ctx, out, { at: at + i * 0.1 + Math.random() * 0.05, freq, slideTo: freq * 2, peak: 0.35, decay: 0.09 })
+    }
+    snarl(ctx, out, at + 0.2, 1.3, 55, { rise: 1.2, fall: 0.9, rattle: 12, cutoff: 500, peak: 0.25, breath: 0.1 })
+  },
+
+  // Rage Drake: a piercing reptile shriek.
+  drake(ctx, at, out) {
+    snarl(ctx, out, at, 1.2, 420, { rise: 1.5, fall: 0.6, rattle: 55, cutoff: 3500, peak: 0.22, breath: 0.15 })
+    snarl(ctx, out, at, 1.1, 140, { rise: 1.4, fall: 0.6, rattle: 30, cutoff: 900, peak: 0.2, breath: 0 })
+  },
+
+  // Ashardalon: the great red dragon. A long, enormous roar over a rumble you can feel.
+  dragon(ctx, at, out) {
+    tone(ctx, out, { at, freq: 40, slideTo: 30, peak: 0.6, attack: 0.4, decay: 2.3 })
+    snarl(ctx, out, at + 0.1, 2.6, 42, { rise: 2, fall: 0.6, rattle: 14, cutoff: 600, peak: 0.45, breath: 0.45 })
+    snarl(ctx, out, at + 0.2, 2.4, 160, { rise: 1.7, fall: 0.5, rattle: 33, cutoff: 2200, peak: 0.14, breath: 0 })
+    burst(ctx, out, { at: at + 0.3, freq: 600, q: 0.7, peak: 0.25, attack: 0.5, decay: 1.8, sweepTo: 2500 })
+  },
+
+  // Gauth: an eerie warbling hum, like a magic eye opening.
+  gauth(ctx, at, out) {
+    for (const [freq, tremolo] of [[220, 6], [233, 7.5], [330, 4]]) pad(ctx, out, { at, freq, length: 1.8, peak: 0.12, type: 'sine', tremolo })
+    tone(ctx, out, { at: at + 0.2, freq: 900, slideTo: 1800, peak: 0.08, attack: 0.6, decay: 0.8 })
+  },
 }
 
-// A growl: a low buzzy voice with a ragged wobble, pushed through distortion.
-function snarl(ctx, out, at, length, freq) {
+// A growl: a low buzzy voice with a ragged wobble, pushed through distortion. The
+// options shape it into different beasts: how far the pitch rises and falls, how
+// fast it rattles, how bright and how loud it is.
+function snarl(ctx, out, at, length, freq, { rise = 1.4, fall = 0.8, rattle = 23, cutoff = 900, peak = 0.25, breath = 0.25 } = {}) {
   const osc = ctx.createOscillator()
   osc.type = 'sawtooth'
   osc.frequency.setValueAtTime(freq, at)
-  osc.frequency.linearRampToValueAtTime(freq * 1.4, at + length * 0.3)
-  osc.frequency.linearRampToValueAtTime(freq * 0.8, at + length)
+  osc.frequency.linearRampToValueAtTime(freq * rise, at + length * 0.3)
+  osc.frequency.linearRampToValueAtTime(freq * fall, at + length)
   const lfo = ctx.createOscillator()
   const depth = ctx.createGain()
   lfo.type = 'square'
-  lfo.frequency.value = 23
+  lfo.frequency.value = rattle
   depth.gain.value = freq * 0.3
   lfo.connect(depth).connect(osc.frequency)
 
@@ -331,16 +558,55 @@ function snarl(ctx, out, at, length, freq) {
   shaper.curve = curve
   const filter = ctx.createBiquadFilter()
   filter.type = 'lowpass'
-  filter.frequency.value = 900
+  filter.frequency.value = cutoff
   const gain = ctx.createGain()
   gain.gain.setValueAtTime(0.0001, at)
-  gain.gain.linearRampToValueAtTime(0.25, at + length * 0.2)
-  gain.gain.linearRampToValueAtTime(0.18, at + length * 0.7)
+  gain.gain.linearRampToValueAtTime(peak, at + length * 0.2)
+  gain.gain.linearRampToValueAtTime(peak * 0.7, at + length * 0.7)
   gain.gain.linearRampToValueAtTime(0.0001, at + length)
   osc.connect(shaper).connect(filter).connect(gain).connect(out)
-  burst(ctx, out, { at, type: 'lowpass', freq: 700, peak: 0.25, attack: length * 0.2, decay: length * 0.8 })
+  if (breath) burst(ctx, out, { at, type: 'lowpass', freq: cutoff * 0.8, peak: breath, attack: length * 0.2, decay: length * 0.8 })
   for (const node of [osc, lfo]) {
     node.start(at)
     node.stop(at + length + 0.05)
   }
 }
+
+// A held note with a slow swell, for pads and hums.
+function pad(ctx, out, { at, freq, length, peak = 0.08, type = 'triangle', detune = 0, tremolo = 0 }) {
+  const osc = ctx.createOscillator()
+  osc.type = type
+  osc.frequency.value = freq
+  osc.detune.value = detune
+  const gain = ctx.createGain()
+  gain.gain.setValueAtTime(0.0001, at)
+  gain.gain.linearRampToValueAtTime(peak, at + length * 0.35)
+  gain.gain.setValueAtTime(peak, at + length * 0.65)
+  gain.gain.linearRampToValueAtTime(0.0001, at + length)
+  let node = osc.connect(gain)
+  const extra = []
+  if (tremolo) {
+    const wobble = ctx.createGain()
+    const lfo = ctx.createOscillator()
+    const depth = ctx.createGain()
+    lfo.frequency.value = tremolo
+    depth.gain.value = 0.5
+    wobble.gain.value = 0.5
+    lfo.connect(depth).connect(wobble.gain)
+    node = node.connect(wobble)
+    extra.push(lfo)
+  }
+  node.connect(out)
+  for (const n of [osc, ...extra]) {
+    n.start(at)
+    n.stop(at + length + 0.05)
+  }
+}
+
+// The tunes a new dungeon tile can play: a slow, eerie line over a low drone.
+// A different one each time keeps it from wearing thin.
+const TILE_TUNES = [
+  [69, 72, 71, 68],
+  [64, 65, 68, 69],
+  [76, 74, 72, 71],
+]
