@@ -10,7 +10,7 @@ import {
 import { PHASES } from '../data/phases.js'
 import { heroItems, itemAttackBonus, itemTrapBonus, tileAcBonus } from '../data/items.js'
 import { effectsOf, heroAc, heroAttackPenalty, maxRolls } from '../data/powerEffects.js'
-import { MAX_SURGES, MIN_SURGES, checkVictory, countDefeat, isPlayable, newAdventure, onceOnlyDraw, showStory, takeToken, tilesToCome } from './adventure.js'
+import { MAX_SURGES, MIN_SURGES, checkVictory, countDefeat, escapeBlockers, isPlayable, newAdventure, onceOnlyDraw, showStory, takeToken, tilesToCome } from './adventure.js'
 
 export const SAVE_VERSION = 1
 
@@ -1244,6 +1244,8 @@ function reduce(state, action) {
 
     case 'ADVENTURE_ESCAPED':
       if (!state.adventure) return state
+      // Escaping only counts once every other goal is done.
+      if (action.escaped && escapeBlockers(state).length > 0) return state
       return withLog({ ...state, adventure: { ...state.adventure, escaped: Boolean(action.escaped) } }, action.escaped ? 'The heroes escaped the dungeon!' : 'Not escaped after all.')
 
     case 'CLAIM_HERO': {

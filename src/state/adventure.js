@@ -100,6 +100,9 @@ export function goalParts(state) {
   return parts
 }
 
+// The goals still to do before the heroes can escape (escaping comes last).
+export const escapeBlockers = (state) => goalParts(state).filter((p) => p.key !== 'escape' && !p.done)
+
 export const goalMet = (state) => {
   const parts = goalParts(state)
   return parts.length > 0 && parts.every((p) => p.done)
