@@ -9,6 +9,10 @@ services:
     environment:
       - INSTANCE_LABEL=${INSTANCE_LABEL:-}
       - ART_DIR=/app/art
+      # The narrator's voice. The key lives only in the git-ignored .env on the Pi.
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY:-}
+      - ELEVENLABS_VOICE_ID=${ELEVENLABS_VOICE_ID:-}
+      - ELEVENLABS_MODEL=${ELEVENLABS_MODEL:-}
     volumes:
       # The current game is saved here, so it survives restarts and updates.
       - game-data:/data
