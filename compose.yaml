@@ -8,11 +8,14 @@ services:
       - "${HOST_PORT:-8081}:3000"
     environment:
       - INSTANCE_LABEL=${INSTANCE_LABEL:-}
+      - ART_DIR=/app/art
     volumes:
       # The current game is saved here, so it survives restarts and updates.
       - game-data:/data
       # Your own power cards (cards/cards.json) stay on the Pi, outside git.
       - ./cards:/app/cards:ro
+      # Photos of your cards, added from the card art screen. Also only on the Pi.
+      - ./cards/art:/app/art
     restart: unless-stopped
 
 volumes:

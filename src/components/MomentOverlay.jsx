@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { heroArt } from '../data/art.js'
 import { HERO_COLORS } from '../data/heroes.js'
+import { artUrl, useArt } from '../state/useArt.js'
 import Die from './Die3D.jsx'
 
 const SHOW_MS = { roll: 2200, crit: 3500, fumble: 3000, defeat: 3000, level: 3500, down: 3500, poison: 3500, spawn: 3000, monster: 4500, 'monster-down': 5000, encounter: 4500, treasure: 4000 }
@@ -25,6 +27,7 @@ const STYLES = {
 // on top of whatever screen this device is showing, then gets out of the way.
 export default function MomentOverlay({ moment, heroes, big = false }) {
   const [visible, setVisible] = useState(null)
+  const art = useArt()
 
   useEffect(() => {
     if (!moment || Date.now() - moment.at > STALE_MS) return
@@ -40,6 +43,8 @@ export default function MomentOverlay({ moment, heroes, big = false }) {
   const isRoll = visible.value != null || rolls.length > 0
   // A roll's big reveal waits until the die stops spinning.
   const reveal = isRoll ? 'moment-reveal' : 'moment-pop'
+  // The monster's picture when it appears, attacks or falls; the hero's when they level up.
+  const picture = artUrl(art, visible.art ?? (hero && visible.kind === 'level' ? heroArt(hero.key) : null))
 
   return (
     <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-zinc-950/40 p-6">
@@ -48,6 +53,9 @@ export default function MomentOverlay({ moment, heroes, big = false }) {
           big ? 'min-w-[40vw] text-[3vw]' : 'min-w-72 text-2xl'
         }`}
       >
+        {picture && isRoll && (
+          <img src={picture} alt="" className={`mx-auto mb-3 aspect-square rounded-2xl object-cover ${big ? 'w-[10vw]' : 'w-24'}`} />
+        )}
         {rolls.length > 0 ? (
           // A monster attack: one die per hero it attacked, with the result under each.
           <div className={`flex justify-center gap-[0.6em] ${rolls.length > 1 ? (big ? 'text-[5vw]' : 'text-5xl') : big ? 'text-[8vw]' : 'text-7xl'}`}>
@@ -69,6 +77,8 @@ export default function MomentOverlay({ moment, heroes, big = false }) {
           <div className={big ? 'text-[8vw]' : 'text-7xl'}>
             <Die value={visible.value} />
           </div>
+        ) : picture ? (
+          <img src={picture} alt="" className={`mx-auto aspect-square rounded-2xl object-cover shadow-2xl ${big ? 'w-[24vw]' : 'w-56'}`} />
         ) : (
           <div className={big ? 'text-[7vw]' : 'text-6xl'}>{style.icon}</div>
         )}
