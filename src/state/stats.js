@@ -33,11 +33,14 @@ export function trackStats(before, after, action) {
     changed = true
   }
 
-  // Damage taken, and heroes knocked down.
+  // Damage taken, and heroes knocked down. Tumbling Escape and Practiced Evasion turn a
+  // hit into a miss, so the damage they give back comes off again.
+  const dodged = action.type === 'DODGE_HIT' || action.type === 'EVADE_HIT'
   for (const hero of after.heroes) {
     const old = before.heroes.find((h) => h.id === hero.id)
-    if (!old || hero.hp >= old.hp) continue
-    add(hero.id, (s) => ({ ...s, damageTaken: s.damageTaken + (old.hp - hero.hp), downs: s.downs + (hero.hp === 0 ? 1 : 0) }))
+    if (!old || hero.hp === old.hp) continue
+    if (hero.hp < old.hp) add(hero.id, (s) => ({ ...s, damageTaken: s.damageTaken + (old.hp - hero.hp), downs: s.downs + (hero.hp === 0 ? 1 : 0) }))
+    else if (dodged) add(hero.id, (s) => ({ ...s, damageTaken: Math.max(0, s.damageTaken - (hero.hp - old.hp)), downs: Math.max(0, s.downs - (old.hp === 0 ? 1 : 0)) }))
   }
 
   // Treasure: new item cards in a hero's hand.
