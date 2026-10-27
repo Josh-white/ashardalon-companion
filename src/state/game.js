@@ -999,7 +999,7 @@ function evadeHit(state, action) {
   next = { ...next, turn: { ...next.turn, lastEventAttack: { ...last, results } } }
   next = withLog(next, `${hero.name} used Practiced Evasion: the attack misses!${row.miss > 0 ? ` (${row.miss} miss damage)` : ''}`)
   if (last.kind === 'trap' && validRoll(action.disableRoll)) {
-    next = gameReducer(next, { type: 'DISABLE_TRAP', trapId: last.trapId, heroId: hero.id, roll: action.disableRoll })
+    next = gameReducer(next, { type: 'DISABLE_TRAP', trapId: last.trapId, heroId: hero.id, roll: action.disableRoll, free: true })
   }
   return next
 }
@@ -1194,13 +1194,15 @@ function startDamage(state, hero) {
   })
 }
 
-// Trying to open the Cage takes the place of the active hero's attack: once per Hero
-// Phase, and not after they've attacked.
-export function canTryCurse(state, hero) {
+// Opening the Cage or disabling a trap takes the place of the active hero's attack:
+// once per Hero Phase, and not after they've attacked.
+export function canSpendAttack(state, hero) {
   if (!hero || PHASES[state.turn.phase]?.key !== 'hero' || state.heroes[state.turn.heroIndex]?.id !== hero.id) return false
   const last = state.turn.lastAttack
-  return !state.turn.curseTried && !(last && !last.bonus && last.heroId === hero.id)
+  return !state.turn.attackSpent && !(last && !last.bonus && last.heroId === hero.id)
 }
+
+const spendAttack = (state, hero, on) => ({ ...state, turn: { ...state.turn, attackSpent: { heroId: hero.id, on } } })
 
 // Some curses end on a roll at the end of a phase ("Roll a die at the end of your Hero
 // Phase: 10+ discard this card"). The device sends the dice with NEXT_PHASE.
@@ -2210,14 +2212,15 @@ function reduce(state, action) {
       // Instead of attacking, a hero on the trap's tile rolls to disable it (Kobold Trappers makes it harder).
       const trap = (state.traps ?? []).find((t) => t.id === action.trapId && t.type === 'trap')
       const hero = state.heroes.find((h) => h.id === action.heroId)
-      if (!trap || !hero || !validRoll(action.roll)) return state
+      // Practiced Evasion's roll is free; otherwise this is the active hero's attack.
+      if (!trap || !hero || !validRoll(action.roll) || (!action.free && !canSpendAttack(state, hero))) return state
       const penalty = state.environment?.card?.trapPenalty ?? 0
       const tools = itemTrapBonus(hero)
       const total = action.roll - penalty + tools
       const target = trap.card.trap?.disable ?? 10
       const disabled = total >= target
       const sum = penalty || tools ? `${action.roll}${tools ? ` + ${tools}` : ''}${penalty ? ` − ${penalty}` : ''} = ${total}` : `${action.roll}`
-      let next = withLog(state, `${hero.name} rolled ${sum} to disable the ${trap.name} (needed ${target}).${disabled ? ' Disabled!' : ''}`)
+      let next = withLog(action.free ? state : spendAttack(state, hero, `the ${trap.name}`), `${hero.name} rolled ${sum} to disable the ${trap.name} (needed ${target}).${disabled ? ' Disabled!' : ''}`)
       if (disabled) next = discardEncounterCard({ ...next, traps: next.traps.filter((t) => t.id !== trap.id) }, trap.cardId)
       return withMoment(next, {
         kind: disabled ? 'defeat' : 'roll',
@@ -2243,10 +2246,10 @@ function reduce(state, action) {
       const removeRoll = curse?.card?.removeRoll
       if (!removeRoll || removeRoll.phase !== 'action' || !validRoll(action.roll)) return state
       const helper = state.heroes[state.turn.heroIndex]
-      if (!canTryCurse(state, helper)) return state
+      if (!canSpendAttack(state, helper)) return state
       const broken = action.roll >= removeRoll.target
       const who = helper.id === hero.id ? hero.name : `${helper.name}, helping ${hero.name},`
-      const tried = { ...state, turn: { ...state.turn, curseTried: helper.id } }
+      const tried = spendAttack(state, helper, `the ${curse.name}`)
       const next = broken
         ? removeCurse(tried, hero.id, curse.id, `${who} rolled ${action.roll}. ${hero.name} is free of the ${curse.name}!`)
         : withLog(tried, `${who} rolled ${action.roll} against the ${curse.name} (needed ${removeRoll.target}).`)

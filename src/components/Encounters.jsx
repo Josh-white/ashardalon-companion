@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { HERO_COLORS, XP_TO_CANCEL_ENCOUNTER } from '../data/heroes.js'
 import { itemTrapBonus, tileAcBonus } from '../data/items.js'
 import { heroAc, reactionsFor } from '../data/powerEffects.js'
-import { ENCOUNTER_LABELS, canTryCurse, encounterCount, phaseChecks, villainInPlay } from '../state/game.js'
+import { ENCOUNTER_LABELS, canSpendAttack, encounterCount, phaseChecks, villainInPlay } from '../state/game.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { DrawMonsterButton, HeroPicker } from './MonsterTurns.jsx'
@@ -515,6 +515,8 @@ export function DisableTraps({ state, hero, dispatch }) {
   if (traps.length === 0) return null
   const penalty = state.environment?.card?.trapPenalty ?? 0
   const tools = itemTrapBonus(hero)
+  const blocked = attackBlocked(state, hero, 'disabling a trap')
+  if (blocked) return <p className="mt-4 rounded-xl bg-zinc-950/50 p-3 text-zinc-400">{blocked}</p>
   return (
     <div className="mt-4 rounded-xl bg-zinc-950/50 p-3">
       <p className="text-lg text-zinc-100">
@@ -535,14 +537,15 @@ export function DisableTraps({ state, hero, dispatch }) {
 
 // Hero Phase: what the hero's curses do, and the Cage's roll to get out.
 // What stops a hero from trying to open the Cage right now, or null when they can.
-function curseTryBlocked(state, hero) {
-  if (canTryCurse(state, hero)) return null
-  return state.turn.curseTried === hero.id ? `${hero.name} already rolled for a cage this turn.` : `${hero.name} attacked this turn, so the cage has to wait.`
+function attackBlocked(state, hero, what) {
+  if (canSpendAttack(state, hero)) return null
+  const spent = state.turn.attackSpent
+  return spent?.heroId === hero.id ? `${hero.name} used this turn's attack on ${spent.on}.` : `${hero.name} attacked this turn, so ${what} has to wait.`
 }
 
 function CurseRollButton({ state, hero, cursed, curse, dispatch }) {
   const roll = curse.card.removeRoll
-  const blocked = curseTryBlocked(state, hero)
+  const blocked = attackBlocked(state, hero, 'the cage')
   if (blocked) return <p className="mt-2 text-sm text-purple-300">{blocked}</p>
   const helping = cursed.id !== hero.id
   return (
