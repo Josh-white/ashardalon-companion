@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { HERO_COLORS, XP_TO_CANCEL_ENCOUNTER, XP_TO_LEVEL_UP } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
-import HeroAttack from './HeroAttack.jsx'
+import { reactionsFor } from '../data/powerEffects.js'
+import HeroAttack, { AttackAftermath } from './HeroAttack.jsx'
 import MonsterTurns, { DrawMonsterButton } from './MonsterTurns.jsx'
 import { rollD20 } from '../state/random.js'
 import { Button } from './ui.jsx'
@@ -34,6 +35,27 @@ function YesNo({ question, onYes, onNo }) {
   )
 }
 
+// Free at-will attacks from Cause Fear or Acrobatic Onslaught, and how the last one went.
+// `onlyHeroId` shows just one hero's, on that hero's own iPad.
+export function ExtraAttacks({ state, dispatch, onlyHeroId = null }) {
+  const extras = (state.turn.bonusAttacks ?? []).filter((b) => !onlyHeroId || b.heroId === onlyHeroId)
+  const last = state.turn.lastAttack
+  const showLast = last?.bonus && (!onlyHeroId || last.heroId === onlyHeroId)
+  return (
+    <>
+      {showLast && (
+        <div className="mt-5 rounded-2xl border-2 border-amber-600/60 bg-zinc-950/60 p-4">
+          <AttackAftermath state={state} last={last} dispatch={dispatch} />
+        </div>
+      )}
+      {extras.map((extra, i) => {
+        const hero = state.heroes.find((h) => h.id === extra.heroId)
+        return hero ? <HeroAttack key={`${extra.heroId}-${extra.source}-${i}`} state={state} hero={hero} dispatch={dispatch} extra={extra} /> : null
+      })}
+    </>
+  )
+}
+
 function HeroPhase({ state, hero, dispatch }) {
   return (
     <>
@@ -59,6 +81,7 @@ function HeroPhase({ state, hero, dispatch }) {
       )}
 
       <HeroAttack state={state} hero={hero} dispatch={dispatch} />
+      <ExtraAttacks state={state} dispatch={dispatch} />
 
       {hero.level === 1 && state.turn.natural20 === hero.id && (
         <Note tone="good">
@@ -108,6 +131,34 @@ function ExplorationPhase({ state, hero, dispatch }) {
   )
 }
 
+// Perseverance: cancelling costs 1 XP less for each hero on the cleric's tile.
+function Perseverance({ state, dispatch }) {
+  const [offer] = reactionsFor(state.heroes, 'perseverance')
+  if (!offer) return null
+  const { hero, power } = offer
+  return (
+    <div className="mt-3">
+      <p className="text-base text-zinc-300">
+        {hero.name}'s Perseverance makes it cheaper. How many heroes are on {hero.name}'s tile, counting {hero.name}?
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {state.heroes.map((_, i) => {
+          const cost = Math.max(0, XP_TO_CANCEL_ENCOUNTER - (i + 1))
+          return (
+            <Button
+              key={i}
+              disabled={state.xp < cost}
+              onClick={() => dispatch({ type: 'CANCEL_ENCOUNTER', perseverance: { heroId: hero.id, powerId: power.id, heroesOnTile: i + 1 } })}
+            >
+              {i + 1} → {cost} XP
+            </Button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function VillainPhase({ state, hero, dispatch }) {
   const explored = state.turn.explored === true
   // Only a new tile can skip the encounter, and only when it has no black triangle.
@@ -132,6 +183,7 @@ function VillainPhase({ state, hero, dispatch }) {
           >
             Spend {XP_TO_CANCEL_ENCOUNTER} XP to cancel the encounter
           </Button>
+          <Perseverance state={state} dispatch={dispatch} />
         </Note>
       ) : (
         <Note tone="good">No encounter card this turn.</Note>
