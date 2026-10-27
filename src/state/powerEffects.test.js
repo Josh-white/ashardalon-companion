@@ -267,3 +267,13 @@ describe('token powers', () => {
     expect(state.moment.title).toMatch(/Vistra returns/)
   })
 })
+
+describe('Hypnotism', () => {
+  it('attacks the monster next to the moved one, never the moved one', () => {
+    let state = withMonsters(give(start(), 4, { name: 'Hypnotism', attack: '+9', damage: '1' }))
+    const [moved, other] = state.monsters
+    const hit = (target) => attack(state, 4, 'at-will', [[target, 10]], { movedId: moved.id })
+    expect(hit(moved)).toBe(state)
+    expect(hit(other).monsters.map((m) => m.name)).toEqual(['Ogre'])
+  })
+})

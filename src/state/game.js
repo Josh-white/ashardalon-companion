@@ -541,6 +541,8 @@ function heroAttack(state, action) {
   const baseBonus = item ? item.card.attack.bonus : powerNumber(power?.card?.attack)
   const targets = (Array.isArray(action.targets) ? action.targets : [])
     .filter((t) => foes(state).some((m) => m.id === t.monsterId && m.ac) && validRoll(t.roll))
+    // Hypnotism never hurts the monster it moved.
+    .filter((t) => effects.ask !== 'moved-monster' || t.monsterId !== action.movedId)
     .slice(0, item ? 1 : maxRolls(power))
   if (!source || baseBonus === null || power?.used || targets.length === 0) return state
 
