@@ -64,6 +64,7 @@ export function describeAction(state, action) {
       return 'Drawing an encounter'
     case 'ENCOUNTER_ATTACK':
       return state.encounter ? `${state.encounter.card.name}'s attack` : 'Encounter attack'
+    case 'FILTER_ENCOUNTER_MONSTERS':
     case 'RESOLVE_ENCOUNTER':
     case 'REDRAW_ENCOUNTER':
       return state.encounter ? state.encounter.card.name : 'Encounter'

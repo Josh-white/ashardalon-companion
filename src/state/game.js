@@ -355,7 +355,7 @@ function resolveEncounter(state, action) {
     const poisoned = next.heroes.filter((h) => h.conditions.includes('Poisoned')).map((h) => h.id)
     ;({ next, downed } = damageHeroes(next, poisoned, card.damagePoisoned, card.name))
   }
-  if (card.filterMonsters) next = filterMonsterDeck(next, card.filterMonsters, action.random, action.monsterCards)
+  if (card.filterMonsters && !encounter.filtered) next = filterMonsterDeck(next, card.filterMonsters, action.random, action.monsterCards)
 
   if (card.type === 'curse' && hero) {
     const curse = { id: newId('curse'), cardId: card.id, name: card.name, text: card.text, card: card.curse ?? {} }
@@ -1153,6 +1153,15 @@ export function gameReducer(state, action) {
 
     case 'RESOLVE_ENCOUNTER':
       return resolveEncounter(state, action)
+
+    case 'FILTER_ENCOUNTER_MONSTERS': {
+      // Spotted! stacks the monster deck before its monster is drawn, so that draw comes
+      // off the stacked deck. After this the card can't be cancelled.
+      const encounter = state.encounter
+      if (!encounter?.card.filterMonsters || encounter.filtered) return state
+      const next = filterMonsterDeck(state, encounter.card.filterMonsters, action.random, action.monsterCards)
+      return { ...next, encounter: { ...encounter, filtered: true, attacked: true } }
+    }
 
     case 'REDRAW_ENCOUNTER': {
       // A trap or hazard on a tile that already has a marker: discard it and draw a new one.
