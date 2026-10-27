@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { HERO_COLORS, XP_TO_CANCEL_ENCOUNTER } from '../data/heroes.js'
 import { itemTrapBonus, tileAcBonus } from '../data/items.js'
 import { heroAc, reactionsFor } from '../data/powerEffects.js'
-import { ENCOUNTER_LABELS, phaseChecks } from '../state/game.js'
+import { ENCOUNTER_LABELS, phaseChecks, villainInPlay } from '../state/game.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { DrawMonsterButton, HeroPicker } from './MonsterTurns.jsx'
@@ -25,6 +25,7 @@ function targetQuestion(targets, hero) {
   if (targets === 'activeTile') return `Tap every hero on ${hero.name}'s tile.`
   if (targets === 'within1') return `Tap every hero within 1 tile of ${hero.name} (${hero.name} too).`
   if (targets === 'trapTile') return 'Tap every hero on the trap’s tile.'
+  if (targets === 'villainWithin1') return 'Tap every hero within 1 tile of the villain.'
   return null
 }
 
@@ -35,7 +36,7 @@ const describe = (attack) =>
 function AttackStep({ state, hero, name, attack, onAttack }) {
   const question = targetQuestion(attack.targets, hero)
   const fixed = attack.targets === 'active' ? [hero.id] : attack.targets === 'all' ? state.heroes.map((h) => h.id) : null
-  const [chosen, setChosen] = useState(attack.targets === 'trapTile' ? [] : [hero.id])
+  const [chosen, setChosen] = useState(attack.targets === 'trapTile' || attack.targets === 'villainWithin1' ? [] : [hero.id])
   const [guarded, setGuarded] = useState([])
   const [results, setResults] = useState(null)
   const targets = fixed ?? chosen
@@ -219,13 +220,17 @@ function EncounterCard({ state, hero, dispatch }) {
   const { card, attacked } = state.encounter
   const [markerChecked, setMarkerChecked] = useState(false)
   const placesMarker = card.type === 'hazard' || card.type === 'trap'
-  const needsAttack = card.attack && !attacked
+  // Ashardalon Breathes! does nothing (and is discarded) when Ashardalon isn't in play.
+  const villainHere = villainInPlay(state, card)
+  const needsAttack = card.attack && !attacked && villainHere
 
   const autoNotes = [
     card.damageEach > 0 && `Every hero takes ${card.damageEach} damage when you tap the button.`,
     card.damagePoisoned > 0 && `Every Poisoned hero takes ${card.damagePoisoned} damage when you tap the button.`,
     card.filterMonsters && !state.encounter.filtered && `The app looks at the top 5 monster cards, keeps the ${card.filterMonsters}s on top and discards the rest.`,
     card.drawAnother && 'Then you draw another encounter card.',
+    !villainHere && 'Its villain isn’t in play, so it’s just discarded.',
+    villainHere && card.returnToTop > 0 && 'Then the app shuffles it back into the top 3 encounter cards.',
   ].filter(Boolean)
 
   return (
@@ -237,7 +242,8 @@ function EncounterCard({ state, hero, dispatch }) {
       </div>
       <p className="whitespace-pre-line text-lg text-zinc-100">{card.text}</p>
 
-      {!attacked && (
+      {card.noCancel && <p className="font-semibold text-amber-300">This card can’t be canceled.</p>}
+      {!attacked && !card.noCancel && (
         <Button
           className="w-full"
           disabled={state.xp < XP_TO_CANCEL_ENCOUNTER}
@@ -246,7 +252,7 @@ function EncounterCard({ state, hero, dispatch }) {
           Spend {XP_TO_CANCEL_ENCOUNTER} XP to cancel it (party has {state.xp})
         </Button>
       )}
-      {!attacked && <Perseverance state={state} dispatch={dispatch} />}
+      {!attacked && !card.noCancel && <Perseverance state={state} dispatch={dispatch} />}
 
       {placesMarker && !markerChecked && !attacked ? (
         <div>
@@ -262,7 +268,7 @@ function EncounterCard({ state, hero, dispatch }) {
         </div>
       ) : (
         <>
-          {card.attack && (
+          {card.attack && villainHere && (
             <AttackStep
               state={state}
               hero={hero}
@@ -300,7 +306,7 @@ function EncounterCard({ state, hero, dispatch }) {
                   dispatch({ type: 'RESOLVE_ENCOUNTER', monsterCards, random: randomNumbers(SHUFFLE_NUMBERS) })
                 }
               >
-                {RESOLVE_LABELS[card.type](hero)}
+                {villainHere && card.returnToTop > 0 ? 'Done, shuffle it back in' : RESOLVE_LABELS[card.type](hero)}
               </Button>
             </>
           )}

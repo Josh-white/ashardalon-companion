@@ -96,7 +96,8 @@ export function shuffle(list, random = []) {
 
 function buildDeck(cards = [], random) {
   const byId = Object.fromEntries(cards.map((card) => [card.id, card]))
-  const ids = cards.flatMap((card) => Array.from({ length: card.copies ?? 1 }, () => card.id))
+  // Adventure cards wait outside the deck until something adds them.
+  const ids = cards.filter((card) => !card.adventure).flatMap((card) => Array.from({ length: card.copies ?? 1 }, () => card.id))
   return { cards: byId, draw: shuffle(ids, random), discard: [] }
 }
 
@@ -334,10 +335,25 @@ const discardEncounterCard = (state, cardId) =>
 
 export const ENCOUNTER_LABELS = { event: 'Event', curse: 'Curse', environment: 'Environment', hazard: 'Hazard', trap: 'Trap' }
 
+// Shuffles a card in among the top 3 cards of the encounter deck ("shuffle this card with
+// the top 3 Encounter Cards and return the 4 cards to the top of the deck").
+function intoTopThree(deck, cardId, card, random = []) {
+  const r = Number(random[0])
+  const slot = Math.floor((Number.isFinite(r) && r >= 0 && r < 1 ? r : 0) * (Math.min(3, deck.draw.length) + 1))
+  const draw = deck.draw.filter((id) => id !== cardId)
+  return { ...deck, cards: { ...deck.cards, [cardId]: deck.cards[cardId] ?? card }, draw: [...draw.slice(0, slot), cardId, ...draw.slice(slot)], discard: deck.discard.filter((id) => id !== cardId) }
+}
+
 function drawEncounter(state, action) {
   const hero = state.heroes.find((h) => h.id === action.heroId)
   if (!hero || state.encounter) return state
-  const withDeck = state.encounterDeck ? state : { ...state, encounterDeck: buildDeck(action.cards, action.random) }
+  let withDeck = state.encounterDeck ? state : { ...state, encounterDeck: buildDeck(action.cards, action.random) }
+  // Cards waiting to go in, such as Ashardalon Breathes! once Ashardalon is on the board.
+  for (const cardId of withDeck.encounterAdds ?? []) {
+    const card = withDeck.encounterDeck.cards[cardId] ?? (action.cards ?? []).find((c) => c.id === cardId)
+    if (card) withDeck = { ...withDeck, encounterDeck: intoTopThree(withDeck.encounterDeck, cardId, card, action.random?.slice(-1)) }
+  }
+  withDeck = { ...withDeck, encounterAdds: [] }
   const drawn = drawTop(withDeck.encounterDeck, action.random)
   if (!drawn) return withLog(state, 'There are no encounter cards left to draw.')
   const card = drawn.deck.cards[drawn.cardId]
@@ -372,6 +388,9 @@ function filterMonsterDeck(state, type, random, cards = []) {
   )
 }
 
+// A card about a villain (Ashardalon Breathes!) only does anything while that villain is in play.
+export const villainInPlay = (state, card) => !card.villain || activeVillains(state).some((v) => v.cardId === card.villain)
+
 // After the encounter card is read out (and any attack rolled), the app does what it
 // can and puts the card where it goes: on the hero (curse), in play (environment), on
 // the board (trap, hazard), or in the discards (event).
@@ -401,6 +420,8 @@ function resolveEncounter(state, action) {
   } else if (card.type === 'trap' || card.type === 'hazard') {
     const marker = { id: newId('trap'), cardId: card.id, name: card.name, type: card.type, ownerId: encounter.heroId, card }
     next = withLog({ ...next, traps: [...(next.traps ?? []), marker] }, `A ${card.name} marker goes on ${hero?.name ?? 'the hero'}'s tile.`)
+  } else if (card.returnToTop && villainInPlay(next, card)) {
+    next = withLog({ ...next, encounterDeck: intoTopThree(next.encounterDeck, card.id, card, action.random?.slice(-1)) }, `${card.name} was shuffled back into the top of the encounter deck.`)
   } else {
     next = discardEncounterCard(next, card.id)
   }
@@ -1103,8 +1124,9 @@ function useItem(state, action) {
 function monsterControl(state, action) {
   const hero = state.heroes.find((h) => h.id === action.heroId)
   const item = heroItems(hero).find((i) => i.id === action.itemId && !i.used && i.card?.use === 'monsterControl')
-  const monster = state.monsters.find((m) => m.id === action.monsterId)
-  const target = state.monsters.find((m) => m.id === action.targetId && m.id !== action.monsterId)
+  // Villains count as monsters here: a villain can be controlled, or attacked.
+  const monster = findFoe(state, action.monsterId)
+  const target = action.targetId !== action.monsterId ? findFoe(state, action.targetId) : null
   if (!item || !monster || !target?.ac || !validRoll(action.roll)) return state
   const attack = item.card.monsterAttack ?? { bonus: 9, damage: 1 }
   const result = rollAgainst(target, action.roll, { ...attack, miss: 0 })
@@ -1232,11 +1254,16 @@ function placeVillain(state, action) {
       enraged: card.enraged ?? null,
     },
   }
-  const next = { ...state, villains: [...(state.villains ?? []), villain] }
+  let next = { ...state, villains: [...(state.villains ?? []), villain] }
+  // Ashardalon brings his breath card: it goes into the top of the encounter deck before the next draw.
+  if (card.addEncounter) next = { ...next, encounterAdds: [...(next.encounterAdds ?? []).filter((id) => id !== card.addEncounter), card.addEncounter] }
   return withMoment(withLog(next, `The villain ${villain.fullName} appears!`), {
     kind: 'spawn',
     title: `${villain.fullName} appears!`,
-    detail: [`Place the ${villain.name} figure. It takes a turn at the start of every Villain Phase.`, card.onPlace].filter(Boolean).join(' '),
+    detail: [
+      `Place the ${villain.name} figure. It takes a turn at the start of every Villain Phase.`,
+      card.addEncounter ? 'The app shuffles its special encounter card into the top of the encounter deck.' : card.onPlace,
+    ].filter(Boolean).join(' '),
   })
 }
 
@@ -1719,7 +1746,7 @@ function reduce(state, action) {
       const power = hero?.powers.find((x) => x.id === p.powerId)
       const helps = power && !power.used && effectsOf(power).reaction === 'perseverance'
       const cost = helps ? Math.max(0, XP_TO_CANCEL_ENCOUNTER - clamp(Number(p.heroesOnTile) || 0, 1, state.heroes.length)) : XP_TO_CANCEL_ENCOUNTER
-      if (state.xp < cost || (p && !helps) || state.encounter?.attacked) return state
+      if (state.xp < cost || (p && !helps) || state.encounter?.attacked || state.encounter?.card.noCancel) return state
       let next = helps ? markUsed(state, hero.id, power.id) : state
       next = { ...next, xp: next.xp - cost }
       const how = helps ? ' with Perseverance' : ''

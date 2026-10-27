@@ -123,3 +123,42 @@ describe('Adventure 1 with a villain', () => {
     expect(state.status).toBe('won')
   })
 })
+
+describe('Ashardalon Breathes!', () => {
+  const file = normalizeCardFile({
+    powers: [],
+    villains: [
+      { id: 'ashardalon', name: 'Ashardalon', ac: 16, hp: 12, addEncounter: 'breathes', attacks: [{ id: 'bite', name: 'Bite', bonus: 10, damage: 1 }], tactics: [{ move: 'toward' }] },
+    ],
+    encounters: [
+      { id: 'quiet', name: 'Quiet', type: 'event', copies: 6 },
+      { id: 'breathes', name: 'Ashardalon Breathes!', type: 'event', adventure: true, noCancel: true, villain: 'ashardalon', returnToTop: 3, attack: { bonus: 9, damage: 3, miss: 1, targets: 'villainWithin1' } },
+    ],
+  })
+  const drawCard = (state) => gameReducer(state, { type: 'DRAW_ENCOUNTER', heroId: state.heroes[0].id, cards: file.encounters, random: [] })
+
+  it('stays out of the deck until Ashardalon arrives, then comes up within the next 4 draws', () => {
+    expect(file.problems).toEqual([])
+    let state = drawCard(start())
+    expect(state.encounterDeck.draw).not.toContain('breathes')
+    state = gameReducer(state, { type: 'RESOLVE_ENCOUNTER', random: [] })
+    state = gameReducer(state, { type: 'PLACE_VILLAIN', name: 'Ashardalon', cards: file.villains })
+    state = drawCard(state)
+    expect(state.encounter.card.id).toBe('breathes')
+    // It can't be canceled, attacks, then goes back into the top of the deck.
+    expect(gameReducer({ ...state, xp: 10 }, { type: 'CANCEL_ENCOUNTER' }).encounter).not.toBeNull()
+    state = gameReducer(state, { type: 'ENCOUNTER_ATTACK', targets: [{ heroId: state.heroes[1].id, roll: 1 }] })
+    expect(state.heroes[1].hp).toBe(state.heroes[1].maxHp - 1)
+    state = gameReducer(state, { type: 'RESOLVE_ENCOUNTER', random: [0.99] })
+    expect(state.encounterDeck.draw.slice(0, 4)).toContain('breathes')
+  })
+
+  it('is discarded when Ashardalon is gone', () => {
+    let state = gameReducer(start(), { type: 'PLACE_VILLAIN', name: 'Ashardalon', cards: file.villains })
+    state = gameReducer(state, { type: 'DEFEAT_MONSTER', monsterId: state.villains[0].id })
+    state = drawCard(state)
+    expect(state.encounter.card.id).toBe('breathes')
+    state = gameReducer(state, { type: 'RESOLVE_ENCOUNTER', random: [] })
+    expect(state.encounterDeck.discard).toContain('breathes')
+  })
+})

@@ -836,6 +836,20 @@ describe('treasure deck', () => {
     expect(state.turn.treasureOwed).toBe(state.heroes[0].id)
   })
 
+  it('lets the scroll control a villain, or aim a monster at one', () => {
+    const boss = { id: 'boss', name: 'Boss', ac: 5, hp: 3, attacks: [], tactics: [] }
+    let state = gameReducer(give(setup(), 'scroll'), { type: 'PLACE_VILLAIN', name: 'Boss', cards: [boss] })
+    const [villain] = state.villains
+    const rat = state.monsters[1]
+    state = gameReducer(state, { type: 'MONSTER_CONTROL', heroId: state.heroes[0].id, itemId: item(state, 'Scroll').id, monsterId: villain.id, targetId: rat.id, roll: 5 })
+    expect(state.monsters.map((m) => m.name)).toEqual(['Ogre'])
+    expect(state.heroes[0].items).toEqual([])
+
+    state = give(state, 'scroll')
+    state = gameReducer(state, { type: 'MONSTER_CONTROL', heroId: state.heroes[0].id, itemId: item(state, 'Scroll').id, monsterId: state.monsters[0].id, targetId: villain.id, roll: 5 })
+    expect(state.villains[0].hp).toBe(2)
+  })
+
   it('turns a monster into the next one off the monster deck', () => {
     let state = give(setup(), 'wand')
     const rat = state.monsters[1]

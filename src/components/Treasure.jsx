@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CONDITIONS, HERO_COLORS } from '../data/heroes.js'
 import { heroItems, tileGuards } from '../data/items.js'
+import { foes } from '../state/game.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { HeroChoice, MonsterChoice } from './Pickers.jsx'
@@ -325,7 +326,7 @@ export function TileGuardQuestion({ state, targets, guarded, onToggle }) {
 // Scroll of Monster Control: on the active hero's monster's turn, it attacks another monster instead.
 export function MonsterControl({ state, hero, monster, item, dispatch, onDone }) {
   const [targetId, setTargetId] = useState(null)
-  const others = state.monsters.filter((m) => m.id !== monster.id && m.ac)
+  const others = foes(state).filter((m) => m.id !== monster.id && m.ac)
   const attack = item.card.monsterAttack ?? { bonus: 9, damage: 1 }
   return (
     <div className="space-y-3 rounded-xl border border-amber-600 bg-amber-950/40 p-3">
