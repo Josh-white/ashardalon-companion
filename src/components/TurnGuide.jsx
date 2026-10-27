@@ -5,7 +5,8 @@ import HeroAttack, { AttackAftermath } from './HeroAttack.jsx'
 import { Doors, RevealButtons } from './Adventure.jsx'
 import MonsterTurns, { DrawMonsterButton, VillainTurns } from './MonsterTurns.jsx'
 import { rollD20 } from '../state/random.js'
-import { checksFor, phaseChecks } from '../state/game.js'
+import { checksFor, phaseChecks, villagerRollDue } from '../state/game.js'
+import { VillagerTurn } from './Villagers.jsx'
 import { useCards } from '../state/useCards.js'
 import { treasurePending } from './Treasure.jsx'
 import { Button } from './ui.jsx'
@@ -116,6 +117,7 @@ function HeroPhase({ state, hero, dispatch }) {
         </Note>
       )}
       <PhaseChecks state={state} hero={hero} phaseKey="hero" dispatch={dispatch} />
+      <VillagerTurn state={state} hero={hero} dispatch={dispatch} />
     </>
   )
 }
@@ -220,7 +222,8 @@ export default function TurnGuide({ state, dispatch }) {
   const waiting =
     Boolean(state.encounter) ||
     (isLastPhase && treasurePending(state, treasures)) ||
-    phaseChecks(state, checksFor(current.key)).length > 0
+    phaseChecks(state, checksFor(current.key)).length > 0 ||
+    villagerRollDue(state)
   const nextHero = state.heroes[(heroIndex + 1) % state.heroes.length]
 
   return (

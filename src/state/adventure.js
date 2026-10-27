@@ -3,7 +3,7 @@
 
 // Bigger features an adventure can need. The picker only offers an adventure once the
 // app has every feature it needs; the others show what they're waiting for.
-export const SUPPORTED_FEATURES = ['villains', 'chambers', 'doors']
+export const SUPPORTED_FEATURES = ['villains', 'chambers', 'doors', 'villagers', 'adventure-encounters', 'time-tokens', 'vast-gate']
 
 export const FEATURE_LABELS = {
   villains: 'villains',
@@ -46,6 +46,7 @@ export function newAdventure(card) {
     onceSeen: [], // onceOnly monsters already drawn
     lockedDoors: [], // Locked Doors still shut: { id }
     chamber: null, // the chamber card once its entrance is revealed: { card, villain, objectivePlaced, done }
+    timeTokens: null, // Time tokens left on the Vast Gate, once the Gate Ceremony is found
     won: false,
     story: story(card.title, card.story.start),
   }
@@ -105,11 +106,16 @@ export function goalParts(state) {
     const holder = token?.heldBy && state.heroes.find((h) => h.id === token.heldBy)
     parts.push({ key: `token-${name}`, label: `Get the ${name}`, progress: holder ? `${holder.name} has it` : token ? 'waiting to be picked up' : 'not found yet', done: Boolean(holder) })
   }
+  for (const { tile, label } of win.reveals ?? []) {
+    const found = adventure.revealed.includes(tile)
+    parts.push({ key: `reveal-${tile}`, label: label || `Find the ${tile}`, progress: found ? 'found' : 'not found yet', done: found })
+  }
   for (const name of win.villains) {
     const villain = (state.villains ?? []).find((v) => sameName(v.name, name))
     parts.push({ key: `villain-${name}`, label: `Defeat the ${name}`, progress: villain?.defeated ? 'defeated' : villain ? 'in play' : 'not found yet', done: Boolean(villain?.defeated) })
   }
   if (win.chamber) parts.push(...chamberParts(state))
+  if (adventure.chamber?.card.win.villagers) parts.push(villagerPart(state))
   if (win.escape || adventure.chamber?.card.win.escape) {
     parts.push({ key: 'escape', label: 'Escape the dungeon', progress: adventure.escaped ? 'escaped' : '', done: adventure.escaped })
   }
@@ -120,7 +126,8 @@ export function goalParts(state) {
 function chamberParts(state) {
   const chamber = state.adventure.chamber
   if (!chamber) return [{ key: 'chamber', label: 'Find the chamber', progress: 'not found yet', done: false }]
-  const { win } = chamber.card
+  // The adventure can ask for more than the card does (The Vast Gate Ritual: its monsters too).
+  const win = { ...chamber.card.win, chamberMonsters: chamber.card.win.chamberMonsters || state.adventure.card.win.chamberMonsters }
   const parts = []
   if (win.chamberMonsters) {
     const left = state.monsters.filter((m) => m.chamber).length
@@ -132,12 +139,30 @@ function chamberParts(state) {
   }
   if (win.objective && chamber.card.objective) {
     const { name } = chamber.card.objective
-    const standing = state.monsters.some((m) => m.objective)
+    const standing = state.monsters.some((m) => m.objective && sameName(m.name, name))
     parts.push({ key: 'chamber-objective', label: `Destroy the ${name}`, progress: standing ? 'still standing' : 'destroyed', done: chamber.objectivePlaced && !standing })
   }
   if (win.manual) parts.push({ key: 'chamber-manual', label: win.manual, progress: '', done: chamber.done })
   return parts
 }
+
+// Free the Captives: at least one villager has to be alive when the chamber is cleared.
+function villagerPart(state) {
+  const villagers = state.villagers ?? []
+  const alive = aliveVillagers(state).length
+  return { key: 'villagers', label: 'Keep at least 1 villager alive', progress: `${alive} of ${villagers.length} still in play`, done: alive > 0 }
+}
+
+export const aliveVillagers = (state) => (state.villagers ?? []).filter((v) => !v.removed)
+
+// The villager a Hero Phase roll activates, or null when that villager is gone (or never came).
+export const villagerForRoll = (state, roll) => {
+  const villager = (state.villagers ?? []).find((v) => roll >= v.card.roll[0] && roll <= v.card.roll[1])
+  return villager && !villager.removed ? villager : null
+}
+
+// Is this objective (the Vast Gate, the Altar) still standing?
+export const objectiveInPlay = (state, name) => state.monsters.some((m) => m.objective && sameName(m.name, name))
 
 // The goals still to do before the heroes can escape (escaping comes last).
 export const escapeBlockers = (state) => goalParts(state).filter((p) => p.key !== 'escape' && !p.done)

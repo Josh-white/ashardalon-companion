@@ -3,6 +3,7 @@ import { HERO_COLORS } from '../data/heroes.js'
 import { itemsWithUse } from '../data/items.js'
 import { heroAc, reactionsFor } from '../data/powerEffects.js'
 import { activeVillains } from '../state/game.js'
+import { aliveVillagers } from '../state/adventure.js'
 import { useCards } from '../state/useCards.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
 import { MonsterControl, TileGuardQuestion } from './Treasure.jsx'
@@ -83,6 +84,19 @@ export function HeroPicker({ heroes, chosen, onToggle }) {
     <div className="grid grid-cols-2 gap-2">
       {heroes.map((hero) => {
         const on = chosen.includes(hero.id)
+        if (hero.villager) {
+          return (
+            <button
+              key={hero.id}
+              type="button"
+              onClick={() => onToggle(hero.id)}
+              className={`rounded-xl border-2 px-3 py-3 text-left text-lg font-bold text-emerald-200 transition active:scale-95 ${on ? 'border-amber-400 bg-emerald-950' : 'border-emerald-800 bg-zinc-900'}`}
+            >
+              🧑‍🌾 {hero.name}
+              <span className="block text-sm font-normal text-zinc-400">Villager · AC {hero.ac} · {hero.hp} HP</span>
+            </button>
+          )
+        }
         return (
           <button
             key={hero.id}
@@ -135,11 +149,15 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
   }
   const finish = figure < figures ? nextFigure : onDone
 
+  // Villagers count as heroes for monster tactics (Free the Captives), listed first because
+  // a monster goes for a villager when it can.
+  const villagers = aliveVillagers(state).map((v) => ({ ...v, villager: true }))
+  const targetable = [...villagers, ...state.heroes]
   const many = step?.targets === 'all' || step?.target === 'mostHp'
   const toggle = (heroId) =>
     setChosen((list) => (many ? (list.includes(heroId) ? list.filter((id) => id !== heroId) : [...list, heroId]) : [heroId]))
   // "The hero with the most HP": the app picks from the heroes tapped, unless there's a tie.
-  const tapped = state.heroes.filter((h) => chosen.includes(h.id))
+  const tapped = targetable.filter((h) => chosen.includes(h.id))
   const strongest = step?.target === 'mostHp' && tapped.length > 0 ? mostHp(tapped) : null
   const top = Math.max(...tapped.map((h) => h.hp))
   const tied = step?.target === 'mostHp' && !strongest ? tapped.filter((h) => h.hp === top) : []
@@ -158,7 +176,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
   const last = state.turn.lastMonsterAttack
   const rows = results && last?.monsterId === monster.id ? last.results : []
 
-  const movedTo = state.heroes.find((h) => h.id === targetIds[0])
+  const movedTo = targetable.find((h) => h.id === targetIds[0])
   // The attack that was rolled: for a table, the row the die picked.
   const used = (rows.length > 0 && card.attacks.find((a) => a.id === last.attackId)) || attack
   const effect = (hit) => {
@@ -234,7 +252,8 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
           {step.move === 'adjacent' && step.targets === 'all' && (
             <p className="rounded-lg bg-amber-950/60 p-3 text-lg text-amber-200">First, move the {name} next to the closest hero.</p>
           )}
-          <HeroPicker heroes={state.heroes} chosen={chosen} onToggle={toggle} />
+          {villagers.length > 0 && <p className="text-emerald-200">Villagers count as heroes here, and the {name} picks a villager over a hero when it can.</p>}
+          <HeroPicker heroes={targetable} chosen={chosen} onToggle={toggle} />
           {step.target === 'mostHp' && tapped.length > 1 && strongest && (
             <p className="rounded-lg bg-zinc-900 p-3 text-lg text-zinc-200">{`${strongest.name} has the most HP, so it attacks ${strongest.name}.`}</p>
           )}
@@ -284,6 +303,17 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
           )}
           <ul className="space-y-2">
             {rows.map((row) => {
+              if (row.villager) {
+                const villager = state.villagers.find((v) => v.id === row.heroId)
+                return (
+                  <li key={row.heroId} className={`rounded-xl p-3 text-lg ${row.hit ? 'bg-red-950' : 'bg-zinc-900'}`}>
+                    The {name} rolled {row.value} + {used.bonus} = {row.total} against the villager{' '}
+                    <span className="font-bold text-emerald-200">{villager?.name}</span>'s AC {row.ac}.{' '}
+                    <b className={row.hit ? 'text-red-300' : 'text-emerald-300'}>{row.hit ? 'Hit!' : 'Miss!'}</b> {villager?.name} takes {row.dealt} damage.
+                    {villager?.removed && <span className="mt-1 block font-semibold text-amber-200">{villager.name} is gone. Take the token off the board.</span>}
+                  </li>
+                )
+              }
               const hero = state.heroes.find((h) => h.id === row.heroId)
               const hit = row.hit && !row.dodged
               const escape = row.hit && !row.dodged && reactionsFor([hero], 'dodge')[0]
@@ -324,7 +354,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
             {step?.move === 'toward' || !step
               ? step?.toward === 'mostHp'
                 ? `Move the ${name} ${tiles} toward ${towardHero ? `${towardHero.name}, the hero with the most HP` : 'the hero with the most HP (pick one if they’re tied)'}.`
-                : `Move the ${name} ${tiles} toward the closest hero.`
+                : `Move the ${name} ${tiles} toward the closest hero${villagers.length > 0 ? ' or villager (a villager, if it has the choice)' : ''}.`
               : 'Do what the card says.'}
           </p>
           <Button variant="gold" className="w-full py-3 text-lg" onClick={finish}>
