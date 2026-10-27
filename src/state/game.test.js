@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { normalizeCardFile } from '../data/cards.js'
 import { heroAc, heroAttackPenalty } from '../data/powerEffects.js'
-import { createHero, encounterCardsOutdated, gameReducer, initialState, phaseChecks } from './game.js'
+import { checksFor, createHero, encounterCardsOutdated, gameReducer, initialState, phaseChecks } from './game.js'
 
 const startGame = (count = 2) =>
   gameReducer(initialState, { type: 'START_GAME', heroes: HERO_TEMPLATES.slice(0, count).map((t) => createHero(t)) })
@@ -643,13 +643,24 @@ describe('encounter deck', () => {
     expect(state.heroes[0].curses).toHaveLength(0)
   })
 
-  it('holds the Villain Phase for a reminder from the Exploration Phase', () => {
+  it('holds the Exploration Phase for its reminder, even with no new tile', () => {
     let state = resolve(drawCard(startGame(), 'grudge'))
-    for (let i = 0; i < 2; i++) state = gameReducer(state, { type: 'NEXT_PHASE' })
+    state = gameReducer(state, { type: 'NEXT_PHASE' })
+    expect(state.turn.phase).toBe(1)
+    state = gameReducer(state, { type: 'SET_EXPLORED', explored: false, rolls: [1, 1] })
+    expect(state.turn).toMatchObject({ phase: 1, explored: false })
     const [check] = phaseChecks(state, 'exploration')
     expect(check.note).toBe('Move a monster next to {hero}.')
     expect(gameReducer(state, { type: 'NEXT_PHASE' })).toBe(state)
     state = gameReducer(state, { type: 'ANSWER_CHECK', key: check.key, answer: true })
+    expect(gameReducer(state, { type: 'NEXT_PHASE' }).turn.phase).toBe(2)
+  })
+
+  it('waits for the next Exploration Phase when the card arrives in the Villain Phase', () => {
+    let state = startGame()
+    for (let i = 0; i < 2; i++) state = gameReducer(state, { type: 'NEXT_PHASE' })
+    state = resolve(drawCard(state, 'grudge'))
+    expect(phaseChecks(state, checksFor('villain'))).toEqual([])
     expect(gameReducer(state, { type: 'NEXT_PHASE' }).turn.heroIndex).toBe(1)
   })
 

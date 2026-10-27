@@ -826,9 +826,9 @@ const removeCurse = (state, heroId, curseId, text) => {
   return withLog(discardEncounterCard(next, curse.cardId), text)
 }
 
-// Which checks a phase shows. The Exploration Phase often ends early (no new tile), so
-// its checks are asked at the start of the Villain Phase instead.
-export const checksFor = (phaseKey) => (phaseKey === 'hero' ? 'hero' : phaseKey === 'villain' ? 'exploration' : null)
+// Which checks a phase shows. The Villain Phase has none, so a card drawn there waits
+// for the next turn's Exploration Phase.
+export const checksFor = (phaseKey) => (phaseKey === 'hero' || phaseKey === 'exploration' ? phaseKey : null)
 
 // The questions a phase ends with, from the active hero's curses, the environment, and
 // hazards on the board. Each has a key so it's asked once per turn, on every device.
@@ -1688,6 +1688,8 @@ function reduce(state, action) {
       // new tile the phase is over, and the Villain Phase knows to draw an encounter.
       if (PHASES[state.turn.phase]?.key !== 'exploration') return state
       const explored = Boolean(action.explored)
+      // A card's end-of-Exploration question (Wrath of the Enemy) holds the phase open.
+      if (!explored && phaseChecks(state, 'exploration').length > 0) return { ...state, turn: { ...state.turn, explored } }
       // Skipping ahead ends the Exploration Phase, so its curse rolls happen now.
       const ended = explored ? state : endPhaseCurses(state, state.heroes[state.turn.heroIndex], 'exploration', action.rolls)
       return { ...ended, turn: { ...ended.turn, explored, phase: explored ? ended.turn.phase : ended.turn.phase + 1 } }

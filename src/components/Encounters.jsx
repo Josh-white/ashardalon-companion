@@ -543,7 +543,7 @@ export function PhaseChecks({ state, hero, phaseKey, dispatch }) {
   return (
     <div className="mt-4 rounded-2xl border-2 border-purple-700 bg-purple-950/60 p-4">
       <p className="text-sm font-bold uppercase tracking-widest text-purple-300">
-        {phaseKey === 'hero' ? 'When you’re done with your Hero Phase' : 'Before the monsters'} · {check.source}
+        {phaseKey === 'hero' ? 'When you’re done with your Hero Phase' : 'When you’re done exploring'} · {check.source}
       </p>
       {check.ask ? (
         <>
