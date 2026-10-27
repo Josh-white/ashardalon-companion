@@ -8,6 +8,7 @@ import { rollD20 } from '../state/random.js'
 import { checksFor, phaseChecks } from '../state/game.js'
 import { useCards } from '../state/useCards.js'
 import { treasurePending } from './Treasure.jsx'
+import { DrawnTile, useTileDraw } from './Tiles.jsx'
 import { Button } from './ui.jsx'
 
 // Each phase asks only what the app can't see for itself. The checklist each phase
@@ -121,17 +122,20 @@ function HeroPhase({ state, hero, dispatch }) {
 }
 
 function ExplorationPhase({ state, hero, dispatch }) {
-  const { explored, monsterDrawn } = state.turn
+  const { explored, monsterDrawn, noTiles } = state.turn
+  const tileDraw = useTileDraw()
   const checks = <PhaseChecks state={state} hero={hero} phaseKey="exploration" dispatch={dispatch} />
   if (explored === false) {
     // No new tile, but a card still has something to do before the phase ends.
     return (
       <>
         <Note>
-          <p>{hero.name} isn't on an unexplored edge, so no new tile this turn.</p>
-          <Button variant="ghost" className="mt-2" onClick={() => dispatch({ type: 'SET_EXPLORED', explored: true })}>
-            Oops, {hero.name} is on an edge
-          </Button>
+          <p>{noTiles ? 'The dungeon tile stack is empty, so no new tile this turn.' : `${hero.name} isn't on an unexplored edge, so no new tile this turn.`}</p>
+          {!noTiles && (
+            <Button variant="ghost" className="mt-2" onClick={() => dispatch({ type: 'SET_EXPLORED', explored: true, ...tileDraw })}>
+              Oops, {hero.name} is on an edge
+            </Button>
+          )}
         </Note>
         {checks}
       </>
@@ -141,7 +145,7 @@ function ExplorationPhase({ state, hero, dispatch }) {
     return (
       <YesNo
         question={`Is ${hero.name} standing on an unexplored edge?`}
-        onYes={() => dispatch({ type: 'SET_EXPLORED', explored: true })}
+        onYes={() => dispatch({ type: 'SET_EXPLORED', explored: true, ...tileDraw })}
         onNo={() => dispatch({ type: 'SET_EXPLORED', explored: false, rolls: [rollD20(), rollD20()] })}
       />
     )
@@ -149,7 +153,13 @@ function ExplorationPhase({ state, hero, dispatch }) {
   const newest = monsterDrawn && [...state.monsters].reverse().find((m) => m.ownerId === hero.id)
   return (
     <>
-      <Note>Draw a dungeon tile and put it on that edge.</Note>
+      {state.tileStack ? (
+        <Note>
+          <DrawnTile tile={state.turn.tiles?.explore} />
+        </Note>
+      ) : (
+        <Note>Draw a dungeon tile and put it on that edge.</Note>
+      )}
       <RevealButtons state={state} dispatch={dispatch} />
       {monsterDrawn ? (
         <Note tone="good">

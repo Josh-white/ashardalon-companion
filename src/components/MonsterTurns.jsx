@@ -8,6 +8,7 @@ import { useCards } from '../state/useCards.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
 import Art from './Art.jsx'
 import { MonsterControl, TileGuardQuestion } from './Treasure.jsx'
+import { DrawTileButton } from './Tiles.jsx'
 import { Button } from './ui.jsx'
 
 // Enough random numbers to shuffle the whole monster deck.
@@ -213,9 +214,8 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
 
       {!controlling && !asking && step?.explore && (
         <>
-          <p className="text-xl text-zinc-100">
-            Draw a dungeon tile from the <b>bottom</b> of the stack and put it next to the {name}'s tile.
-          </p>
+          <p className="text-xl text-zinc-100">A new tile goes next to the {name}'s tile, from the <b>bottom</b> of the stack.</p>
+          <DrawTileButton state={state} dispatch={dispatch} drawKey={`monster-${monster.id}`} from="bottom" />
           <DrawMonsterButton
             state={state}
             heroId={activeHeroId}
