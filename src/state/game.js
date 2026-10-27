@@ -1044,8 +1044,9 @@ function useItem(state, action) {
 function monsterControl(state, action) {
   const hero = state.heroes.find((h) => h.id === action.heroId)
   const item = heroItems(hero).find((i) => i.id === action.itemId && !i.used && i.card?.use === 'monsterControl')
-  const monster = state.monsters.find((m) => m.id === action.monsterId)
-  const target = state.monsters.find((m) => m.id === action.targetId && m.id !== action.monsterId)
+  // Villains count as monsters here: a villain can be controlled, or attacked.
+  const monster = findFoe(state, action.monsterId)
+  const target = action.targetId !== action.monsterId ? findFoe(state, action.targetId) : null
   if (!item || !monster || !target?.ac || !validRoll(action.roll)) return state
   const attack = item.card.monsterAttack ?? { bonus: 9, damage: 1 }
   const result = rollAgainst(target, action.roll, { ...attack, miss: 0 })
