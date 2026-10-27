@@ -1,3 +1,4 @@
+import { heroArt, monsterArt } from '../data/art.js'
 import { HERO_COLORS } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
 import { EnvironmentBanner } from './Encounters.jsx'
@@ -6,11 +7,13 @@ import { heroItems } from '../data/items.js'
 import { heroAc } from '../data/powerEffects.js'
 import { activeVillains } from '../state/game.js'
 import { ProjectorAdventure } from './Adventure.jsx'
+import Art from './Art.jsx'
+import { SoundToggle } from './SoundToggle.jsx'
 import { HpBar } from './ui.jsx'
 
 // A read-only screen for the projector: big enough to read across the room,
 // with no buttons to tap. Everything changes from the players' iPads.
-export default function ProjectorView({ state, onSwitchSeat }) {
+export default function ProjectorView({ state, onSwitchSeat, sound }) {
   const { heroIndex, phase, round } = state.turn
   const activeHero = state.heroes[heroIndex]
   const current = PHASES[phase]
@@ -31,9 +34,12 @@ export default function ProjectorView({ state, onSwitchSeat }) {
             </span>
           </div>
         </div>
-        <h1 className={`font-display text-[5vw] font-bold leading-tight ${color.text}`}>
-          {activeHero.player || activeHero.name}'s turn
-        </h1>
+        <div className="flex items-center gap-[1.5vw]">
+          <Art name={heroArt(activeHero.key)} className="w-[8vw] rounded-[1vw]" />
+          <h1 className={`font-display text-[5vw] font-bold leading-tight ${color.text}`}>
+            {activeHero.player || activeHero.name}'s turn
+          </h1>
+        </div>
         <div className="mt-[1vh] grid grid-cols-3 gap-[1vw]">
           {PHASES.map((p, i) => (
             <div
@@ -79,9 +85,12 @@ export default function ProjectorView({ state, onSwitchSeat }) {
                 i === heroIndex ? `border-transparent ring-[0.3vw] ${heroColor.ring}` : 'border-zinc-800'
               }`}
             >
-              <div className="flex items-baseline justify-between">
-                <span className={`font-display text-[2.4vw] font-bold ${heroColor.text}`}>{hero.name}</span>
-                <span className="text-zinc-400">{hero.player}</span>
+              <div className="flex items-center gap-[0.8vw]">
+                <Art name={heroArt(hero.key)} className={`w-[5vw] rounded-[0.8vw] ${down ? 'grayscale' : ''}`} />
+                <div className="min-w-0">
+                  <div className={`font-display text-[2.4vw] font-bold leading-tight ${heroColor.text}`}>{hero.name}</div>
+                  <div className="text-zinc-400">{hero.player}</div>
+                </div>
               </div>
               <div className={`text-[3vw] font-bold ${down ? 'text-red-400' : 'text-zinc-100'}`}>
                 {down ? 'DOWN!' : `${hero.hp} / ${hero.maxHp}`}
@@ -103,14 +112,17 @@ export default function ProjectorView({ state, onSwitchSeat }) {
       {activeVillains(state).length > 0 && (
         <section className="flex flex-wrap gap-[1.2vw]">
           {activeVillains(state).map((villain) => (
-            <div key={villain.id} className="min-w-[30vw] rounded-[1.2vw] border-2 border-fuchsia-600 bg-fuchsia-950/40 p-[1vw]">
-              <div className="text-[1.2vw] font-semibold uppercase tracking-widest text-fuchsia-400">👑 Villain</div>
-              <div className="font-display text-[2.6vw] font-bold text-fuchsia-200">{villain.enraged ? `Enraged ${villain.name}` : villain.fullName}</div>
-              <div className="text-[2.4vw] font-bold text-zinc-100">
-                {villain.hp} / {villain.maxHp} HP <span className="text-[1.6vw] font-normal text-zinc-400">· AC {villain.ac}</span>
+            <div key={villain.id} className="flex min-w-[30vw] gap-[1vw] rounded-[1.2vw] border-2 border-fuchsia-600 bg-fuchsia-950/40 p-[1vw]">
+              <Art name={monsterArt(villain)} className="w-[9vw] rounded-[1vw]" />
+              <div className="flex-1">
+                <div className="text-[1.2vw] font-semibold uppercase tracking-widest text-fuchsia-400">👑 Villain</div>
+                <div className="font-display text-[2.6vw] font-bold text-fuchsia-200">{villain.enraged ? `Enraged ${villain.name}` : villain.fullName}</div>
+                <div className="text-[2.4vw] font-bold text-zinc-100">
+                  {villain.hp} / {villain.maxHp} HP <span className="text-[1.6vw] font-normal text-zinc-400">· AC {villain.ac}</span>
+                </div>
+                <HpBar hp={villain.hp} maxHp={villain.maxHp} />
+                {villain.conditions.length > 0 && <p className="mt-[0.5vh] text-amber-400">{villain.conditions.join(', ')}</p>}
               </div>
-              <HpBar hp={villain.hp} maxHp={villain.maxHp} />
-              {villain.conditions.length > 0 && <p className="mt-[0.5vh] text-amber-400">{villain.conditions.join(', ')}</p>}
             </div>
           ))}
         </section>
@@ -125,8 +137,13 @@ export default function ProjectorView({ state, onSwitchSeat }) {
               const owner = state.heroes.find((h) => h.id === monster.ownerId)
               return (
                 <div key={monster.id} className="rounded-[1.2vw] border border-red-900/70 bg-zinc-900 p-[1vw]">
-                  <div className="font-display text-[2vw] font-bold text-red-300">{monster.name}</div>
-                  <div className="text-zinc-400">{owner ? `${owner.name}'s card` : ''}</div>
+                  <div className="flex items-center gap-[0.8vw]">
+                    <Art name={monsterArt(monster)} className="w-[5vw] rounded-[0.8vw]" />
+                    <div className="min-w-0">
+                      <div className="font-display text-[2vw] font-bold leading-tight text-red-300">{monster.name}</div>
+                      <div className="text-zinc-400">{owner ? `${owner.name}'s card` : ''}</div>
+                    </div>
+                  </div>
                   <div className="text-[2.2vw] font-bold text-zinc-100">
                     {monster.hp} / {monster.maxHp} HP
                   </div>
@@ -151,9 +168,12 @@ export default function ProjectorView({ state, onSwitchSeat }) {
 
       <footer className="flex items-center justify-between text-zinc-500">
         <span>{latest ? latest.text : ''}</span>
-        <button type="button" className="text-[1vw] text-zinc-700 hover:text-zinc-400" onClick={onSwitchSeat}>
-          switch view
-        </button>
+        <span className="flex items-center gap-[1vw]">
+          <SoundToggle on={sound.on} setOn={sound.setOn} className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />
+          <button type="button" className="text-[1vw] text-zinc-700 hover:text-zinc-400" onClick={onSwitchSeat}>
+            switch view
+          </button>
+        </span>
       </footer>
     </div>
   )

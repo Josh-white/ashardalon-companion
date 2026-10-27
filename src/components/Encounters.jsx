@@ -33,7 +33,7 @@ const describe = (attack) =>
   [attack.damage > 0 && `${attack.damage} damage`, ...attack.conditions].filter(Boolean).join(' and ') || 'no damage'
 
 // Rolls an attack from an encounter card or a trap. `dispatchAttack` sends the targets.
-function AttackStep({ state, hero, name, attack, onAttack }) {
+function AttackStep({ state, hero, name, attack, onAttack, dispatch }) {
   const question = targetQuestion(attack.targets, hero)
   const fixed = attack.targets === 'active' ? [hero.id] : attack.targets === 'all' ? state.heroes.map((h) => h.id) : null
   const [chosen, setChosen] = useState(attack.targets === 'trapTile' || attack.targets === 'villainWithin1' ? [] : [hero.id])
@@ -62,11 +62,29 @@ function AttackStep({ state, hero, name, attack, onAttack }) {
           const damage = hit ? attack.damage : attack.miss
           const conditions = hit ? attack.conditions : attack.missConditions
           const effect = [damage > 0 && `${damage} damage`, ...conditions].filter(Boolean).join(' and ') || 'nothing'
+          // Practiced Evasion turns this hit into a miss.
+          const evaded = state.turn.lastEventAttack?.results.some((r) => r.heroId === target.id && r.evaded)
+          const now = state.heroes.find((h) => h.id === target.id) ?? target
+          const evasion = hit && !evaded && reactionsFor([now], 'evade')[0]
+          const missEffect = [attack.miss > 0 && `${attack.miss} damage`, ...(attack.missConditions ?? [])].filter(Boolean).join(' and ') || 'nothing'
           return (
-            <li key={target.id} className={`rounded-xl p-3 text-lg ${hit ? 'bg-red-950' : 'bg-zinc-900'}`}>
+            <li key={target.id} className={`rounded-xl p-3 text-lg ${hit && !evaded ? 'bg-red-950' : 'bg-zinc-900'}`}>
               {name} rolled {value} + {attack.bonus} = {total} against{' '}
               <span className={`font-bold ${HERO_COLORS[target.color].text}`}>{target.name}</span>'s AC {ac}.{' '}
-              <b className={hit ? 'text-red-300' : 'text-emerald-300'}>{hit ? 'Hit!' : 'Miss!'}</b> {target.name} takes {effect}.
+              <b className={hit && !evaded ? 'text-red-300' : 'text-emerald-300'}>
+                {evaded ? 'Practiced Evasion: a miss!' : hit ? 'Hit!' : 'Miss!'}
+              </b>{' '}
+              {target.name} takes {evaded ? missEffect : effect}.
+              {evasion && dispatch && (
+                <Button
+                  className="mt-2 w-full"
+                  onClick={() =>
+                    dispatch({ type: 'EVADE_HIT', heroId: target.id, powerId: evasion.power.id, disableRoll: rollD20() })
+                  }
+                >
+                  🤸 {target.name} uses Practiced Evasion: the attack misses
+                </Button>
+              )}
             </li>
           )
         })}
@@ -280,6 +298,7 @@ function EncounterCard({ state, hero, dispatch }) {
               name={card.name}
               attack={card.attack}
               onAttack={(targets, tileGuarded) => dispatch({ type: 'ENCOUNTER_ATTACK', targets, tileGuarded })}
+              dispatch={dispatch}
             />
           )}
           {!needsAttack && asksTile && (
@@ -409,6 +428,7 @@ function TrapActivation({ state, hero, trap, dispatch, onDone }) {
             dispatch({ type: 'TRAP_ATTACK', trapId: trap.id, targets, tileGuarded })
             setHit(true)
           }}
+          dispatch={dispatch}
         />
       )}
       {!attack && damage > 0 && !hit && (

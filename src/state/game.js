@@ -7,10 +7,12 @@ import {
   XP_TO_CANCEL_ENCOUNTER,
   XP_TO_LEVEL_UP,
 } from '../data/heroes.js'
+import { monsterArt } from '../data/art.js'
 import { PHASES } from '../data/phases.js'
 import { heroItems, itemAttackBonus, itemTrapBonus, tileAcBonus } from '../data/items.js'
 import { effectsOf, heroAc, heroAttackPenalty, maxRolls } from '../data/powerEffects.js'
 import { DOOR_KINDS, DOOR_UNLOCK_ROLL, MAX_SURGES, MIN_SURGES, checkVictory, countDefeat, escapeBlockers, isPlayable, newAdventure, onceOnlyDraw, playableChambers, revealsReady, showStory, takeToken } from './adventure.js'
+import { trackStats } from './stats.js'
 
 export const SAVE_VERSION = 1
 
@@ -46,6 +48,7 @@ export const initialState = {
   // The virtual treasure deck, built on the first treasure draw.
   treasureDeck: null,
   treasure: null, // the treasure card just drawn, waiting for a hero to take it: { id, cardId, heroId, card }
+  stats: {}, // each hero's bragging rights for the end-of-game recap (state/stats.js), by hero id
 }
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
@@ -178,6 +181,7 @@ function drawMonster(state, heroId, random) {
   return withMoment(withLog(next, `${heroLabel(hero)} drew ${article(card.name)} ${card.name}!`), {
     kind: 'spawn',
     heroId: hero.id,
+    art: monsterArt(monster),
     title: figures > 1 ? `${figures} ${card.name}s appear!` : `${article(card.name) === 'an' ? 'An' : 'A'} ${card.name} appears!`,
     detail: figures > 1 ? `Place ${figures} ${card.name} figures on the new tile.` : 'Place its figure on the new tile.',
   })
@@ -254,6 +258,7 @@ function monsterAttack(state, action) {
   return withMoment(next, {
     kind: downed.length > 0 ? 'monster-down' : 'monster',
     monsterId: monster.id,
+    art: monsterArt(monster),
     title: `${monster.name}: ${attack.name}!`,
     detail: downed.length > 0 ? `${downed.join(' and ')} ${downed.length > 1 ? 'are' : 'is'} down!` : '',
     rolls,
@@ -263,7 +268,8 @@ function monsterAttack(state, action) {
 // An attack on one or more heroes, from a monster, an encounter card or a trap. Each
 // target comes with the d20 the device rolled for it. A hit deals the damage and
 // conditions; a miss deals the miss damage (and any miss conditions).
-function attackHeroes(state, { who, attack, targets: list, moment, tileGuarded }) {
+// `source` ({ kind: 'encounter' } or { kind: 'trap', trapId }) is remembered for Practiced Evasion.
+function attackHeroes(state, { who, attack, targets: list, moment, tileGuarded, source }) {
   const targets = (Array.isArray(list) ? list : []).filter(
     (t) => state.heroes.some((h) => h.id === t.heroId) && validRoll(t.roll),
   )
@@ -271,6 +277,7 @@ function attackHeroes(state, { who, attack, targets: list, moment, tileGuarded }
 
   let next = state
   const rolls = []
+  const results = []
   const downed = []
   for (const { heroId, roll } of targets) {
     const hero = next.heroes.find((h) => h.id === heroId)
@@ -285,6 +292,7 @@ function attackHeroes(state, { who, attack, targets: list, moment, tileGuarded }
     const result = [damage > 0 && `${damage} damage`, ...conditions].filter(Boolean).join(' and ')
     const outcome = hit ? `Hit! ${result || 'No damage'}` : result ? `Miss, but ${result}` : 'Miss!'
     rolls.push({ heroId: hero.id, value: roll, total, ac, hit, outcome })
+    results.push({ heroId: hero.id, hit, dealt: hero.hp - hp, conditions, miss: attack.miss, missConditions: attack.missConditions ?? [] })
     next = withLog(next, `${who} attacked ${hero.name}: rolled ${roll} + ${attack.bonus} = ${total} against AC ${ac}. ${outcome}`)
     // Each miss against Mirror Image pops one of the images.
     if (!hit && hero.tokens?.mirrorImage > 0) {
@@ -292,6 +300,7 @@ function attackHeroes(state, { who, attack, targets: list, moment, tileGuarded }
       next = withLog(next, `One of ${hero.name}'s mirror images vanished.`)
     }
   }
+  if (source) next = { ...next, turn: { ...next.turn, lastEventAttack: { ...source, results } } }
   for (const name of downed) next = withLog(next, `${name} is down!`)
   return withMoment(next, {
     kind: downed.length > 0 ? 'monster-down' : 'monster',
@@ -476,6 +485,7 @@ function defeatVillain(state, villain) {
     return {
       state: withMoment(withLog(next, `The ${villain.name} is enraged! It's back up with ${rage.hp} HP and AC ${rage.ac}.`), {
         kind: 'spawn',
+        art: monsterArt(villain),
         title: `The ${villain.name} is enraged!`,
         detail: `It gets back up with ${rage.hp} HP, AC ${rage.ac} and nastier tactics. Flip its card over.`,
       }),
@@ -809,6 +819,32 @@ function dodgeHit(state, action) {
   const results = last.results.map((r) => (r === row ? { ...r, dodged: true } : r))
   next = { ...next, turn: { ...next.turn, lastMonsterAttack: { ...last, results } } }
   return withLog(next, `${hero.name} used Tumbling Escape: the attack misses!${row.miss > 0 ? ` (${row.miss} miss damage)` : ''} Put ${hero.name} on a tile within 1 tile.`)
+}
+
+// Practiced Evasion: an encounter card's or trap's hit becomes a miss. The damage and
+// conditions come back off and the miss result lands instead. Against a trap, the
+// hero also gets a free roll to disable it (the device sends the d20 as disableRoll).
+function evadeHit(state, action) {
+  const last = state.turn.lastEventAttack
+  const hero = state.heroes.find((h) => h.id === action.heroId)
+  const power = hero?.powers.find((p) => p.id === action.powerId)
+  const row = last?.results.find((r) => r.heroId === hero?.id && r.hit && !r.evaded)
+  if (!row || !power || power.used || effectsOf(power).reaction !== 'evade') return state
+  let next = markUsed(state, hero.id, power.id)
+  next = updateHero(next, hero.id, (h) => {
+    const kept = h.conditions.filter((c) => !row.conditions.includes(c))
+    return {
+      hp: clamp(h.hp + row.dealt - row.miss, 0, h.maxHp),
+      conditions: [...kept, ...row.missConditions.filter((c) => !kept.includes(c))],
+    }
+  })
+  const results = last.results.map((r) => (r === row ? { ...r, evaded: true } : r))
+  next = { ...next, turn: { ...next.turn, lastEventAttack: { ...last, results } } }
+  next = withLog(next, `${hero.name} used Practiced Evasion: the attack misses!${row.miss > 0 ? ` (${row.miss} miss damage)` : ''}`)
+  if (last.kind === 'trap' && validRoll(action.disableRoll)) {
+    next = gameReducer(next, { type: 'DISABLE_TRAP', trapId: last.trapId, heroId: hero.id, roll: action.disableRoll })
+  }
+  return next
 }
 
 // Invisibility lasts until the wizard's next turn, and a hero in the Astral Refuge comes
@@ -1333,6 +1369,7 @@ function placeVillain(state, action) {
   if (card.addEncounter) next = { ...next, encounterAdds: [...(next.encounterAdds ?? []).filter((id) => id !== card.addEncounter), card.addEncounter] }
   return withMoment(withLog(next, `The villain ${villain.fullName} appears!`), {
     kind: 'spawn',
+    art: monsterArt(villain),
     title: `${villain.fullName} appears!`,
     detail: [
       `Place the ${villain.name} figure. It takes a turn at the start of every Villain Phase.`,
@@ -1341,8 +1378,8 @@ function placeVillain(state, action) {
   })
 }
 
-// Every action, then a check for an adventure's victory.
-export const gameReducer = (state, action) => checkVictory(reduce(state, action))
+// Every action, then a check for an adventure's victory, then the recap's counts.
+export const gameReducer = (state, action) => trackStats(state, checkVictory(reduce(state, action)), action)
 
 // A special tile turned up: read its text, then do what the adventure says.
 function revealTile(state, action) {
@@ -1745,6 +1782,9 @@ function reduce(state, action) {
     case 'DODGE_HIT':
       return dodgeHit(state, action)
 
+    case 'EVADE_HIT':
+      return evadeHit(state, action)
+
     case 'ATTACH_MONSTER_CARDS': {
       // Monsters added before the deck existed get their card, so they can take guided
       // turns and be attacked against their AC. Matched by name.
@@ -1791,7 +1831,7 @@ function reduce(state, action) {
       if (villain) {
         // The Rage Drake still flips to its enraged side the first time.
         const { state: next, defeated } = defeatVillain(state, villain)
-        return defeated ? withMoment(next, { kind: 'defeat', title: `${villain.name} defeated!`, detail: '' }) : next
+        return defeated ? withMoment(next, { kind: 'defeat', art: monsterArt(villain), title: `${villain.name} defeated!`, detail: '' }) : next
       }
       const monster = state.monsters.find((m) => m.id === action.monsterId)
       if (!monster) return state
@@ -1812,6 +1852,7 @@ function reduce(state, action) {
       }
       return withMoment(withLog(next, `The ${monster.name} was defeated! +${monster.xp} XP`), {
         kind: 'defeat',
+        art: monsterArt(monster),
         title: `${monster.name} defeated!`,
         detail: `+${monster.xp} XP for the party${treasure ? '. Draw a treasure card!' : ''}`,
       })
@@ -1854,6 +1895,7 @@ function reduce(state, action) {
         targets: action.targets,
         tileGuarded: action.tileGuarded,
         moment: { title: `${encounter.card.name}!` },
+        source: { kind: 'encounter' },
       })
       return next === state ? state : { ...next, encounter: { ...encounter, attacked: true } }
     }
@@ -1890,6 +1932,7 @@ function reduce(state, action) {
         targets: action.targets,
         tileGuarded: action.tileGuarded,
         moment: { title: `${trap.name}!` },
+        source: { kind: 'trap', trapId: trap.id },
       })
     }
 

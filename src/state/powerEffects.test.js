@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { effectsOf, heroAc, maxRolls, POWER_EFFECT_NAMES } from '../data/powerEffects.js'
 import { createHero, gameReducer, initialState } from './game.js'
+import { heroStats } from './stats.js'
 
 // Quinn, Vistra, Keyleth, Tarak, Heskan, in turn order.
 const start = () =>
@@ -226,6 +227,7 @@ describe('defense powers', () => {
     expect(heroAt(state, 3)).toMatchObject({ hp: 6, conditions: ['Dazed'] })
     state = gameReducer(state, { type: 'DODGE_HIT', heroId: heroAt(state, 3).id, powerId: slot(state, 3, 'utility').id })
     expect(heroAt(state, 3)).toMatchObject({ hp: 7, conditions: [] }) // the miss damage still lands
+    expect(heroStats(state, heroAt(state, 3).id).damageTaken).toBe(1) // and only it counts for the recap
   })
 
   it('Noble Shield makes Keyleth the only target, at a roll of 20', () => {

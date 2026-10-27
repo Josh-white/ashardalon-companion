@@ -676,6 +676,32 @@ describe('encounter deck', () => {
     expect(state.encounterDeck.discard).toContain('darts')
   })
 
+  it('lets Practiced Evasion turn an encounter or trap hit into a miss', () => {
+    const evasion = (state, i) => {
+      const hero = state.heroes[i]
+      const slot = hero.powers.find((p) => p.type === 'utility')
+      return gameReducer(state, { type: 'SET_POWER_CARD', heroId: hero.id, powerId: slot.id, card: { id: 'pe', name: 'Practiced Evasion' } })
+    }
+    const evade = (state, i, disableRoll) => {
+      const hero = state.heroes[i]
+      return gameReducer(state, { type: 'EVADE_HIT', heroId: hero.id, powerId: hero.powers.find((p) => p.card?.name === 'Practiced Evasion').id, disableRoll })
+    }
+    // Arrow: a hit is 2 damage and Poisoned, a miss is 1 damage.
+    let state = evasion(drawCard(startGame(), 'arrow'), 0)
+    const hero = state.heroes[0]
+    state = gameReducer(state, { type: 'ENCOUNTER_ATTACK', targets: [{ heroId: hero.id, roll: 20 }] })
+    state = evade(state, 0)
+    expect(state.heroes[0]).toMatchObject({ hp: hero.hp - 1, conditions: [] })
+    expect(state.heroes[0].powers.find((p) => p.card?.name === 'Practiced Evasion').used).toBe(true)
+    expect(evade(state, 0)).toBe(state)
+    // Against a trap, the evading hero also gets a free roll to disable it.
+    state = evasion(resolve(drawCard(startGame(), 'darts')), 1)
+    state = gameReducer(state, { type: 'TRAP_ATTACK', trapId: state.traps[0].id, targets: [{ heroId: state.heroes[1].id, roll: 19 }] })
+    state = evade(state, 1, 12)
+    expect(state.heroes[1].hp).toBe(state.heroes[1].maxHp)
+    expect(state.traps).toHaveLength(0)
+  })
+
   it('makes traps harder to disable in a trapper environment', () => {
     let state = resolve(drawCard(startGame(), 'darts'))
     state = resolve(drawCard(state, 'bad-air'))
