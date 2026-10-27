@@ -12,6 +12,7 @@ import { PHASES } from '../data/phases.js'
 import { heroItems, itemAttackBonus, itemTrapBonus, tileAcBonus } from '../data/items.js'
 import { effectsOf, heroAc, heroAttackPenalty, maxRolls } from '../data/powerEffects.js'
 import { DOOR_KINDS, DOOR_UNLOCK_ROLL, MAX_SURGES, MIN_SURGES, checkVictory, countDefeat, escapeBlockers, isPlayable, newAdventure, onceOnlyDraw, playableChambers, revealsReady, showStory, takeToken } from './adventure.js'
+import { trackStats } from './stats.js'
 
 export const SAVE_VERSION = 1
 
@@ -47,6 +48,7 @@ export const initialState = {
   // The virtual treasure deck, built on the first treasure draw.
   treasureDeck: null,
   treasure: null, // the treasure card just drawn, waiting for a hero to take it: { id, cardId, heroId, card }
+  stats: {}, // each hero's bragging rights for the end-of-game recap (state/stats.js), by hero id
 }
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
@@ -1320,8 +1322,8 @@ function placeVillain(state, action) {
   })
 }
 
-// Every action, then a check for an adventure's victory.
-export const gameReducer = (state, action) => checkVictory(reduce(state, action))
+// Every action, then a check for an adventure's victory, then the recap's counts.
+export const gameReducer = (state, action) => trackStats(state, checkVictory(reduce(state, action)), action)
 
 // A special tile turned up: read its text, then do what the adventure says.
 function revealTile(state, action) {
