@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { monsterArt } from '../data/art.js'
 import { HERO_COLORS } from '../data/heroes.js'
 import { itemsWithUse } from '../data/items.js'
 import { heroAc, reactionsFor } from '../data/powerEffects.js'
@@ -6,6 +7,7 @@ import { activeVillains } from '../state/game.js'
 import { aliveVillagers } from '../state/adventure.js'
 import { useCards } from '../state/useCards.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
+import Art from './Art.jsx'
 import { MonsterControl, TileGuardQuestion } from './Treasure.jsx'
 import { Button } from './ui.jsx'
 
@@ -191,8 +193,9 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
 
   return (
     <div className="space-y-4 rounded-2xl border-2 border-red-700 bg-zinc-950/80 p-4">
-      <div className="flex items-baseline justify-between gap-2">
-        <h4 className="font-display text-2xl font-bold text-red-300">
+      <div className="flex items-center gap-3">
+        <Art name={monsterArt(monster)} className="w-16" />
+        <h4 className="mr-auto font-display text-2xl font-bold text-red-300">
           {name}
           {figures > 1 && <span className="ml-2 text-base text-zinc-400">figure {figure} of {figures}</span>}
         </h4>
