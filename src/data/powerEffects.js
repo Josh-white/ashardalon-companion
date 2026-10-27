@@ -15,6 +15,7 @@ import { itemAc } from './items.js'
 //   onHit       { healSelf } or { heal, pick: 'tile' } (the attacker or one hero on their tile).
 //   after       hit or miss: 'heal-tile' (1 HP to each hero on the tile), 'shield', 'pass-monster', 'at-will'.
 //   note        a reminder shown after the roll.
+//   hitNote, missNote  a reminder shown after the roll only when it hit, or only when it missed.
 //   keepOnMiss  a daily that isn't used up when it misses.
 //   free        doesn't use up the hero's attack (a trap can still be disabled after it).
 // Other powers have a `use`, done from the power's tile:
@@ -64,7 +65,10 @@ const EFFECTS = {
 
   // Tarak, the rogue
   'Furious Assault': { reaction: 'furious' },
-  'Distracting Jab': { note: 'On a hit, move the monster 1 square. Then move your speed.' },
+  'Distracting Jab': {
+    hitNote: 'Hit! Move the monster 1 square, then move your speed.',
+    missNote: "A miss doesn't move the monster. You still move your speed.",
+  },
   'Lucky Strike': { evenBonus: 1 },
   'Positioning Shot': { note: 'Hit or miss: put the monster on any square of your tile or a tile next to it.' },
   'Acrobatic Onslaught': { after: 'at-will', note: 'Put your hero on a tile within 2 tiles of where you started.' },

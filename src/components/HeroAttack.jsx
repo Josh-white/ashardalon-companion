@@ -117,7 +117,11 @@ export function AttackAftermath({ state, last, dispatch }) {
         </Button>
       ))}
       {power && <FollowUp key={`${last.powerId}-${last.rolls.length}`} state={state} hero={hero} power={power} last={last} dispatch={dispatch} />}
-      {effects.note && <p className="rounded-lg bg-amber-950/60 p-3 text-amber-200">{effects.note}</p>}
+      {[effects.note, last.rolls.some((r) => r.hit) ? effects.hitNote : effects.missNote].filter(Boolean).map((note) => (
+        <p key={note} className="rounded-lg bg-amber-950/60 p-3 text-amber-200">
+          {note}
+        </p>
+      ))}
     </div>
   )
 }
