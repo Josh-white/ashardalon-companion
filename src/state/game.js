@@ -918,6 +918,9 @@ function startTurn(state) {
   if (!hero) return state
   // A hero who starts the turn at 0 HP spends a healing surge first; the poison and curse
   // damage comes after that (USE_SURGE), so getting back up doesn't skip it.
+  if (hero.hp === 0 && state.surges <= 0) {
+    return withLog({ ...state, status: 'lost' }, `${hero.name} is down at the start of the turn with no healing surges left.`)
+  }
   if (hero.hp === 0) return { ...state, turn: { ...state.turn, startDamageDue: hero.id } }
   return startDamage(state, hero)
 }
@@ -1071,7 +1074,7 @@ function dealStartingTreasure(state, cards, random) {
     if (!card) break
     const item = { id: newId('item'), cardId: card.id, name: card.name, used: false, card }
     next = updateHero({ ...next, treasureDeck: drawn.deck }, hero.id, (h) => ({ items: [...(h.items ?? []), item] }))
-    next = withLog(next, `${heroLabel(hero)} starts with ${article(card.name)} ${card.name}.`)
+    next = withLog(next, `${heroLabel(hero)} starts with ${/^\S+s'?(\s|$)/.test(card.name) ? '' : `${article(card.name)} `}${card.name}.`)
     found.push(`${hero.name}: ${card.name}`)
   }
   return withMoment(next, { kind: 'treasure', title: 'Starting treasure!', detail: found.join(' · ') })
@@ -1962,6 +1965,8 @@ function reduce(state, action) {
       const { heroIndex, phase, round } = state.turn
       // The phase's questions (Walls of Magma, Dragon Fear...) have to be answered first.
       if (phaseChecks(state, checksFor(PHASES[phase].key)).length > 0) return state
+      // A hero who started the turn at 0 HP spends a healing surge before anything else.
+      if (state.turn.startDamageDue && state.status === 'playing') return state
       if (phase < PHASES.length - 1) {
         const ended = endPhaseCurses(state, state.heroes[heroIndex], PHASES[phase].key, action.rolls)
         const next = { ...ended, turn: { ...ended.turn, phase: phase + 1 } }

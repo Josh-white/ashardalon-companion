@@ -456,6 +456,22 @@ describe('conditions between phases', () => {
     expect(state.heroes[1].hp).toBe(state.heroes[1].surgeValue)
   })
 
+  it('waits for the healing surge of a hero who starts at 0 HP', () => {
+    let state = startGame()
+    state = gameReducer(state, { type: 'ADJUST_HP', heroId: state.heroes[1].id, amount: -99 })
+    state = next(next(next(state)))
+    expect(next(state)).toBe(state)
+    state = gameReducer(state, { type: 'USE_SURGE', heroId: state.heroes[1].id })
+    expect(next(state).turn.phase).toBe(1)
+  })
+
+  it('ends the game when a hero starts at 0 HP with no surges left', () => {
+    let state = { ...startGame(), surges: 0 }
+    state = gameReducer(state, { type: 'ADJUST_HP', heroId: state.heroes[1].id, amount: -99 })
+    state = next(next(next(state)))
+    expect(state.status).toBe('lost')
+  })
+
   it('rolls 10 or more after the Hero Phase to end the poison', () => {
     const state = poisoned(startGame(), 0)
     expect(next(state, 9).heroes[0].conditions).toEqual(['Poisoned'])

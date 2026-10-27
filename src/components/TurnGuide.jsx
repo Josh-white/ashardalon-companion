@@ -226,6 +226,7 @@ export default function TurnGuide({ state, dispatch }) {
   // The turn can't pass while a treasure card waits to be drawn or handed out.
   const waiting =
     Boolean(state.encounter) ||
+    Boolean(state.turn.startDamageDue) ||
     encounterOwed ||
     (isLastPhase && treasurePending(state, treasures)) ||
     phaseChecks(state, checksFor(current.key)).length > 0
