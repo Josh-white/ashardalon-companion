@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { CONDITIONS, HERO_COLORS, XP_TO_LEVEL_UP } from '../data/heroes.js'
+import { itemSpeed } from '../data/items.js'
 import { heroAc } from '../data/powerEffects.js'
 import { useCards } from '../state/useCards.js'
 import { MonsterChoice } from './Pickers.jsx'
 import PowerList from './PowerList.jsx'
+import { ItemList } from './Treasure.jsx'
 import { Button, Chip, HpBar } from './ui.jsx'
 
 // Blade Barrier and Flaming Sphere tokens deal 1 damage to the monsters you tap.
@@ -56,7 +58,7 @@ function PowerMarkers({ state, hero, dispatch }) {
     tokens.invisible && "👻 Invisible: monsters don't count you as the closest hero until your next turn.",
     tokens.refuge && '✨ In the Astral Refuge: off the board until your next turn.',
   ].filter(Boolean)
-  if (lines.length === 0 && !(tokens.bladeBarrier > 0) && !(tokens.flamingSphere > 0)) return null
+  if (lines.length === 0 && !(tokens.bladeBarrier > 0) && !(tokens.flamingSphere > 0) && !(tokens.caltrops > 0)) return null
   return (
     <div className="mt-3 space-y-2">
       {lines.map((line) => (
@@ -72,6 +74,16 @@ function PowerMarkers({ state, hero, dispatch }) {
           source="bladeBarrier"
           label={`🗡️ Blade Barrier (${tokens.bladeBarrier} left): a monster was put on one`}
           prompt="Which monster landed on a Blade Barrier token? Take that token off the board."
+        />
+      )}
+      {tokens.caltrops > 0 && (
+        <TokenDamage
+          state={state}
+          hero={hero}
+          dispatch={dispatch}
+          source="caltrops"
+          label={`📌 Caltrops (${tokens.caltrops} left): a monster was put on one`}
+          prompt="Which monster was put on a Caltrop token? Take that token off the board."
         />
       )}
       {tokens.flamingSphere > 0 && (
@@ -120,7 +132,7 @@ export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, 
         </div>
         <div className="text-right text-sm text-zinc-400">
           <div>AC {heroAc(hero)}{(hero.curses ?? []).some((c) => c.card?.acPenalty) && <span className="text-red-400"> (cursed)</span>}</div>
-          <div>Speed {hero.speed}</div>
+          <div>Speed {hero.speed + itemSpeed(hero)}</div>
         </div>
       </div>
 
@@ -178,6 +190,7 @@ export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, 
       {state && <PowerMarkers state={state} hero={hero} dispatch={dispatch} />}
 
       <PowerList state={state} hero={hero} dispatch={dispatch} tilesHidden={powersInTurnGuide} />
+      <ItemList state={state} hero={hero} dispatch={dispatch} />
 
       <div className="mt-3 flex flex-wrap gap-2">
         {CONDITIONS.map((condition) => (

@@ -1,3 +1,5 @@
+import { itemAc } from './items.js'
+
 // What each power does besides its attack roll, so the app can do it instead of the
 // players. Matched to a card by its name. These are short reminders in our own words;
 // the card's own text stays in cards.json.
@@ -113,12 +115,12 @@ export function reactionsFor(heroes, reaction) {
   )
 }
 
-// A hero's AC with Cleric's Shield and Mirror Image counted.
+// A hero's AC with Cleric's Shield, Mirror Image and treasure items counted.
 // Curses (encounter cards) can lower a hero's AC or attack rolls while they last.
 const curseTotal = (hero, field) => (hero.curses ?? []).reduce((sum, curse) => sum + (curse.card?.[field] ?? 0), 0)
 export const heroAttackPenalty = (hero) => curseTotal(hero, 'attackPenalty')
 
 export function heroAc(hero) {
   const tokens = hero.tokens ?? {}
-  return hero.ac + (hero.shieldedBy ? 2 : 0) + 2 * (tokens.mirrorImage ?? 0) - curseTotal(hero, 'acPenalty')
+  return hero.ac + (hero.shieldedBy ? 2 : 0) + 2 * (tokens.mirrorImage ?? 0) + itemAc(hero) - curseTotal(hero, 'acPenalty')
 }

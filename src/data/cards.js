@@ -15,7 +15,7 @@ export function normalizeCardFile(data) {
   const powers = []
   const seen = new Set()
   const list = Array.isArray(data?.powers) ? data.powers : null
-  if (!list) return { powers, abilities: [], monsters: [], encounters: [], problems: ['The file needs a "powers" list.'] }
+  if (!list) return { powers, abilities: [], monsters: [], encounters: [], treasures: [], problems: ['The file needs a "powers" list.'] }
 
   list.forEach((card, i) => {
     const label = card?.name ? `"${card.name}"` : `power #${i + 1}`
@@ -49,6 +49,7 @@ export function normalizeCardFile(data) {
     abilities: normalizeAbilities(data?.heroes, problems),
     monsters: normalizeMonsters(data?.monsters, problems),
     encounters: normalizeEncounters(data?.encounters, problems),
+    treasures: normalizeTreasures(data?.treasures, problems),
     problems,
   }
 }
@@ -250,4 +251,74 @@ function normalizeEncounters(list, problems) {
     })
   })
   return encounters
+}
+
+// What a treasure item does when it's used, for the ones the app can do itself.
+export const ITEM_USES = ['heal', 'endCondition', 'refreshPower', 'refreshAny', 'reduceDamage', 'levelUp', 'polymorph', 'reroll', 'caltrops', 'monsterControl', 'note']
+export const ITEM_RANGES = ['adjacent', 'within1']
+const ITEM_AFTER = ['flip', 'discard']
+
+// Treasure cards, for the virtual treasure deck. Optional. Every card is an item the hero
+// keeps: `inPlay` items work all the time, the rest wait until they're used. The extra
+// fields say which parts the app can do itself.
+function normalizeTreasures(list, problems) {
+  if (list === undefined) return []
+  if (!Array.isArray(list)) {
+    problems.push('"treasures" should be a list.')
+    return []
+  }
+  const treasures = []
+  const seen = new Set()
+  list.forEach((card, i) => {
+    const label = card?.name ? `"${card.name}"` : `treasure #${i + 1}`
+    if (!card || typeof card !== 'object') return problems.push(`${label} is not a card.`)
+    if (!card.id || typeof card.id !== 'string') return problems.push(`${label} needs an "id".`)
+    if (seen.has(card.id)) return problems.push(`${label} reuses the id "${card.id}".`)
+    if (!card.name || typeof card.name !== 'string') return problems.push(`${label} needs a "name".`)
+    if (card.use !== undefined && !ITEM_USES.includes(card.use)) {
+      return problems.push(`${label} has use "${card.use}"; use one of ${ITEM_USES.join(', ')}.`)
+    }
+    if (card.after !== undefined && !ITEM_AFTER.includes(card.after)) {
+      return problems.push(`${label} has after "${card.after}"; use flip or discard.`)
+    }
+    for (const field of ['attackRange', 'damageRange']) {
+      if (card[field] !== undefined && !ITEM_RANGES.includes(card[field])) {
+        return problems.push(`${label} has ${field} "${card[field]}"; use one of ${ITEM_RANGES.join(', ')}.`)
+      }
+    }
+    const attackOf = (attack) =>
+      attack && wholeNumber(attack.bonus) ? { bonus: attack.bonus, damage: wholeNumber(attack.damage) ? attack.damage : 1 } : null
+    const attack = attackOf(card.attack)
+    if (card.attack !== undefined && !attack) return problems.push(`${label} has an attack that needs a "bonus".`)
+    const monsterAttack = attackOf(card.monsterAttack)
+    if (card.monsterAttack !== undefined && !monsterAttack) return problems.push(`${label} has a monsterAttack that needs a "bonus".`)
+    seen.add(card.id)
+    treasures.push({
+      id: card.id,
+      name: card.name,
+      copies: wholeNumber(card.copies, 1) ? card.copies : 1,
+      flavor: typeof card.flavor === 'string' ? card.flavor : '',
+      text: typeof card.text === 'string' ? card.text : '',
+      inPlay: card.inPlay === true,
+      after: card.after ?? null,
+      attackBonus: count(card.attackBonus),
+      attackRange: card.attackRange ?? null,
+      stillBonus: count(card.stillBonus),
+      damageBonus: count(card.damageBonus),
+      damageRange: card.damageRange ?? null,
+      critFrom: wholeNumber(card.critFrom, 2) && card.critFrom <= 20 ? card.critFrom : 0,
+      acBonus: count(card.acBonus),
+      tileAcBonus: count(card.tileAcBonus),
+      speedBonus: count(card.speedBonus),
+      trapBonus: count(card.trapBonus),
+      attack,
+      freeAttack: card.freeAttack === true,
+      monsterAttack,
+      use: card.use ?? null,
+      heal: count(card.heal),
+      tokens: wholeNumber(card.tokens, 1) ? card.tokens : 0,
+      note: typeof card.note === 'string' ? card.note : '',
+    })
+  })
+  return treasures
 }

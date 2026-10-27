@@ -121,3 +121,25 @@ Encounter cards make a virtual encounter deck. In the Villain Phase the app know
 - Curses (`curse`): `acPenalty`, `attackPenalty`, `startDamage` (at the start of the hero's turn), `extraEncounter` (more encounter draws), `removeOnDefeat`, and `removeRoll` with a `target` and a `phase`: `hero`, `exploration` or `villain` (the app rolls at the end of that phase) or `action` (a button the hero taps instead of attacking, with an optional `label`).
 - Environments: `trapPenalty` lowers rolls to disable traps.
 - Traps (`trap`): an `attack` with `"targets": "trapTile"`, or `damage` with no roll, plus the `disable` roll. Traps take a turn in their owner's Villain Phase, and a hero can try to disable one in the Hero Phase.
+
+### Treasure cards (optional)
+
+Treasure cards make a virtual treasure deck. The first monster defeated in a turn shows **Draw a treasure card** for the hero who defeated it. The card is read out on the iPad and the projector, and the finder keeps it or hands it to another hero. Items then sit on the hero card: ones in play add their bonuses by themselves, and the rest have a **Tap to use** button. Used items flip over or go to the discards, which are shuffled into a new deck when the deck runs out.
+
+```json
+{
+  "powers": [],
+  "treasures": [
+    { "id": "sword", "name": "Sword", "copies": 1, "text": "What the card says.",
+      "inPlay": true, "attackBonus": 1, "attackRange": "adjacent" },
+    { "id": "potion", "name": "Potion", "text": "What the card says.", "use": "heal", "heal": 2, "after": "discard" },
+    { "id": "ring", "name": "Ring", "text": "What the card says.", "attack": { "bonus": 8, "damage": 1 }, "after": "flip" }
+  ]
+}
+```
+
+- `copies` and `flavor` are optional. `inPlay`: `true` for "Play this item immediately"; its bonuses last while the hero has it.
+- Bonuses: `attackBonus` (with `attackRange`: `adjacent` or `within1`, asked on each attack), `stillBonus` (more attack if the hero didn't move), `damageBonus` (with `damageRange`), `critFrom` (+1 damage on a natural roll this high or more), `acBonus`, `tileAcBonus` (the owner and heroes on their tile; asked when a hero is attacked), `speedBonus`, `trapBonus` (to disable traps).
+- `attack`: the item makes its own attack roll from the attack box. `note` is a reminder shown with it.
+- `use`: what tapping it does: `heal` (with `heal`), `endCondition`, `refreshPower`, `refreshAny` (a power or an item), `reduceDamage` (1 HP back after a hit), `levelUp`, `polymorph` (swap a monster for a new monster card), `reroll` (offered on a missed attack), `caltrops` (with `tokens`), `monsterControl` (on a monster's turn, with a `monsterAttack`), or `note`.
+- `after`: `flip` or `discard` once used. Leave it out for items that can be used again.
