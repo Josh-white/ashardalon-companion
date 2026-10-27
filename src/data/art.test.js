@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ART_NAME, cardArt, heroArt, monsterArt } from './art.js'
+import { ART_NAME, cardArt, heroArt, heroCardArt, monsterArt } from './art.js'
 
 describe('card art names', () => {
   it('names each picture after what it shows', () => {
@@ -16,5 +16,13 @@ describe('card art names', () => {
   it('only makes names the server accepts', () => {
     for (const name of [heroArt('wizard'), monsterArt({ name: "Kobold's ../ Dragonshield!" })]) expect(name).toMatch(ART_NAME)
     expect('../game').not.toMatch(ART_NAME)
+  })
+})
+
+describe('hero card art', () => {
+  it('has its own name the server accepts', () => {
+    expect(heroCardArt('cleric')).toBe('card-hero-cleric')
+    expect(heroCardArt('cleric')).toMatch(ART_NAME)
+    expect('card-cards').not.toMatch(ART_NAME)
   })
 })

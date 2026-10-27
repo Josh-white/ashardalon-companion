@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { heroArt } from '../data/art.js'
+import { heroArt, heroCardArt } from '../data/art.js'
 import { CONDITIONS, HERO_COLORS, XP_TO_LEVEL_UP } from '../data/heroes.js'
 import { itemSpeed } from '../data/items.js'
 import { heroAc } from '../data/powerEffects.js'
+import { artUrl, useArt } from '../state/useArt.js'
 import { useCards } from '../state/useCards.js'
 import Art from './Art.jsx'
 import { MonsterChoice } from './Pickers.jsx'
@@ -110,17 +111,27 @@ function PowerMarkers({ state, hero, dispatch }) {
 
 // natural20: this hero rolled a natural 20 on an attack this turn, the one time it can level up.
 // state: the whole game, for powers that pick another hero or a monster. Optional.
-export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, powersInTurnGuide = false, natural20 = false }) {
+// showCardArt: put the big art from the hero card behind it (the player's own iPad).
+export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, powersInTurnGuide = false, natural20 = false, showCardArt = false }) {
   const color = HERO_COLORS[hero.color]
   const down = hero.hp === 0
   const abilities = (useCards().abilities ?? []).filter((a) => a.hero === hero.key && a.level <= hero.level)
+  const cardArt = artUrl(useArt(), showCardArt ? heroCardArt(hero.key) : null)
 
   return (
     <div
-      className={`rounded-2xl border border-zinc-800 p-4 transition ${color.bg} ${
+      className={`relative isolate overflow-hidden rounded-2xl border border-zinc-800 p-4 transition ${color.bg} ${
         isActive ? `ring-4 ${color.ring}` : ''
       } ${down ? 'opacity-80' : ''}`}
     >
+      {cardArt && (
+        // Faded into the card so the numbers and buttons stay easy to read.
+        <img
+          src={cardArt}
+          alt=""
+          className={`card-art pointer-events-none absolute inset-y-0 right-0 -z-10 h-full w-3/4 object-cover object-top opacity-30 ${down ? 'grayscale' : ''}`}
+        />
+      )}
       <div className="flex items-start gap-3">
         <Art name={heroArt(hero.key)} className={`w-20 ${down ? 'grayscale' : ''}`} />
         <div className="mr-auto">

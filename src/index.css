@@ -56,3 +56,9 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .d20-land, .d20-crit { animation: none; }
 }
+
+/* The hero's card art fades out toward the left, behind the hero card's text. */
+.card-art {
+  mask-image: linear-gradient(to left, black 35%, transparent);
+  -webkit-mask-image: linear-gradient(to left, black 35%, transparent);
+}
