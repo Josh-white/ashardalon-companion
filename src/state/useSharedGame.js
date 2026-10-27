@@ -25,7 +25,11 @@ export function useSharedGame() {
     const connect = () => {
       const socket = new WebSocket(socketUrl())
       socketRef.current = socket
-      socket.onopen = () => setConnected(true)
+      socket.onopen = () => {
+        setConnected(true)
+        // A sleeping iPad misses news of new card pictures, so look again on every (re)connect.
+        refreshArt()
+      }
       socket.onmessage = (event) => {
         const message = JSON.parse(event.data)
         if (message.type === 'state') {
