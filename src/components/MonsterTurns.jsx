@@ -133,7 +133,14 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
   const [results, setResults] = useState(null)
   const [tiePick, setTiePick] = useState(null) // the players' pick when heroes tie for the most HP
   const [controlling, setControlling] = useState(false)
-  const step = card.tactics[stepIndex]
+  // Heroes in the Astral Refuge are off the board, so monsters can't find or attack them.
+  // With nobody left on the board, only the steps that don't need a hero are asked.
+  const away = state.heroes.filter((h) => h.tokens?.refuge)
+  const nobody = away.length === state.heroes.length && aliveVillagers(state).length === 0
+  const needsNobody = (s) => s.when === 'aloneByUnexploredEdge' || (!s.when && s.explore)
+  let index = stepIndex
+  while (nobody && card.tactics[index] && !needsNobody(card.tactics[index])) index++
+  const step = card.tactics[index]
   // Scroll of Monster Control, read on the active hero's own turn.
   const activeHero = state.heroes.find((h) => h.id === activeHeroId)
   const [scroll] = itemsWithUse(activeHero ? [activeHero] : [], 'monsterControl')
@@ -155,7 +162,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
   // Villagers count as heroes for monster tactics (Free the Captives), listed first because
   // a monster goes for a villager when it can.
   const villagers = aliveVillagers(state).map((v) => ({ ...v, villager: true }))
-  const targetable = [...villagers, ...state.heroes]
+  const targetable = [...villagers, ...state.heroes.filter((h) => !h.tokens?.refuge)]
   const many = step?.targets === 'all' || step?.target === 'mostHp'
   const toggle = (heroId) =>
     setChosen((list) => (many ? (list.includes(heroId) ? list.filter((id) => id !== heroId) : [...list, heroId]) : [heroId]))
@@ -202,6 +209,12 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
         </h4>
         <span className="text-sm text-zinc-500">AC {monster.ac}</span>
       </div>
+      {away.length > 0 && !results && (
+        <p className="rounded-lg bg-sky-950/60 p-3 text-sky-200">
+          ✨ {away.map((h) => h.name).join(' and ')} {away.length > 1 ? 'are' : 'is'} in the Astral Refuge, off the board.{' '}
+          {nobody ? `No hero is on the board for the ${name} to go after.` : `Leave ${away.length > 1 ? 'them' : away[0].name} out when you answer.`}
+        </p>
+      )}
       {card.special && figure === 1 && stepIndex === 0 && !answered && (
         <p className="rounded-lg bg-zinc-900 p-2 text-sm text-zinc-400">{card.special}</p>
       )}
@@ -223,7 +236,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
             <Button variant="gold" className="py-4 text-2xl" onClick={() => setAnswered(true)}>
               Yes
             </Button>
-            <Button className="py-4 text-2xl" onClick={() => setStepIndex((i) => i + 1)}>
+            <Button className="py-4 text-2xl" onClick={() => setStepIndex(index + 1)}>
               No
             </Button>
           </div>
@@ -354,7 +367,9 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
       {!controlling && !asking && !step?.explore && !attack && (
         <>
           <p className="text-xl text-zinc-100">
-            {step?.move === 'toward' || !step
+            {nobody
+              ? `The ${name} has nobody to go after, so it does nothing this turn.`
+              : step?.move === 'toward' || !step
               ? step?.toward === 'mostHp'
                 ? `Move the ${name} ${tiles} toward ${towardHero ? `${towardHero.name}, the hero with the most HP` : 'the hero with the most HP (pick one if they’re tied)'}.`
                 : `Move the ${name} ${tiles} toward the closest hero${villagers.length > 0 ? ' or villager (a villager, if it has the choice)' : ''}.`
