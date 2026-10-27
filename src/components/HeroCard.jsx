@@ -1,4 +1,5 @@
 import { CONDITIONS, HERO_COLORS, XP_TO_LEVEL_UP } from '../data/heroes.js'
+import { heroAc } from '../state/game.js'
 import { useCards } from '../state/useCards.js'
 import PowerList from './PowerList.jsx'
 import { Button, Chip, HpBar } from './ui.jsx'
@@ -27,7 +28,7 @@ export default function HeroCard({ hero, isActive, xp, surges, dispatch, powersI
           </p>
         </div>
         <div className="text-right text-sm text-zinc-400">
-          <div>AC {hero.ac}</div>
+          <div>AC {heroAc(hero)}{heroAc(hero) !== hero.ac && <span className="text-red-400"> (cursed)</span>}</div>
           <div>Speed {hero.speed}</div>
         </div>
       </div>
@@ -65,6 +66,22 @@ export default function HeroCard({ hero, isActive, xp, surges, dispatch, powersI
             {surges > 0 ? `Use a healing surge (heal to ${hero.surgeValue})` : 'No surges left: the party falls'}
           </Button>
         </div>
+      )}
+
+      {(hero.curses ?? []).length > 0 && (
+        <ul className="mt-3 space-y-1">
+          {hero.curses.map((curse) => (
+            <li key={curse.id} className="flex items-start justify-between gap-2 rounded-lg bg-purple-950/60 p-2 text-sm text-purple-200">
+              <details>
+                <summary className="font-semibold">🕯️ Cursed: {curse.name}</summary>
+                <p className="mt-1 whitespace-pre-line text-purple-300">{curse.text}</p>
+              </details>
+              <Button variant="ghost" className="shrink-0 text-xs" onClick={() => dispatch({ type: 'REMOVE_CURSE', heroId: hero.id, curseId: curse.id })}>
+                Discard
+              </Button>
+            </li>
+          ))}
+        </ul>
       )}
 
       <PowerList hero={hero} dispatch={dispatch} tilesHidden={powersInTurnGuide} />

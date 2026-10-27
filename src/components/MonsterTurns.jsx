@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { HERO_COLORS } from '../data/heroes.js'
 import { useCards } from '../state/useCards.js'
+import { heroAc } from '../state/game.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
 import { Button } from './ui.jsx'
 
@@ -50,7 +51,7 @@ function targetPrompt(step) {
   return 'Which hero is closest? If it’s a tie, pick one together.'
 }
 
-function HeroPicker({ heroes, chosen, onToggle }) {
+export function HeroPicker({ heroes, chosen, onToggle }) {
   return (
     <div className="grid grid-cols-2 gap-2">
       {heroes.map((hero) => {
@@ -65,7 +66,7 @@ function HeroPicker({ heroes, chosen, onToggle }) {
             } ${HERO_COLORS[hero.color].text}`}
           >
             {hero.name}
-            <span className="block text-sm font-normal text-zinc-400">AC {hero.ac} · {hero.hp} HP</span>
+            <span className="block text-sm font-normal text-zinc-400">AC {heroAc(hero)} · {hero.hp} HP</span>
           </button>
         )
       })}
@@ -109,7 +110,7 @@ function MonsterActivation({ monster, state, dispatch, activeHeroId, onDone }) {
       targets.map(({ heroId, roll: value }) => {
         const hero = state.heroes.find((h) => h.id === heroId)
         const total = value + attack.bonus
-        return { hero, value, total, hit: total >= hero.ac }
+        return { hero, value, total, ac: heroAc(hero), hit: total >= heroAc(hero) }
       }),
     )
   }
@@ -187,10 +188,10 @@ function MonsterActivation({ monster, state, dispatch, activeHeroId, onDone }) {
       {results && (
         <>
           <ul className="space-y-2">
-            {results.map(({ hero, value, total, hit }) => (
+            {results.map(({ hero, value, total, ac, hit }) => (
               <li key={hero.id} className={`rounded-xl p-3 text-lg ${hit ? 'bg-red-950' : 'bg-zinc-900'}`}>
                 The {name} rolled {value} + {attack.bonus} = {total} against{' '}
-                <span className={`font-bold ${HERO_COLORS[hero.color].text}`}>{hero.name}</span>'s AC {hero.ac}.{' '}
+                <span className={`font-bold ${HERO_COLORS[hero.color].text}`}>{hero.name}</span>'s AC {ac}.{' '}
                 <b className={hit ? 'text-red-300' : 'text-emerald-300'}>{hit ? 'Hit!' : 'Miss!'}</b> {hero.name} takes {effect(hit)}.
               </li>
             ))}

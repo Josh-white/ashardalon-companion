@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { HERO_COLORS } from '../data/heroes.js'
 import { rollD20 } from '../state/random.js'
-import { powerNumber } from '../state/game.js'
+import { heroAttackPenalty, powerNumber } from '../state/game.js'
 import { Button } from './ui.jsx'
 
 // "Snake 2" when one hero has two Snakes, so they can be told apart.
@@ -33,7 +33,7 @@ export default function HeroAttack({ state, hero, dispatch }) {
   }
 
   const roll = () => {
-    const bonus = powerNumber(power.card.attack)
+    const bonus = powerNumber(power.card.attack) - heroAttackPenalty(hero)
     const damage = powerNumber(power.card.damage) ?? 0
     const targets = chosen.map((monsterId) => ({ monsterId, roll: rollD20() }))
     dispatch({ type: 'HERO_ATTACK', heroId: hero.id, powerId: power.id, targets })

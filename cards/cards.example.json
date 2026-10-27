@@ -209,6 +209,9 @@
           "move": "toward",
           "text": "Otherwise, it moves 1 tile toward the closest Hero."
         }
+      ],
+      "types": [
+        "Goblin"
       ]
     },
     {
@@ -251,7 +254,37 @@
           "move": "toward",
           "text": "Placeholder tactic."
         }
+      ],
+      "types": [
+        "Giant"
       ]
+    }
+  ],
+  "encounters": [
+    {
+      "id": "example-falling-rocks",
+      "name": "Example Falling Rocks",
+      "type": "event",
+      "text": "Placeholder. Put the real encounter cards in cards/cards.json on your own server.",
+      "attack": {
+        "bonus": 8,
+        "damage": 1,
+        "miss": 1,
+        "targets": "activeTile"
+      }
+    },
+    {
+      "id": "example-gloom",
+      "name": "Example Gloom",
+      "type": "curse",
+      "text": "Placeholder curse: -2 AC. Roll 10+ at the end of your Hero Phase to end it.",
+      "curse": {
+        "acPenalty": 2,
+        "removeRoll": {
+          "phase": "hero",
+          "target": 10
+        }
+      }
     }
   ]
 }

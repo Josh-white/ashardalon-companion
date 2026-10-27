@@ -1,5 +1,7 @@
 import { HERO_COLORS } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
+import { EnvironmentBanner } from './Encounters.jsx'
+import { heroAc } from '../state/game.js'
 import { HpBar } from './ui.jsx'
 
 // A read-only screen for the projector: big enough to read across the room,
@@ -47,6 +49,18 @@ export default function ProjectorView({ state, onSwitchSeat }) {
         </ul>
       </section>
 
+      {(state.environment || state.encounter) && (
+        <section className="space-y-[1vh]">
+          {state.encounter && (
+            <div className="rounded-[1.2vw] border border-sky-700 bg-sky-950/60 p-[1vw]">
+              <span className="font-display text-[2.4vw] font-bold text-sky-200">🃏 {state.encounter.card.name}</span>
+              <p className="whitespace-pre-line text-zinc-200">{state.encounter.card.text}</p>
+            </div>
+          )}
+          <EnvironmentBanner environment={state.environment} />
+        </section>
+      )}
+
       <section className="grid gap-[1.5vw]" style={{ gridTemplateColumns: `repeat(${state.heroes.length}, minmax(0, 1fr))` }}>
         {state.heroes.map((hero, i) => {
           const heroColor = HERO_COLORS[hero.color]
@@ -67,6 +81,10 @@ export default function ProjectorView({ state, onSwitchSeat }) {
               </div>
               <HpBar hp={hero.hp} maxHp={hero.maxHp} />
               {hero.conditions.length > 0 && <p className="mt-[0.5vh] text-amber-400">{hero.conditions.join(', ')}</p>}
+              {(hero.curses ?? []).length > 0 && (
+                <p className="mt-[0.5vh] text-purple-300">🕯️ {hero.curses.map((c) => c.name).join(', ')}</p>
+              )}
+              {heroAc(hero) !== hero.ac && <p className="text-red-300">AC {heroAc(hero)}</p>}
             </div>
           )
         })}
@@ -94,6 +112,16 @@ export default function ProjectorView({ state, onSwitchSeat }) {
           </div>
         )}
       </section>
+
+      {(state.traps ?? []).length > 0 && (
+        <section className="flex flex-wrap gap-[1vw]">
+          {state.traps.map((trap) => (
+            <span key={trap.id} className="rounded-full border border-orange-700 bg-orange-950/60 px-[1vw] py-[0.5vh] text-orange-200">
+              {trap.type === 'trap' ? '⚙️' : '⚠️'} {trap.name}
+            </span>
+          ))}
+        </section>
+      )}
 
       <footer className="flex items-center justify-between text-zinc-500">
         <span>{latest ? latest.text : ''}</span>
