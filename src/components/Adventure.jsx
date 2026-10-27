@@ -335,10 +335,12 @@ export function Doors({ state, hero, dispatch }) {
   const locked = state.adventure.lockedDoors ?? []
   const reveal = (kind, heroIds) => dispatch({ type: 'DOOR_REVEALED', kind, heroId: hero.id, heroIds })
   const special = revealsReady(state.adventure, true)
+  // Heskan's Mage Hand opens any door on his tile, not just one next to him.
+  const near = hero.key === 'wizard' ? 'On your tile (Mage Hand)' : 'Next to'
   return (
     <details className="mt-4 rounded-xl bg-zinc-950/50 p-3" open={special.length > 0 || undefined}>
       <summary className="cursor-pointer text-lg text-zinc-100">
-        🚪 Next to a Closed Door?{locked.length > 0 && <span className="text-amber-300"> · {locked.length} locked</span>}
+        🚪 {near} a Closed Door?{locked.length > 0 && <span className="text-amber-300"> · {locked.length} locked</span>}
       </summary>
       {trapped ? (
         <div className="mt-2">
@@ -368,7 +370,7 @@ export function Doors({ state, hero, dispatch }) {
       {special.length > 0 && <SpecialDoors special={special} dispatch={dispatch} />}
       {locked.length > 0 && (
         <div className="mt-3">
-          <p className="text-zinc-300">Next to a Locked Door? Instead of attacking, try to unlock it.</p>
+          <p className="text-zinc-300">{near} a Locked Door? Instead of attacking, try to unlock it.</p>
           <div className="mt-1 flex flex-wrap gap-2">
             {locked.map((door, i) => (
               <Button key={door.id} onClick={() => dispatch({ type: 'DOOR_UNLOCK', doorId: door.id, heroId: hero.id, roll: rollD20() })}>

@@ -109,6 +109,47 @@ function PowerMarkers({ state, hero, dispatch }) {
   )
 }
 
+// Hero card abilities the app can't settle alone, because only the players know who is on
+// whose tile: Quinn's Saving Grace, Keyleth's Healing Hands and Tarak's Brutal Recovery.
+function AbilityOffers({ state, hero, dispatch }) {
+  const offers = state.turn.abilityOffers ?? {}
+  const quinn = state.heroes.find((h) => h.key === 'cleric')
+  const keyleth = state.heroes.find((h) => h.key === 'paladin')
+  const grace = offers.savingGrace?.includes(hero.id) && hero.conditions.length > 0
+  const hands = offers.healingHands?.includes(hero.id) && hero.hp < hero.maxHp
+  const brutal = offers.brutalRecovery && hero.key === 'rogue'
+  if (!grace && !hands && !brutal) return null
+  const onTile = (other) => (other.id === hero.id ? '' : ` (if ${hero.name} is on ${other.name}'s tile)`)
+  return (
+    <div className="mt-3 space-y-2">
+      {grace && (
+        <div className="space-y-2 rounded-xl border border-sky-700 bg-zinc-950/70 p-3">
+          <p className="text-sm text-sky-200">
+            ✨ {quinn.name}'s Saving Grace: {hero.name} got healed, so {hero.name} can also end one condition{onTile(quinn)}.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {hero.conditions.map((condition) => (
+              <Button key={condition} onClick={() => dispatch({ type: 'SAVING_GRACE', heroId: hero.id, condition })}>
+                End {condition}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
+      {hands && (
+        <Button className="w-full text-left" onClick={() => dispatch({ type: 'HEALING_HANDS', heroId: hero.id })}>
+          🙌 {keyleth.name}'s Healing Hands: +1 HP for that healing surge{onTile(keyleth)}
+        </Button>
+      )}
+      {brutal && (
+        <Button className="w-full text-left" onClick={() => dispatch({ type: 'BRUTAL_RECOVERY' })}>
+          💪 Brutal Recovery: that natural 20 flips Furious Assault back over (if the hero who rolled it is on {hero.name}'s tile)
+        </Button>
+      )}
+    </div>
+  )
+}
+
 // natural20: this hero rolled a natural 20 on an attack this turn, the one time it can level up.
 // state: the whole game, for powers that pick another hero or a monster. Optional.
 // showCardArt: put the big art from the hero card behind it (the player's own iPad).
@@ -202,6 +243,7 @@ export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, 
       )}
 
       {state && <PowerMarkers state={state} hero={hero} dispatch={dispatch} />}
+      {state && dispatch && <AbilityOffers state={state} hero={hero} dispatch={dispatch} />}
 
       <PowerList state={state} hero={hero} dispatch={dispatch} tilesHidden={powersInTurnGuide} />
       <ItemList state={state} hero={hero} dispatch={dispatch} />

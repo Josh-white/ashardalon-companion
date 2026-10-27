@@ -5,7 +5,7 @@ import HeroAttack, { AttackAftermath } from './HeroAttack.jsx'
 import { Doors, EscapeNote, RevealButtons } from './Adventure.jsx'
 import MonsterTurns, { DrawMonsterButton, VillainTurns } from './MonsterTurns.jsx'
 import { rollD20 } from '../state/random.js'
-import { checksFor, phaseChecks, phaseTodo, villagerRollDue } from '../state/game.js'
+import { checksFor, phaseChecks, phaseTodo, poisonBonus, villagerRollDue } from '../state/game.js'
 import { VillagerTurn } from './Villagers.jsx'
 import { useCards } from '../state/useCards.js'
 import { treasurePending } from './Treasure.jsx'
@@ -85,7 +85,7 @@ function HeroPhase({ state, hero, dispatch }) {
         <Note>Move and attack, attack and move, or move twice.</Note>
       )}
       {hero.conditions.includes('Poisoned') && (
-        <Note tone="warn">{hero.name} is Poisoned. When you end the Hero Phase, the app rolls: 10 or more shakes it off.</Note>
+        <Note tone="warn">{hero.name} is Poisoned. When you end the Hero Phase, the app rolls: 10 or more shakes it off{poisonBonus(hero) ? ` (+${poisonBonus(hero)} from Cast-Iron Stomach)` : ''}.</Note>
       )}
 
       <CurseNotes state={state} hero={hero} dispatch={dispatch} />

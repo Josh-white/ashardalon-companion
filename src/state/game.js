@@ -682,8 +682,40 @@ function healHero(state, heroId, amount, source) {
   if (!hero || amount <= 0) return state
   const hp = Math.min(hero.maxHp, hero.hp + amount)
   if (hp === hero.hp) return withLog(state, `${hero.name} is already at full HP.`)
-  return withLog(updateHero(state, hero.id, () => ({ hp })), `${hero.name} regained ${hp - hero.hp} HP from ${source}.`)
+  const next = withLog(updateHero(state, hero.id, () => ({ hp })), `${hero.name} regained ${hp - hero.hp} HP from ${source}.`)
+  return offerSavingGrace(next, hero)
 }
+
+// The heroes' own abilities (the hero cards), offered for the rest of the turn on the hero
+// card they help: turn.abilityOffers = { savingGrace: [heroId], healingHands: [heroId], brutalRecovery }.
+const heroWith = (state, key) => state.heroes.find((h) => h.key === key)
+const offers = (state) => state.turn.abilityOffers ?? {}
+function addOffer(state, kind, value) {
+  const now = offers(state)
+  const merged = value === true ? true : [...new Set([...(now[kind] ?? []), value])]
+  return { ...state, turn: { ...state.turn, abilityOffers: { ...now, [kind]: merged } } }
+}
+function dropOffer(state, kind, heroId) {
+  const now = offers(state)
+  const left = heroId ? (now[kind] ?? []).filter((id) => id !== heroId) : false
+  return { ...state, turn: { ...state.turn, abilityOffers: { ...now, [kind]: left } } }
+}
+
+// Quinn's Saving Grace: a hero on Quinn's tile who regains HP can also end a condition.
+function offerSavingGrace(state, hero) {
+  if (!heroWith(state, 'cleric') || hero.conditions.length === 0) return state
+  return addOffer(state, 'savingGrace', hero.id)
+}
+
+// Tarak's Brutal Recovery: a natural 20 by a hero on Tarak's tile can flip Furious Assault back over.
+function offerBrutalRecovery(state) {
+  const tarak = heroWith(state, 'rogue')
+  if (!tarak?.powers.some((p) => p.used && effectsOf(p).reaction === 'furious')) return state
+  return addOffer(state, 'brutalRecovery', true)
+}
+
+// Vistra's Cast-Iron Stomach: +5 to rolls to end Poisoned.
+export const poisonBonus = (hero) => (hero?.key === 'fighter' ? 5 : 0)
 
 const validRoll = (roll) => Number.isInteger(roll) && roll >= 1 && roll <= 20
 
@@ -775,7 +807,7 @@ function heroAttack(state, action) {
       ...next.turn,
       bonusAttacks: extras,
       // Remembered for Inspiring Advice, Furious Assault and the power's own follow-up question.
-      lastAttack: { heroId: hero.id, powerId: power?.id ?? null, itemId: item?.id ?? null, attack, rolls, followUpDone: false, bonus: Boolean(extraAttack) },
+      lastAttack: { heroId: hero.id, powerId: power?.id ?? null, itemId: item?.id ?? null, attack, rolls, followUpDone: false, bonus: Boolean(extraAttack), free: Boolean(effects.free) },
     },
   }
 
@@ -785,7 +817,7 @@ function heroAttack(state, action) {
   const natural20 = rolls.some((r) => r.value === 20)
   const canLevel = natural20 && hero.level === 1 && next.xp >= XP_TO_LEVEL_UP
   // A natural 20 on an attack is what lets a hero level up this turn.
-  if (natural20) next = { ...next, turn: { ...next.turn, natural20: hero.id } }
+  if (natural20) next = offerBrutalRecovery({ ...next, turn: { ...next.turn, natural20: hero.id } })
   const won = defeatDetails(next, defeated, hero.id)
   next = won.state
   return withMoment(next, {
@@ -832,7 +864,7 @@ function rerollAttack(state, action) {
     if (power?.type === 'daily') next = markUsed(next, hero.id, power.id)
     if (effects.onHit?.healSelf && !last.rolls.some((r) => r.hit)) next = healHero(next, hero.id, effects.onHit.healSelf, power.name)
   }
-  if (action.roll === 20) next = { ...next, turn: { ...next.turn, natural20: hero.id } }
+  if (action.roll === 20) next = offerBrutalRecovery({ ...next, turn: { ...next.turn, natural20: hero.id } })
   const won = defeatDetails(next, hurt.defeated ? [monster] : [], hero.id)
   return withMoment(won.state, {
     kind: action.roll === 20 ? 'crit' : hurt.defeated ? 'defeat' : 'roll',
@@ -1199,7 +1231,7 @@ function startDamage(state, hero) {
 export function canSpendAttack(state, hero) {
   if (!hero || PHASES[state.turn.phase]?.key !== 'hero' || state.heroes[state.turn.heroIndex]?.id !== hero.id) return false
   const last = state.turn.lastAttack
-  return !state.turn.attackSpent && !(last && !last.bonus && last.heroId === hero.id)
+  return !state.turn.attackSpent && !(last && !last.bonus && !last.free && last.heroId === hero.id)
 }
 
 const spendAttack = (state, hero, on) => ({ ...state, turn: { ...state.turn, attackSpent: { heroId: hero.id, on } } })
@@ -1241,15 +1273,17 @@ function endHeroPhase(state, hero, roll) {
     )
   }
   if (!hero.conditions.includes('Poisoned') || !Number.isInteger(roll) || roll < 1 || roll > 20) return next
-  const cured = roll >= 10
+  const bonus = poisonBonus(hero)
+  const cured = roll + bonus >= 10
+  const rolled = bonus ? `${roll} + ${bonus} (Cast-Iron Stomach) = ${roll + bonus}` : roll
   if (cured) next = updateHero(next, hero.id, (h) => ({ conditions: h.conditions.filter((c) => c !== 'Poisoned') }))
-  next = withLog(next, `${hero.name} rolled ${roll} against the poison${cured ? ' and shook it off!' : '. Still poisoned.'}`)
+  next = withLog(next, `${hero.name} rolled ${rolled} against the poison${cured ? ' and shook it off!' : '. Still poisoned.'}`)
   return withMoment(next, {
     kind: 'poison',
     heroId: hero.id,
     value: roll,
     title: cured ? 'Poison gone!' : 'Still poisoned',
-    detail: `${hero.name} needed 10 or more.`,
+    detail: bonus ? `${hero.name} needed 10 or more, with +${bonus} from Cast-Iron Stomach.` : `${hero.name} needed 10 or more.`,
   })
 }
 
@@ -1937,13 +1971,41 @@ function reduce(state, action) {
       if (state.surges <= 0) {
         return withLog({ ...state, status: 'lost' }, `${hero.name} fell with no healing surges left.`)
       }
-      const healed = updateHero({ ...state, surges: state.surges - 1 }, hero.id, (h) => ({
-        hp: Math.min(h.maxHp, h.surgeValue),
+      // Keyleth's Healing Hands: her own surge heals 1 more. Anyone else's is offered,
+      // since only the players know who is on Keyleth's tile.
+      const own = hero.key === 'paladin' ? 1 : 0
+      let healed = updateHero({ ...state, surges: state.surges - 1 }, hero.id, (h) => ({
+        hp: Math.min(h.maxHp, h.surgeValue + own),
       }))
-      const logged = withLog(healed, `${hero.name} used a healing surge.`)
+      if (!own && heroWith(state, 'paladin')) healed = addOffer(healed, 'healingHands', hero.id)
+      healed = offerSavingGrace(healed, hero)
+      const logged = withLog(healed, `${hero.name} used a healing surge${own ? ', +1 HP from Healing Hands' : ''}.`)
       if (state.turn.startDamageDue !== hero.id) return logged
       const { startDamageDue: _, ...turn } = logged.turn
       return startDamage({ ...logged, turn }, logged.heroes.find((h) => h.id === hero.id))
+    }
+
+    case 'SAVING_GRACE': {
+      const hero = state.heroes.find((h) => h.id === action.heroId)
+      if (!hero || !offers(state).savingGrace?.includes(hero.id) || !hero.conditions.includes(action.condition)) return state
+      const next = updateHero(state, hero.id, (h) => ({ conditions: h.conditions.filter((c) => c !== action.condition) }))
+      return withLog(dropOffer(next, 'savingGrace', hero.id), `Saving Grace: ${hero.name} is no longer ${action.condition}.`)
+    }
+
+    case 'HEALING_HANDS': {
+      const hero = state.heroes.find((h) => h.id === action.heroId)
+      if (!hero || !offers(state).healingHands?.includes(hero.id)) return state
+      return healHero(dropOffer(state, 'healingHands', hero.id), hero.id, 1, 'Healing Hands')
+    }
+
+    case 'BRUTAL_RECOVERY': {
+      const tarak = heroWith(state, 'rogue')
+      const assault = tarak?.powers.find((p) => p.used && effectsOf(p).reaction === 'furious')
+      if (!offers(state).brutalRecovery || !assault) return state
+      const next = updateHero(dropOffer(state, 'brutalRecovery'), tarak.id, (h) => ({
+        powers: h.powers.map((p) => (p.id === assault.id ? { ...p, used: false } : p)),
+      }))
+      return withLog(next, `Brutal Recovery: ${tarak.name} flipped Furious Assault back over.`)
     }
 
     case 'TOGGLE_POWER':

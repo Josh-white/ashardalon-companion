@@ -10,6 +10,12 @@ export function describeAction(state, action) {
       return hero ? `${hero.name} ${signed(action.amount)} HP` : 'HP change'
     case 'ADJUST_MONSTER_HP':
       return monster ? `${monster.name} ${signed(action.amount)} HP` : 'Monster HP change'
+    case 'SAVING_GRACE':
+      return 'Saving Grace'
+    case 'HEALING_HANDS':
+      return 'Healing Hands'
+    case 'BRUTAL_RECOVERY':
+      return 'Brutal Recovery'
     case 'USE_SURGE':
       return hero ? `${hero.name}'s healing surge` : 'Healing surge'
     case 'TOGGLE_POWER': {
