@@ -58,12 +58,19 @@ export function narrationFor(before, after, now = Date.now()) {
     if (turnChanged && after.turn.phase === 0 && hero) lines.push(`${who(hero)}, it's your turn. What will ${hero.name} do?`)
     if (!before.turn.explored && after.turn.explored) lines.push(pick(NEW_TILE, `${after.turn.round}-${after.turn.heroIndex}`))
   }
+  // An adventure's red "Read aloud" box: the whole story, not just its title.
+  const story = after.adventure?.story
+  const newStory = story?.text && story.id !== before.adventure?.story?.id
+  if (newStory) {
+    const title = story.title === after.adventure.card?.title || story.title === 'Victory!' ? '' : story.title
+    lines.push(`${title} ${story.text}`.trim())
+  }
   const moment = after.moment
   if (moment && moment.id !== before.moment?.id && now - moment.at < STALE_MS) {
     const line = momentLine(moment, after)
     if (line) lines.push(line)
   }
-  if (before.status !== after.status && after.status === 'won') lines.push('Victory! The heroes have triumphed. Songs will be sung of this day!')
+  if (before.status !== after.status && after.status === 'won' && !newStory) lines.push('Victory! The heroes have triumphed. Songs will be sung of this day!')
   if (before.status !== after.status && after.status === 'lost') lines.push('Alas… the heroes have fallen. The dungeon claims another party.')
   return lines
 }

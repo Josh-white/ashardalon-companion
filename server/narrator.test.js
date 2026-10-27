@@ -64,7 +64,7 @@ describe('narrator endpoint', () => {
 
   it('refuses very long lines', async () => {
     const base = await start('secret-key')
-    expect((await fetch(`${base}/narrate?text=${'a'.repeat(500)}`)).status).toBe(413)
+    expect((await fetch(`${base}/narrate?text=${'a'.repeat(1300)}`)).status).toBe(413)
     expect(calls).toHaveLength(0)
   })
 })

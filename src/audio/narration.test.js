@@ -52,6 +52,17 @@ describe('narrator lines', () => {
     )
   })
 
+  it('reads the whole story in a Read aloud box', () => {
+    const adventure = (story) => ({ card: { title: 'Into the Mountain' }, story })
+    const exit = { id: 's2', title: 'The Tunnel Exit!', text: 'Ahead, you see light streaming in from above.' }
+    expect(narrationFor(game({ adventure: adventure(null) }), game({ adventure: adventure(exit) }), NOW)).toEqual([
+      'The Tunnel Exit! Ahead, you see light streaming in from above.',
+    ])
+    expect(narrationFor(game({ adventure: adventure(exit) }), game({ adventure: adventure(exit) }), NOW)).toEqual([])
+    const won = { id: 's3', title: 'Victory!', text: 'You escaped the dungeon!' }
+    expect(narrationFor(game({ adventure: adventure(exit) }), game({ status: 'won', adventure: adventure(won) }), NOW)).toEqual(['You escaped the dungeon!'])
+  })
+
   it('cheers a win', () => {
     expect(narrationFor(game(), game({ status: 'won' }), NOW)[0]).toMatch(/^Victory!/)
   })

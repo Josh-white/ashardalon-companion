@@ -9,8 +9,9 @@ import { join } from 'node:path'
 // "George", a warm storyteller from the ElevenLabs voice library.
 export const DEFAULT_VOICE = 'JBFqnCBsd6RMkjVDRZzb'
 export const DEFAULT_MODEL = 'eleven_multilingual_v2'
-// Longer than any line the projector sends; a guard against running up the bill.
-export const MAX_TEXT = 400
+// Longer than any line the projector sends (the longest adventure story is
+// about 750 characters); a guard against running up the bill.
+export const MAX_TEXT = 1200
 
 export function createNarrator({
   apiKey = process.env.ELEVENLABS_API_KEY || null,
