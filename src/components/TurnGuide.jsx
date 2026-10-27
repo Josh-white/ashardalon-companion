@@ -3,6 +3,7 @@ import { HERO_COLORS, XP_TO_CANCEL_ENCOUNTER, XP_TO_LEVEL_UP } from '../data/her
 import { PHASES } from '../data/phases.js'
 import HeroAttack from './HeroAttack.jsx'
 import MonsterTurns, { DrawMonsterButton } from './MonsterTurns.jsx'
+import { rollD20 } from '../state/random.js'
 import { Button } from './ui.jsx'
 
 // Each phase asks only what the app can't see for itself. The checklist each phase
@@ -48,14 +49,31 @@ function HeroPhase({ state, hero, dispatch }) {
           </Button>
         </Note>
       )}
-      <Note>Move and attack, attack and move, or move twice.</Note>
+      {hero.conditions.includes('Dazed') ? (
+        <Note tone="warn">{hero.name} is Dazed: move <b>or</b> attack this turn, not both. Dazed wears off after this phase.</Note>
+      ) : (
+        <Note>Move and attack, attack and move, or move twice.</Note>
+      )}
+      {hero.conditions.includes('Poisoned') && (
+        <Note tone="warn">{hero.name} is Poisoned. When you end the Hero Phase, the app rolls: 10 or more shakes it off.</Note>
+      )}
 
       <HeroAttack state={state} hero={hero} dispatch={dispatch} />
 
-      {hero.level === 1 && state.xp >= XP_TO_LEVEL_UP && (
+      {hero.level === 1 && state.turn.natural20 === hero.id && (
         <Note tone="good">
-          <p>Rolled a natural 20 this turn? Spend {XP_TO_LEVEL_UP} XP to reach level 2.</p>
-          <Button variant="gold" className="mt-2" onClick={() => dispatch({ type: 'LEVEL_UP', heroId: hero.id })}>
+          <p>
+            Natural 20!{' '}
+            {state.xp >= XP_TO_LEVEL_UP
+              ? `Spend ${XP_TO_LEVEL_UP} XP to reach level 2.`
+              : `Leveling up takes ${XP_TO_LEVEL_UP} XP, and the party has ${state.xp}.`}
+          </p>
+          <Button
+            variant="gold"
+            className="mt-2"
+            disabled={state.xp < XP_TO_LEVEL_UP}
+            onClick={() => dispatch({ type: 'LEVEL_UP', heroId: hero.id })}
+          >
             Level up
           </Button>
         </Note>
@@ -163,7 +181,8 @@ export default function TurnGuide({ state, dispatch }) {
         <Button variant="ghost" onClick={() => dispatch({ type: 'PREVIOUS_PHASE' })}>
           ← Back
         </Button>
-        <Button variant="gold" className="px-6 py-3 text-lg" onClick={() => dispatch({ type: 'NEXT_PHASE' })}>
+        {/* The die is for a poisoned hero's roll to shake off the poison after the Hero Phase. */}
+        <Button variant="gold" className="px-6 py-3 text-lg" onClick={() => dispatch({ type: 'NEXT_PHASE', roll: rollD20() })}>
           {isLastPhase ? `Pass to ${nextHero.player || nextHero.name} →` : `On to ${PHASES[phase + 1].title} →`}
         </Button>
       </div>
