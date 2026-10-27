@@ -5,6 +5,7 @@ import MonsterList from './components/MonsterList.jsx'
 import ProjectorView from './components/ProjectorView.jsx'
 import SeatPicker from './components/SeatPicker.jsx'
 import Setup from './components/Setup.jsx'
+import { TreasureStep } from './components/Treasure.jsx'
 import TurnGuide, { ExtraAttacks } from './components/TurnGuide.jsx'
 import UndoButton from './components/UndoButton.jsx'
 import { Button, HpBar } from './components/ui.jsx'
@@ -151,6 +152,8 @@ function HeroView({ state, dispatch, hero }) {
       {myTurn ? <TurnGuide state={state} dispatch={dispatch} /> : <WaitingBanner state={state} />}
       {/* Cause Fear gives other heroes an attack during someone else's turn. */}
       {!myTurn && <ExtraAttacks state={state} dispatch={dispatch} onlyHeroId={hero.id} />}
+      {/* A monster defeated on someone else's turn earns this hero the treasure. */}
+      {!myTurn && <TreasureStep state={state} dispatch={dispatch} heroId={hero.id} />}
       <HeroCard
         state={state}
         hero={hero}

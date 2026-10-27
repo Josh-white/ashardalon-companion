@@ -8,6 +8,7 @@ import {
   XP_TO_LEVEL_UP,
 } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
+import { heroItems, itemAttackBonus, itemTrapBonus, tileAcBonus } from '../data/items.js'
 import { effectsOf, heroAc, heroAttackPenalty, maxRolls } from '../data/powerEffects.js'
 
 export const SAVE_VERSION = 1
@@ -34,6 +35,9 @@ export const initialState = {
   encounter: null, // the encounter card being read out: { id, cardId, heroId, card, attacked }
   environment: null, // the Environment card in play: { cardId, name, card }
   traps: [], // trap and hazard markers on the board: { id, cardId, name, type, ownerId, card }
+  // The virtual treasure deck, built on the first treasure draw.
+  treasureDeck: null,
+  treasure: null, // the treasure card just drawn, waiting for a hero to take it: { id, cardId, heroId, card }
 }
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
@@ -163,6 +167,11 @@ const discardMonsterCard = (state, monster) =>
     ? { ...state, monsterDeck: { ...state.monsterDeck, discard: [...state.monsterDeck.discard, monster.cardId] } }
     : state
 
+// A hero's AC against an attack. Heroes standing on a Blessed Shield owner's tile
+// (tileGuarded, asked on the iPad) get its bonus too.
+const targetAc = (state, hero, tileGuarded) =>
+  heroAc(hero) + (Array.isArray(tileGuarded) && tileGuarded.includes(hero.id) ? tileAcBonus(state.heroes, hero) : 0)
+
 // One monster attack against one or more heroes. Each target comes with the d20 the
 // device rolled for it. A hit deals the damage and conditions; a miss deals the miss damage.
 function monsterAttack(state, action) {
@@ -190,7 +199,7 @@ function monsterAttack(state, action) {
   const downed = []
   for (const { heroId, roll } of targets) {
     const hero = next.heroes.find((h) => h.id === heroId)
-    const ac = heroAc(hero)
+    const ac = targetAc(next, hero, action.tileGuarded)
     const total = roll + attack.bonus
     const hit = total >= ac
     const damage = hit ? attack.damage : attack.miss
@@ -227,7 +236,7 @@ function monsterAttack(state, action) {
 // An attack on one or more heroes, from a monster, an encounter card or a trap. Each
 // target comes with the d20 the device rolled for it. A hit deals the damage and
 // conditions; a miss deals the miss damage (and any miss conditions).
-function attackHeroes(state, { who, attack, targets: list, moment }) {
+function attackHeroes(state, { who, attack, targets: list, moment, tileGuarded }) {
   const targets = (Array.isArray(list) ? list : []).filter(
     (t) => state.heroes.some((h) => h.id === t.heroId) && validRoll(t.roll),
   )
@@ -238,7 +247,7 @@ function attackHeroes(state, { who, attack, targets: list, moment }) {
   const downed = []
   for (const { heroId, roll } of targets) {
     const hero = next.heroes.find((h) => h.id === heroId)
-    const ac = heroAc(hero)
+    const ac = targetAc(next, hero, tileGuarded)
     const total = roll + attack.bonus
     const hit = total >= ac
     const damage = hit ? attack.damage : attack.miss
@@ -398,11 +407,12 @@ function hurtMonster(state, monster, dealt) {
   return { state: withLog(next, `The ${monster.name} was defeated! +${monster.xp} XP`), defeated: true }
 }
 
-// The first monster defeated in a turn earns a treasure card. Returns the moment's words.
-function defeatDetails(state, defeated) {
+// The first monster defeated in a turn earns a treasure card for the hero who defeated
+// it. Returns the moment's words.
+function defeatDetails(state, defeated, heroId) {
   if (defeated.length === 0) return { state, details: [] }
   const treasure = !state.turn.treasureDrawn
-  const next = treasure ? { ...state, turn: { ...state.turn, treasureDrawn: true } } : state
+  const next = treasure ? { ...state, turn: { ...state.turn, treasureDrawn: true, treasureOwed: heroId ?? null } } : state
   const xp = defeated.reduce((sum, m) => sum + m.xp, 0)
   return {
     state: next,
@@ -428,37 +438,50 @@ const validRoll = (roll) => Number.isInteger(roll) && roll >= 1 && roll <= 20
 function rollAgainst(monster, roll, attack) {
   const total = roll + attack.bonus
   const hit = total >= monster.ac
-  const extra = hit && attack.evenBonus && roll % 2 === 0 ? attack.evenBonus : 0
-  const damage = attack.damage + extra
+  const even = hit && attack.evenBonus && roll % 2 === 0 ? attack.evenBonus : 0
+  // Dragontooth Pick and Vorpal Sword: +1 damage on a high natural roll.
+  const crit = hit ? (attack.crits ?? []).filter((from) => roll >= from).length : 0
+  const damage = attack.damage + even + crit
   const dealt = hit ? damage : attack.miss
   const outcome = hit ? (damage > 0 ? `Hit! ${damage} damage` : 'Hit!') : attack.miss > 0 ? `Miss, but ${attack.miss} damage` : 'Miss!'
   return { total, hit, dealt, outcome }
 }
 
-// A hero attacks one or more monsters with a power. Each target comes with the d20 the
-// device rolled. Monsters brought to 0 HP are defeated, and a daily power is used up.
-// The power's own effects (powerEffects.js) are applied here too.
+// A hero attacks one or more monsters with a power or an item (Crossbow of Speed). Each
+// target comes with the d20 the device rolled. Monsters brought to 0 HP are defeated, and
+// a daily power is used up. The power's own effects (powerEffects.js) and the hero's
+// items (items.js) are applied here too.
 function heroAttack(state, action) {
   const hero = state.heroes.find((h) => h.id === action.heroId)
-  const power = hero?.powers.find((p) => p.id === action.powerId)
+  const item = action.itemId ? heroItems(hero).find((i) => i.id === action.itemId && !i.used && i.card?.attack) : null
+  const power = item ? null : hero?.powers.find((p) => p.id === action.powerId)
+  const source = item ?? power
   const effects = effectsOf(power)
   // Cause Fear and Acrobatic Onslaught hand out an extra at-will attack.
   const bonusAttacks = state.turn.bonusAttacks ?? []
   const extraAttack = action.bonusAttack ? bonusAttacks.find((b) => b.heroId === hero?.id) : null
   if (action.bonusAttack && (!extraAttack || power?.type !== 'at-will')) return state
-  const baseBonus = powerNumber(power?.card?.attack)
+  const baseBonus = item ? item.card.attack.bonus : powerNumber(power?.card?.attack)
   const targets = (Array.isArray(action.targets) ? action.targets : [])
     .filter((t) => state.monsters.some((m) => m.id === t.monsterId && m.ac) && validRoll(t.roll))
-    .slice(0, maxRolls(power))
-  if (!power || baseBonus === null || power.used || targets.length === 0) return state
+    .slice(0, item ? 1 : maxRolls(power))
+  if (!source || baseBonus === null || power?.used || targets.length === 0) return state
 
   const adjacent = effects.ask === 'adjacent-count' ? clamp(Number(action.adjacentCount) || 0, 0, 8) : 0
   const attack = {
     bonus: baseBonus + (extraAttack?.bonus ?? 0) + adjacent - heroAttackPenalty(hero),
-    damage: (powerNumber(power.card.damage) ?? 0) + (effects.ask === 'started-adjacent' && action.startedAdjacent ? 1 : 0),
+    damage: item
+      ? item.card.attack.damage
+      : (powerNumber(power.card.damage) ?? 0) + (effects.ask === 'started-adjacent' && action.startedAdjacent ? 1 : 0),
     // "3 (Miss: 1)": some powers still hurt on a miss.
-    miss: powerNumber(/miss\D*(\d+)/i.exec(power.card.damage ?? '')?.[1]) ?? 0,
+    miss: item ? 0 : powerNumber(/miss\D*(\d+)/i.exec(power.card.damage ?? '')?.[1]) ?? 0,
     evenBonus: effects.evenBonus ?? 0,
+  }
+  // Magic weapons add to rolls against monsters close enough, so each target can differ.
+  const distances = action.distances && typeof action.distances === 'object' ? action.distances : {}
+  const attackOn = (monsterId) => {
+    const extra = itemAttackBonus(hero, distances[monsterId], action.stayed === true)
+    return { ...attack, bonus: attack.bonus + extra.bonus, damage: attack.damage + extra.damage, crits: extra.crits }
   }
 
   let next = state
@@ -468,14 +491,15 @@ function heroAttack(state, action) {
     const monster = next.monsters.find((m) => m.id === monsterId)
     if (!monster) {
       // Tornado Strike can aim a second roll at a monster the first one already beat.
-      next = withLog(next, `${hero.name}'s ${power.name}: that monster was already defeated.`)
+      next = withLog(next, `${hero.name}'s ${source.name}: that monster was already defeated.`)
       continue
     }
-    const result = rollAgainst(monster, roll, attack)
-    rolls.push({ monsterId, label: monster.name, value: roll, total: result.total, ac: monster.ac, hit: result.hit, outcome: result.outcome, dealt: result.dealt })
+    const rowAttack = attackOn(monsterId)
+    const result = rollAgainst(monster, roll, rowAttack)
+    rolls.push({ monsterId, label: monster.name, value: roll, total: result.total, ac: monster.ac, hit: result.hit, outcome: result.outcome, dealt: result.dealt, attack: rowAttack })
     next = withLog(
       next,
-      `${hero.name}'s ${power.name} vs the ${monster.name}: rolled ${roll} + ${attack.bonus} = ${result.total} against AC ${monster.ac}. ${result.outcome}`,
+      `${hero.name}'s ${source.name} vs the ${monster.name}: rolled ${roll} + ${rowAttack.bonus} = ${result.total} against AC ${monster.ac}. ${result.outcome}`,
     )
     const hurt = hurtMonster(next, monster, result.dealt)
     next = hurt.state
@@ -483,8 +507,9 @@ function heroAttack(state, action) {
   }
   const anyHit = rolls.some((r) => r.hit)
 
-  // A daily is used up, except Comeback Strike when it misses.
-  if (power.type === 'daily' && (anyHit || !effects.keepOnMiss)) next = markUsed(next, hero.id, power.id)
+  // A daily is used up, except Comeback Strike when it misses. Ring of Shooting Stars flips over.
+  if (power?.type === 'daily' && (anyHit || !effects.keepOnMiss)) next = markUsed(next, hero.id, power.id)
+  if (item?.card.after) next = spendItem(next, hero.id, item.id)
   if (effects.onHit?.healSelf && anyHit) next = healHero(next, hero.id, effects.onHit.healSelf, power.name)
 
   let extras = extraAttack ? bonusAttacks.filter((b) => b !== extraAttack) : bonusAttacks
@@ -495,7 +520,7 @@ function heroAttack(state, action) {
       ...next.turn,
       bonusAttacks: extras,
       // Remembered for Inspiring Advice, Furious Assault and the power's own follow-up question.
-      lastAttack: { heroId: hero.id, powerId: power.id, attack, rolls, followUpDone: false, bonus: Boolean(extraAttack) },
+      lastAttack: { heroId: hero.id, powerId: power?.id ?? null, itemId: item?.id ?? null, attack, rolls, followUpDone: false, bonus: Boolean(extraAttack) },
     },
   }
 
@@ -506,52 +531,58 @@ function heroAttack(state, action) {
   const canLevel = natural20 && hero.level === 1 && next.xp >= XP_TO_LEVEL_UP
   // A natural 20 on an attack is what lets a hero level up this turn.
   if (natural20) next = { ...next, turn: { ...next.turn, natural20: hero.id } }
-  const won = defeatDetails(next, defeated)
+  const won = defeatDetails(next, defeated, hero.id)
   next = won.state
   return withMoment(next, {
     kind: natural20 ? 'crit' : defeated.length > 0 ? 'defeat' : 'roll',
     heroId: hero.id,
-    title: `${hero.name}: ${power.name}!`,
+    title: `${hero.name}: ${source.name}!`,
     detail: [...won.details, canLevel && 'Natural 20! You can level up.'].filter(Boolean).join(' '),
     rolls,
   })
 }
 
-// Inspiring Advice: a hero who missed rolls again. The miss damage comes back off, and
-// the advice card is only used up if the new roll hits.
+// Inspiring Advice or a Lucky Charm: a hero who missed rolls again. The miss damage
+// comes back off, and the advice card is only used up if the new roll hits. The charm
+// is discarded either way.
 function rerollAttack(state, action) {
   const last = state.turn.lastAttack
   const helper = state.heroes.find((h) => h.id === action.helperId)
-  const advice = helper?.powers.find((p) => p.id === action.helperPowerId)
+  const advice = action.helperItemId ? null : helper?.powers.find((p) => p.id === action.helperPowerId)
+  const charm = action.helperItemId ? heroItems(helper).find((i) => i.id === action.helperItemId && !i.used && i.card?.use === 'reroll') : null
   const row = last?.rolls.find((r) => r.monsterId === action.monsterId && !r.hit && !r.rerolled)
   const monster = state.monsters.find((m) => m.id === action.monsterId)
   const hero = state.heroes.find((h) => h.id === last?.heroId)
   const power = hero?.powers.find((p) => p.id === last.powerId)
-  if (!row || !monster || !advice || advice.used || effectsOf(advice).reaction !== 'reroll' || !validRoll(action.roll)) return state
+  const helps = charm || (advice && !advice.used && effectsOf(advice).reaction === 'reroll')
+  if (!row || !monster || !helps || !validRoll(action.roll)) return state
 
+  const helpName = charm ? `${helper.name}'s Lucky Charm` : `${helper.name}'s Inspiring Advice`
+  const attack = row.attack ?? last.attack
   const before = { ...monster, hp: Math.min(monster.maxHp, monster.hp + row.dealt) }
   let next = updateMonster(state, monster.id, () => ({ hp: before.hp }))
-  const result = rollAgainst(before, action.roll, last.attack)
+  if (charm) next = spendItem(next, helper.id, charm.id)
+  const result = rollAgainst(before, action.roll, attack)
   next = withLog(
     next,
-    `${helper.name}'s Inspiring Advice: ${hero.name} rolled again, ${action.roll} + ${last.attack.bonus} = ${result.total} against AC ${monster.ac}. ${result.outcome}`,
+    `${helpName}: ${hero.name} rolled again, ${action.roll} + ${attack.bonus} = ${result.total} against AC ${monster.ac}. ${result.outcome}`,
   )
   const hurt = hurtMonster(next, before, result.dealt)
   next = hurt.state
   const rolls = last.rolls.map((r) => (r === row ? { ...r, value: action.roll, total: result.total, hit: result.hit, outcome: result.outcome, dealt: result.dealt, rerolled: true } : r))
   next = { ...next, turn: { ...next.turn, lastAttack: { ...last, rolls } } }
   if (result.hit) {
-    next = markUsed(next, helper.id, advice.id)
+    if (advice) next = markUsed(next, helper.id, advice.id)
     const effects = effectsOf(power)
-    if (power.type === 'daily') next = markUsed(next, hero.id, power.id)
+    if (power?.type === 'daily') next = markUsed(next, hero.id, power.id)
     if (effects.onHit?.healSelf && !last.rolls.some((r) => r.hit)) next = healHero(next, hero.id, effects.onHit.healSelf, power.name)
   }
   if (action.roll === 20) next = { ...next, turn: { ...next.turn, natural20: hero.id } }
-  const won = defeatDetails(next, hurt.defeated ? [monster] : [])
+  const won = defeatDetails(next, hurt.defeated ? [monster] : [], hero.id)
   return withMoment(won.state, {
     kind: action.roll === 20 ? 'crit' : hurt.defeated ? 'defeat' : 'roll',
     heroId: hero.id,
-    title: `Inspiring Advice: ${result.hit ? 'Hit!' : 'Missed again'}`,
+    title: `${charm ? 'Lucky Charm' : 'Inspiring Advice'}: ${result.hit ? 'Hit!' : 'Missed again'}`,
     detail: won.details.join(' '),
     rolls: [{ monsterId: monster.id, label: monster.name, value: action.roll, total: result.total, ac: monster.ac, hit: result.hit, outcome: result.outcome }],
   })
@@ -594,8 +625,8 @@ function attackFollowUp(state, action) {
   return state
 }
 
-// Damage that isn't an attack roll: Furious Assault's +1, a Blade Barrier token, or the
-// Flaming Sphere burning every monster on its tile.
+// Damage that isn't an attack roll: Furious Assault's +1, a Blade Barrier or Caltrop
+// token, or the Flaming Sphere burning every monster on its tile.
 function powerDamage(state, action) {
   const hero = state.heroes.find((h) => h.id === action.heroId)
   const monsters = (Array.isArray(action.monsterIds) ? action.monsterIds : [])
@@ -615,6 +646,9 @@ function powerDamage(state, action) {
   } else if (action.source === 'bladeBarrier' && tokens.bladeBarrier > 0 && monsters.length === 1) {
     next = updateHero(next, hero.id, (h) => ({ tokens: { ...h.tokens, bladeBarrier: h.tokens.bladeBarrier - 1 } }))
     source = 'a Blade Barrier'
+  } else if (action.source === 'caltrops' && tokens.caltrops > 0 && monsters.length === 1) {
+    next = updateHero(next, hero.id, (h) => ({ tokens: { ...h.tokens, caltrops: h.tokens.caltrops - 1 } }))
+    source = 'a Caltrop'
   } else if (action.source === 'flamingSphere' && tokens.flamingSphere > 0 && !state.turn.sphereBurned) {
     next = updateHero(next, hero.id, (h) => ({ tokens: { ...h.tokens, flamingSphere: h.tokens.flamingSphere - 1 } }))
     next = { ...next, turn: { ...next.turn, sphereBurned: true } }
@@ -629,7 +663,7 @@ function powerDamage(state, action) {
     next = hurt.state
     if (hurt.defeated) defeated.push(monster)
   }
-  const won = defeatDetails(next, defeated)
+  const won = defeatDetails(next, defeated, hero.id)
   return withMoment(won.state, {
     kind: defeated.length > 0 ? 'defeat' : 'roll',
     heroId: hero.id,
@@ -778,6 +812,162 @@ function endHeroPhase(state, hero, roll) {
     value: roll,
     title: cured ? 'Poison gone!' : 'Still poisoned',
     detail: `${hero.name} needed 10 or more.`,
+  })
+}
+
+// Level 2: the 2nd-level side of the hero card, and one more daily power to choose.
+function levelUp(state, hero) {
+  const leveled = updateHero(state, hero.id, (h) => ({
+    level: 2,
+    maxHp: h.maxHp + LEVEL_UP_HP_BONUS,
+    hp: h.hp + LEVEL_UP_HP_BONUS,
+    ac: h.ac + LEVEL_UP_AC_BONUS,
+    surgeValue: h.surgeValue + LEVEL_UP_SURGE_BONUS,
+    powers: [...h.powers, newPower('daily')],
+  }))
+  return withMoment(withLog(leveled, `${hero.name} reached level 2!`), {
+    kind: 'level',
+    heroId: hero.id,
+    title: `${hero.name} reached level 2!`,
+    detail: 'Flip your hero card and choose another daily power!',
+  })
+}
+
+const discardTreasureCard = (state, cardId) =>
+  state.treasureDeck && cardId
+    ? { ...state, treasureDeck: { ...state.treasureDeck, discard: [...state.treasureDeck.discard, cardId] } }
+    : state
+
+// An item that's been used flips over (like a used daily) or goes to the treasure discards.
+function spendItem(state, heroId, itemId, how) {
+  const hero = state.heroes.find((h) => h.id === heroId)
+  const item = heroItems(hero).find((i) => i.id === itemId)
+  const after = how ?? item?.card?.after
+  if (!item || !after) return state
+  if (after === 'flip') return updateHero(state, hero.id, (h) => ({ items: h.items.map((i) => (i.id === item.id ? { ...i, used: true } : i)) }))
+  const next = updateHero(state, hero.id, (h) => ({ items: h.items.filter((i) => i.id !== item.id) }))
+  return discardTreasureCard(next, item.cardId)
+}
+
+// Defeating a monster earns a treasure card; the device sends the cards and shuffle numbers.
+function drawTreasure(state, action) {
+  const heroId = state.turn.treasureOwed
+  const hero = state.heroes.find((h) => h.id === heroId)
+  if (!hero || state.treasure) return state
+  const withDeck = state.treasureDeck ? state : { ...state, treasureDeck: buildDeck(action.cards, action.random) }
+  const drawn = drawTop(withDeck.treasureDeck, action.random)
+  if (!drawn) return withLog(state, 'There are no treasure cards left to draw.')
+  const card = drawn.deck.cards[drawn.cardId]
+  if (!card) return state
+  let next = {
+    ...withDeck,
+    treasureDeck: drawn.deck,
+    treasure: { id: newId('treasure'), cardId: card.id, heroId: hero.id, card },
+    turn: { ...withDeck.turn, treasureOwed: null },
+  }
+  if (drawn.reshuffled) next = withLog(next, 'The treasure discards were shuffled into a new deck.')
+  return withMoment(withLog(next, `${heroLabel(hero)} found ${article(card.name)} ${card.name}!`), {
+    kind: 'treasure',
+    heroId: hero.id,
+    title: card.name,
+    detail: card.flavor || 'Treasure!',
+  })
+}
+
+// The treasure card goes in front of a hero: the one who found it, or one they hand it to.
+function keepTreasure(state, action) {
+  const treasure = state.treasure
+  const hero = state.heroes.find((h) => h.id === (action.heroId ?? treasure?.heroId))
+  if (!treasure || !hero) return state
+  const { card } = treasure
+  const item = { id: newId('item'), cardId: card.id, name: card.name, used: false, card }
+  const next = updateHero({ ...state, treasure: null }, hero.id, (h) => ({ items: [...(h.items ?? []), item] }))
+  return withLog(next, card.inPlay ? `${hero.name} put the ${card.name} into play.` : `${hero.name} took the ${card.name}.`)
+}
+
+// Using an item from its card: healing, ending a condition, flipping a power back up, and
+// so on. Then it flips over or is discarded, if the card says so.
+function useItem(state, action) {
+  const hero = state.heroes.find((h) => h.id === action.heroId)
+  const item = heroItems(hero).find((i) => i.id === action.itemId && !i.used)
+  const card = item?.card
+  if (!card?.use || card.use === 'monsterControl') return state
+  const picked = state.heroes.find((h) => h.id === (Array.isArray(action.heroIds) && action.heroIds[0])) ?? hero
+  let next = withLog(state, `${heroLabel(hero)} used the ${card.name}.`)
+
+  switch (card.use) {
+    case 'heal':
+      next = healHero(next, picked.id, card.heal, `the ${card.name}`)
+      break
+    case 'reduceDamage':
+      // "Reduce the damage by 1": the app already took it off, so it comes back.
+      next = healHero(next, hero.id, 1, `the ${card.name}`)
+      break
+    case 'endCondition': {
+      if (!picked.conditions.includes(action.condition)) return state
+      next = updateHero(next, picked.id, (h) => ({ conditions: h.conditions.filter((c) => c !== action.condition) }))
+      next = withLog(next, `${picked.name} is no longer ${action.condition}.`)
+      break
+    }
+    case 'refreshPower':
+    case 'refreshAny': {
+      // A used power, or (Pearl of Power) a used item, flips back up.
+      const power = hero.powers.find((p) => p.id === action.targetId && p.used)
+      const other = card.use === 'refreshAny' && heroItems(hero).find((i) => i.id === action.targetId && i.used && i.id !== item.id)
+      if (power) next = updateHero(next, hero.id, (h) => ({ powers: h.powers.map((p) => (p.id === power.id ? { ...p, used: false } : p)) }))
+      else if (other) next = updateHero(next, hero.id, (h) => ({ items: h.items.map((i) => (i.id === other.id ? { ...i, used: false } : i)) }))
+      else return state
+      next = withLog(next, `${hero.name}'s ${(power ?? other).name} is ready again.`)
+      break
+    }
+    case 'levelUp':
+      if (hero.level !== 1) return state
+      next = levelUp(next, hero)
+      break
+    case 'polymorph': {
+      // The monster is swapped for the next card off the monster deck, with the same owner.
+      const monster = state.monsters.find((m) => m.id === action.monsterId)
+      if (!monster) return state
+      const owner = state.heroes.find((h) => h.id === monster.ownerId) ?? hero
+      next = discardMonsterCard({ ...next, monsters: next.monsters.filter((m) => m.id !== monster.id) }, monster)
+      next = withLog(next, `The ${monster.name} was turned into something else!`)
+      const withDeck = next.monsterDeck || !(action.cards?.length > 0) ? next : { ...next, monsterDeck: buildDeck(action.cards, action.random) }
+      next = withDeck.monsterDeck ? drawMonster(withDeck, owner.id, action.random) : withDeck
+      break
+    }
+    case 'caltrops':
+      next = updateHero(next, hero.id, (h) => ({ tokens: { ...h.tokens, caltrops: (h.tokens?.caltrops ?? 0) + card.tokens } }))
+      break
+    default:
+      // A Lucky Charm used on another roll, Potion of Speed, Wand of Fear: the table does the rest.
+      break
+  }
+  return spendItem(next, hero.id, item.id)
+}
+
+// Scroll of Monster Control: during the Villain Phase a monster attacks another monster
+// instead of acting. The scroll's owner gets the XP (and a treasure, if it's the first).
+function monsterControl(state, action) {
+  const hero = state.heroes.find((h) => h.id === action.heroId)
+  const item = heroItems(hero).find((i) => i.id === action.itemId && !i.used && i.card?.use === 'monsterControl')
+  const monster = state.monsters.find((m) => m.id === action.monsterId)
+  const target = state.monsters.find((m) => m.id === action.targetId && m.id !== action.monsterId)
+  if (!item || !monster || !target?.ac || !validRoll(action.roll)) return state
+  const attack = item.card.monsterAttack ?? { bonus: 9, damage: 1 }
+  const result = rollAgainst(target, action.roll, { ...attack, miss: 0 })
+  let next = spendItem(state, hero.id, item.id, 'discard')
+  next = withLog(
+    next,
+    `${hero.name}'s ${item.name}: the ${monster.name} attacked the ${target.name}, rolled ${action.roll} + ${attack.bonus} = ${result.total} against AC ${target.ac}. ${result.outcome}`,
+  )
+  const hurt = hurtMonster(next, target, result.dealt)
+  const won = defeatDetails(hurt.state, hurt.defeated ? [target] : [], hero.id)
+  return withMoment(won.state, {
+    kind: hurt.defeated ? 'defeat' : 'roll',
+    heroId: hero.id,
+    title: `The ${monster.name} attacks the ${target.name}!`,
+    detail: won.details.join(' '),
+    rolls: [{ monsterId: target.id, label: target.name, value: action.roll, total: result.total, ac: target.ac, hit: result.hit, outcome: result.outcome }],
   })
 }
 
@@ -1006,20 +1196,7 @@ export function gameReducer(state, action) {
     case 'LEVEL_UP': {
       const hero = state.heroes.find((h) => h.id === action.heroId)
       if (!hero || hero.level >= 2 || state.xp < XP_TO_LEVEL_UP || state.turn.natural20 !== hero.id) return state
-      const leveled = updateHero({ ...state, xp: state.xp - XP_TO_LEVEL_UP }, hero.id, (h) => ({
-        level: 2,
-        maxHp: h.maxHp + LEVEL_UP_HP_BONUS,
-        hp: h.hp + LEVEL_UP_HP_BONUS,
-        ac: h.ac + LEVEL_UP_AC_BONUS,
-        surgeValue: h.surgeValue + LEVEL_UP_SURGE_BONUS,
-        powers: [...h.powers, newPower('daily')],
-      }))
-      return withMoment(withLog(leveled, `${hero.name} reached level 2!`), {
-        kind: 'level',
-        heroId: hero.id,
-        title: `${hero.name} reached level 2!`,
-        detail: 'Flip your hero card and choose another daily power!',
-      })
+      return levelUp({ ...state, xp: state.xp - XP_TO_LEVEL_UP }, hero)
     }
 
     case 'ADD_MONSTER': {
@@ -1098,11 +1275,12 @@ export function gameReducer(state, action) {
       if (!monster) return state
       // One treasure card per turn, for the first monster defeated.
       const treasure = !state.turn.treasureDrawn
+      const winner = action.heroId ?? state.heroes[state.turn.heroIndex]?.id ?? null
       const next = {
         ...state,
         xp: state.xp + monster.xp,
         monsters: state.monsters.filter((m) => m.id !== monster.id),
-        turn: { ...state.turn, treasureDrawn: true },
+        turn: { ...state.turn, treasureDrawn: true, treasureOwed: treasure ? winner : state.turn.treasureOwed ?? null },
       }
       return withMoment(withLog(next, `The ${monster.name} was defeated! +${monster.xp} XP`), {
         kind: 'defeat',
@@ -1146,6 +1324,7 @@ export function gameReducer(state, action) {
         who: encounter.card.name,
         attack: encounter.card.attack,
         targets: action.targets,
+        tileGuarded: action.tileGuarded,
         moment: { title: `${encounter.card.name}!` },
       })
       return next === state ? state : { ...next, encounter: { ...encounter, attacked: true } }
@@ -1168,7 +1347,13 @@ export function gameReducer(state, action) {
     case 'TRAP_ATTACK': {
       const trap = (state.traps ?? []).find((t) => t.id === action.trapId)
       if (!trap?.card.trap?.attack) return state
-      return attackHeroes(state, { who: `The ${trap.name}`, attack: trap.card.trap.attack, targets: action.targets, moment: { title: `${trap.name}!` } })
+      return attackHeroes(state, {
+        who: `The ${trap.name}`,
+        attack: trap.card.trap.attack,
+        targets: action.targets,
+        tileGuarded: action.tileGuarded,
+        moment: { title: `${trap.name}!` },
+      })
     }
 
     case 'TRAP_DAMAGE': {
@@ -1190,10 +1375,11 @@ export function gameReducer(state, action) {
       const hero = state.heroes.find((h) => h.id === action.heroId)
       if (!trap || !hero || !validRoll(action.roll)) return state
       const penalty = state.environment?.card?.trapPenalty ?? 0
-      const total = action.roll - penalty
+      const tools = itemTrapBonus(hero)
+      const total = action.roll - penalty + tools
       const target = trap.card.trap?.disable ?? 10
       const disabled = total >= target
-      const sum = penalty ? `${action.roll} − ${penalty} = ${total}` : `${action.roll}`
+      const sum = penalty || tools ? `${action.roll}${tools ? ` + ${tools}` : ''}${penalty ? ` − ${penalty}` : ''} = ${total}` : `${action.roll}`
       let next = withLog(state, `${hero.name} rolled ${sum} to disable the ${trap.name} (needed ${target}).${disabled ? ' Disabled!' : ''}`)
       if (disabled) next = discardEncounterCard({ ...next, traps: next.traps.filter((t) => t.id !== trap.id) }, trap.cardId)
       return withMoment(next, {
@@ -1244,6 +1430,30 @@ export function gameReducer(state, action) {
       return withLog(updateMonster(state, monster.id, () => ({ ownerId: owner.id })), `The ${monster.name} now belongs to ${owner.name}.`)
     }
 
+    case 'DRAW_TREASURE':
+      return drawTreasure(state, action)
+
+    case 'KEEP_TREASURE':
+      return keepTreasure(state, action)
+
+    case 'USE_ITEM':
+      return useItem(state, action)
+
+    case 'MONSTER_CONTROL':
+      return monsterControl(state, action)
+
+    case 'TOGGLE_ITEM':
+      // A flipped item flipped back by hand, or the other way.
+      return updateHero(state, action.heroId, (hero) => ({
+        items: heroItems(hero).map((i) => (i.id === action.itemId ? { ...i, used: !i.used } : i)),
+      }))
+
+    case 'DISCARD_ITEM': {
+      const hero = state.heroes.find((h) => h.id === action.heroId)
+      const item = heroItems(hero).find((i) => i.id === action.itemId)
+      return item ? withLog(spendItem(state, hero.id, item.id, 'discard'), `${hero.name} discarded the ${item.name}.`) : state
+    }
+
     case 'SET_TRIANGLE':
       // The Villain Phase's question: does the new tile have a black triangle?
       return { ...state, turn: { ...state.turn, triangle: Boolean(action.triangle) } }
@@ -1259,8 +1469,8 @@ export function gameReducer(state, action) {
         const next = { ...ended, turn: { ...ended.turn, phase: phase + 1 } }
         return PHASES[phase].key === 'hero' ? endHeroPhase(next, next.heroes[heroIndex], action.roll) : next
       }
-      // An encounter card has to be finished before the turn moves on.
-      if (state.encounter) return state
+      // An encounter or treasure card has to be finished before the turn moves on.
+      if (state.encounter || state.treasure) return state
       const nextIndex = (heroIndex + 1) % state.heroes.length
       return startTurn({
         ...endPhaseCurses(state, state.heroes[heroIndex], 'villain', action.rolls),

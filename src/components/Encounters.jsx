@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { HERO_COLORS, XP_TO_CANCEL_ENCOUNTER } from '../data/heroes.js'
+import { itemTrapBonus, tileAcBonus } from '../data/items.js'
 import { heroAc, reactionsFor } from '../data/powerEffects.js'
 import { ENCOUNTER_LABELS } from '../state/game.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { DrawMonsterButton, HeroPicker } from './MonsterTurns.jsx'
+import { TileGuardQuestion } from './Treasure.jsx'
 import { Button } from './ui.jsx'
 
 // Enough random numbers to shuffle the whole encounter deck.
@@ -34,18 +36,20 @@ function AttackStep({ state, hero, name, attack, onAttack }) {
   const question = targetQuestion(attack.targets, hero)
   const fixed = attack.targets === 'active' ? [hero.id] : attack.targets === 'all' ? state.heroes.map((h) => h.id) : null
   const [chosen, setChosen] = useState(attack.targets === 'trapTile' ? [] : [hero.id])
+  const [guarded, setGuarded] = useState([])
   const [results, setResults] = useState(null)
   const targets = fixed ?? chosen
   const toggle = (id) => setChosen((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]))
 
   const roll = () => {
     const rolled = targets.map((heroId) => ({ heroId, roll: rollD20() }))
-    onAttack(rolled)
+    onAttack(rolled, guarded)
     setResults(
       rolled.map(({ heroId, roll: value }) => {
         const target = state.heroes.find((h) => h.id === heroId)
         const total = value + attack.bonus
-        return { hero: target, value, total, ac: heroAc(target), hit: total >= heroAc(target) }
+        const ac = heroAc(target) + (guarded.includes(heroId) ? tileAcBonus(state.heroes, target) : 0)
+        return { hero: target, value, total, ac, hit: total >= ac }
       }),
     )
   }
@@ -82,6 +86,12 @@ function AttackStep({ state, hero, name, attack, onAttack }) {
         </>
       )}
       {attack.targets === 'all' && <p className="text-zinc-300">It attacks every hero.</p>}
+      <TileGuardQuestion
+        state={state}
+        targets={targets}
+        guarded={guarded}
+        onToggle={(id) => setGuarded((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]))}
+      />
       <Button variant="danger" className="w-full py-4 text-xl font-bold" disabled={targets.length === 0} onClick={roll}>
         🎲 Roll the attack
       </Button>
@@ -258,7 +268,7 @@ function EncounterCard({ state, hero, dispatch }) {
               hero={hero}
               name={card.name}
               attack={card.attack}
-              onAttack={(targets) => dispatch({ type: 'ENCOUNTER_ATTACK', targets })}
+              onAttack={(targets, tileGuarded) => dispatch({ type: 'ENCOUNTER_ATTACK', targets, tileGuarded })}
             />
           )}
           {!needsAttack && (
@@ -353,8 +363,8 @@ function TrapActivation({ state, hero, trap, dispatch, onDone }) {
           hero={hero}
           name={`The ${trap.name}`}
           attack={attack}
-          onAttack={(targets) => {
-            dispatch({ type: 'TRAP_ATTACK', trapId: trap.id, targets })
+          onAttack={(targets, tileGuarded) => {
+            dispatch({ type: 'TRAP_ATTACK', trapId: trap.id, targets, tileGuarded })
             setHit(true)
           }}
         />
@@ -434,11 +444,13 @@ export function DisableTraps({ state, hero, dispatch }) {
   const traps = (state.traps ?? []).filter((t) => t.type === 'trap')
   if (traps.length === 0) return null
   const penalty = state.environment?.card?.trapPenalty ?? 0
+  const tools = itemTrapBonus(hero)
   return (
     <div className="mt-4 rounded-xl bg-zinc-950/50 p-3">
       <p className="text-lg text-zinc-100">
         On a trap's tile? Instead of attacking, try to disable it.
         {penalty > 0 && <span className="text-red-300"> {state.environment.name}: −{penalty} to the roll.</span>}
+        {tools > 0 && <span className="text-amber-300"> 💰 Your tools: +{tools} to the roll.</span>}
       </p>
       <div className="mt-2 grid grid-cols-2 gap-2">
         {traps.map((trap) => (
