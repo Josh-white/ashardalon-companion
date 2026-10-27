@@ -5,6 +5,7 @@ import { createServer } from 'node:http'
 import { dirname, extname, join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WebSocketServer } from 'ws'
+import { createNarrator } from './narrator.js'
 import { normalizeCardFile } from '../src/data/cards.js'
 import { describeAction } from '../src/state/describeAction.js'
 import { gameReducer, initialState, SAVE_VERSION } from '../src/state/game.js'
@@ -82,6 +83,8 @@ export function startServer({
   exampleCardsFile = join(ROOT, 'cards', 'cards.example.json'),
   // Set on the test copy so every screen shows it isn't the real game.
   instance = process.env.INSTANCE_LABEL || null,
+  // Spoken lines are saved next to the game, so they survive updates.
+  narrator = createNarrator({ cacheDir: join(dirname(saveFile), 'narration') }),
 } = {}) {
   let state = loadSavedGame(saveFile)
   // Earlier versions of the game, newest last, each with what changed after it.
@@ -98,6 +101,7 @@ export function startServer({
         .end(JSON.stringify(loadCards(cardsFile, exampleCardsFile)))
       return
     }
+    if (narrator.handle(req, res)) return
     serveStatic(staticDir, req, res)
   })
 
