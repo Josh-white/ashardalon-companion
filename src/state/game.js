@@ -93,20 +93,42 @@ function monsterFromCard(card, ownerId) {
   }
 }
 
-// Draws the top monster card for a hero, reshuffling the discards when the pile runs out.
+const article = (name) => (/^[AEIOU]/.test(name) ? 'an' : 'a')
+
+// Draws a monster card for a hero. A hero never has two cards of the same monster, so
+// cards they already have are discarded until a new one turns up. The discards are
+// shuffled into a new deck when the deck runs out.
 function drawMonster(state, heroId, random) {
   const hero = state.heroes.find((h) => h.id === heroId)
   const deck = state.monsterDeck
   if (!hero || !deck) return state
+  const owned = new Set(state.monsters.filter((m) => m.ownerId === hero.id).map((m) => m.cardId))
   let { draw, discard } = deck
   let next = state
-  if (draw.length === 0) {
-    if (discard.length === 0) return withLog(state, 'Every monster card is already in play.')
-    draw = shuffle(discard, random)
-    discard = []
-    next = withLog(next, 'The monster discards were shuffled into a new deck.')
+  let reshuffled = false
+  const skipped = []
+  let cardId = null
+  while (cardId === null) {
+    if (draw.length === 0) {
+      if (discard.length === 0 || reshuffled) {
+        return withLog(state, `There's no monster card left that ${hero.name} doesn't already have.`)
+      }
+      draw = shuffle(discard, random)
+      discard = []
+      reshuffled = true
+      next = withLog(next, 'The monster discards were shuffled into a new deck.')
+    }
+    const [top, ...rest] = draw
+    draw = rest
+    if (owned.has(top)) skipped.push(top)
+    else cardId = top
   }
-  const card = deck.cards[draw[0]]
+  discard = [...discard, ...skipped]
+  for (const id of skipped) {
+    const name = deck.cards[id]?.name ?? 'monster'
+    next = withLog(next, `Discarded ${article(name)} ${name}: ${hero.name} already has one.`)
+  }
+  const card = deck.cards[cardId]
   if (!card) return state
   const monster = monsterFromCard(card, hero.id)
   const figures = monster.card.figures
@@ -114,18 +136,20 @@ function drawMonster(state, heroId, random) {
   const exploring = PHASES[next.turn.phase]?.key === 'exploration' && next.heroes[next.turn.heroIndex]?.id === hero.id
   next = {
     ...next,
-    monsterDeck: { ...deck, draw: draw.slice(1), discard },
+    monsterDeck: { ...deck, draw, discard },
     monsters: [...next.monsters, monster],
     turn: exploring ? { ...next.turn, monsterDrawn: true } : next.turn,
   }
-  return withMoment(withLog(next, `${heroLabel(hero)} drew ${/^[AEIOU]/.test(card.name) ? 'an' : 'a'} ${card.name}!`), {
+  return withMoment(withLog(next, `${heroLabel(hero)} drew ${article(card.name)} ${card.name}!`), {
     kind: 'spawn',
     heroId: hero.id,
-    title: figures > 1 ? `${figures} ${card.name}s appear!` : `${/^[AEIOU]/.test(card.name) ? 'An' : 'A'} ${card.name} appears!`,
+    title: figures > 1 ? `${figures} ${card.name}s appear!` : `${article(card.name) === 'an' ? 'An' : 'A'} ${card.name} appears!`,
     detail: figures > 1 ? `Place ${figures} ${card.name} figures on the new tile.` : 'Place its figure on the new tile.',
   })
 }
 
+// A defeated monster's card goes to the party's XP pile (the xp count), never back into
+// the deck. Only a monster removed by mistake goes to the discards.
 const discardMonsterCard = (state, monster) =>
   monster.cardId && state.monsterDeck
     ? { ...state, monsterDeck: { ...state.monsterDeck, discard: [...state.monsterDeck.discard, monster.cardId] } }
@@ -220,17 +244,17 @@ function heroAttack(state, action) {
       next = updateMonster(next, monster.id, () => ({ hp }))
     } else {
       defeated.push(monster)
-      next = discardMonsterCard(
-        { ...next, xp: next.xp + monster.xp, monsters: next.monsters.filter((m) => m.id !== monster.id) },
-        monster,
-      )
+      next = { ...next, xp: next.xp + monster.xp, monsters: next.monsters.filter((m) => m.id !== monster.id) }
       next = withLog(next, `The ${monster.name} was defeated! +${monster.xp} XP`)
     }
   }
   const natural20 = rolls.some((r) => r.value === 20)
   const canLevel = natural20 && hero.level === 1 && next.xp >= XP_TO_LEVEL_UP
+  const treasure = defeated.length > 0 && !next.turn.treasureDrawn
+  if (treasure) next = { ...next, turn: { ...next.turn, treasureDrawn: true } }
   const details = [
     defeated.length > 0 && `${defeated.map((m) => m.name).join(' and ')} defeated! +${defeated.reduce((sum, m) => sum + m.xp, 0)} XP`,
+    treasure && 'Draw a treasure card!',
     canLevel && 'Natural 20! You can level up.',
   ].filter(Boolean)
   return withMoment(next, {
@@ -239,6 +263,44 @@ function heroAttack(state, action) {
     title: `${hero.name}: ${power.name}!`,
     detail: details.join(' '),
     rolls,
+  })
+}
+
+// Poison hurts at the start of the poisoned hero's turn.
+function startTurn(state) {
+  const hero = state.heroes[state.turn.heroIndex]
+  if (!hero?.conditions.includes('Poisoned') || hero.hp === 0) return state
+  const hp = hero.hp - 1
+  const next = withLog(updateHero(state, hero.id, () => ({ hp })), `${hero.name} took 1 poison damage.`)
+  return withMoment(next, {
+    kind: hp === 0 ? 'down' : 'poison',
+    heroId: hero.id,
+    title: hp === 0 ? `${hero.name} is down!` : `${hero.name} takes 1 poison damage`,
+    detail: hp === 0 ? 'Spend a healing surge to get back up.' : 'Roll 10 or more after your Hero Phase to shake it off.',
+  })
+}
+
+// After the Hero Phase, Dazed wears off and a poisoned hero rolls (the device sends
+// the d20 with the action) to shake off the poison on a 10 or more.
+function endHeroPhase(state, hero, roll) {
+  if (!hero) return state
+  let next = state
+  if (hero.conditions.includes('Dazed')) {
+    next = withLog(
+      updateHero(next, hero.id, (h) => ({ conditions: h.conditions.filter((c) => c !== 'Dazed') })),
+      `${hero.name} is no longer Dazed.`,
+    )
+  }
+  if (!hero.conditions.includes('Poisoned') || !Number.isInteger(roll) || roll < 1 || roll > 20) return next
+  const cured = roll >= 10
+  if (cured) next = updateHero(next, hero.id, (h) => ({ conditions: h.conditions.filter((c) => c !== 'Poisoned') }))
+  next = withLog(next, `${hero.name} rolled ${roll} against the poison${cured ? ' and shook it off!' : '. Still poisoned.'}`)
+  return withMoment(next, {
+    kind: 'poison',
+    heroId: hero.id,
+    value: roll,
+    title: cured ? 'Poison gone!' : 'Still poisoned',
+    detail: `${hero.name} needed 10 or more.`,
   })
 }
 
@@ -537,14 +599,18 @@ export function gameReducer(state, action) {
     case 'DEFEAT_MONSTER': {
       const monster = state.monsters.find((m) => m.id === action.monsterId)
       if (!monster) return state
-      const next = discardMonsterCard(
-        { ...state, xp: state.xp + monster.xp, monsters: state.monsters.filter((m) => m.id !== monster.id) },
-        monster,
-      )
+      // One treasure card per turn, for the first monster defeated.
+      const treasure = !state.turn.treasureDrawn
+      const next = {
+        ...state,
+        xp: state.xp + monster.xp,
+        monsters: state.monsters.filter((m) => m.id !== monster.id),
+        turn: { ...state.turn, treasureDrawn: true },
+      }
       return withMoment(withLog(next, `The ${monster.name} was defeated! +${monster.xp} XP`), {
         kind: 'defeat',
         title: `${monster.name} defeated!`,
-        detail: `+${monster.xp} XP for the party`,
+        detail: `+${monster.xp} XP for the party${treasure ? '. Draw a treasure card!' : ''}`,
       })
     }
 
@@ -567,13 +633,14 @@ export function gameReducer(state, action) {
     case 'NEXT_PHASE': {
       const { heroIndex, phase, round } = state.turn
       if (phase < PHASES.length - 1) {
-        return { ...state, turn: { ...state.turn, phase: phase + 1 } }
+        const next = { ...state, turn: { ...state.turn, phase: phase + 1 } }
+        return PHASES[phase].key === 'hero' ? endHeroPhase(next, state.heroes[heroIndex], action.roll) : next
       }
       const nextIndex = (heroIndex + 1) % state.heroes.length
-      return {
+      return startTurn({
         ...state,
         turn: { heroIndex: nextIndex, phase: 0, round: nextIndex === 0 ? round + 1 : round },
-      }
+      })
     }
 
     case 'PREVIOUS_PHASE': {

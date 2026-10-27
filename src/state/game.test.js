@@ -251,18 +251,31 @@ describe('monster deck', () => {
     expect(state.monsters[0]).toMatchObject({ name: 'Devil', hp: 3, maxHp: 3, ac: 16, xp: 3 })
   })
 
-  it('discards defeated monsters and reshuffles them when the deck runs out', () => {
-    let state = startGame()
-    for (let i = 0; i < 3; i++) state = draw(state)
-    expect(state.monsterDeck.draw).toEqual([])
-    expect(draw(state).log[0].text).toMatch(/already in play/)
+  it('never gives a hero two of the same monster card', () => {
+    let state = draw(startGame()) // a Snake
+    state = draw(state) // the second Snake is discarded, so the Devil comes out
+    expect(state.monsters.map((m) => m.name)).toEqual(['Snake', 'Devil'])
+    expect(state.monsterDeck).toMatchObject({ draw: [], discard: ['snake'] })
+    // Another hero can still have a Snake: the discards are reshuffled.
+    state = draw(state, 1)
+    expect(state.monsters.map((m) => m.name)).toEqual(['Snake', 'Devil', 'Snake'])
+    expect(draw(state).log[0].text).toMatch(/no monster card left/)
+  })
+
+  it('puts defeated monsters in the XP pile and removed ones back in the deck', () => {
+    let state = draw(draw(startGame()))
     state = gameReducer(state, { type: 'DEFEAT_MONSTER', monsterId: state.monsters[0].id })
+    expect(state.monsterDeck.discard).toEqual(['snake'])
     state = gameReducer(state, { type: 'REMOVE_MONSTER', monsterId: state.monsters[0].id })
-    expect(state.monsterDeck.discard).toHaveLength(2)
-    state = draw(state)
-    expect(state.monsters).toHaveLength(2)
-    expect(state.monsterDeck).toMatchObject({ discard: [] })
-    expect(state.monsterDeck.draw).toHaveLength(1)
+    expect(state.monsterDeck.discard).toEqual(['snake', 'devil'])
+  })
+
+  it('asks for one treasure card per turn for defeating monsters', () => {
+    let state = draw(draw(startGame()))
+    state = gameReducer(state, { type: 'DEFEAT_MONSTER', monsterId: state.monsters[0].id })
+    expect(state.moment.detail).toMatch(/treasure/)
+    state = gameReducer(state, { type: 'DEFEAT_MONSTER', monsterId: state.monsters[0].id })
+    expect(state.moment.detail).not.toMatch(/treasure/)
   })
 
   it('rolls monster attacks against hero AC and applies damage and conditions', () => {
@@ -341,8 +354,8 @@ describe('hero attacks', () => {
     state = attack(state, 8)
     expect(state.monsters).toHaveLength(0)
     expect(state.xp).toBe(2)
-    expect(state.monsterDeck.discard).toEqual(['ogre'])
-    expect(state.moment.kind).toBe('defeat')
+    expect(state.monsterDeck.discard).toEqual([])
+    expect(state.moment).toMatchObject({ kind: 'defeat', detail: expect.stringMatching(/treasure/) })
   })
 
   it('takes one Legion Devil figure at a time', () => {
@@ -396,5 +409,31 @@ describe('turn guide answers', () => {
   it('only answers the exploration question during the Exploration Phase', () => {
     const state = startGame()
     expect(gameReducer(state, { type: 'SET_EXPLORED', explored: false })).toBe(state)
+  })
+})
+
+describe('conditions between phases', () => {
+  const poisoned = (state, i) => gameReducer(state, { type: 'TOGGLE_HERO_CONDITION', heroId: state.heroes[i].id, condition: 'Poisoned' })
+  const next = (state, roll = 1) => gameReducer(state, { type: 'NEXT_PHASE', roll })
+
+  it('hurts a poisoned hero at the start of their turn', () => {
+    let state = poisoned(startGame(), 1)
+    state = next(next(next(state)))
+    expect(state.turn.heroIndex).toBe(1)
+    expect(state.heroes[1].hp).toBe(state.heroes[1].maxHp - 1)
+    expect(state.moment.kind).toBe('poison')
+  })
+
+  it('rolls 10 or more after the Hero Phase to end the poison', () => {
+    const state = poisoned(startGame(), 0)
+    expect(next(state, 9).heroes[0].conditions).toEqual(['Poisoned'])
+    expect(next(state, 10).heroes[0].conditions).toEqual([])
+  })
+
+  it('ends Dazed after the Hero Phase', () => {
+    const start = startGame()
+    const state = gameReducer(start, { type: 'TOGGLE_HERO_CONDITION', heroId: start.heroes[0].id, condition: 'Dazed' })
+    expect(state.heroes[0].conditions).toEqual(['Dazed'])
+    expect(next(state).heroes[0].conditions).toEqual([])
   })
 })
