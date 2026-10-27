@@ -1,4 +1,4 @@
-import DiceButton from './components/DiceButton.jsx'
+import { useEffect } from 'react'
 import HeroCard from './components/HeroCard.jsx'
 import MomentOverlay from './components/MomentOverlay.jsx'
 import MonsterList from './components/MonsterList.jsx'
@@ -10,6 +10,8 @@ import UndoButton from './components/UndoButton.jsx'
 import { Button, HpBar } from './components/ui.jsx'
 import { HERO_COLORS } from './data/heroes.js'
 import { PHASES } from './data/phases.js'
+import { randomNumbers } from './state/random.js'
+import { useCards } from './state/useCards.js'
 import { useDeviceId, useSeat, useSharedGame } from './state/useSharedGame.js'
 
 const TABLE_SEAT = 'table'
@@ -142,12 +144,11 @@ function PartyStrip({ heroes, exceptId }) {
 function HeroView({ state, dispatch, hero }) {
   const heroIndex = state.heroes.indexOf(hero)
   const myTurn = heroIndex === state.turn.heroIndex
-  // During your Hero Phase the turn guide lists your powers, so the hero card doesn't repeat them.
+  // During your Hero Phase the attack box lists your attack powers, so the hero card doesn't repeat them.
   const powersInTurnGuide = myTurn && PHASES[state.turn.phase].key === 'hero'
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4">
       {myTurn ? <TurnGuide state={state} dispatch={dispatch} /> : <WaitingBanner state={state} />}
-      <DiceButton heroId={hero.id} dispatch={dispatch} className="w-full" />
       <HeroCard
         hero={hero}
         isActive={myTurn}
@@ -167,7 +168,6 @@ function TableView({ state, dispatch }) {
   return (
     <div className="mx-auto max-w-6xl space-y-8 p-4">
       <TurnGuide state={state} dispatch={dispatch} />
-      <DiceButton heroId={state.heroes[state.turn.heroIndex].id} dispatch={dispatch} />
       <section>
         <h2 className="mb-3 font-display text-2xl font-bold text-zinc-100">Heroes</h2>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -202,6 +202,13 @@ export default function App() {
   const { state, connected, dispatch, undo, undoDepth, instance } = useSharedGame()
   const [seat, setSeat] = useSeat()
   const deviceId = useDeviceId()
+  const cards = useCards()
+
+  // A game from before the monster deck has monsters without their card; give them one.
+  const needsCards = state?.monsters.some((m) => !m.card && cards.monsters.some((c) => c.name.toLowerCase() === m.name.toLowerCase()))
+  useEffect(() => {
+    if (needsCards) dispatch({ type: 'ATTACH_MONSTER_CARDS', cards: cards.monsters })
+  }, [needsCards]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!state) return <Connecting />
 
@@ -234,7 +241,7 @@ export default function App() {
           dispatch={dispatch}
           deviceId={deviceId}
           onClaim={setSeat}
-          onDemo={(picks) => dispatch({ type: 'START_DEMO', picks })}
+          onDemo={(picks, monsterCards) => dispatch({ type: 'START_DEMO', picks, monsterCards, random: randomNumbers(128) })}
           watchOnly={seat === PROJECTOR_SEAT}
           onProjector={() => setSeat(PROJECTOR_SEAT)}
           onLeaveProjector={() => setSeat(null)}

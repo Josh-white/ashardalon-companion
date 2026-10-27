@@ -181,5 +181,77 @@
       "damage": "3",
       "text": "Placeholder daily power."
     }
+  ],
+  "monsters": [
+    {
+      "id": "example-goblin",
+      "name": "Example Goblin",
+      "copies": 3,
+      "ac": 13,
+      "hp": 1,
+      "xp": 1,
+      "attacks": [
+        {
+          "id": "spear",
+          "name": "Spear",
+          "bonus": 6,
+          "damage": 1
+        }
+      ],
+      "tactics": [
+        {
+          "when": "within1",
+          "move": "adjacent",
+          "attack": "spear",
+          "text": "Placeholder. Put the real monster cards in cards/cards.json on your own server."
+        },
+        {
+          "move": "toward",
+          "text": "Otherwise, it moves 1 tile toward the closest Hero."
+        }
+      ]
+    },
+    {
+      "id": "example-ogre",
+      "name": "Example Ogre",
+      "copies": 2,
+      "ac": 15,
+      "hp": 2,
+      "xp": 2,
+      "attacks": [
+        {
+          "id": "slam",
+          "name": "Slam",
+          "bonus": 7,
+          "damage": 1,
+          "conditions": [
+            "Dazed"
+          ]
+        },
+        {
+          "id": "rock",
+          "name": "Rock",
+          "bonus": 6,
+          "damage": 2,
+          "miss": 1
+        }
+      ],
+      "tactics": [
+        {
+          "when": "adjacent",
+          "attack": "slam",
+          "text": "Placeholder tactic."
+        },
+        {
+          "when": "within2",
+          "attack": "rock",
+          "text": "Placeholder tactic."
+        },
+        {
+          "move": "toward",
+          "text": "Placeholder tactic."
+        }
+      ]
+    }
   ]
 }

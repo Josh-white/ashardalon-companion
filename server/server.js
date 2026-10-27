@@ -50,7 +50,7 @@ export function loadCards(cardsFile, exampleFile) {
   try {
     return { source, ...normalizeCardFile(JSON.parse(readFileSync(file, 'utf8'))) }
   } catch (error) {
-    return { source, powers: [], abilities: [], problems: [`Could not read ${source === 'custom' ? 'cards.json' : 'the example cards'}: ${error.message}`] }
+    return { source, powers: [], abilities: [], monsters: [], problems: [`Could not read ${source === 'custom' ? 'cards.json' : 'the example cards'}: ${error.message}`] }
   }
 }
 
@@ -72,7 +72,7 @@ function serveStatic(staticDir, req, res) {
   createReadStream(file).pipe(res)
 }
 
-const NOT_UNDOABLE = new Set(['ROLL_DIE', 'CLAIM_HERO', 'RELEASE_HERO', 'SET_LOBBY_PLAYER', 'SET_LOBBY_PICK', 'SET_LOBBY_READY'])
+const NOT_UNDOABLE = new Set(['ROLL_DIE', 'ATTACH_MONSTER_CARDS', 'CLAIM_HERO', 'RELEASE_HERO', 'SET_LOBBY_PLAYER', 'SET_LOBBY_PICK', 'SET_LOBBY_READY'])
 
 export function startServer({
   port = Number(process.env.PORT ?? 3000),

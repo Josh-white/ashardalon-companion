@@ -1,4 +1,4 @@
-import { HERO_TEMPLATES } from './heroes.js'
+import { CONDITIONS, HERO_TEMPLATES } from './heroes.js'
 
 // "Attack +8 · Damage 1", to compare cards while choosing.
 export function cardStats(card) {
@@ -15,7 +15,7 @@ export function normalizeCardFile(data) {
   const powers = []
   const seen = new Set()
   const list = Array.isArray(data?.powers) ? data.powers : null
-  if (!list) return { powers, abilities: [], problems: ['The file needs a "powers" list.'] }
+  if (!list) return { powers, abilities: [], monsters: [], problems: ['The file needs a "powers" list.'] }
 
   list.forEach((card, i) => {
     const label = card?.name ? `"${card.name}"` : `power #${i + 1}`
@@ -44,7 +44,12 @@ export function normalizeCardFile(data) {
       suggested: card.suggested === true,
     })
   })
-  return { powers, abilities: normalizeAbilities(data?.heroes, problems), problems }
+  return {
+    powers,
+    abilities: normalizeAbilities(data?.heroes, problems),
+    monsters: normalizeMonsters(data?.monsters, problems),
+    problems,
+  }
 }
 
 // Hero card abilities, such as Keyleth's Healing Hands. Optional; `level` 2 means
@@ -74,4 +79,82 @@ function normalizeAbilities(list, problems) {
     }
   })
   return abilities
+}
+
+// What a monster's tactics can ask about the board, in the order a card checks them.
+export const TACTIC_CHECKS = ['adjacent', 'sameTile', 'within1', 'within2', 'aloneByUnexploredEdge']
+const MOVES = ['adjacent', 'toward']
+const wholeNumber = (value, min = 0) => Number.isInteger(value) && value >= min
+
+// Monster cards, for the virtual monster deck and the guided Villain Phase. Optional.
+// Each card lists its attacks and its tactics as steps: the first step whose `when`
+// is true happens, and a step without `when` is the "Otherwise".
+function normalizeMonsters(list, problems) {
+  if (list === undefined) return []
+  if (!Array.isArray(list)) {
+    problems.push('"monsters" should be a list.')
+    return []
+  }
+  const monsters = []
+  const seen = new Set()
+  list.forEach((card, i) => {
+    const label = card?.name ? `"${card.name}"` : `monster #${i + 1}`
+    if (!card || typeof card !== 'object') return problems.push(`${label} is not a card.`)
+    if (!card.id || typeof card.id !== 'string') return problems.push(`${label} needs an "id".`)
+    if (seen.has(card.id)) return problems.push(`${label} reuses the id "${card.id}".`)
+    if (!card.name || typeof card.name !== 'string') return problems.push(`${label} needs a "name".`)
+    for (const field of ['ac', 'hp', 'xp']) {
+      if (!wholeNumber(card[field], field === 'xp' ? 0 : 1)) return problems.push(`${label} needs a number for "${field}".`)
+    }
+    const attacks = []
+    for (const attack of Array.isArray(card.attacks) ? card.attacks : []) {
+      if (!attack?.id || !attack.name || !wholeNumber(attack.bonus) || !wholeNumber(attack.damage ?? 0)) {
+        return problems.push(`${label} has an attack that needs an "id", a "name", a "bonus" and a "damage".`)
+      }
+      attacks.push({
+        id: String(attack.id),
+        name: String(attack.name),
+        bonus: attack.bonus,
+        damage: attack.damage ?? 0,
+        miss: wholeNumber(attack.miss) ? attack.miss : 0,
+        conditions: (Array.isArray(attack.conditions) ? attack.conditions : []).filter((c) => CONDITIONS.includes(c)),
+      })
+    }
+    const tactics = []
+    for (const step of Array.isArray(card.tactics) ? card.tactics : []) {
+      if (step?.when !== undefined && !TACTIC_CHECKS.includes(step.when)) {
+        return problems.push(`${label} has a tactic with when "${step.when}"; use one of ${TACTIC_CHECKS.join(', ')}.`)
+      }
+      if (step.attack !== undefined && !attacks.some((a) => a.id === step.attack)) {
+        return problems.push(`${label} has a tactic that uses the attack "${step.attack}", which isn't on the card.`)
+      }
+      if (step.move !== undefined && !MOVES.includes(step.move)) {
+        return problems.push(`${label} has a tactic with move "${step.move}"; use one of ${MOVES.join(', ')}.`)
+      }
+      tactics.push({
+        when: step.when ?? null,
+        move: step.move ?? null,
+        attack: step.attack ?? null,
+        targets: step.targets === 'all' ? 'all' : 'one',
+        explore: step.explore === true,
+        text: typeof step.text === 'string' ? step.text : '',
+      })
+    }
+    if (tactics.length === 0) return problems.push(`${label} needs a "tactics" list.`)
+    seen.add(card.id)
+    monsters.push({
+      id: card.id,
+      name: card.name,
+      ac: card.ac,
+      hp: card.hp,
+      xp: card.xp,
+      copies: wholeNumber(card.copies, 1) ? card.copies : 1,
+      // Legion Devils come in threes: one card, three figures.
+      figures: wholeNumber(card.figures, 1) ? card.figures : 1,
+      special: typeof card.special === 'string' ? card.special : '',
+      attacks,
+      tactics,
+    })
+  })
+  return monsters
 }

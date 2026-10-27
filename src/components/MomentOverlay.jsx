@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { HERO_COLORS } from '../data/heroes.js'
 
-const SHOW_MS = { roll: 2200, crit: 3500, fumble: 3000, defeat: 3000, level: 3500, down: 3500 }
+const SHOW_MS = { roll: 2200, crit: 3500, fumble: 3000, defeat: 3000, level: 3500, down: 3500, spawn: 3000, monster: 4500, 'monster-down': 5000 }
 // A device that reconnects shouldn't replay a moment that is long over.
 const STALE_MS = 8000
 const ROLL_SPIN_MS = 900
@@ -13,6 +13,9 @@ const STYLES = {
   defeat: { icon: '⚔️', title: 'text-emerald-300', panel: 'border-emerald-500 bg-emerald-950/95' },
   level: { icon: '⭐', title: 'text-amber-300', panel: 'border-amber-400 bg-zinc-900/95 moment-glow' },
   down: { icon: '💀', title: 'text-red-300', panel: 'border-red-600 bg-red-950/95 moment-shake' },
+  spawn: { icon: '🐉', title: 'text-red-300', panel: 'border-red-700 bg-zinc-900/95' },
+  monster: { icon: '👹', title: 'text-red-300', panel: 'border-red-700 bg-zinc-900/95' },
+  'monster-down': { icon: '💀', title: 'text-red-300', panel: 'border-red-600 bg-red-950/95' },
 }
 
 function Die({ value }) {
@@ -56,7 +59,8 @@ export default function MomentOverlay({ moment, heroes, big = false }) {
   if (!visible) return null
   const style = STYLES[visible.kind] ?? STYLES.roll
   const hero = heroes.find((h) => h.id === visible.heroId)
-  const isRoll = visible.value != null
+  const rolls = visible.rolls ?? []
+  const isRoll = visible.value != null || rolls.length > 0
   // A roll's big reveal waits until the die stops spinning.
   const reveal = isRoll ? 'moment-reveal' : 'moment-pop'
 
@@ -67,7 +71,24 @@ export default function MomentOverlay({ moment, heroes, big = false }) {
           big ? 'min-w-[40vw] text-[3vw]' : 'min-w-72 text-2xl'
         }`}
       >
-        {isRoll ? (
+        {rolls.length > 0 ? (
+          // A monster attack: one die per hero it attacked, with the result under each.
+          <div className={`flex justify-center gap-[0.6em] ${rolls.length > 1 ? (big ? 'text-[5vw]' : 'text-5xl') : big ? 'text-[8vw]' : 'text-7xl'}`}>
+            {rolls.map((r) => {
+              // A monster's attack rolls against heroes; a hero's attack rolls against labeled monsters.
+              const target = r.label ? null : heroes.find((h) => h.id === r.heroId)
+              return (
+                <div key={r.heroId ?? r.monsterId}>
+                  <Die value={r.value} />
+                  <div className={`${reveal} mt-1 text-[0.3em] font-bold ${target ? HERO_COLORS[target.color].text : 'text-red-300'}`}>
+                    {r.label ?? target?.name}
+                  </div>
+                  <div className={`${reveal} text-[0.25em] ${r.hit ? 'text-red-300' : 'text-emerald-300'}`}>{r.outcome}</div>
+                </div>
+              )
+            })}
+          </div>
+        ) : isRoll ? (
           <div className={big ? 'text-[8vw]' : 'text-7xl'}>
             <Die value={visible.value} />
           </div>

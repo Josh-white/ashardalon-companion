@@ -14,23 +14,6 @@ export function Button({ variant = 'default', className = '', ...props }) {
   )
 }
 
-export function Stepper({ label, value, onChange, min = 0 }) {
-  return (
-    <label className="flex flex-col gap-1 text-sm text-zinc-400">
-      {label}
-      <div className="flex items-center gap-2">
-        <Button className="h-10 w-10 !px-0 text-xl" onClick={() => onChange(Math.max(min, value - 1))}>
-          −
-        </Button>
-        <span className="w-8 text-center text-xl font-bold text-zinc-100">{value}</span>
-        <Button className="h-10 w-10 !px-0 text-xl" onClick={() => onChange(value + 1)}>
-          +
-        </Button>
-      </div>
-    </label>
-  )
-}
-
 export function Chip({ active, onClick, children }) {
   return (
     <button
