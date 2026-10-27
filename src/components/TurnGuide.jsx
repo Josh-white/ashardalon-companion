@@ -2,7 +2,7 @@ import { HERO_COLORS, XP_TO_LEVEL_UP } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
 import { CurseNotes, PhaseChecks, DisableTraps, EncounterStep, EnvironmentBanner, PassMonsters, encountersLeft, TrapTurns } from './Encounters.jsx'
 import HeroAttack, { AttackAftermath } from './HeroAttack.jsx'
-import { Doors, RevealButtons } from './Adventure.jsx'
+import { Doors, EscapeNote, RevealButtons } from './Adventure.jsx'
 import MonsterTurns, { DrawMonsterButton, VillainTurns } from './MonsterTurns.jsx'
 import { rollD20 } from '../state/random.js'
 import { checksFor, phaseChecks } from '../state/game.js'
@@ -95,6 +95,7 @@ function HeroPhase({ state, hero, dispatch }) {
       )}
       <DisableTraps state={state} hero={hero} dispatch={dispatch} />
       <Doors state={state} hero={hero} dispatch={dispatch} />
+      <EscapeNote state={state} hero={hero} dispatch={dispatch} />
       <ExtraAttacks state={state} dispatch={dispatch} />
 
       {hero.level === 1 && state.turn.natural20 === hero.id && (
@@ -214,11 +215,18 @@ export default function TurnGuide({ state, dispatch }) {
   const color = HERO_COLORS[hero.color]
   const stepKey = `${round}-${heroIndex}-${phase}`
 
-  const { treasures } = useCards()
+  const { treasures, encounters } = useCards()
   const isLastPhase = phase === PHASES.length - 1
+  // An encounter card the turn still owes (or the black triangle question) has to come
+  // first, so a quick tap on Pass doesn't skip it. Only with the app's encounter deck.
+  const encounterOwed =
+    isLastPhase &&
+    (Boolean(state.encounterDeck) || encounters.length > 0) &&
+    ((state.turn.explored === true && state.turn.triangle === undefined) || encountersLeft(state, hero) > 0)
   // The turn can't pass while a treasure card waits to be drawn or handed out.
   const waiting =
     Boolean(state.encounter) ||
+    encounterOwed ||
     (isLastPhase && treasurePending(state, treasures)) ||
     phaseChecks(state, checksFor(current.key)).length > 0
   const nextHero = state.heroes[(heroIndex + 1) % state.heroes.length]
@@ -251,6 +259,9 @@ export default function TurnGuide({ state, dispatch }) {
       {current.key === 'exploration' && <ExplorationPhase state={state} hero={hero} dispatch={dispatch} />}
       {current.key === 'villain' && <VillainPhase key={stepKey} state={state} hero={hero} dispatch={dispatch} />}
 
+      {encounterOwed && !state.encounter && (
+        <p className="mt-4 text-right text-sm text-amber-300">Draw the encounter card before passing the turn.</p>
+      )}
       <div className="mt-6 flex items-center justify-between gap-3">
         <Button variant="ghost" onClick={() => dispatch({ type: 'PREVIOUS_PHASE' })}>
           ← Back

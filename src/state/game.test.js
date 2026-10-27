@@ -443,6 +443,19 @@ describe('conditions between phases', () => {
     expect(state.moment.kind).toBe('poison')
   })
 
+  it('hurts a poisoned hero who starts at 0 HP after the healing surge', () => {
+    let state = poisoned(startGame(), 1)
+    state = gameReducer(state, { type: 'ADJUST_HP', heroId: state.heroes[1].id, amount: -99 })
+    state = next(next(next(state)))
+    expect(state.heroes[1].hp).toBe(0)
+    state = gameReducer(state, { type: 'USE_SURGE', heroId: state.heroes[1].id })
+    expect(state.heroes[1].hp).toBe(state.heroes[1].surgeValue - 1)
+    // Only once: a second surge later in the turn doesn't hurt again.
+    state = gameReducer(state, { type: 'ADJUST_HP', heroId: state.heroes[1].id, amount: -99 })
+    state = gameReducer(state, { type: 'USE_SURGE', heroId: state.heroes[1].id })
+    expect(state.heroes[1].hp).toBe(state.heroes[1].surgeValue)
+  })
+
   it('rolls 10 or more after the Hero Phase to end the poison', () => {
     const state = poisoned(startGame(), 0)
     expect(next(state, 9).heroes[0].conditions).toEqual(['Poisoned'])
@@ -468,6 +481,7 @@ describe('encounter deck', () => {
     encounters: [
       { id: 'arrow', name: 'Arrow', type: 'event', attack: { bonus: 8, damage: 2, miss: 1, conditions: ['Poisoned'], targets: 'active' } },
       { id: 'heat', name: 'Heat', type: 'event', damageEach: 1, drawAnother: true },
+      { id: 'pounce', name: 'Pounce', type: 'event', damageIfMonsterOnTile: 2, drawMonster: true },
       { id: 'jinx', name: 'Jinx', type: 'curse', curse: { acPenalty: 4, attackPenalty: 2, removeRoll: { phase: 'hero', target: 10 } } },
       { id: 'bad-air', name: 'Bad Air', type: 'environment', trapPenalty: 4 },
       { id: 'still-air', name: 'Still Air', type: 'environment' },
@@ -529,6 +543,13 @@ describe('encounter deck', () => {
     const state = resolve(drawCard(startGame(), 'heat'))
     expect(state.heroes.every((h) => h.hp === h.maxHp - 1)).toBe(true)
     expect(state.turn.encountersOwed).toBe(1)
+  })
+
+  it('hurts the active hero only when a monster is on their tile', () => {
+    const state = drawCard(startGame(), 'pounce')
+    const hurt = gameReducer(state, { type: 'RESOLVE_ENCOUNTER', random: [], monsterCards: monsters, monsterOnTile: true })
+    expect(hurt.heroes.map((h) => h.maxHp - h.hp)).toEqual([2, 0])
+    expect(resolve(state).heroes.every((h) => h.hp === h.maxHp)).toBe(true)
   })
 
   it('keeps the turn from moving on while an encounter is out', () => {

@@ -155,6 +155,13 @@ function BeforeQuestion({ hero, effects, answers, setAnswers }) {
   return null
 }
 
+// "3 Miss: 1 Damage" → "3 damage, 1 on a miss".
+function damageLabel(text) {
+  const damage = powerNumber(text) ?? 0
+  const miss = powerNumber(/miss\D*(\d+)/i.exec(text ?? '')?.[1])
+  return `${damage} damage${miss ? `, ${miss} on a miss` : ''}`
+}
+
 const DISTANCE_LABELS = { adjacent: 'Next to me', within1: 'Within 1 tile', far: 'Farther' }
 
 // Magic weapons only help against monsters close enough, so the app asks how far each one is.
@@ -298,7 +305,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
                 >
                   <span className="block font-semibold text-zinc-100">{p.name}</span>
                   <span className="text-sm text-zinc-400">
-                    {p.card.attack} · {p.card.damage || '0'} damage{p.type === 'daily' ? ' · daily' : ''}
+                    {p.card.attack} · {damageLabel(p.card.damage)}{p.type === 'daily' ? ' · daily' : ''}
                   </span>
                 </button>
               ))}

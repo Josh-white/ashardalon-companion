@@ -405,6 +405,9 @@ function resolveEncounter(state, action) {
   if (card.damageEach > 0) {
     ;({ next, downed } = damageHeroes(next, next.heroes.map((h) => h.id), card.damageEach, card.name))
   }
+  if (card.damageIfMonsterOnTile > 0 && action.monsterOnTile && hero) {
+    ;({ next, downed } = damageHeroes(next, [hero.id], card.damageIfMonsterOnTile, card.name))
+  }
   if (card.damagePoisoned > 0) {
     const poisoned = next.heroes.filter((h) => h.conditions.includes('Poisoned')).map((h) => h.id)
     ;({ next, downed } = damageHeroes(next, poisoned, card.damagePoisoned, card.name))
@@ -912,7 +915,15 @@ function startTurn(state) {
     state = removeCurse(state, hero.id, curse.id, `${hero.name} is back from the ${curse.name}. Put ${hero.name} on any tile.`)
     state = withMoment(state, { kind: 'encounter', heroId: hero.id, title: `${hero.name} is back!`, detail: `${curse.name} is over. Put ${hero.name} on any tile.` })
   }
-  if (!hero || hero.hp === 0) return state
+  if (!hero) return state
+  // A hero who starts the turn at 0 HP spends a healing surge first; the poison and curse
+  // damage comes after that (USE_SURGE), so getting back up doesn't skip it.
+  if (hero.hp === 0) return { ...state, turn: { ...state.turn, startDamageDue: hero.id } }
+  return startDamage(state, hero)
+}
+
+// Poison and start-of-turn curse damage (Bloodlust).
+function startDamage(state, hero) {
   const poison = hero.conditions.includes('Poisoned') ? 1 : 0
   const curse = curseTotal(hero, 'startDamage')
   if (poison + curse === 0) return state
@@ -1598,7 +1609,10 @@ function reduce(state, action) {
       const healed = updateHero({ ...state, surges: state.surges - 1 }, hero.id, (h) => ({
         hp: Math.min(h.maxHp, h.surgeValue),
       }))
-      return withLog(healed, `${hero.name} used a healing surge.`)
+      const logged = withLog(healed, `${hero.name} used a healing surge.`)
+      if (state.turn.startDamageDue !== hero.id) return logged
+      const { startDamageDue: _, ...turn } = logged.turn
+      return startDamage({ ...logged, turn }, logged.heroes.find((h) => h.id === hero.id))
     }
 
     case 'TOGGLE_POWER':
@@ -1956,8 +1970,10 @@ function reduce(state, action) {
       // An encounter or treasure card has to be finished before the turn moves on.
       if (state.encounter || state.treasure) return state
       const nextIndex = (heroIndex + 1) % state.heroes.length
+      // Read-aloud text belongs to the turn it came up in; it doesn't stay on the projector.
+      const told = state.adventure?.story ? { ...state, adventure: { ...state.adventure, story: null } } : state
       return startTurn({
-        ...endPhaseCurses(state, state.heroes[heroIndex], 'villain', action.rolls),
+        ...endPhaseCurses(told, state.heroes[heroIndex], 'villain', action.rolls),
         turn: { heroIndex: nextIndex, phase: 0, round: nextIndex === 0 ? round + 1 : round },
       })
     }

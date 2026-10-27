@@ -346,6 +346,8 @@ function normalizeEncounters(list, problems) {
       drawMonster: card.drawMonster === true,
       damageEach: count(card.damageEach),
       damagePoisoned: count(card.damagePoisoned),
+      // Frenzied Leap: this much damage to the active hero when a monster is on their tile, instead of drawing one.
+      damageIfMonsterOnTile: count(card.damageIfMonsterOnTile),
       healMonster: count(card.healMonster),
       refreshDaily: card.refreshDaily === true,
       passMonsters: card.passMonsters === true,

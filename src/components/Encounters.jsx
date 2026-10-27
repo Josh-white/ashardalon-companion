@@ -219,6 +219,11 @@ function EncounterCard({ state, hero, dispatch }) {
   const { monsters: monsterCards } = useCards()
   const { card, attacked } = state.encounter
   const [markerChecked, setMarkerChecked] = useState(false)
+  // Frenzied Leap: null until the table says whether a monster is on the active hero's tile.
+  const [monsterOnTile, setMonsterOnTile] = useState(null)
+  const asksTile = card.damageIfMonsterOnTile > 0 && monsterOnTile === null
+  const resolve = (extra = {}) =>
+    dispatch({ type: 'RESOLVE_ENCOUNTER', monsterCards, random: randomNumbers(SHUFFLE_NUMBERS), monsterOnTile: monsterOnTile === true, ...extra })
   const placesMarker = card.type === 'hazard' || card.type === 'trap'
   // Ashardalon Breathes! does nothing (and is discarded) when Ashardalon isn't in play.
   const villainHere = villainInPlay(state, card)
@@ -277,7 +282,20 @@ function EncounterCard({ state, hero, dispatch }) {
               onAttack={(targets, tileGuarded) => dispatch({ type: 'ENCOUNTER_ATTACK', targets, tileGuarded })}
             />
           )}
-          {!needsAttack && (
+          {!needsAttack && asksTile && (
+            <div>
+              <p className="text-xl font-semibold text-zinc-100">Is a monster on {hero.name}'s tile?</p>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <Button variant="danger" className="py-3 text-xl" onClick={() => resolve({ monsterOnTile: true })}>
+                  Yes: {card.damageIfMonsterOnTile} damage
+                </Button>
+                <Button className="py-3 text-xl" onClick={() => setMonsterOnTile(false)}>
+                  No
+                </Button>
+              </div>
+            </div>
+          )}
+          {!needsAttack && !asksTile && (
             <>
               {card.drawMonster && card.filterMonsters && !state.encounter.filtered ? (
                 <Button
@@ -302,9 +320,7 @@ function EncounterCard({ state, hero, dispatch }) {
               <Button
                 variant="gold"
                 className="w-full py-3 text-lg"
-                onClick={() =>
-                  dispatch({ type: 'RESOLVE_ENCOUNTER', monsterCards, random: randomNumbers(SHUFFLE_NUMBERS) })
-                }
+                onClick={() => resolve()}
               >
                 {villainHere && card.returnToTop > 0 ? 'Done, shuffle it back in' : RESOLVE_LABELS[card.type](hero)}
               </Button>
@@ -550,7 +566,7 @@ export function EnvironmentBanner({ environment, className = '' }) {
   )
   return (
     <div className={`rounded-xl border border-emerald-800 bg-emerald-950/50 p-3 text-emerald-100 ${className}`}>
-      <span className="font-bold">🌋 Environment: {environment.name}.</span> <span className="text-emerald-200">{rule}</span>
+      <span className="font-bold">🌋 Environment: {environment.name}{/[.!?]$/.test(environment.name) ? '' : '.'}</span> <span className="text-emerald-200">{rule}</span>
     </div>
   )
 }
