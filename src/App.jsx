@@ -4,6 +4,7 @@ import HeroCard from './components/HeroCard.jsx'
 import MomentOverlay from './components/MomentOverlay.jsx'
 import MonsterList, { VillainList } from './components/MonsterList.jsx'
 import ProjectorView from './components/ProjectorView.jsx'
+import Recap from './components/Recap.jsx'
 import SeatPicker from './components/SeatPicker.jsx'
 import Setup from './components/Setup.jsx'
 import { TreasureStep } from './components/Treasure.jsx'
@@ -50,6 +51,13 @@ function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitchSeat })
           <Button variant="ghost" className="text-sm" onClick={() => dispatch({ type: 'END_GAME', result: 'won' })}>
             We won!
           </Button>
+          <Button
+            variant="ghost"
+            className="text-sm"
+            onClick={() => window.confirm('Did the party lose? This shows the end-of-game recap.') && dispatch({ type: 'END_GAME', result: 'lost' })}
+          >
+            We lost
+          </Button>
           <Button variant="ghost" className="text-sm" onClick={newGame}>
             New game
           </Button>
@@ -61,30 +69,6 @@ function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitchSeat })
         </p>
       )}
     </header>
-  )
-}
-
-function GameOver({ state, dispatch }) {
-  const won = state.status === 'won'
-  return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-zinc-950/90 p-6">
-      <div className="max-w-md rounded-3xl border border-zinc-800 bg-zinc-900 p-8 text-center">
-        <div className="text-6xl">{won ? '🏆' : '💀'}</div>
-        <h2 className={`mt-4 font-display text-4xl font-bold ${won ? 'text-amber-400' : 'text-red-400'}`}>
-          {won ? 'Victory!' : 'The party has fallen'}
-        </h2>
-        {won && state.adventure?.card.story.victory && <p className="mt-3 italic text-zinc-200">{state.adventure.card.story.victory}</p>}
-        <p className="mt-2 text-zinc-400">
-          {state.turn.round} rounds · {state.xp} XP left in the pool
-        </p>
-        <div className="mt-6 flex justify-center gap-3">
-          <Button onClick={() => dispatch({ type: 'RESUME' })}>Back to the game</Button>
-          <Button variant="gold" onClick={() => dispatch({ type: 'NEW_GAME' })}>
-            New game
-          </Button>
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -284,7 +268,7 @@ export default function App() {
         {banners}
         <ProjectorView state={state} onSwitchSeat={() => setSeat(null)} />
         <MomentOverlay moment={state.moment} heroes={state.heroes} big />
-        {(state.status === 'won' || state.status === 'lost') && <GameOver state={state} dispatch={dispatch} />}
+        {(state.status === 'won' || state.status === 'lost') && <Recap state={state} big />}
       </main>
     )
   }
@@ -310,7 +294,7 @@ export default function App() {
       />
       {myHero ? <HeroView state={state} dispatch={dispatch} hero={myHero} /> : <TableView state={state} dispatch={dispatch} />}
       <MomentOverlay moment={state.moment} heroes={state.heroes} />
-      {(state.status === 'won' || state.status === 'lost') && <GameOver state={state} dispatch={dispatch} />}
+      {(state.status === 'won' || state.status === 'lost') && <Recap state={state} dispatch={dispatch} />}
     </main>
   )
 }
