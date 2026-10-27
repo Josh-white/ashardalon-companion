@@ -37,7 +37,7 @@ export default function ProjectorView({ state, onSwitchSeat, sound }) {
           </div>
         </div>
         <div className="flex items-center gap-[1.5vw]">
-          <Art name={heroArt(activeHero.key)} className="w-[8vw] rounded-[1vw]" />
+          <Art name={heroArt(activeHero.key)} className="w-[8vw]" />
           <h1 className={`font-display text-[5vw] font-bold leading-tight ${color.text}`}>
             {activeHero.player || activeHero.name}'s turn
           </h1>
@@ -88,7 +88,7 @@ export default function ProjectorView({ state, onSwitchSeat, sound }) {
               }`}
             >
               <div className="flex items-center gap-[0.8vw]">
-                <Art name={heroArt(hero.key)} className={`w-[5vw] rounded-[0.8vw] ${down ? 'grayscale' : ''}`} />
+                <Art name={heroArt(hero.key)} className={`w-[5vw] ${down ? 'grayscale' : ''}`} />
                 <div className="min-w-0">
                   <div className={`font-display text-[2.4vw] font-bold leading-tight ${heroColor.text}`}>{hero.name}</div>
                   <div className="text-zinc-400">{hero.player}</div>
@@ -115,7 +115,7 @@ export default function ProjectorView({ state, onSwitchSeat, sound }) {
         <section className="flex flex-wrap gap-[1.2vw]">
           {activeVillains(state).map((villain) => (
             <div key={villain.id} className="flex min-w-[30vw] gap-[1vw] rounded-[1.2vw] border-2 border-fuchsia-600 bg-fuchsia-950/40 p-[1vw]">
-              <Art name={monsterArt(villain)} className="w-[9vw] rounded-[1vw]" />
+              <Art name={monsterArt(villain)} className="w-[9vw]" />
               <div className="flex-1">
                 <div className="text-[1.2vw] font-semibold uppercase tracking-widest text-fuchsia-400">👑 Villain</div>
                 <div className="font-display text-[2.6vw] font-bold text-fuchsia-200">{villain.enraged ? `Enraged ${villain.name}` : villain.fullName}</div>
@@ -140,7 +140,7 @@ export default function ProjectorView({ state, onSwitchSeat, sound }) {
               return (
                 <div key={monster.id} className="rounded-[1.2vw] border border-red-900/70 bg-zinc-900 p-[1vw]">
                   <div className="flex items-center gap-[0.8vw]">
-                    <Art name={monsterArt(monster)} className="w-[5vw] rounded-[0.8vw]" />
+                    <Art name={monsterArt(monster)} className="w-[5vw]" />
                     <div className="min-w-0">
                       <div className="font-display text-[2vw] font-bold leading-tight text-red-300">{monster.name}</div>
                       <div className="text-zinc-400">{owner ? `${owner.name}'s card` : ''}</div>

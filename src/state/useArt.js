@@ -30,11 +30,13 @@ export function useArt() {
   return art
 }
 
-export const artUrl = (art, name) => (name && art[name] ? `/art/${name}.jpg?v=${art[name]}` : null)
+export const artUrl = (art, name) => (name && art[name] ? `/art/${name}.${art[name].ext}?v=${art[name].v}` : null)
 
-// Saves a cropped picture to the Pi (or takes it away with null).
+// Saves a cropped picture to the Pi (or takes it away with null). A PNG keeps
+// a token's see-through corners; anything else is saved as a JPEG.
 export async function saveArt(name, blob) {
-  const res = await fetch(`/art/${name}.jpg`, blob ? { method: 'PUT', body: blob, headers: { 'Content-Type': 'image/jpeg' } } : { method: 'DELETE' })
+  const ext = blob?.type === 'image/png' ? 'png' : 'jpg'
+  const res = await fetch(`/art/${name}.${ext}`, blob ? { method: 'PUT', body: blob, headers: { 'Content-Type': blob.type } } : { method: 'DELETE' })
   if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`)
   publish(await res.json())
 }
