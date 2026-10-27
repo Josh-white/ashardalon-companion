@@ -356,6 +356,18 @@ describe('hero attacks', () => {
     expect(attack(state, 15, 'daily')).toBe(state)
   })
 
+  it('deals a power\'s miss damage on a miss', () => {
+    const state = attack(setup([ogre], { id: 'smite', name: 'Smite', attack: '+9', damage: '3 (Miss: 1)' }), 2)
+    expect(state.monsters[0].hp).toBe(1)
+  })
+
+  it('gives monsters from before the deck their card, matched by name', () => {
+    let state = gameReducer(startGame(), { type: 'ADD_MONSTER', name: 'ogre', hp: 2, xp: 2, ownerId: startGame().heroes[0].id })
+    state = gameReducer(state, { type: 'ATTACH_MONSTER_CARDS', cards: [ogre] })
+    expect(state.monsters[0]).toMatchObject({ ac: 14, hp: 2, card: { attacks: [{ id: 'slam' }] } })
+    expect(gameReducer(state, { type: 'ATTACH_MONSTER_CARDS', cards: [ogre] })).toBe(state)
+  })
+
   it('needs a power with an attack number', () => {
     const state = setup([ogre], { id: 'heal', name: 'Heal', attack: '', damage: '' })
     expect(attack(state, 15)).toBe(state)

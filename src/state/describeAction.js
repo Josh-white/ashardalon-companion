@@ -36,6 +36,8 @@ export function describeAction(state, action) {
       const power = hero?.powers.find((p) => p.id === action.powerId)
       return power ? `${hero.name}'s ${power.name}` : 'Hero attack'
     }
+    case 'ATTACH_MONSTER_CARDS':
+      return 'Monster cards'
     case 'SET_EXPLORED':
       return action.explored ? 'Exploring' : 'Not exploring'
     case 'DEFEAT_MONSTER':

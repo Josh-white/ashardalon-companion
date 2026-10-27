@@ -192,6 +192,8 @@ function heroAttack(state, action) {
   const power = hero?.powers.find((p) => p.id === action.powerId)
   const bonus = powerNumber(power?.card?.attack)
   const damage = powerNumber(power?.card?.damage) ?? 0
+  // "3 (Miss: 1)": some powers still hurt on a miss.
+  const miss = powerNumber(/miss\D*(\d+)/i.exec(power?.card?.damage ?? '')?.[1]) ?? 0
   const targets = (Array.isArray(action.targets) ? action.targets : []).filter(
     (t) => state.monsters.some((m) => m.id === t.monsterId && m.ac) && Number.isInteger(t.roll) && t.roll >= 1 && t.roll <= 20,
   )
@@ -206,8 +208,9 @@ function heroAttack(state, action) {
     const monster = next.monsters.find((m) => m.id === monsterId)
     const total = roll + bonus
     const hit = total >= monster.ac
-    const hp = hit ? damageMonster(monster, damage) : monster.hp
-    const outcome = hit ? (damage > 0 ? `Hit! ${damage} damage` : 'Hit!') : 'Miss!'
+    const dealt = hit ? damage : miss
+    const hp = dealt > 0 ? damageMonster(monster, dealt) : monster.hp
+    const outcome = hit ? (damage > 0 ? `Hit! ${damage} damage` : 'Hit!') : miss > 0 ? `Miss, but ${miss} damage` : 'Miss!'
     rolls.push({ monsterId, label: monster.name, value: roll, total, ac: monster.ac, hit, outcome })
     next = withLog(
       next,
@@ -501,6 +504,21 @@ export function gameReducer(state, action) {
 
     case 'HERO_ATTACK':
       return heroAttack(state, action)
+
+    case 'ATTACH_MONSTER_CARDS': {
+      // Monsters added before the deck existed get their card, so they can take guided
+      // turns and be attacked against their AC. Matched by name.
+      const cards = Array.isArray(action.cards) ? action.cards : []
+      let changed = false
+      const monsters = state.monsters.map((monster) => {
+        const card = !monster.card && cards.find((c) => c.name.toLowerCase() === monster.name.toLowerCase())
+        if (!card) return monster
+        changed = true
+        const { id, hp, maxHp, ownerId, conditions } = monster
+        return { ...monsterFromCard(card, ownerId), id, hp: Math.min(hp, card.hp * (card.figures ?? 1)), maxHp: Math.max(maxHp, card.hp), conditions }
+      })
+      return changed ? { ...state, monsters } : state
+    }
 
     case 'SET_EXPLORED': {
       // The Exploration Phase's question: is the hero on an unexplored edge? With no

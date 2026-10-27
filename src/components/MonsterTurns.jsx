@@ -270,8 +270,11 @@ export default function MonsterTurns({ state, dispatch, hero }) {
                   Take its turn
                 </Button>
               ) : (
-                // Added by hand, so the app doesn't know its tactics.
-                <Button onClick={() => markDone(monster)}>Done (use its card)</Button>
+                // The app has no card for it, so it's played from the physical card.
+                <span className="flex items-center gap-2 text-right text-sm text-zinc-400">
+                  Play it from its card
+                  <Button onClick={() => markDone(monster)}>Done</Button>
+                </span>
               )}
             </li>
           ))}

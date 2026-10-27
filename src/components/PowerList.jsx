@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { cardStats } from '../data/cards.js'
+import { powerNumber } from '../state/game.js'
 import { useCards } from '../state/useCards.js'
 
 export function PowerTile({ power, onToggle }) {
@@ -75,8 +76,8 @@ function PowerPicker({ hero, power, options, dispatch }) {
   )
 }
 
-// tilesHidden: the turn guide is already showing this hero's powers, so only an
-// empty slot's picker shows here.
+// tilesHidden: the turn guide's attack box is already showing this hero's attack
+// powers, so only the others (utilities, used dailies) and empty slots show here.
 export default function PowerList({ hero, dispatch, tilesHidden = false }) {
   const cards = useCards()
   // A card picked in another slot isn't offered again.
@@ -85,7 +86,8 @@ export default function PowerList({ hero, dispatch, tilesHidden = false }) {
       (c) => c.hero === hero.key && c.type === power.type && !hero.powers.some((p) => p.card?.id === c.id),
     )
   const needsPick = (power) => !power.card && optionsFor(power).length > 0
-  const shown = hero.powers.filter((power) => !tilesHidden || needsPick(power))
+  const inAttackBox = (power) => !power.used && powerNumber(power.card?.attack) !== null
+  const shown = hero.powers.filter((power) => !tilesHidden || needsPick(power) || !inAttackBox(power))
   if (shown.length === 0) return null
 
   return (

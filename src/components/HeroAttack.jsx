@@ -19,6 +19,7 @@ export default function HeroAttack({ state, hero, dispatch }) {
   const [chosen, setChosen] = useState([])
   const [results, setResults] = useState(null)
   const power = powers.find((p) => p.id === powerId)
+  const unknownAc = state.monsters.find((m) => chosen.includes(m.id) && !m.ac)
 
   if (state.monsters.length === 0 && !results) {
     return <p className="mt-4 rounded-xl bg-zinc-950/50 p-3 text-zinc-400">No monsters to attack right now.</p>
@@ -125,12 +126,12 @@ export default function HeroAttack({ state, hero, dispatch }) {
                   <p className="mt-1 whitespace-pre-line">{power.card.text}</p>
                 </details>
               )}
-              <Button
-                variant="gold"
-                className="w-full py-4 text-xl"
-                disabled={chosen.length === 0 || chosen.some((id) => !state.monsters.find((m) => m.id === id)?.ac)}
-                onClick={roll}
-              >
+              {unknownAc && (
+                <p className="text-amber-300">
+                  The app doesn't know the {unknownAc.name}'s AC. Roll the die yourself and use its card.
+                </p>
+              )}
+              <Button variant="gold" className="w-full py-4 text-xl" disabled={chosen.length === 0 || Boolean(unknownAc)} onClick={roll}>
                 🎲 Roll {power.name} ({power.card.attack})
               </Button>
             </>

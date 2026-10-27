@@ -3,7 +3,6 @@ import { HERO_COLORS, XP_TO_CANCEL_ENCOUNTER, XP_TO_LEVEL_UP } from '../data/her
 import { PHASES } from '../data/phases.js'
 import HeroAttack from './HeroAttack.jsx'
 import MonsterTurns, { DrawMonsterButton } from './MonsterTurns.jsx'
-import { PowerTile } from './PowerList.jsx'
 import { Button } from './ui.jsx'
 
 // Each phase asks only what the app can't see for itself. The checklist each phase
@@ -50,25 +49,6 @@ function HeroPhase({ state, hero, dispatch }) {
         </Note>
       )}
       <Note>Move and attack, attack and move, or move twice.</Note>
-
-      {/* The hero's chosen powers, right where the Hero Phase asks for an attack. Tap a
-          daily or utility to flip it over once it's used. */}
-      {hero.powers.length > 0 && (
-        <div className="mt-5">
-          <h3 className="font-display text-xl font-bold text-zinc-200">{hero.name}'s powers</h3>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            {[...hero.powers]
-              .sort((a, b) => Number(a.used) - Number(b.used))
-              .map((power) => (
-                <PowerTile
-                  key={power.id}
-                  power={power}
-                  onToggle={() => dispatch({ type: 'TOGGLE_POWER', heroId: hero.id, powerId: power.id })}
-                />
-              ))}
-          </div>
-        </div>
-      )}
 
       <HeroAttack state={state} hero={hero} dispatch={dispatch} />
 
