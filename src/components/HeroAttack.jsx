@@ -64,9 +64,13 @@ export default function HeroAttack({ state, hero, dispatch }) {
               </li>
             ))}
           </ul>
-          <Button className="w-full" onClick={reset}>
-            Attack again
-          </Button>
+          {hero.conditions.includes('Dazed') ? (
+            <p className="text-amber-300">{hero.name} is Dazed, so that was the one action this turn.</p>
+          ) : (
+            <Button className="w-full" onClick={reset}>
+              Attack again
+            </Button>
+          )}
         </>
       ) : (
         <>

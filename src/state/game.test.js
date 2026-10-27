@@ -31,8 +31,9 @@ describe('heroes', () => {
   })
 
   it('levels up once for 5 XP', () => {
-    let state = { ...startGame(), xp: 6 }
+    let state = startGame()
     const hero = state.heroes[0]
+    state = { ...state, xp: 6, turn: { ...state.turn, natural20: hero.id } }
     state = gameReducer(state, { type: 'LEVEL_UP', heroId: hero.id })
     expect(state.heroes[0].level).toBe(2)
     expect(state.heroes[0].maxHp).toBe(hero.maxHp + 2)
@@ -41,6 +42,13 @@ describe('heroes', () => {
     expect(state.heroes[0].powers.filter((p) => p.type === 'daily')).toHaveLength(2)
     expect(state.xp).toBe(1)
     expect(gameReducer(state, { type: 'LEVEL_UP', heroId: hero.id })).toBe(state)
+  })
+
+  it('only levels up after that hero rolls a natural 20 this turn', () => {
+    const state = { ...startGame(), xp: 6 }
+    expect(gameReducer(state, { type: 'LEVEL_UP', heroId: state.heroes[0].id })).toBe(state)
+    const other = { ...state, turn: { ...state.turn, natural20: state.heroes[1].id } }
+    expect(gameReducer(other, { type: 'LEVEL_UP', heroId: state.heroes[0].id })).toBe(other)
   })
 })
 
@@ -109,7 +117,8 @@ describe('big moments', () => {
   })
 
   it('celebrates defeated monsters and level-ups', () => {
-    let state = { ...startGame(), xp: 5 }
+    let state = startGame()
+    state = { ...state, xp: 5, turn: { ...state.turn, natural20: state.heroes[0].id } }
     state = gameReducer(state, { type: 'ADD_MONSTER', name: 'Snake', hp: 1, xp: 1, ownerId: state.heroes[0].id })
     state = gameReducer(state, { type: 'DEFEAT_MONSTER', monsterId: state.monsters[0].id })
     expect(state.moment).toMatchObject({ kind: 'defeat', title: 'Snake defeated!' })
@@ -356,6 +365,14 @@ describe('hero attacks', () => {
     expect(state.xp).toBe(2)
     expect(state.monsterDeck.discard).toEqual([])
     expect(state.moment).toMatchObject({ kind: 'defeat', detail: expect.stringMatching(/treasure/) })
+  })
+
+  it('remembers a natural 20 so the hero can level up, until the next turn', () => {
+    expect(attack(setup(), 19).turn.natural20).toBeUndefined()
+    let state = attack(setup(), 20)
+    expect(state.turn.natural20).toBe(state.heroes[0].id)
+    for (let i = 0; i < 3; i++) state = gameReducer(state, { type: 'NEXT_PHASE' })
+    expect(state.turn.natural20).toBeUndefined()
   })
 
   it('takes one Legion Devil figure at a time', () => {

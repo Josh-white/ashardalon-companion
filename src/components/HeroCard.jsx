@@ -3,7 +3,8 @@ import { useCards } from '../state/useCards.js'
 import PowerList from './PowerList.jsx'
 import { Button, Chip, HpBar } from './ui.jsx'
 
-export default function HeroCard({ hero, isActive, xp, surges, dispatch, powersInTurnGuide = false }) {
+// natural20: this hero rolled a natural 20 on an attack this turn, the one time it can level up.
+export default function HeroCard({ hero, isActive, xp, surges, dispatch, powersInTurnGuide = false, natural20 = false }) {
   const color = HERO_COLORS[hero.color]
   const down = hero.hp === 0
   const abilities = (useCards().abilities ?? []).filter((a) => a.hero === hero.key && a.level <= hero.level)
@@ -85,8 +86,8 @@ export default function HeroCard({ hero, isActive, xp, surges, dispatch, powersI
           <Button
             variant="ghost"
             className="text-sm"
-            disabled={xp < XP_TO_LEVEL_UP}
-            title="Roll a natural 20 and spend 5 XP, then flip your hero card"
+            disabled={!natural20 || xp < XP_TO_LEVEL_UP}
+            title="Roll a natural 20 on an attack and spend 5 XP, then flip your hero card"
             onClick={() => dispatch({ type: 'LEVEL_UP', heroId: hero.id })}
           >
             Level up (5 XP)

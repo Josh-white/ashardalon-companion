@@ -60,10 +60,20 @@ function HeroPhase({ state, hero, dispatch }) {
 
       <HeroAttack state={state} hero={hero} dispatch={dispatch} />
 
-      {hero.level === 1 && state.xp >= XP_TO_LEVEL_UP && (
+      {hero.level === 1 && state.turn.natural20 === hero.id && (
         <Note tone="good">
-          <p>Rolled a natural 20 this turn? Spend {XP_TO_LEVEL_UP} XP to reach level 2.</p>
-          <Button variant="gold" className="mt-2" onClick={() => dispatch({ type: 'LEVEL_UP', heroId: hero.id })}>
+          <p>
+            Natural 20!{' '}
+            {state.xp >= XP_TO_LEVEL_UP
+              ? `Spend ${XP_TO_LEVEL_UP} XP to reach level 2.`
+              : `Leveling up takes ${XP_TO_LEVEL_UP} XP, and the party has ${state.xp}.`}
+          </p>
+          <Button
+            variant="gold"
+            className="mt-2"
+            disabled={state.xp < XP_TO_LEVEL_UP}
+            onClick={() => dispatch({ type: 'LEVEL_UP', heroId: hero.id })}
+          >
             Level up
           </Button>
         </Note>

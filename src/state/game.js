@@ -250,6 +250,8 @@ function heroAttack(state, action) {
   }
   const natural20 = rolls.some((r) => r.value === 20)
   const canLevel = natural20 && hero.level === 1 && next.xp >= XP_TO_LEVEL_UP
+  // A natural 20 on an attack is what lets a hero level up this turn.
+  if (natural20) next = { ...next, turn: { ...next.turn, natural20: hero.id } }
   const treasure = defeated.length > 0 && !next.turn.treasureDrawn
   if (treasure) next = { ...next, turn: { ...next.turn, treasureDrawn: true } }
   const details = [
@@ -525,7 +527,7 @@ export function gameReducer(state, action) {
 
     case 'LEVEL_UP': {
       const hero = state.heroes.find((h) => h.id === action.heroId)
-      if (!hero || hero.level >= 2 || state.xp < XP_TO_LEVEL_UP) return state
+      if (!hero || hero.level >= 2 || state.xp < XP_TO_LEVEL_UP || state.turn.natural20 !== hero.id) return state
       const leveled = updateHero({ ...state, xp: state.xp - XP_TO_LEVEL_UP }, hero.id, (h) => ({
         level: 2,
         maxHp: h.maxHp + LEVEL_UP_HP_BONUS,

@@ -156,6 +156,7 @@ function HeroView({ state, dispatch, hero }) {
         surges={state.surges}
         dispatch={dispatch}
         powersInTurnGuide={powersInTurnGuide}
+        natural20={state.turn.natural20 === hero.id}
       />
       <MonsterList state={state} dispatch={dispatch} ownerId={hero.id} />
       <PartyStrip heroes={state.heroes} exceptId={hero.id} />
@@ -180,6 +181,7 @@ function TableView({ state, dispatch }) {
               surges={state.surges}
               dispatch={dispatch}
               powersInTurnGuide={i === state.turn.heroIndex && PHASES[state.turn.phase].key === 'hero'}
+              natural20={state.turn.natural20 === hero.id}
             />
           ))}
         </div>
