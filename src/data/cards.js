@@ -243,6 +243,8 @@ function normalizeVillains(list, problems) {
       special: text(card.special),
       // What to do when it's put on the board (Ashardalon's breath card).
       onPlace: text(card.onPlace),
+      // An adventure encounter card (by id) shuffled into the top 3 of the encounter deck when it appears.
+      addEncounter: text(card.addEncounter),
       types: (Array.isArray(card.types) ? card.types : []).filter((t) => typeof t === 'string'),
       attacks,
       tactics,
@@ -254,8 +256,9 @@ function normalizeVillains(list, problems) {
 
 export const ENCOUNTER_TYPES = ['event', 'curse', 'environment', 'hazard', 'trap']
 // Who an encounter or trap attacks: the active hero, the heroes on the active hero's
-// tile, the heroes within 1 tile of the active hero, every hero, or the heroes on the trap's tile.
-export const ENCOUNTER_TARGETS = ['active', 'activeTile', 'within1', 'all', 'trapTile']
+// tile, the heroes within 1 tile of the active hero, every hero, the heroes on the trap's tile,
+// or the heroes within 1 tile of the card's villain (Ashardalon Breathes!).
+export const ENCOUNTER_TARGETS = ['active', 'activeTile', 'within1', 'all', 'trapTile', 'villainWithin1']
 const CURSE_PHASES = ['hero', 'exploration', 'villain', 'action']
 const conditionList = (list) => (Array.isArray(list) ? list : []).filter((c) => CONDITIONS.includes(c))
 
@@ -322,6 +325,13 @@ function normalizeEncounters(list, problems) {
       passMonsters: card.passMonsters === true,
       filterMonsters: typeof card.filterMonsters === 'string' ? card.filterMonsters : '',
       trapPenalty: count(card.trapPenalty),
+      // Adventure cards stay out of the deck until something puts them in (a villain arriving).
+      adventure: card.adventure === true,
+      noCancel: card.noCancel === true,
+      // The villain the card is about (by id): when it isn't in play, the card is just discarded.
+      villain: typeof card.villain === 'string' ? card.villain : '',
+      // Shuffled back in among the top cards of the deck instead of discarded.
+      returnToTop: count(card.returnToTop),
       curse: curse && {
         acPenalty: count(curse.acPenalty),
         attackPenalty: count(curse.attackPenalty),
