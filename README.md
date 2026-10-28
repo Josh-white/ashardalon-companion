@@ -36,7 +36,7 @@ read -rsp "Paste ElevenLabs key: " K; echo; printf 'ELEVENLABS_API_KEY=%s\n' "$K
 docker compose up -d --build
 ```
 
-Only the Pi talks to ElevenLabs, and every line it has spoken is saved in the `game-data` volume, so repeats are free. Optional `.env` settings: `ELEVENLABS_VOICE_ID` (default: George) and `ELEVENLABS_MODEL` (default: `eleven_multilingual_v2`; `eleven_flash_v2_5` costs half as much). The narrator follows the projector's sound switch and waits for the sound effects to finish before it speaks. Browsers only play sound after a tap, so the projector asks for one if it needs it.
+Only the Pi talks to ElevenLabs, and every line it has spoken is saved in the `game-data` volume, so repeats are free. It uses a small cast: a storyteller (George) for the story, tiles and turns, a herald (Alice) for natural 20s, treasure and victories, a menacing voice (Callum) for monsters and bad news, and a gravelly villain (Clyde) who speaks for each villain. Optional `.env` settings: `ELEVENLABS_VOICE_ID`, `ELEVENLABS_VOICE_HERALD`, `ELEVENLABS_VOICE_DANGER` and `ELEVENLABS_VOICE_VILLAIN` (a voice id from your ElevenLabs voice library each) and `ELEVENLABS_MODEL` (default: `eleven_multilingual_v2`; `eleven_flash_v2_5` costs half as much). The narrator follows the projector's sound switch and waits for the sound effects to finish before it speaks. Browsers only play sound after a tap, so the projector asks for one if it needs it.
 
 ## Run it on the Raspberry Pi
 

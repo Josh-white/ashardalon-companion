@@ -1,4 +1,4 @@
-// The narrator's voice. The projector asks for a line with GET /narrate?text=...,
+// The narrator's voices. The projector asks for a line with GET /narrate?voice=herald&text=...,
 // and this turns it into speech with ElevenLabs. The API key stays here on the
 // Pi (ELEVENLABS_API_KEY in .env); no browser ever sees it. Each line is saved
 // as an mp3, so a line heard before ("A Kobold appears!") costs nothing again.
@@ -6,8 +6,22 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-// "George", a warm storyteller from the ElevenLabs voice library.
-export const DEFAULT_VOICE = 'JBFqnCBsd6RMkjVDRZzb'
+// The cast, from the ElevenLabs voice library. Each can be swapped with a voice id
+// in .env: ELEVENLABS_VOICE_ID (narrator), ELEVENLABS_VOICE_HERALD, _DANGER, _VILLAIN.
+export const DEFAULT_VOICES = {
+  narrator: 'JBFqnCBsd6RMkjVDRZzb', // George: warm storyteller
+  herald: 'Xb7hH8MSUJpSv4BDjhvA', // Alice: bright, confident; cheers the heroes on
+  danger: 'N2lVS1w4EtoT3dr4eOWO', // Callum: husky and menacing; monsters and bad news
+  villain: '2EiwWnXFnvU5JabPnv8n', // Clyde: gravelly; villains speak for themselves
+}
+export const DEFAULT_VOICE = DEFAULT_VOICES.narrator
+
+const castFromEnv = (env) => ({
+  narrator: env.ELEVENLABS_VOICE_ID || DEFAULT_VOICES.narrator,
+  herald: env.ELEVENLABS_VOICE_HERALD || DEFAULT_VOICES.herald,
+  danger: env.ELEVENLABS_VOICE_DANGER || DEFAULT_VOICES.danger,
+  villain: env.ELEVENLABS_VOICE_VILLAIN || DEFAULT_VOICES.villain,
+})
 export const DEFAULT_MODEL = 'eleven_multilingual_v2'
 // Longer than any line the projector sends (the longest adventure story is
 // about 750 characters); a guard against running up the bill.
@@ -15,7 +29,7 @@ export const MAX_TEXT = 1200
 
 export function createNarrator({
   apiKey = process.env.ELEVENLABS_API_KEY || null,
-  voice = process.env.ELEVENLABS_VOICE_ID || DEFAULT_VOICE,
+  voices = castFromEnv(process.env),
   model = process.env.ELEVENLABS_MODEL || DEFAULT_MODEL,
   cacheDir,
   fetchSpeech = globalThis.fetch,
@@ -23,7 +37,7 @@ export function createNarrator({
   // Lines being fetched right now, so two screens asking at once cost one call.
   const pending = new Map()
 
-  const speak = async (text) => {
+  const speak = async (text, voice) => {
     const file = join(cacheDir, `${createHash('sha1').update(`${voice}|${model}|${text}`).digest('hex')}.mp3`)
     if (existsSync(file)) return readFileSync(file)
     if (pending.has(file)) return pending.get(file)
@@ -73,7 +87,10 @@ export function createNarrator({
       res.writeHead(413, { 'Content-Type': 'text/plain' }).end('Line too long')
       return true
     }
-    speak(text).then(
+    // Only the cast's roles, so a page can't ask for any voice it likes.
+    const role = url.searchParams.get('voice')
+    const voice = Object.hasOwn(voices, role ?? '') ? voices[role] : voices.narrator
+    speak(text, voice).then(
       (audio) => res.writeHead(200, { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'public, max-age=31536000, immutable' }).end(audio),
       (error) => {
         console.error('Narrator:', error.message)

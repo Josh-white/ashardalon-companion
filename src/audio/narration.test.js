@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { momentLine, narrationFor } from './narration.js'
+import { momentLines, narrationFor as linesFor } from './narration.js'
+
+// Most tests only care about the words; the cast has its own test below.
+const momentLine = (moment, state) => momentLines(moment, state)[0]?.text ?? null
+const narrationFor = (...args) => linesFor(...args).map((line) => line.text)
 
 const heroes = [
   { id: 'h1', name: 'Keyleth', player: 'Sam' },
@@ -61,6 +65,19 @@ describe('narrator lines', () => {
     expect(narrationFor(game({ adventure: adventure(exit) }), game({ adventure: adventure(exit) }), NOW)).toEqual([])
     const won = { id: 's3', title: 'Victory!', text: 'You escaped the dungeon!' }
     expect(narrationFor(game({ adventure: adventure(exit) }), game({ status: 'won', adventure: adventure(won) }), NOW)).toEqual(['You escaped the dungeon!'])
+  })
+
+  it('gives each kind of line its own voice', () => {
+    const villains = [{ id: 'v1', name: 'Meerak', fullName: 'Meerak the Kobold Dragonlord' }]
+    const voices = (moment, state = game()) => momentLines(moment, state).map((line) => line.voice)
+    expect(voices({ kind: 'crit', heroId: 'h1', value: 20, title: 'NATURAL 20!' })).toEqual(['herald'])
+    expect(voices({ kind: 'treasure', title: 'Potion of Healing' })).toEqual(['herald'])
+    expect(voices({ kind: 'spawn', title: 'A Kobold appears!' })).toEqual(['danger'])
+    expect(voices({ kind: 'down', title: 'Keyleth is down!' })).toEqual(['danger'])
+    expect(voices({ kind: 'encounter', title: 'Hall of Spiders' })).toEqual(['narrator'])
+    // A villain is announced, then speaks for itself.
+    expect(voices({ kind: 'spawn', title: 'Meerak the Kobold Dragonlord appears!' }, game({ villains }))).toEqual(['narrator', 'villain'])
+    expect(voices({ kind: 'spawn', title: 'The Meerak is enraged!' }, game({ villains }))).toEqual(['narrator', 'villain'])
   })
 
   it('cheers a win', () => {

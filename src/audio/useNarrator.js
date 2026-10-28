@@ -41,7 +41,7 @@ export function useNarrator(state, on) {
     }
     player.onended = done
     player.onerror = done
-    player.src = `/narrate?text=${encodeURIComponent(line)}`
+    player.src = `/narrate?voice=${line.voice}&text=${encodeURIComponent(line.text)}`
     player.play().then(
       () => setBlocked(false),
       (error) => {

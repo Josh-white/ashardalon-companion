@@ -2,7 +2,7 @@ import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createNarrator } from './narrator.js'
+import { createNarrator, DEFAULT_VOICES } from './narrator.js'
 import { startServer } from './server.js'
 
 describe('narrator endpoint', () => {
@@ -60,6 +60,19 @@ describe('narrator endpoint', () => {
     await fetch(`${base}/narrate?text=${encodeURIComponent('A Kobold appears!')}`)
     expect(calls).toHaveLength(1)
     expect(readdirSync(join(dir, 'narration'))).toHaveLength(1)
+  })
+
+  it('speaks each role in its own voice, and only the cast', async () => {
+    const base = await start('secret-key')
+    await fetch(`${base}/narrate?voice=villain&text=Hello`)
+    await fetch(`${base}/narrate?voice=herald&text=Hello`)
+    await fetch(`${base}/narrate?voice=not-a-role&text=Hello`)
+    await fetch(`${base}/narrate?voice=constructor&text=Hello`)
+    const used = calls.map((c) => c.url.split('/text-to-speech/')[1].split('?')[0])
+    expect(used[0]).toBe(DEFAULT_VOICES.villain)
+    expect(used[1]).toBe(DEFAULT_VOICES.herald)
+    // Anything else is the narrator; the last call is the same line again, from the cache.
+    expect(used.slice(2)).toEqual([DEFAULT_VOICES.narrator])
   })
 
   it('refuses very long lines', async () => {
