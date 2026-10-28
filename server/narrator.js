@@ -36,8 +36,14 @@ export const villainLines = () =>
   [...Object.values(VILLAIN_LINES), VILLAIN_DEFAULT].flatMap((lines) =>
     ['arrive', 'enraged', 'fall'].filter((when) => lines[when]).map((when) => ({ role: lines.voice, text: lines[when] })),
   )
-// v3 acts out stage directions in the text, like [menacing] or [laughs].
-export const DEFAULT_MODEL = 'eleven_v3'
+// Everyday lines use the quick, cheap flash model (about half a credit a letter).
+export const DEFAULT_MODEL = 'eleven_flash_v2_5'
+// Villains use v3, which acts out stage directions like [menacing] or [laughs] but
+// costs about twice as much; their lines are few and get recorded once.
+export const DEFAULT_VILLAIN_MODEL = 'eleven_v3'
+// Models lines may already be saved under, so changing models never pays twice.
+const KNOWN_MODELS = ['eleven_flash_v2_5', 'eleven_v3', 'eleven_multilingual_v2']
+const VILLAIN_ROLES = new Set(['villain', ...Object.values(VILLAIN_LINES).map((v) => v.voice).filter((v) => v !== 'danger')])
 // Older models read stage directions out loud, so they're taken out for those.
 const actsTags = (model) => /^eleven_v[3-9]/.test(model)
 export const speakable = (text, model) => (actsTags(model) ? text : text.replace(/\[[^\]]*\]\s*/g, '').trim())
@@ -48,7 +54,8 @@ export const MAX_TEXT = 1200
 export function createNarrator({
   apiKey = process.env.ELEVENLABS_API_KEY || null,
   voices = castFromEnv(process.env),
-  model = process.env.ELEVENLABS_MODEL || DEFAULT_MODEL,
+  model: everydayModel = process.env.ELEVENLABS_MODEL || DEFAULT_MODEL,
+  villainModel = process.env.ELEVENLABS_VILLAIN_MODEL || DEFAULT_VILLAIN_MODEL,
   cacheDir,
   fetchSpeech = globalThis.fetch,
 } = {}) {
@@ -58,9 +65,14 @@ export function createNarrator({
   // their lines go straight to the narrator.
   const refused = new Set()
 
-  const speak = async (text, voice) => {
-    const file = join(cacheDir, `${createHash('sha1').update(`${voice}|${model}|${text}`).digest('hex')}.mp3`)
+  const cacheFile = (voice, model, text) => join(cacheDir, `${createHash('sha1').update(`${voice}|${model}|${text}`).digest('hex')}.mp3`)
+
+  const speak = async (text, voice, model) => {
+    const file = cacheFile(voice, model, text)
     if (existsSync(file)) return readFileSync(file)
+    // The same line in the same voice, already recorded with another model.
+    const saved = KNOWN_MODELS.map((other) => cacheFile(voice, other, text)).find(existsSync)
+    if (saved) return readFileSync(saved)
     if (pending.has(file)) return pending.get(file)
     const job = (async () => {
       const response = await fetchSpeech(`https://api.elevenlabs.io/v1/text-to-speech/${voice}?output_format=mp3_44100_128`, {
@@ -97,12 +109,13 @@ export function createNarrator({
   const speakAs = (role, text) => {
     const chosen = Object.hasOwn(voices, role ?? '') ? voices[role] : voices.narrator
     const voice = refused.has(chosen) ? voices.narrator : chosen
-    return speak(text, voice).catch((error) => {
+    const model = VILLAIN_ROLES.has(role) ? villainModel : everydayModel
+    return speak(text, voice, model).catch((error) => {
       if (voice === voices.narrator) throw error
       console.error(`Narrator: the ${role} voice failed, using the narrator instead.`, error.message)
       // Not found or not on this plan won't fix itself; a network blip might.
       if (error.status === 402 || error.status === 403 || error.status === 404) refused.add(voice)
-      return speak(text, voices.narrator)
+      return speak(text, voices.narrator, model)
     })
   }
 

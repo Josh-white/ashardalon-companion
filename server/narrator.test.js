@@ -2,7 +2,7 @@ import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createNarrator, DEFAULT_VOICES, speakable, villainLines } from './narrator.js'
+import { createNarrator, DEFAULT_MODEL, DEFAULT_VILLAIN_MODEL, DEFAULT_VOICES, speakable, villainLines } from './narrator.js'
 import { startServer } from './server.js'
 
 describe('narrator endpoint', () => {
@@ -116,6 +116,30 @@ describe('narrator endpoint', () => {
     expect(ashardalon.url).toContain(DEFAULT_VOICES.ashardalon)
     await narrator.warmUp()
     expect(calls).toHaveLength(lines.length)
+  })
+
+  it('uses the cheap model for everyday lines and v3 for villains', async () => {
+    const base = await start('secret-key')
+    await fetch(`${base}/narrate?voice=herald&text=Hello`)
+    await fetch(`${base}/narrate?voice=ashardalon&text=Hello`)
+    expect(calls.map((c) => JSON.parse(c.options.body).model_id)).toEqual([DEFAULT_MODEL, DEFAULT_VILLAIN_MODEL])
+  })
+
+  it('reuses a line already recorded with another model', async () => {
+    const made = []
+    const fetchSpeech = async (url, options) => {
+      made.push(JSON.parse(options.body).model_id)
+      return new Response(new Uint8Array([9]), { status: 200 })
+    }
+    const ask = async (model) => {
+      const narrator = createNarrator({ apiKey: 'k', model, cacheDir: join(dir, 'narration'), fetchSpeech })
+      const one = await startServer({ port: 0, saveFile: join(dir, 'game.json'), staticDir: dir, warmNarrator: false, narrator })
+      await fetch(`http://localhost:${one.port}/narrate?voice=herald&text=Hello`)
+      await one.close()
+    }
+    await ask('eleven_v3')
+    await ask(DEFAULT_MODEL)
+    expect(made).toEqual(['eleven_v3'])
   })
 
   it('refuses very long lines', async () => {
