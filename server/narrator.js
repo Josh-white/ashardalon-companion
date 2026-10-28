@@ -22,7 +22,11 @@ const castFromEnv = (env) => ({
   danger: env.ELEVENLABS_VOICE_DANGER || DEFAULT_VOICES.danger,
   villain: env.ELEVENLABS_VOICE_VILLAIN || DEFAULT_VOICES.villain,
 })
-export const DEFAULT_MODEL = 'eleven_multilingual_v2'
+// v3 acts out stage directions in the text, like [menacing] or [laughs].
+export const DEFAULT_MODEL = 'eleven_v3'
+// Older models read stage directions out loud, so they're taken out for those.
+const actsTags = (model) => /^eleven_v[3-9]/.test(model)
+export const speakable = (text, model) => (actsTags(model) ? text : text.replace(/\[[^\]]*\]\s*/g, '').trim())
 // Longer than any line the projector sends (the longest adventure story is
 // about 750 characters); a guard against running up the bill.
 export const MAX_TEXT = 1200
@@ -49,9 +53,10 @@ export function createNarrator({
         method: 'POST',
         headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
         body: JSON.stringify({
-          text,
+          text: speakable(text, model),
           model_id: model,
-          voice_settings: { stability: 0.4, similarity_boost: 0.75, style: 0.35 },
+          // v3 only takes stability 0, 0.5 or 1; 0.5 keeps a voice steady but expressive.
+          voice_settings: actsTags(model) ? { stability: 0.5, similarity_boost: 0.75 } : { stability: 0.4, similarity_boost: 0.75, style: 0.35 },
         }),
       })
       if (!response.ok) {

@@ -2,8 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { momentLines, narrationFor as linesFor } from './narration.js'
 
 // Most tests only care about the words; the cast has its own test below.
-const momentLine = (moment, state) => momentLines(moment, state)[0]?.text ?? null
-const narrationFor = (...args) => linesFor(...args).map((line) => line.text)
+// Stage directions like [excited] are left out, as an older voice model would.
+const words = (text) => text.replace(/\[[^\]]*\]\s*/g, '')
+const momentLine = (moment, state) => {
+  const line = momentLines(moment, state)[0]
+  return line ? words(line.text) : null
+}
+const narrationFor = (...args) => linesFor(...args).map((line) => words(line.text))
 
 const heroes = [
   { id: 'h1', name: 'Keyleth', player: 'Sam' },
@@ -68,7 +73,10 @@ describe('narrator lines', () => {
   })
 
   it('gives each kind of line its own voice', () => {
-    const villains = [{ id: 'v1', name: 'Meerak', fullName: 'Meerak the Kobold Dragonlord' }]
+    const villains = [
+      { id: 'v1', name: 'Kobold Dragonlord', fullName: 'Meerak, Kobold Dragonlord' },
+      { id: 'v2', name: 'Rage Drake', fullName: 'Rage Drake' },
+    ]
     const voices = (moment, state = game()) => momentLines(moment, state).map((line) => line.voice)
     expect(voices({ kind: 'crit', heroId: 'h1', value: 20, title: 'NATURAL 20!' })).toEqual(['herald'])
     expect(voices({ kind: 'treasure', title: 'Potion of Healing' })).toEqual(['herald'])
@@ -76,8 +84,13 @@ describe('narrator lines', () => {
     expect(voices({ kind: 'down', title: 'Keyleth is down!' })).toEqual(['danger'])
     expect(voices({ kind: 'encounter', title: 'Hall of Spiders' })).toEqual(['narrator'])
     // A villain is announced, then speaks for itself.
-    expect(voices({ kind: 'spawn', title: 'Meerak the Kobold Dragonlord appears!' }, game({ villains }))).toEqual(['narrator', 'villain'])
-    expect(voices({ kind: 'spawn', title: 'The Meerak is enraged!' }, game({ villains }))).toEqual(['narrator', 'villain'])
+    expect(voices({ kind: 'spawn', title: 'Meerak, Kobold Dragonlord appears!' }, game({ villains }))).toEqual(['narrator', 'villain'])
+    expect(momentLines({ kind: 'spawn', title: 'Meerak, Kobold Dragonlord appears!' }, game({ villains }))[1].text).toMatch(/^\[shouting\] Intruders/)
+    // A villain's last words come before the cheer.
+    expect(voices({ kind: 'defeat', title: 'Kobold Dragonlord defeated!' }, game({ villains }))).toEqual(['villain', 'herald'])
+    // Beasts don't talk: the danger voice describes them.
+    expect(voices({ kind: 'spawn', title: 'Rage Drake appears!' }, game({ villains }))).toEqual(['narrator', 'danger'])
+    expect(voices({ kind: 'spawn', title: 'The Rage Drake is enraged!' }, game({ villains }))).toEqual(['danger'])
   })
 
   it('cheers a win', () => {

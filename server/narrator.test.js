@@ -2,7 +2,7 @@ import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createNarrator, DEFAULT_VOICES } from './narrator.js'
+import { createNarrator, DEFAULT_VOICES, speakable } from './narrator.js'
 import { startServer } from './server.js'
 
 describe('narrator endpoint', () => {
@@ -92,6 +92,11 @@ describe('narrator endpoint', () => {
     const response = await fetch(`http://localhost:${server.port}/narrate?voice=villain&text=Hello`)
     expect(response.status).toBe(200)
     expect(calls.map((c) => c.url.includes(DEFAULT_VOICES.narrator))).toEqual([false, true])
+  })
+
+  it('keeps stage directions only for models that act them out', () => {
+    expect(speakable('[menacing] Kneel… [laughs] or burn!', 'eleven_v3')).toBe('[menacing] Kneel… [laughs] or burn!')
+    expect(speakable('[menacing] Kneel… [laughs] or burn!', 'eleven_multilingual_v2')).toBe('Kneel… or burn!')
   })
 
   it('refuses very long lines', async () => {
