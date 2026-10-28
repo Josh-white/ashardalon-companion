@@ -10,6 +10,7 @@ import { ProjectorAdventure } from './Adventure.jsx'
 import { TilesLeft } from './Tiles.jsx'
 import Art from './Art.jsx'
 import { MusicToggle, SoundToggle } from './SoundToggle.jsx'
+import { BoardSwitch } from './SoundBoard.jsx'
 import { HpBar } from './ui.jsx'
 import { useLayoutEffect, useRef, useState } from 'react'
 
@@ -23,7 +24,7 @@ export default function ProjectorView(props) {
   )
 }
 
-function ProjectorScreen({ state, onSwitchSeat, sound }) {
+function ProjectorScreen({ state, dispatch, onSwitchSeat, sound }) {
   const { heroIndex, phase, round } = state.turn
   const activeHero = state.heroes[heroIndex]
   const current = PHASES[phase]
@@ -182,6 +183,7 @@ function ProjectorScreen({ state, onSwitchSeat, sound }) {
         <span className="flex items-center gap-[1vw]">
           <SoundToggle on={sound.on} setOn={sound.setOn} className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />
           <MusicToggle on={sound.musicOn} setOn={sound.setMusicOn} soundOn={sound.on} className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />
+          <BoardSwitch state={state} dispatch={dispatch} className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />
           <button type="button" className="text-[1vw] text-zinc-700 hover:text-zinc-400" onClick={onSwitchSeat}>
             switch view
           </button>

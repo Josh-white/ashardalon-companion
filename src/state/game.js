@@ -14,6 +14,7 @@ import { effectsOf, heroAc, heroAttackPenalty, maxRolls } from '../data/powerEff
 import { STARTING_TILES, MAX_TILES, MIN_TILES, adjustTiles, bottomToTop, buildTileStack, takeTile } from './tiles.js'
 import { DOOR_KINDS, DOOR_UNLOCK_ROLL, MAX_SURGES, MIN_SURGES, aliveVillagers, checkVictory, countDefeat, escapeBlockers, isPlayable, newAdventure, objectiveInPlay, onceOnlyDraw, playableChambers, revealsReady, showStory, takeToken, villagerForRoll } from './adventure.js'
 import { trackStats } from './stats.js'
+import { playBoardSound, setBoardOff } from './soundboard.js'
 
 export const SAVE_VERSION = 1
 
@@ -60,6 +61,7 @@ export const initialState = {
   // The dungeon tile stack (state/tiles.js): { stack: ['' | special tile name], drawn }, top first.
   tileStack: null,
   lobbyTiles: STARTING_TILES,
+  soundboard: null, // the players' sound board (state/soundboard.js): { off, last, turn, used }
   stats: {}, // each hero's bragging rights for the end-of-game recap (state/stats.js), by hero id
 }
 
@@ -2419,6 +2421,12 @@ function reduce(state, action) {
 
     case 'RESUME':
       return { ...state, status: 'playing' }
+
+    case 'PLAY_BOARD_SOUND':
+      return playBoardSound(state, action)
+
+    case 'SET_SOUNDBOARD_OFF':
+      return setBoardOff(state, action.off)
 
     default:
       return state

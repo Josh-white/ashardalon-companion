@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { activeVillains } from '../state/game.js'
-import { NOTE, TILE_MUSIC_MS, burst, momentSoundMs, output, pad, tileRevealed, tone } from './sfx.js'
+import { NOTE, TILE_MUSIC_MS, burst, momentSoundMs, output, soundMs, pad, tileRevealed, tone } from './sfx.js'
 import { audioContext } from './soundSetting.js'
 
 // Background music, like an RPG's: calm and eerie while exploring, drums when
@@ -186,6 +186,11 @@ export function useMusic(state, on) {
   useEffect(() => {
     if (on && moment && Date.now() - moment.at < 3000) player.duck(momentSoundMs(moment))
   }, [moment?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const board = state?.soundboard?.last
+  useEffect(() => {
+    if (on && board && Date.now() - board.at < 3000) player.duck(soundMs(board.sound))
+  }, [board?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const last = useRef(null)
   useEffect(() => {

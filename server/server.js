@@ -163,7 +163,7 @@ function serveStatic(staticDir, req, res) {
 }
 
 const SEEN_LIMIT = 500
-const NOT_UNDOABLE = new Set(['ROLL_DIE', 'ATTACH_MONSTER_CARDS', 'UPDATE_ENCOUNTER_CARDS', 'CLAIM_HERO', 'RELEASE_HERO', 'SET_LOBBY_PLAYER', 'SET_LOBBY_PICK', 'SET_LOBBY_READY'])
+const NOT_UNDOABLE = new Set(['ROLL_DIE', 'ATTACH_MONSTER_CARDS', 'UPDATE_ENCOUNTER_CARDS', 'CLAIM_HERO', 'RELEASE_HERO', 'SET_LOBBY_PLAYER', 'SET_LOBBY_PICK', 'SET_LOBBY_READY', 'PLAY_BOARD_SOUND', 'SET_SOUNDBOARD_OFF'])
 
 export function startServer({
   port = Number(process.env.PORT ?? 3000),
@@ -251,12 +251,13 @@ export function startServer({
         const previous = history.pop()
         if (!previous) return
         // Clear the moment so screens don't replay an old celebration.
-        state = { ...previous.state, moment: null }
+        // The sound board isn't part of Undo either, so Undo can't hand out more taps.
+        state = { ...previous.state, moment: null, soundboard: state.soundboard }
       } else {
         const next = gameReducer(state, action)
         if (next === state) return
         // Dice rolls can't be undone (no rerolling a bad roll), and neither can
-        // picking heroes, since each iPad changes its own pick freely.
+        // picking heroes, since each iPad changes its own pick freely, or the sound board.
         if (!NOT_UNDOABLE.has(action.type)) {
           history.push({ state, label: describeAction(state, action) })
           if (history.length > UNDO_LIMIT) history.shift()
