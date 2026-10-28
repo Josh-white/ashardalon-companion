@@ -113,3 +113,58 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .area-entrance { animation: area-fade 0.3s both; }
 }
+
+/* The intro screen: Ashardalon's eyes open in the dark while embers drift up. */
+.intro {
+  background: radial-gradient(ellipse at 50% 110%, #7c1d0b 0%, #2a0a06 45%, #09090b 80%);
+  color: #f4e9d8;
+  transition: opacity 0.8s ease-in 2.4s;
+}
+.intro-waking { opacity: 0; }
+.intro-dragon {
+  top: 50%; left: 50%;
+  width: min(90vw, 90vh); height: min(90vw, 90vh);
+  transform: translate(-50%, -55%);
+  object-fit: contain; opacity: 0.3;
+  border-radius: 9999px;
+  /* A dim red glow of the dragon's token, its round edge faded away. */
+  filter: sepia(1) saturate(4) hue-rotate(-25deg) brightness(0.55) blur(1px);
+  -webkit-mask-image: radial-gradient(circle, #000 40%, transparent 68%);
+  mask-image: radial-gradient(circle, #000 40%, transparent 68%);
+  animation: intro-fade-in 3s ease-out both;
+}
+.intro-waking .intro-dragon { animation: intro-flare 2.5s ease-out both; }
+.intro-ember {
+  position: absolute; bottom: -20px; border-radius: 9999px;
+  background: #fb923c; box-shadow: 0 0 10px 3px rgb(251 146 60 / 0.7);
+  animation: intro-rise 7s linear infinite;
+}
+.intro-eyes { width: min(36vw, 420px); }
+.intro-eye { transform-origin: center; transform-box: fill-box; animation: intro-eye 3s ease-out both, intro-glow 2.4s ease-in-out 3s infinite; }
+.intro-title {
+  text-shadow: 0 0 18px rgb(245 158 11 / 0.75), 0 0 60px rgb(220 38 38 / 0.65), 0 4px 0 #7c2d12;
+  animation: intro-burn 2.2s ease-out 1.2s both;
+}
+.intro-cta { animation: intro-ring 1.8s ease-out infinite; }
+.intro-waking .intro-cta { animation: none; }
+@keyframes intro-fade-in { from { opacity: 0; } to { opacity: 0.3; } }
+@keyframes intro-flare { 0% { opacity: 0.3; } 30% { opacity: 0.8; transform: translate(-50%, -55%) scale(1.08); } 100% { opacity: 0.6; transform: translate(-50%, -55%) scale(1.15); } }
+@keyframes intro-rise { 0% { transform: translateY(0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translateY(-110vh) scale(0.4); opacity: 0; } }
+@keyframes intro-eye { 0%, 30% { transform: scaleY(0.05); } 45%, 100% { transform: scaleY(1); } }
+@keyframes intro-glow { 0%, 100% { opacity: 0.75; } 50% { opacity: 1; } }
+@keyframes intro-burn { from { opacity: 0; letter-spacing: 0.5em; filter: blur(8px); } to { opacity: 1; letter-spacing: 0.04em; filter: blur(0); } }
+@keyframes intro-ring { 0% { box-shadow: 0 0 0 0 rgb(251 191 36 / 0.7); } 100% { box-shadow: 0 0 0 1.5em rgb(251 191 36 / 0); } }
+@media (prefers-reduced-motion: reduce) {
+  .intro-dragon, .intro-ember, .intro-eye, .intro-title, .intro-cta { animation: none; }
+}
+
+/* The lobby's hall of heroes: each hero's torch lights up as an iPad picks them. */
+@keyframes torch-flicker { 0%, 100% { transform: scaleY(1) scaleX(1); } 25% { transform: scaleY(1.12) scaleX(0.92); } 50% { transform: scaleY(0.94) scaleX(1.05); } 75% { transform: scaleY(1.08) scaleX(0.96); } }
+@keyframes torch-arrive { 0% { transform: scale(0.7); opacity: 0.3; } 60% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); } }
+.torch-flame { transform-origin: 50% 100%; transform-box: fill-box; animation: torch-flicker 0.9s ease-in-out infinite; }
+.torch-arrive { animation: torch-arrive 0.7s ease-out both; }
+.hold-ring { transition: stroke-dashoffset 0.15s ease-out; }
+.hold-ring-filling { transition: stroke-dashoffset var(--hold-ms) linear; }
+@media (prefers-reduced-motion: reduce) {
+  .torch-flame, .torch-arrive { animation: none; }
+}

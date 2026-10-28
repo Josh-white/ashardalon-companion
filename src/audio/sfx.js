@@ -3,6 +3,7 @@ import { serverNow, useGameStates } from '../state/useSharedGame.js'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { audioContext } from './soundSetting.js'
 import { loadSamples, playSample, sampleMs } from './samples.js'
+import { newArrivals } from './narration.js'
 
 // The 3D die lands this long after a roll's moment starts (ROLL_MS in Die3D.jsx).
 export const DIE_LANDS_MS = 900
@@ -292,7 +293,7 @@ function schedule(ctx, sounds) {
 // How long a paused page may take to start its sound again and still play the moment.
 const RESUME_MS = 1500
 
-function play(sounds) {
+export function play(sounds) {
   const ctx = audioContext()
   if (!ctx) return
   loadSamples(ctx)
@@ -320,6 +321,8 @@ export function changeSounds(before, after) {
   const board = after?.soundboard?.last
   if (isNew(board, before?.soundboard?.last) && SOUNDS[board.sound]) sounds.push([board.sound, 0])
   if (tileRevealed(before, after)) sounds.push(['tile', 0])
+  // A torch flares in the lobby as each hero joins.
+  if (newArrivals(before, after).length > 0) sounds.push(['fire', 0])
   return sounds
 }
 

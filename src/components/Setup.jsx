@@ -8,6 +8,7 @@ import { useCards } from '../state/useCards.js'
 import { AdventurePicker, ChosenAdventure } from './Adventure.jsx'
 import Art from './Art.jsx'
 import { CampaignLobby, HeroCampaign } from './Campaign.jsx'
+import { HeroHall, HoldToPick } from './HeroHall.jsx'
 import { Button } from './ui.jsx'
 
 const templateFor = (key) => HERO_TEMPLATES.find((t) => t.key === key)
@@ -188,13 +189,15 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+    <div className={`mx-auto space-y-6 p-4 sm:p-8 ${watchOnly ? 'max-w-6xl' : 'max-w-4xl'}`}>
       <header className="text-center">
-        <h1 className="font-display text-4xl font-bold text-amber-400 sm:text-5xl">Wrath of Ashardalon</h1>
+        <h1 className="font-display text-4xl font-bold text-amber-400 sm:text-5xl">{watchOnly ? 'The Heroes Assemble' : 'Wrath of Ashardalon'}</h1>
         <p className="mt-2 text-lg text-zinc-400">
-          {watchOnly ? 'Waiting for the heroes to get ready…' : mine ? 'Get your hero ready.' : 'Pick your hero on this iPad.'}
+          {watchOnly ? 'Pick your hero on your iPad to light their torch.' : mine ? 'Get your hero ready.' : 'Pick your hero on this iPad.'}
         </p>
       </header>
+
+      {watchOnly && <HeroHall heroes={heroChoices} lobby={lobby} />}
 
       {watchOnly ? (
         state.campaign ? <CampaignLobby state={state} dispatch={dispatch} /> : <AdventurePicker state={state} dispatch={dispatch} />
@@ -204,23 +207,16 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
 
       {mine && !watchOnly && <MyHero state={state} claim={mine} cards={cards} deviceId={deviceId} dispatch={dispatch} />}
 
+      {!watchOnly && (
       <div className="grid gap-3 sm:grid-cols-2">
         {heroChoices.map((template) => {
           const owner = lobby.find((c) => c.heroKey === template.key)
           if (owner && owner === mine) return null
           const color = HERO_COLORS[template.color]
           const taken = Boolean(owner)
-          const canPick = !watchOnly && !taken && !mine
-          return (
-            <button
-              key={template.key}
-              type="button"
-              disabled={!canPick}
-              onClick={() => claim(template)}
-              className={`rounded-2xl border border-zinc-800 p-4 text-left transition ${
-                taken ? color.bg : 'bg-zinc-900'
-              } ${canPick ? 'active:scale-95' : 'cursor-default'} ${!taken && mine ? 'opacity-50' : ''}`}
-            >
+          const canPick = !taken && !mine
+          const body = (
+            <>
               <span className="flex items-center gap-3">
                 <Art name={heroArt(template.key)} className="w-14" />
                 <span>
@@ -239,10 +235,21 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
                   </span>
                 )}
               </span>
-            </button>
+            </>
+          )
+          const look = `rounded-2xl border border-zinc-800 p-4 text-left transition ${taken ? color.bg : 'bg-zinc-900'} ${!taken && mine ? 'opacity-50' : ''}`
+          return canPick ? (
+            <HoldToPick key={template.key} label={`Hold to pick ${template.name}`} onPick={() => claim(template)} className={`${look} active:scale-95`}>
+              {body}
+            </HoldToPick>
+          ) : (
+            <div key={template.key} className={look}>
+              {body}
+            </div>
           )
         })}
       </div>
+      )}
 
       <div className="flex flex-col items-center gap-2">
         {/* Only the projector starts the game, once every hero is ready. */}
