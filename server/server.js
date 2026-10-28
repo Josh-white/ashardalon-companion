@@ -11,7 +11,8 @@ import { createNarrator } from './narrator.js'
 import { auditionList, pickTake, takesDir } from './soundTakes.js'
 import { normalizeCardFile } from '../src/data/cards.js'
 import { describeAction } from '../src/state/describeAction.js'
-import { gameReducer, initialState, SAVE_VERSION } from '../src/state/game.js'
+import { gameReducer, initialState } from '../src/state/game.js'
+import { migrateSave } from '../src/state/saves.js'
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 
@@ -31,12 +32,24 @@ const CONTENT_TYPES = {
   '.webmanifest': 'application/manifest+json',
 }
 
+// The saved game, upgraded from an older version of the app if needed. A save that
+// can't be used (broken, or from a newer version) is moved aside rather than saved
+// over, so it can still be put back by hand.
 export function loadSavedGame(file) {
+  if (!existsSync(file)) return initialState
+  let saved = null
   try {
-    const saved = JSON.parse(readFileSync(file, 'utf8'))
-    if (saved && saved.version === SAVE_VERSION) return saved
+    saved = migrateSave(JSON.parse(readFileSync(file, 'utf8')))
   } catch {
-    // No save yet, or a broken one: start fresh.
+    // Not JSON: handled below.
+  }
+  if (saved) return saved
+  const aside = `${file.replace(/\.json$/, '')}-unreadable-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
+  try {
+    renameSync(file, aside)
+    console.error(`Could not use the saved game, so it was moved to ${aside} and a new game started.`)
+  } catch (error) {
+    console.error('Could not use or move the saved game:', error.message)
   }
   return initialState
 }

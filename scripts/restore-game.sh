@@ -29,14 +29,14 @@ if ! python3 -c 'import json, sys; json.load(open(sys.argv[1]))' "$file" 2>/dev/
   exit 1
 fi
 
-# The app starts a new game when a save's version doesn't match, so refuse a
-# backup from a different version of the app rather than lose the current game.
-version() { python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("version"))' "$1"; }
+# The app upgrades a save from an older version of itself, but can't read one from
+# a newer version, so refuse that rather than lose the current game.
+version() { python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("version") or 0)' "$1"; }
 running="$BACKUP_DIR/.running.json"
 trap 'rm -f "$running"' EXIT
-if docker cp "$CONTAINER:/data/game.json" "$running" 2>/dev/null && [ "$(version "$file")" != "$(version "$running")" ] && [ "${FORCE:-}" != 1 ]; then
-  echo "$(basename "$file") was saved by a different version of the app (save version $(version "$file"), the app is on $(version "$running"))." >&2
-  echo "The app would start a fresh game instead. Nothing was changed. Run with FORCE=1 to restore it anyway." >&2
+if docker cp "$CONTAINER:/data/game.json" "$running" 2>/dev/null && [ "$(version "$file")" -gt "$(version "$running")" ] && [ "${FORCE:-}" != 1 ]; then
+  echo "$(basename "$file") was saved by a newer version of the app (save version $(version "$file"), the app is on $(version "$running"))." >&2
+  echo "Update the app first. Nothing was changed. Run with FORCE=1 to restore it anyway." >&2
   exit 1
 fi
 
