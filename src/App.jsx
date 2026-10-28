@@ -14,11 +14,12 @@ import { TreasureStep } from './components/Treasure.jsx'
 import { TilesLeft } from './components/Tiles.jsx'
 import TurnGuide, { ExtraAttacks } from './components/TurnGuide.jsx'
 import UndoButton from './components/UndoButton.jsx'
-import { SoundToggle, TapForSound } from './components/SoundToggle.jsx'
+import { MusicToggle, SoundToggle, TapForSound } from './components/SoundToggle.jsx'
 import { Button, HpBar } from './components/ui.jsx'
 import { heroArt } from './data/art.js'
 import { useSoundEffects } from './audio/sfx.js'
-import { useAudioLocked, useSoundSetting } from './audio/soundSetting.js'
+import { useMusic } from './audio/music.js'
+import { useAudioLocked, useMusicSetting, useSoundSetting } from './audio/soundSetting.js'
 import { HERO_COLORS } from './data/heroes.js'
 import { PHASES } from './data/phases.js'
 import { encounterCardsOutdated } from './state/game.js'
@@ -61,6 +62,7 @@ function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitchSeat, s
         <div className="ml-auto flex flex-wrap gap-2">
           <UndoButton undo={undo} depth={undoDepth} dispatch={dispatch} className="max-w-56 truncate" />
           <SoundToggle on={sound.on} setOn={sound.setOn} className="text-sm" />
+          <MusicToggle on={sound.musicOn} setOn={sound.setMusicOn} soundOn={sound.on} className="text-sm" />
           <Button variant="ghost" className="text-sm" onClick={onSwitchSeat}>
             {seatLabel} · switch
           </Button>
@@ -239,9 +241,11 @@ export default function App() {
   }, [encountersOutdated]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [soundOn, setSoundOn] = useSoundSetting(seat)
-  const sound = { on: soundOn, setOn: setSoundOn }
+  const [musicOn, setMusicOn] = useMusicSetting(seat)
+  const sound = { on: soundOn, setOn: setSoundOn, musicOn, setMusicOn }
   const soundLocked = useAudioLocked(soundOn)
   useSoundEffects(state, soundOn)
+  useMusic(state, soundOn && musicOn)
 
   if (!state) return <Connecting />
 
