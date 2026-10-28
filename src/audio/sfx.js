@@ -1,14 +1,19 @@
 import { useEffect, useRef } from 'react'
+import { HERO_TEMPLATES } from '../data/heroes.js'
 import { audioContext } from './soundSetting.js'
+import { loadSamples, playSample, sampleMs } from './samples.js'
 
 // The 3D die lands this long after a roll's moment starts (ROLL_MS in Die3D.jsx).
 export const DIE_LANDS_MS = 900
+// After the die lands, sounds take turns: the next starts this long after the last
+// began, or sooner if the last one is shorter.
+const STEP_MS = 650
 // A device that reconnects shouldn't replay the sound of a moment that's over.
 const STALE_MS = 3000
 
 // How long each sound lasts, so the narrator knows when it can talk.
 const LENGTH_MS = {
-  dice: 850,
+  dice: 800,
   land: 250,
   clang: 900,
   whoosh: 450,
@@ -25,6 +30,19 @@ const LENGTH_MS = {
   down: 1900,
   chime: 900,
   tile: 4300,
+  fire: 900,
+  frost: 900,
+  zap: 800,
+  boom: 900,
+  arcane: 800,
+  holy: 1000,
+  psychic: 1000,
+  arrow: 600,
+  fizzle: 600,
+  hurt: 450,
+  'hurt-big': 600,
+  'hurt-small': 350,
+  'hurt-snake': 450,
   bear: 2000,
   hiss: 1500,
   bow: 900,
@@ -42,12 +60,18 @@ const LENGTH_MS = {
   drake: 1300,
   dragon: 2800,
   gauth: 1900,
-  drumroll: 2900,
-  applause: 2200,
+  tada: 1000,
+  wahwah: 1200,
+  dundun: 1500,
+  rimshot: 1100,
+  crickets: 1200,
+  laugh: 1350,
+  swords: 1500,
+  drumroll: 1700,
 }
 
 // How long a sound lasts, in ms.
-export const soundMs = (sound) => LENGTH_MS[sound] ?? 0
+export const soundMs = (sound) => sampleMs(sound) ?? LENGTH_MS[sound] ?? 0
 
 // How long a new tile's music lasts, so background music can make room for it.
 export const TILE_MUSIC_MS = LENGTH_MS.tile
@@ -74,6 +98,39 @@ const MONSTER_VOICES = {
   gauth: 'gauth',
 }
 
+// The sound a power makes as it's cast, from words in its name, or failing that from
+// the hero who used it (Heskan's powers are magic, Quinn's are holy). Null for a plain
+// weapon swing, which keeps the sword clang.
+const SPELL_WORDS = [
+  ['fire', /flam|fire|burn|scorch|breath|blaze/],
+  ['frost', /frost|ice\b|icy|cold|freez/],
+  ['zap', /lightning|shock|spark/],
+  ['boom', /thunder/],
+  ['psychic', /fear|hypno|daze|dread|mind/],
+  ['holy', /holy|sacred|smite|divine|radiant|righteous|hymn|blade barrier|bless/],
+  ['arcane', /missile|spectral|arcane|magic|force|ray\b/],
+  ['arrow', /shot|arrow|bow\b|sling/],
+]
+const HERO_SPELLS = { wizard: 'arcane', cleric: 'holy' }
+
+export function spellKind(title = '') {
+  // A hero attack's title is "Hero: Power name!".
+  const [heroName, power = ''] = title.split(': ')
+  const lower = power.toLowerCase()
+  const match = SPELL_WORDS.find(([, words]) => words.test(lower))
+  if (match) return match[0]
+  const hero = HERO_TEMPLATES.find((h) => h.name === heroName)
+  return HERO_SPELLS[hero?.key] ?? null
+}
+
+// How a monster yelps when it's hit: big ones grunt low, small ones squeak, snakes hiss.
+const HURT_SIZES = {
+  bear: 'hurt-big', smasher: 'hurt-big', otyugh: 'hurt-big', dragon: 'hurt-big', devil: 'hurt-big', warhorn: 'hurt-big',
+  kobold: 'hurt-small', dragonlord: 'hurt-small', gibber: 'hurt-small', grell: 'hurt-small',
+  hiss: 'hurt-snake',
+}
+export const hurtSound = (name) => HURT_SIZES[monsterVoice(name)] ?? 'hurt'
+
 export function monsterVoice(title = '') {
   const lower = title.toLowerCase()
   const name = Object.keys(MONSTER_VOICES).find((n) => lower.includes(n))
@@ -87,26 +144,41 @@ export function momentSounds(moment) {
   const rolls = moment.rolls ?? (moment.value != null ? [{ value: moment.value }] : [])
   const values = rolls.map((r) => r.value)
 
+  // The die rolls on its own; everything else waits until it lands, then plays one
+  // sound after another (each starts once the last one's main hit is over).
+  const sounds = [['dice', 0]]
+  let next = DIE_LANDS_MS
+  const then = (sound) => {
+    sounds.push([sound, next])
+    next += Math.min(LENGTH_MS[sound], STEP_MS)
+  }
+
   // Monster, trap and encounter attacks roll against heroes; a hero's attack rolls
   // against labeled monsters.
   if (rolls.some((r) => r.heroId && !r.label)) {
-    const hit = rolls.some((r) => r.hit)
-    const sounds = [['growl', 0], ['dice', 150], [hit ? 'thud' : 'whoosh', DIE_LANDS_MS]]
-    if (moment.kind === 'monster-down') sounds.push(['down', DIE_LANDS_MS + 500])
+    then(rolls.some((r) => r.hit) ? 'thud' : 'whoosh')
+    if (moment.kind === 'monster-down') then('down')
     return sounds
   }
 
   if (rolls.length > 0) {
     const anyHit = rolls.some((r) => r.hit)
     const attack = rolls.some((r) => r.hit != null)
-    let result = 'land'
-    if (values.includes(20)) result = 'fanfare'
-    else if (attack && anyHit) result = 'clang'
-    else if (values.includes(1)) result = 'trombone'
-    else if (attack) result = 'whoosh'
-    const sounds = [['dice', 0], [result, DIE_LANDS_MS]]
-    // A defeated monster (or an unlocked door) gets a little victory tune after the hit.
-    if (moment.kind === 'defeat') sounds.push(['victory', DIE_LANDS_MS + (result === 'land' ? 200 : 600)])
+    const spell = attack ? spellKind(moment.title) : null
+    if (values.includes(20)) then('fanfare')
+    // A power cast at a monster makes its own sound once the die has landed.
+    if (spell) then(spell)
+    if (!values.includes(20)) {
+      if (attack && anyHit) {
+        if (!spell) then('clang')
+      } else if (values.includes(1)) then('trombone')
+      else if (attack) then(spell ? 'fizzle' : 'whoosh')
+      else then('land')
+    }
+    // Each monster that was hit (up to two) yelps.
+    for (const row of rolls.filter((r) => r.hit && r.label).slice(0, 2)) then(hurtSound(row.label))
+    // A defeated monster (or an unlocked door) gets a little victory tune at the end.
+    if (moment.kind === 'defeat') then('victory')
     return sounds
   }
 
@@ -130,7 +202,7 @@ export function momentSounds(moment) {
 
 // When this moment's sounds are over, in ms from the moment starting.
 export function momentSoundMs(moment) {
-  return Math.max(0, ...momentSounds(moment).map(([sound, delay]) => delay + LENGTH_MS[sound]))
+  return Math.max(0, ...momentSounds(moment).map(([sound, delay]) => delay + soundMs(sound)))
 }
 
 // Whether a dungeon tile was just turned over: exploring, or the tile tracker drawing
@@ -142,16 +214,90 @@ export function tileRevealed(before, after) {
   return Object.entries(after.turn.tiles ?? {}).some(([key, tile]) => tile !== 'none' && old[key] === undefined)
 }
 
+// How much louder or quieter each sound plays, in dB, so they all come out at about
+// the same volume (measured by rendering each one). Natural 20s, level ups and
+// Ashardalon get a little extra; sound board sounds sit a little under the game's.
+const LEVEL_DB = {
+  dice: 16,
+  land: 9,
+  clang: 11,
+  whoosh: 11,
+  thud: 13,
+  growl: -3,
+  roar: -5,
+  fanfare: -1,
+  trombone: -2,
+  victory: 4,
+  levelup: 5,
+  card: 10,
+  poison: 12,
+  down: 7,
+  chime: 1,
+  tile: -3,
+  bear: -8,
+  hiss: -3,
+  bow: 12,
+  smasher: -6,
+  chant: 4,
+  duergar: -1,
+  devil: -6,
+  gibber: 8,
+  grell: 15,
+  kobold: -3,
+  dragonlord: -2,
+  warhorn: -3,
+  thunder: 9,
+  otyugh: -2,
+  drake: -8,
+  dragon: -4,
+  gauth: 1,
+  tada: -6,
+  wahwah: -4,
+  dundun: -6,
+  rimshot: -5,
+  crickets: 10,
+  laugh: 6,
+  swords: 9,
+  drumroll: -4,
+}
+
+// Each play is up to 2% higher or lower, so the tenth roll doesn't sound exactly like
+// the first. The building blocks below read this while a sound is being made.
+const PITCH_VARIETY = 0.04
+let pitch = 1
+
+// Plays one sound at `at`, at its level and a slightly different pitch each time.
+export function playSound(ctx, sound, at) {
+  loadSamples(ctx)
+  const level = ctx.createGain()
+  level.connect(output(ctx))
+  pitch = 1 + (Math.random() - 0.5) * PITCH_VARIETY
+  try {
+    // A recording is evened out in the file itself; a made-up sound gets its level here.
+    if (playSample(ctx, sound, at, level, pitch)) return
+    level.gain.value = Math.pow(10, (LEVEL_DB[sound] ?? 0) / 20)
+    SOUNDS[sound](ctx, at, level)
+  } finally {
+    pitch = 1
+  }
+}
+
 function play(sounds) {
   const ctx = audioContext()
+  loadSamples(ctx)
   if (!ctx || ctx.state !== 'running') return
   const start = ctx.currentTime + 0.02
-  for (const [sound, delay] of sounds) SOUNDS[sound](ctx, start + delay / 1000, output(ctx))
+  for (const [sound, delay] of sounds) playSound(ctx, sound, start + delay / 1000)
 }
 
 // Plays each big moment's sounds, and music when a new tile is revealed, on this
 // device while sound is on.
 export function useSoundEffects(state, on) {
+  // Fetch the recordings while sound is on, so they're ready for the first moment.
+  useEffect(() => {
+    if (on) loadSamples(audioContext())
+  }, [on])
+
   const moment = state?.moment
   useEffect(() => {
     if (!on || !moment || Date.now() - moment.at > STALE_MS) return
@@ -184,6 +330,8 @@ export function output(ctx) {
   const volume = ctx.createGain()
   volume.gain.value = 1
   const limiter = ctx.createDynamicsCompressor()
+  // Fast enough to catch the first crack of a clang or a hit.
+  limiter.attack.value = 0.001
   volume.connect(limiter).connect(ctx.destination)
   master = volume
   return master
@@ -217,8 +365,8 @@ function envelope(ctx, at, peak, attack, decay) {
 export function tone(ctx, out, { at, freq, type = 'sine', peak = 0.3, attack = 0.005, decay = 0.4, slideTo, filter }) {
   const osc = ctx.createOscillator()
   osc.type = type
-  osc.frequency.setValueAtTime(freq, at)
-  if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, at + attack + decay)
+  osc.frequency.setValueAtTime(freq * pitch, at)
+  if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo * pitch, at + attack + decay)
   const gain = envelope(ctx, at, peak, attack, decay)
   let node = osc
   if (filter) {
@@ -237,8 +385,8 @@ export function burst(ctx, out, { at, type = 'bandpass', freq = 2000, q = 1, pea
   const source = noise(ctx)
   const filter = ctx.createBiquadFilter()
   filter.type = type
-  filter.frequency.setValueAtTime(freq, at)
-  if (sweepTo) filter.frequency.exponentialRampToValueAtTime(sweepTo, at + attack + decay)
+  filter.frequency.setValueAtTime(freq * pitch, at)
+  if (sweepTo) filter.frequency.exponentialRampToValueAtTime(sweepTo * pitch, at + attack + decay)
   filter.Q.value = q
   source.connect(filter).connect(envelope(ctx, at, peak, attack, decay)).connect(out)
   source.start(at, Math.random() * 0.5)
@@ -246,7 +394,9 @@ export function burst(ctx, out, { at, type = 'bandpass', freq = 2000, q = 1, pea
 }
 
 // A brassy note: a sawtooth whose filter opens as it's blown, for horns and trombones.
-function brass(ctx, out, { at, freq, length, peak = 0.18, wobble = 0, slideTo }) {
+function brass(ctx, out, { at, freq: baseFreq, length, peak = 0.18, wobble = 0, slideTo: baseSlide }) {
+  const freq = baseFreq * pitch
+  const slideTo = baseSlide && baseSlide * pitch
   const osc = ctx.createOscillator()
   osc.type = 'sawtooth'
   osc.frequency.setValueAtTime(freq, at)
@@ -284,11 +434,18 @@ export const NOTE = (n) => 440 * Math.pow(2, (n - 69) / 12) // MIDI note number 
 export const SOUNDS = {
   // The d20 rattling across the table: clicks that slow down and get quieter.
   dice(ctx, at, out) {
-    let t = at
-    for (let i = 0; i < 9; i++) {
-      burst(ctx, out, { at: t, freq: 2500 + Math.random() * 2500, q: 4, peak: 0.8 * (1 - i / 11), decay: 0.03 })
-      t += 0.04 + i * 0.012 + Math.random() * 0.03
-    }
+    // One die: a few bounces, each closer together and softer, then a little wobble
+    // as it settles. The same pitch throughout, because it's the same die.
+    const pitch = 0.9 + Math.random() * 0.2
+    const bounces = [0, 0.2, 0.36, 0.48, 0.57, 0.63]
+    bounces.forEach((when, i) => {
+      const t = at + when
+      const loud = 0.9 * Math.pow(0.72, i)
+      tone(ctx, out, { at: t, freq: 950 * pitch, slideTo: 700 * pitch, type: 'triangle', peak: loud * 0.5, decay: 0.05 })
+      burst(ctx, out, { at: t, freq: 3200 * pitch, q: 5, peak: loud, decay: 0.025 })
+      tone(ctx, out, { at: t, freq: 160, slideTo: 90, peak: loud * 0.35, decay: 0.06 })
+    })
+    for (let i = 0; i < 4; i++) burst(ctx, out, { at: at + 0.67 + i * 0.035, freq: 3200 * pitch, q: 5, peak: 0.08 / (i + 1), decay: 0.015 })
   },
 
   // The die settling on its number.
@@ -313,8 +470,11 @@ export const SOUNDS = {
 
   // A heavy blow landing on a hero.
   thud(ctx, at, out) {
-    tone(ctx, out, { at, freq: 110, slideTo: 40, peak: 0.9, decay: 0.45 })
+    tone(ctx, out, { at, freq: 110, slideTo: 40, peak: 0.5, decay: 0.45 })
     burst(ctx, out, { at, type: 'lowpass', freq: 900, peak: 0.8, decay: 0.2 })
+    // The smack itself, up where a projector speaker can play it.
+    burst(ctx, out, { at, freq: 450, q: 1.2, peak: 0.9, decay: 0.12 })
+    tone(ctx, out, { at, freq: 220, slideTo: 120, peak: 0.4, decay: 0.15 })
   },
 
   // A monster about to strike.
@@ -521,6 +681,8 @@ export const SOUNDS = {
     burst(ctx, out, { at, type: 'highpass', freq: 1500, peak: 0.7, decay: 0.12 })
     burst(ctx, out, { at: at + 0.05, type: 'lowpass', freq: 250, peak: 1.4, attack: 0.05, decay: 1.6 })
     burst(ctx, out, { at: at + 0.4, type: 'lowpass', freq: 160, peak: 1, attack: 0.2, decay: 1.1 })
+    // The crackle that rolls away, so it's thunder and not just rumble on a small speaker.
+    burst(ctx, out, { at: at + 0.03, freq: 900, q: 0.7, peak: 0.6, attack: 0.02, decay: 0.9, sweepTo: 300 })
   },
 
   // Otyugh: a slimy gurgle from deep in a filthy pit.
@@ -552,34 +714,160 @@ export const SOUNDS = {
     tone(ctx, out, { at: at + 0.2, freq: 900, slideTo: 1800, peak: 0.08, attack: 0.6, decay: 0.8 })
   },
 
-  // Sound board: a snare roll that builds, then a cymbal crash.
+  // --- Sound board. Its own sounds, so a real natural 20 or Ashardalon still stands out.
+
+  // Ta-da! A quick pickup into a bright chord.
+  tada(ctx, at, out) {
+    brass(ctx, out, { at, freq: NOTE(67), length: 0.12, peak: 0.2 })
+    for (const note of [72, 76, 79]) brass(ctx, out, { at: at + 0.16, freq: NOTE(note), length: 0.75, peak: 0.13, wobble: 3 })
+    burst(ctx, out, { at: at + 0.16, type: 'highpass', freq: 6000, peak: 0.25, decay: 0.5 })
+  },
+
+  // Wah-wah: two sad notes, the second one drooping.
+  wahwah(ctx, at, out) {
+    brass(ctx, out, { at, freq: NOTE(57), length: 0.35, peak: 0.24 })
+    brass(ctx, out, { at: at + 0.42, freq: NOTE(56), length: 0.7, peak: 0.24, wobble: 7, slideTo: NOTE(54) })
+  },
+
+  // Dun, dun, DUNNN! Low strings and a drum for a dramatic reveal.
+  dundun(ctx, at, out) {
+    const steps = [[52, 0, 0.18], [53, 0.28, 0.18], [51, 0.56, 0.9]]
+    for (const [note, when, length] of steps) {
+      for (const octave of [0, -12]) brass(ctx, out, { at: at + when, freq: NOTE(note + octave), length, peak: octave ? 0.16 : 0.2, wobble: length > 0.5 ? 5 : 0 })
+      tone(ctx, out, { at: at + when, freq: 140, slideTo: 90, peak: length > 0.5 ? 0.7 : 0.45, decay: length > 0.5 ? 0.6 : 0.2 })
+    }
+  },
+
+  // Ba-dum-tss: two toms and a cymbal, for jokes.
+  rimshot(ctx, at, out) {
+    for (const [when, freq] of [[0, 220], [0.14, 150]]) {
+      tone(ctx, out, { at: at + when, freq, slideTo: freq * 0.75, peak: 0.6, decay: 0.16 })
+      burst(ctx, out, { at: at + when, freq: 1200, q: 1, peak: 0.3, decay: 0.05 })
+    }
+    burst(ctx, out, { at: at + 0.3, type: 'highpass', freq: 7000, peak: 0.45, attack: 0.003, decay: 0.7 })
+    burst(ctx, out, { at: at + 0.3, freq: 3500, q: 2, peak: 0.25, decay: 0.12 })
+  },
+
+  // Crickets, for an awkward silence.
+  crickets(ctx, at, out) {
+    for (let chirp = 0; chirp < 4; chirp++) {
+      const t = at + chirp * 0.34
+      for (let pulse = 0; pulse < 3; pulse++) tone(ctx, out, { at: t + pulse * 0.03, freq: 4300, peak: 0.12, attack: 0.004, decay: 0.018 })
+    }
+  },
+
+  // Mwa-ha-ha-ha! A deep villain laugh: a breath, then voiced "ha"s that fall in pitch.
+  laugh(ctx, at, out) {
+    const syllables = [[0, 150, 0.32], [0.38, 165, 0.13], [0.55, 155, 0.13], [0.72, 145, 0.13], [0.89, 132, 0.4]]
+    for (const [when, freq, length] of syllables) {
+      burst(ctx, out, { at: at + when, freq: 1400, q: 0.8, peak: 0.15, attack: 0.01, decay: 0.05 })
+      voice(ctx, out, { at: at + when + 0.03, freq, length })
+    }
+  },
+
+  // A quick sword fight: a few clangs, not quite evenly spaced. (The game's own hit
+  // sound is the single clang.)
+  swords(ctx, at, out) {
+    for (const when of [0, 0.32, 0.55, 1.0]) SOUNDS.clang(ctx, at + when, out)
+  },
+
+  // A short snare roll that builds to a cymbal crash.
   drumroll(ctx, at, out) {
-    const hits = 34
+    const hits = 22
     for (let i = 0; i < hits; i++) {
       const t = at + i * 0.045
-      burst(ctx, out, { at: t, type: 'highpass', freq: 1800, peak: 0.15 + 0.5 * (i / hits), decay: 0.05 })
+      burst(ctx, out, { at: t, type: 'highpass', freq: 1800, peak: 0.15 + 0.45 * (i / hits), decay: 0.05 })
       tone(ctx, out, { at: t, freq: 190, slideTo: 150, peak: 0.08 + 0.2 * (i / hits), decay: 0.05 })
     }
     const crash = at + hits * 0.045 + 0.05
-    burst(ctx, out, { at: crash, type: 'highpass', freq: 5000, peak: 0.7, decay: 1.2 })
-    tone(ctx, out, { at: crash, freq: 80, slideTo: 45, peak: 0.8, decay: 0.4 })
+    burst(ctx, out, { at: crash, type: 'highpass', freq: 5000, peak: 0.45, decay: 0.6 })
+    tone(ctx, out, { at: crash, freq: 110, slideTo: 70, peak: 0.6, decay: 0.3 })
   },
 
-  // Sound board: a crowd clapping, many quick claps that fade out.
-  applause(ctx, at, out) {
-    for (let i = 0; i < 70; i++) {
-      const t = at + Math.random() * 1.8
-      const fade = 1 - (t - at) / 2.2
-      burst(ctx, out, { at: t, freq: 1000 + Math.random() * 1800, q: 1.5, peak: 0.45 * fade, decay: 0.04 + Math.random() * 0.03 })
+  // --- Powers cast at a monster, and the monster getting hit.
+
+  // Fire: a roaring whoosh with crackles.
+  fire(ctx, at, out) {
+    burst(ctx, out, { at, freq: 300, q: 0.8, peak: 0.7, attack: 0.15, decay: 0.6, sweepTo: 2000 })
+    burst(ctx, out, { at, type: 'lowpass', freq: 600, peak: 0.5, attack: 0.1, decay: 0.6 })
+    for (let i = 0; i < 8; i++) burst(ctx, out, { at: at + 0.1 + Math.random() * 0.6, freq: 3000, q: 3, peak: 0.25, decay: 0.02 })
+  },
+
+  // Frost: glassy chimes falling, then a crack of ice.
+  frost(ctx, at, out) {
+    ;[96, 91, 88, 84].forEach((note, i) => tone(ctx, out, { at: at + i * 0.07, freq: NOTE(note), type: 'triangle', peak: 0.15, decay: 0.4 }))
+    burst(ctx, out, { at: at + 0.35, type: 'highpass', freq: 3500, peak: 0.3, decay: 0.08 })
+    burst(ctx, out, { at: at + 0.1, type: 'highpass', freq: 6000, peak: 0.12, attack: 0.1, decay: 0.5 })
+  },
+
+  // Lightning: a buzzing electric crackle.
+  zap(ctx, at, out) {
+    for (let i = 0; i < 6; i++) {
+      const t = at + i * 0.09
+      tone(ctx, out, { at: t, freq: 1800 + Math.random() * 1200, slideTo: 200, type: 'sawtooth', peak: 0.08, decay: 0.07, filter: 5000 })
+      burst(ctx, out, { at: t, type: 'highpass', freq: 2500, peak: 0.22, decay: 0.04 })
     }
-    tone(ctx, out, { at, freq: NOTE(84), peak: 0.04, decay: 0.3 })
+    tone(ctx, out, { at, freq: 60, type: 'square', peak: 0.12, attack: 0.05, decay: 0.55, filter: 800 })
+  },
+
+  // Thunder: a deep boom with a shock wave.
+  boom(ctx, at, out) {
+    tone(ctx, out, { at, freq: 120, slideTo: 40, peak: 0.8, decay: 0.6 })
+    burst(ctx, out, { at, type: 'lowpass', freq: 900, peak: 0.9, decay: 0.7 })
+    burst(ctx, out, { at, type: 'highpass', freq: 2000, peak: 0.3, decay: 0.08 })
+  },
+
+  // Magic missiles and other arcane blasts: a rising "pew" and a sparkle.
+  arcane(ctx, at, out) {
+    for (const t of [0, 0.12, 0.24]) tone(ctx, out, { at: at + t, freq: 500, slideTo: 1800, type: 'square', peak: 0.25, decay: 0.12, filter: 3500 })
+    for (let i = 0; i < 6; i++) tone(ctx, out, { at: at + 0.35 + i * 0.05, freq: NOTE(93 + (i % 3) * 4), peak: 0.2, decay: 0.15 })
+  },
+
+  // Holy power: a bright bell over a shining chord.
+  holy(ctx, at, out) {
+    for (const note of [72, 76, 79, 84]) pad(ctx, out, { at, freq: NOTE(note), length: 0.9, peak: 0.08, type: 'sine', tremolo: 6 })
+    tone(ctx, out, { at: at + 0.05, freq: NOTE(84), peak: 0.25, decay: 0.8 })
+    tone(ctx, out, { at: at + 0.05, freq: NOTE(84) * 2.76, peak: 0.08, decay: 0.5 })
+  },
+
+  // Fear and hypnosis: a woozy, wobbling tone.
+  psychic(ctx, at, out) {
+    for (const [freq, tremolo] of [[300, 7], [450, 5]]) pad(ctx, out, { at, freq, length: 0.9, peak: 0.15, type: 'sine', tremolo })
+    tone(ctx, out, { at, freq: 900, slideTo: 250, type: 'triangle', peak: 0.15, attack: 0.1, decay: 0.8 })
+  },
+
+  // A ranged shot: bowstring and arrow.
+  arrow(ctx, at, out) {
+    tone(ctx, out, { at, freq: 200, slideTo: 160, type: 'sawtooth', peak: 0.25, decay: 0.25, filter: 1500 })
+    burst(ctx, out, { at: at + 0.1, freq: 1500, q: 3, peak: 0.6, attack: 0.15, decay: 0.12, sweepTo: 4000 })
+  },
+
+  // A spell that misses: it sputters out.
+  fizzle(ctx, at, out) {
+    burst(ctx, out, { at, freq: 2500, q: 1, peak: 1, attack: 0.02, decay: 0.45, sweepTo: 400 })
+    tone(ctx, out, { at, freq: 700, slideTo: 150, type: 'triangle', peak: 0.3, decay: 0.4 })
+  },
+
+  // A monster that's been hit.
+  hurt(ctx, at, out) {
+    snarl(ctx, out, at, 0.4, 160, { rise: 1.6, fall: 0.7, rattle: 35, cutoff: 1800, peak: 0.3, breath: 0.1 })
+  },
+  'hurt-big'(ctx, at, out) {
+    snarl(ctx, out, at, 0.55, 90, { rise: 1.5, fall: 0.6, rattle: 25, cutoff: 1300, peak: 0.4, breath: 0.15 })
+  },
+  'hurt-small'(ctx, at, out) {
+    snarl(ctx, out, at, 0.3, 330, { rise: 1.5, fall: 0.8, rattle: 50, cutoff: 3000, peak: 0.25, breath: 0.05 })
+  },
+  'hurt-snake'(ctx, at, out) {
+    burst(ctx, out, { at, type: 'highpass', freq: 4000, peak: 0.45, attack: 0.03, decay: 0.4 })
   },
 }
 
 // A growl: a low buzzy voice with a ragged wobble, pushed through distortion. The
 // options shape it into different beasts: how far the pitch rises and falls, how
 // fast it rattles, how bright and how loud it is.
-function snarl(ctx, out, at, length, freq, { rise = 1.4, fall = 0.8, rattle = 23, cutoff = 900, peak = 0.25, breath = 0.25 } = {}) {
+function snarl(ctx, out, at, length, baseFreq, { rise = 1.4, fall = 0.8, rattle = 23, cutoff = 900, peak = 0.25, breath = 0.25 } = {}) {
+  const freq = baseFreq * pitch
   const osc = ctx.createOscillator()
   osc.type = 'sawtooth'
   osc.frequency.setValueAtTime(freq, at)
@@ -612,11 +900,36 @@ function snarl(ctx, out, at, length, freq, { rise = 1.4, fall = 0.8, rattle = 23
   }
 }
 
+// A voiced vowel ("ah"): a buzzy tone shaped by two mouth resonances, for laughs.
+function voice(ctx, out, { at, freq, length, peak = 0.5 }) {
+  const osc = ctx.createOscillator()
+  osc.type = 'sawtooth'
+  osc.frequency.setValueAtTime(freq * pitch * 1.08, at)
+  osc.frequency.linearRampToValueAtTime(freq * pitch, at + length)
+  const gain = ctx.createGain()
+  gain.gain.setValueAtTime(0.0001, at)
+  gain.gain.linearRampToValueAtTime(peak, at + 0.02)
+  gain.gain.setValueAtTime(peak * 0.8, at + length * 0.6)
+  gain.gain.linearRampToValueAtTime(0.0001, at + length)
+  for (const [formant, q, level] of [[750, 6, 1], [1150, 8, 0.6], [2500, 10, 0.25]]) {
+    const filter = ctx.createBiquadFilter()
+    filter.type = 'bandpass'
+    filter.frequency.value = formant
+    filter.Q.value = q
+    const mix = ctx.createGain()
+    mix.gain.value = level
+    osc.connect(filter).connect(mix).connect(gain)
+  }
+  gain.connect(out)
+  osc.start(at)
+  osc.stop(at + length + 0.05)
+}
+
 // A held note with a slow swell, for pads and hums.
 export function pad(ctx, out, { at, freq, length, peak = 0.08, type = 'triangle', detune = 0, tremolo = 0 }) {
   const osc = ctx.createOscillator()
   osc.type = type
-  osc.frequency.value = freq
+  osc.frequency.value = freq * pitch
   osc.detune.value = detune
   const gain = ctx.createGain()
   gain.gain.setValueAtTime(0.0001, at)

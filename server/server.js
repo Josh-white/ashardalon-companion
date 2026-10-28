@@ -79,6 +79,37 @@ export function listArt(artDir) {
   return art
 }
 
+// Recordings that play in place of a made-up sound (src/audio/samples.js), named for
+// the sound they replace: cards/sounds/dice.mp3 replaces "dice". Only on the Pi.
+const SOUND_FILE = /^([a-z0-9-]+)\.(mp3|ogg|wav|m4a)$/
+const SOUND_TYPES = { mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', m4a: 'audio/mp4' }
+
+export function listSounds(soundsDir) {
+  const sounds = {}
+  try {
+    for (const file of readdirSync(soundsDir)) {
+      const [, name] = file.match(SOUND_FILE) ?? []
+      if (name) sounds[name] = { file, v: Math.round(statSync(join(soundsDir, file)).mtimeMs) }
+    }
+  } catch {
+    // No sounds folder: every sound is made up.
+  }
+  return sounds
+}
+
+function serveSound(soundsDir, req, res) {
+  const name = decodeURIComponent(new URL(req.url, 'http://localhost').pathname).slice('/sounds/'.length)
+  const [, , ext] = name.match(SOUND_FILE) ?? []
+  const file = ext && join(soundsDir, name)
+  if (!file || !existsSync(file)) {
+    res.writeHead(404).end('Not found')
+    return
+  }
+  // Screens ask for ?v=<version>, so a recording never changes under one URL.
+  res.writeHead(200, { 'Content-Type': SOUND_TYPES[ext], 'Cache-Control': 'public, max-age=31536000, immutable' })
+  createReadStream(file).pipe(res)
+}
+
 function readBody(req, limit) {
   return new Promise((resolve, reject) => {
     const chunks = []
@@ -163,7 +194,7 @@ function serveStatic(staticDir, req, res) {
 }
 
 const SEEN_LIMIT = 500
-const NOT_UNDOABLE = new Set(['ROLL_DIE', 'ATTACH_MONSTER_CARDS', 'UPDATE_ENCOUNTER_CARDS', 'CLAIM_HERO', 'RELEASE_HERO', 'SET_LOBBY_PLAYER', 'SET_LOBBY_PICK', 'SET_LOBBY_READY', 'PLAY_BOARD_SOUND', 'SET_SOUNDBOARD_OFF'])
+const NOT_UNDOABLE = new Set(['ROLL_DIE', 'ATTACH_MONSTER_CARDS', 'UPDATE_ENCOUNTER_CARDS', 'CLAIM_HERO', 'RELEASE_HERO', 'SET_LOBBY_PLAYER', 'SET_LOBBY_PICK', 'SET_LOBBY_READY', 'PLAY_BOARD_SOUND', 'SET_SOUNDBOARD_OFF', 'SET_SOUNDBOARD_UNLIMITED'])
 
 export function startServer({
   port = Number(process.env.PORT ?? 3000),
@@ -172,6 +203,7 @@ export function startServer({
   cardsFile = process.env.CARDS_FILE ?? join(ROOT, 'cards', 'cards.json'),
   exampleCardsFile = join(ROOT, 'cards', 'cards.example.json'),
   artDir = process.env.ART_DIR ?? join(ROOT, 'cards', 'art'),
+  soundsDir = process.env.SOUNDS_DIR ?? join(ROOT, 'cards', 'sounds'),
   // Set on the test copy so every screen shows it isn't the real game.
   instance = process.env.INSTANCE_LABEL || null,
   // Spoken lines are saved next to the game, so they survive updates.
@@ -203,6 +235,16 @@ export function startServer({
       res
         .writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
         .end(JSON.stringify(listArt(artDir)))
+      return
+    }
+    if (req.url === '/sounds.json') {
+      res
+        .writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+        .end(JSON.stringify(listSounds(soundsDir)))
+      return
+    }
+    if (req.url.startsWith('/sounds/')) {
+      serveSound(soundsDir, req, res)
       return
     }
     if (req.url.startsWith('/art/')) {
@@ -245,6 +287,8 @@ export function startServer({
         seenActions.add(id)
         if (seenActions.size > SEEN_LIMIT) seenActions.delete(seenActions.values().next().value)
       }
+      // Turning off the sound board's limits is only for trying sounds on the test copy.
+      if (action.type === 'SET_SOUNDBOARD_UNLIMITED' && !instance) return
       if (action.type === 'UNDO') {
         // Two people tapping Undo at once both saw the same history depth; only
         // the first tap counts, so one tap never undoes two changes.

@@ -2,3 +2,7 @@ cards.json
 # Your card photos stay on the Pi too.
 art/*
 !art/README.md
+# So do recorded sounds, and anything downloaded to pick them from.
+sounds/*
+!sounds/README.md
+sound-downloads/
