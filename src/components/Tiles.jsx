@@ -88,7 +88,7 @@ export function HallwayDraws({ state, dispatch }) {
     <>
       {drawn.map((tile, i) =>
         tile === '' ? (
-          <p key={i} className="mt-2 text-emerald-300">✓ Long hallway: take the next top tile and put it at the hallway's far end.</p>
+          <p key={i} className="mt-2 text-emerald-300">✓ Long hallway: take the next top tile and put it at the hallway's far end. The monster goes on that tile's scorch mark.</p>
         ) : (
           <DrawnTile key={i} tile={tile} className="mt-2" />
         ),
