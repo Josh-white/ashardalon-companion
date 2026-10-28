@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import { HERO_TEMPLATES } from '../src/data/heroes.js'
 import { createHero, initialState } from '../src/state/game.js'
-import { loadCards, loadSavedGame, startServer } from './server.js'
+import { listSounds, loadCards, loadSavedGame, startServer } from './server.js'
 
 // Opens a socket and collects every state the server sends.
 function connect(port) {
@@ -219,5 +219,18 @@ describe('card art', () => {
     const huge = Buffer.concat([jpeg, Buffer.alloc(3 * 1024 * 1024)])
     expect((await fetch(url('/art/hero-cleric.jpg'), { method: 'PUT', body: huge }).catch(() => ({ status: 413 }))).status).toBe(413)
     expect(await (await fetch(url('/art.json'))).json()).toEqual({})
+  })
+})
+
+describe('recordings', () => {
+  it('lists the recordings on the Pi by the sound they replace', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ashardalon-sounds-'))
+    writeFileSync(join(dir, 'dice.mp3'), 'x')
+    writeFileSync(join(dir, 'CREDITS.csv'), 'x')
+    writeFileSync(join(dir, 'Bad Name.mp3'), 'x')
+    expect(Object.keys(listSounds(dir))).toEqual(['dice'])
+    expect(listSounds(dir).dice.file).toBe('dice.mp3')
+    expect(listSounds(join(dir, 'missing'))).toEqual({})
+    rmSync(dir, { recursive: true, force: true })
   })
 })

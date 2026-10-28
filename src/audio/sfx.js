@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { audioContext } from './soundSetting.js'
+import { loadSamples, playSample, sampleMs } from './samples.js'
 
 // The 3D die lands this long after a roll's moment starts (ROLL_MS in Die3D.jsx).
 export const DIE_LANDS_MS = 900
@@ -52,7 +53,7 @@ const LENGTH_MS = {
 }
 
 // How long a sound lasts, in ms.
-export const soundMs = (sound) => LENGTH_MS[sound] ?? 0
+export const soundMs = (sound) => sampleMs(sound) ?? LENGTH_MS[sound] ?? 0
 
 // How long a new tile's music lasts, so background music can make room for it.
 export const TILE_MUSIC_MS = LENGTH_MS.tile
@@ -135,7 +136,7 @@ export function momentSounds(moment) {
 
 // When this moment's sounds are over, in ms from the moment starting.
 export function momentSoundMs(moment) {
-  return Math.max(0, ...momentSounds(moment).map(([sound, delay]) => delay + LENGTH_MS[sound]))
+  return Math.max(0, ...momentSounds(moment).map(([sound, delay]) => delay + soundMs(sound)))
 }
 
 // Whether a dungeon tile was just turned over: exploring, or the tile tracker drawing
@@ -200,11 +201,14 @@ let pitch = 1
 
 // Plays one sound at `at`, at its level and a slightly different pitch each time.
 export function playSound(ctx, sound, at) {
+  loadSamples(ctx)
   const level = ctx.createGain()
-  level.gain.value = Math.pow(10, (LEVEL_DB[sound] ?? 0) / 20)
   level.connect(output(ctx))
   pitch = 1 + (Math.random() - 0.5) * PITCH_VARIETY
   try {
+    // A recording is evened out in the file itself; a made-up sound gets its level here.
+    if (playSample(ctx, sound, at, level, pitch)) return
+    level.gain.value = Math.pow(10, (LEVEL_DB[sound] ?? 0) / 20)
     SOUNDS[sound](ctx, at, level)
   } finally {
     pitch = 1
@@ -213,6 +217,7 @@ export function playSound(ctx, sound, at) {
 
 function play(sounds) {
   const ctx = audioContext()
+  loadSamples(ctx)
   if (!ctx || ctx.state !== 'running') return
   const start = ctx.currentTime + 0.02
   for (const [sound, delay] of sounds) playSound(ctx, sound, start + delay / 1000)
@@ -221,6 +226,11 @@ function play(sounds) {
 // Plays each big moment's sounds, and music when a new tile is revealed, on this
 // device while sound is on.
 export function useSoundEffects(state, on) {
+  // Fetch the recordings while sound is on, so they're ready for the first moment.
+  useEffect(() => {
+    if (on) loadSamples(audioContext())
+  }, [on])
+
   const moment = state?.moment
   useEffect(() => {
     if (!on || !moment || Date.now() - moment.at > STALE_MS) return
