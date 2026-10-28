@@ -10,9 +10,9 @@ import { join } from 'node:path'
 // in .env: ELEVENLABS_VOICE_ID (narrator), ELEVENLABS_VOICE_HERALD, _DANGER, _VILLAIN.
 export const DEFAULT_VOICES = {
   narrator: 'JBFqnCBsd6RMkjVDRZzb', // George: warm storyteller
-  herald: 'Xb7hH8MSUJpSv4BDjhvA', // Alice: bright, confident; cheers the heroes on
+  herald: 'Xb7hH8MSUJpSbSDYk0k2', // Alice: clear and bright; cheers the heroes on
   danger: 'N2lVS1w4EtoT3dr4eOWO', // Callum: husky and menacing; monsters and bad news
-  villain: '2EiwWnXFnvU5JabPnv8n', // Clyde: gravelly; villains speak for themselves
+  villain: 'pNInz6obpgDQGcFmaJgB', // Adam: dominant, firm; villains speak for themselves
 }
 export const DEFAULT_VOICE = DEFAULT_VOICES.narrator
 
