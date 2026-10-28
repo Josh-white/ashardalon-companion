@@ -10,6 +10,9 @@ import { TileGuardQuestion } from './Treasure.jsx'
 import { DrawTileButton } from './Tiles.jsx'
 import { Button } from './ui.jsx'
 
+// Encounter cards that put the bottom dungeon tile into play.
+const BOTTOM_TILE_CARDS = new Set(['occupied-lair', 'scream-of-the-sentry', 'spotted'])
+
 // Enough random numbers to shuffle the whole encounter deck.
 const SHUFFLE_NUMBERS = 128
 
@@ -331,7 +334,7 @@ function EncounterCard({ state, hero, dispatch }) {
                   ↶ Oops, a monster is on {hero.name}'s tile
                 </Button>
               )}
-              {card.id === 'occupied-lair' && (
+              {BOTTOM_TILE_CARDS.has(card.id) && (
                 <DrawTileButton state={state} dispatch={dispatch} drawKey={`encounter-${state.encounter.id}`} from="bottom" />
               )}
               {card.drawMonster && card.filterMonsters && !state.encounter.filtered ? (

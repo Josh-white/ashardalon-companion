@@ -87,6 +87,12 @@ function HeroPhase({ state, hero, dispatch }) {
       {hero.conditions.includes('Poisoned') && (
         <Note tone="warn">{hero.name} is Poisoned. When you end the Hero Phase, the app rolls: 10 or more shakes it off{poisonBonus(hero) ? ` (+${poisonBonus(hero)} from Cast-Iron Stomach)` : ''}.</Note>
       )}
+      {state.environment?.cardId === 'dragon-s-tribute' && (
+        <Note>
+          💰 Dragon's Tribute: picking up a Treasure token? Draw two and keep the lower value. If one is an item, discard
+          the item. (Treasure cards for defeating monsters are drawn as usual.)
+        </Note>
+      )}
 
       <CurseNotes state={state} hero={hero} dispatch={dispatch} />
 

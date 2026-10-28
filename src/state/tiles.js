@@ -58,3 +58,21 @@ export function bottomToTop(state) {
   if (!deck || deck.stack.length < 2) return state
   return { ...state, tileStack: { ...deck, stack: [deck.stack[deck.stack.length - 1], ...deck.stack.slice(0, -1)] } }
 }
+
+// Fixing the count by hand when the table and the app disagree: ordinary tiles come off
+// (or go on) the bottom, and special tiles stay where they are.
+export function adjustTiles(state, amount) {
+  const deck = state.tileStack
+  if (!deck || !Number.isInteger(amount) || amount === 0) return state
+  const stack = [...deck.stack]
+  if (amount > 0) {
+    for (let i = 0; i < amount && stack.length < MAX_TILES; i++) stack.push('')
+  } else {
+    for (let i = 0; i < -amount; i++) {
+      const last = stack.lastIndexOf('')
+      if (last === -1) break
+      stack.splice(last, 1)
+    }
+  }
+  return { ...state, tileStack: { ...deck, stack } }
+}

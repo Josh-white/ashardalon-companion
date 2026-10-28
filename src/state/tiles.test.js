@@ -85,3 +85,16 @@ describe('dungeon tile stack', () => {
     expect(gameReducer(state, { type: 'DRAW_TILE', key: 'monster-1', from: 'bottom', random: [] }).tileStack.stack).toHaveLength(2)
   })
 })
+
+describe('fixing the tile count by hand', () => {
+  it('takes ordinary tiles off the bottom and leaves special tiles alone', () => {
+    let state = start(null, 10)
+    state = { ...state, tileStack: { stack: ['', '', 'Dire Chamber Entrance', '', ''], drawn: 5 } }
+    state = gameReducer(state, { type: 'ADJUST_TILES', amount: -3 })
+    expect(state.tileStack.stack).toEqual(['', 'Dire Chamber Entrance'])
+    state = gameReducer(state, { type: 'ADJUST_TILES', amount: -5 })
+    expect(state.tileStack.stack).toEqual(['Dire Chamber Entrance'])
+    state = gameReducer(state, { type: 'ADJUST_TILES', amount: 2 })
+    expect(state.tileStack.stack).toEqual(['Dire Chamber Entrance', '', ''])
+  })
+})
