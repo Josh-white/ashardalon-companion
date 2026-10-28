@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
+import { serverNow, useGameStates } from '../state/useSharedGame.js'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { audioContext } from './soundSetting.js'
 import { loadSamples, playSample, sampleMs } from './samples.js'
@@ -18,6 +19,7 @@ const LENGTH_MS = {
   clang: 900,
   whoosh: 450,
   thud: 600,
+  trap: 900,
   growl: 800,
   roar: 1500,
   fanfare: 1700,
@@ -72,9 +74,6 @@ const LENGTH_MS = {
 
 // How long a sound lasts, in ms.
 export const soundMs = (sound) => sampleMs(sound) ?? LENGTH_MS[sound] ?? 0
-
-// How long a new tile's music lasts, so background music can make room for it.
-export const TILE_MUSIC_MS = LENGTH_MS.tile
 
 // Each monster's own sound when it's drawn, matched by name in the moment's title.
 // Anything not listed (a chamber, a monster from a newer card file) gets the plain roar.
@@ -156,6 +155,7 @@ export function momentSounds(moment) {
   // Monster, trap and encounter attacks roll against heroes; a hero's attack rolls
   // against labeled monsters.
   if (rolls.some((r) => r.heroId && !r.label)) {
+    if (moment.trap) then('trap')
     then(rolls.some((r) => r.hit) ? 'thud' : 'whoosh')
     if (moment.kind === 'monster-down') then('down')
     return sounds
@@ -183,6 +183,7 @@ export function momentSounds(moment) {
   }
 
   if (moment.kind === 'spawn') return [[monsterVoice(moment.title), 0]]
+  if (moment.trap) return [['trap', 0], ['thud', 450]]
 
   const sound = {
     monster: 'roar',
@@ -223,6 +224,7 @@ const LEVEL_DB = {
   clang: 11,
   whoosh: 11,
   thud: 13,
+  trap: 11,
   growl: -3,
   roar: -5,
   fanfare: -1,
@@ -282,44 +284,58 @@ export function playSound(ctx, sound, at) {
   }
 }
 
-function play(sounds) {
-  const ctx = audioContext()
-  loadSamples(ctx)
-  if (!ctx || ctx.state !== 'running') return
+function schedule(ctx, sounds) {
   const start = ctx.currentTime + 0.02
   for (const [sound, delay] of sounds) playSound(ctx, sound, start + delay / 1000)
 }
 
-// Plays each big moment's sounds, and music when a new tile is revealed, on this
-// device while sound is on.
-export function useSoundEffects(state, on) {
+// How long a paused page may take to start its sound again and still play the moment.
+const RESUME_MS = 1500
+
+function play(sounds) {
+  const ctx = audioContext()
+  if (!ctx) return
+  loadSamples(ctx)
+  if (ctx.state === 'running') return schedule(ctx, sounds)
+  // iPads pause sound after a phone call, another app's sound or a nap ('interrupted'
+  // or 'suspended'). Once a tap has unlocked the page it can start again by itself, so
+  // try that rather than dropping the sound.
+  const asked = Date.now()
+  ctx.resume().then(
+    () => {
+      if (ctx.state === 'running' && Date.now() - asked < RESUME_MS) schedule(ctx, sounds)
+    },
+    () => {},
+  )
+}
+
+// A moment, board sound or new tile is news only once, and only while it's fresh.
+const isNew = (now, then) => now && now.id !== then?.id && serverNow() - now.at < STALE_MS
+
+// What a change of game sounds like on this page: each big moment's sounds, a sound
+// someone tapped on the sound board, and music when a new tile is revealed.
+export function changeSounds(before, after) {
+  const sounds = []
+  if (isNew(after?.moment, before?.moment)) sounds.push(...momentSounds(after.moment))
+  const board = after?.soundboard?.last
+  if (isNew(board, before?.soundboard?.last) && SOUNDS[board.sound]) sounds.push([board.sound, 0])
+  if (tileRevealed(before, after)) sounds.push(['tile', 0])
+  return sounds
+}
+
+// Plays every change's sounds on this device while sound is on. It listens to each
+// state the Pi sends, so two changes that land together both get heard.
+export function useSoundEffects(on) {
   // Fetch the recordings while sound is on, so they're ready for the first moment.
   useEffect(() => {
     if (on) loadSamples(audioContext())
   }, [on])
 
-  const moment = state?.moment
-  useEffect(() => {
-    if (!on || !moment || Date.now() - moment.at > STALE_MS) return
-    play(momentSounds(moment))
-  }, [moment?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // The first state a device sees is catching up, not news, so it's only remembered.
-  const last = useRef(null)
-  useEffect(() => {
-    const before = last.current
-    last.current = state
-    if (on && tileRevealed(before, state)) play([['tile', 0]])
-  }, [state, on])
-}
-
-// Plays a sound someone tapped on the sound board (state.soundboard.last).
-export function useBoardSounds(state, on) {
-  const last = state?.soundboard?.last
-  useEffect(() => {
-    if (!on || !last || Date.now() - last.at > STALE_MS || !SOUNDS[last.sound]) return
-    play([[last.sound, 0]])
-  }, [last?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  useGameStates((before, after) => {
+    if (!on) return
+    const sounds = changeSounds(before, after)
+    if (sounds.length > 0) play(sounds)
+  })
 }
 
 // Every sound goes through one gentle compressor so a fanfare on top of a clang
@@ -461,6 +477,14 @@ export const SOUNDS = {
       tone(ctx, out, { at, freq, peak: 0.16, decay })
     }
     tone(ctx, out, { at, freq: 120, slideTo: 60, peak: 0.5, decay: 0.15 })
+  },
+
+  // A trap springs: the click of its catch, then a blade slicing out with a ring of steel.
+  trap(ctx, at, out) {
+    burst(ctx, out, { at, freq: 2600, q: 8, peak: 0.7, decay: 0.02 })
+    burst(ctx, out, { at: at + 0.07, freq: 1800, q: 8, peak: 0.5, decay: 0.02 })
+    burst(ctx, out, { at: at + 0.16, type: 'highpass', freq: 1500, peak: 1, attack: 0.04, decay: 0.18, sweepTo: 6000 })
+    for (const [freq, decay] of [[2900, 0.5], [4100, 0.35], [5600, 0.25]]) tone(ctx, out, { at: at + 0.22, freq, slideTo: freq * 0.97, peak: 0.08, decay })
   },
 
   // A swing that cuts through air and nothing else.

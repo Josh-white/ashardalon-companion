@@ -2457,7 +2457,7 @@ function reduce(state, action) {
         attack: trap.card.trap.attack,
         targets: action.targets,
         tileGuarded: action.tileGuarded,
-        moment: { title: `${trap.name}!` },
+        moment: { title: `${trap.name}!`, trap: true },
         source: { kind: 'trap', trapId: trap.id },
       })
     }
@@ -2470,6 +2470,7 @@ function reduce(state, action) {
       const { next, downed } = damageHeroes(state, heroIds, damage, `the ${trap.name}`)
       return withMoment(next, {
         kind: downed.length > 0 ? 'monster-down' : 'monster',
+        trap: true,
         title: `${trap.name}!`,
         detail: downed.length > 0 ? `${downed.join(' and ')} ${downed.length > 1 ? 'are' : 'is'} down!` : `${damage} damage`,
       })

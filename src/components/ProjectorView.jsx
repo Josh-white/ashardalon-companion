@@ -185,7 +185,7 @@ function ProjectorScreen({ state, dispatch, onSwitchSeat, sound }) {
       <footer className="flex items-center justify-between text-zinc-500">
         <span>{latest ? latest.text : ''}</span>
         <span className="flex items-center gap-[1vw]">
-          <SoundToggle on={sound.on} setOn={sound.setOn} className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />
+          <SoundToggle on={sound.on} setOn={sound.setOn} elsewhere={sound.elsewhere} className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />
           <MusicToggle on={sound.musicOn} setOn={sound.setMusicOn} soundOn={sound.on} className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />
           <BoardSwitch state={state} dispatch={dispatch} className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />
           <button type="button" className="text-[1vw] text-zinc-700 hover:text-zinc-400" onClick={onSwitchSeat}>
