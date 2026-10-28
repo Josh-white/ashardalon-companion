@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { HERO_COLORS, XP_TO_CANCEL_ENCOUNTER } from '../data/heroes.js'
-import { itemTrapBonus, tileAcBonus } from '../data/items.js'
+import { heroItems, itemTrapBonus, tileAcBonus } from '../data/items.js'
 import { heroAc, reactionsFor } from '../data/powerEffects.js'
 import { ENCOUNTER_LABELS, canSpendAttack, encounterCount, phaseChecks, villainInPlay } from '../state/game.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
@@ -12,6 +12,35 @@ import { Button } from './ui.jsx'
 
 // Encounter cards that put the bottom dungeon tile into play.
 const BOTTOM_TILE_CARDS = new Set(['occupied-lair', 'scream-of-the-sentry', 'spotted'])
+
+// Thief in the Dark: the active hero picks one of their treasure cards to lose.
+function ThiefStep({ hero, dispatch }) {
+  const [stolen, setStolen] = useState(null)
+  const items = heroItems(hero)
+  if (stolen) return <p className="text-emerald-300">✓ The thief took {hero.name}'s {stolen}.</p>
+  if (items.length === 0) {
+    return <p className="text-zinc-200">{hero.name} has no treasure cards. Discard a Treasure token if you have one; if not, the thief gets nothing.</p>
+  }
+  return (
+    <div className="space-y-2">
+      <p className="text-zinc-200">Which treasure card does {hero.name} lose?</p>
+      <div className="grid grid-cols-2 gap-2">
+        {items.map((item) => (
+          <Button
+            key={item.id}
+            variant="danger"
+            onClick={() => {
+              dispatch({ type: 'DISCARD_ITEM', heroId: hero.id, itemId: item.id })
+              setStolen(item.name)
+            }}
+          >
+            💰 {item.name}
+          </Button>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 // Enough random numbers to shuffle the whole encounter deck.
 const SHUFFLE_NUMBERS = 128
@@ -334,6 +363,7 @@ function EncounterCard({ state, hero, dispatch }) {
                   ↶ Oops, a monster is on {hero.name}'s tile
                 </Button>
               )}
+              {card.id === 'thief-in-the-dark' && <ThiefStep hero={hero} dispatch={dispatch} />}
               {BOTTOM_TILE_CARDS.has(card.id) && (
                 <DrawTileButton state={state} dispatch={dispatch} drawKey={`encounter-${state.encounter.id}`} from="bottom" />
               )}
