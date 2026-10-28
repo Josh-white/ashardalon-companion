@@ -9,6 +9,7 @@ import { activeVillains } from '../state/game.js'
 import { ProjectorAdventure } from './Adventure.jsx'
 import { TilesLeft } from './Tiles.jsx'
 import Art from './Art.jsx'
+import { AreaName } from './AreaBackdrop.jsx'
 import { MusicToggle, SoundToggle } from './SoundToggle.jsx'
 import { BoardSwitch } from './SoundBoard.jsx'
 import { HpBar } from './ui.jsx'
@@ -35,7 +36,10 @@ function ProjectorScreen({ state, dispatch, onSwitchSeat, sound }) {
     <div className="flex min-h-screen flex-col gap-[2vh] p-[2vw] text-[1.6vw]">
       <section className={`rounded-[2vw] border border-zinc-800 p-[2vw] ${color.bg}`}>
         <div className="flex items-baseline justify-between">
-          <p className="uppercase tracking-widest text-zinc-400">Round {round}</p>
+          <p className="flex items-baseline gap-[2vw]">
+            <span className="uppercase tracking-widest text-zinc-400">Round {round}</span>
+            <AreaName state={state} className="font-semibold" />
+          </p>
           <div className="flex items-baseline gap-[3vw]">
             <TilesLeft state={state} />
             <span className="text-amber-400">
