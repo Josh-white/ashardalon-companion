@@ -20,6 +20,7 @@ import { trackStats } from './stats.js'
 import { campaignHero, campaignOutcome, campaignSurges, isCampaign, newCampaign, shopCards, shopSize } from './campaign.js'
 import { playBoardSound, setBoardOff, setBoardUnlimited } from './soundboard.js'
 import { newFirstRoll, rollFirst } from './firstRoll.js'
+import { moveHero, moveToken, newBoard, pruneTokens } from '../board/play.js'
 
 export const SAVE_VERSION = 1
 
@@ -74,6 +75,8 @@ export const initialState = {
   tokenStack: null,
   // The roll for first turn at the start of a game (state/firstRoll.js), or null.
   firstRoll: null,
+  // The virtual board for a solo game (board/play.js), or null when the real tiles are on the table.
+  board: null,
 }
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
@@ -1777,7 +1780,7 @@ function placeVillain(state, action) {
 }
 
 // Every action, then a check for an adventure's victory, then the recap's counts.
-export const gameReducer = (state, action) => trackStats(state, checkVictory(tagDrawn(reduce(state, action))), action)
+export const gameReducer = (state, action) => trackStats(state, pruneTokens(checkVictory(tagDrawn(reduce(state, action)))), action)
 
 // A dungeon tile drawn from the stack, from the top when exploring or the bottom for a
 // card that says so. `key` says what it was for (explore, a monster, an encounter), so
@@ -2032,6 +2035,8 @@ function reduce(state, action) {
         campaign: campaign && { ...campaign, heroes: campaignHeroes(campaign, heroes, state.lobby ?? []) },
         tokenStack: campaign ? shuffle(Array.isArray(action.tokens) ? action.tokens : [], action.random) : null,
         firstRoll: newFirstRoll(heroes),
+        // A solo game on the virtual board starts with the Start tile and the heroes on it.
+        board: action.boardTiles ? newBoard(action.boardTiles, heroes) : null,
       }
       // The Vast Gate Opens: the gate is on the Start tile, and its Flares! card is in the top 3 encounters.
       const objective = card?.startObjective
@@ -2051,6 +2056,11 @@ function reduce(state, action) {
       }
       return dealStartingTreasure(begun, action.treasureCards, action.random)
     }
+
+    case 'MOVE_HERO':
+      return moveHero(state, action)
+    case 'MOVE_TOKEN':
+      return moveToken(state, action)
 
     case 'CHOOSE_ADVENTURE': {
       // Only before the game, and only an adventure the app can run.

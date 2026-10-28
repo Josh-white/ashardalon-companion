@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { heroArt } from '../data/art.js'
 import { cardStats } from '../data/cards.js'
 import { HERO_COLORS, HERO_TEMPLATES, heroTemplates, statsAtLevel, templateFor } from '../data/heroes.js'
@@ -175,9 +176,89 @@ function MyHero({ state, claim, cards, deviceId, dispatch }) {
   )
 }
 
-export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watchOnly, onProjector, onLeaveProjector, onArt }) {
-  const cards = useCards()
+// Solo on the virtual board: this screen picks one or two heroes and runs the whole game.
+// Each hero is a claim of its own (this screen's id plus ~solo-1 or ~solo-2), so getting
+// a hero ready works the same as on a player's iPad.
+const SOLO_SLOTS = ['~solo-1', '~solo-2']
+
+function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave }) {
   const lobby = state.lobby ?? []
+  const mine = SOLO_SLOTS.map((slot) => lobby.find((c) => c.deviceId === deviceId + slot)).filter(Boolean)
+  const others = lobby.filter((c) => !c.deviceId.startsWith(deviceId + '~solo'))
+  const freeSlot = SOLO_SLOTS.find((slot) => !lobby.some((c) => c.deviceId === deviceId + slot))
+  const ready = mine.length > 0 && mine.every((c) => c.ready) && others.length === 0
+  const pick = (template) =>
+    dispatch({ type: 'CLAIM_HERO', deviceId: deviceId + freeSlot, heroKey: template.key, picks: startingPicks(template, cards.powers) })
+
+  return (
+    <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
+      <header className="text-center">
+        <h1 className="font-display text-4xl font-bold text-amber-400 sm:text-5xl">Solo on the virtual board</h1>
+        <p className="mt-2 text-lg text-zinc-400">Pick one hero, or two to play as a party. No tiles on the table: the dungeon is on this screen.</p>
+      </header>
+      <ChosenAdventure state={state} />
+      {mine.map((claim) => (
+        <MyHero key={claim.deviceId} state={state} claim={claim} cards={cards} deviceId={claim.deviceId} dispatch={dispatch} />
+      ))}
+      {freeSlot && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {heroTemplates()
+            .filter((t) => !lobby.some((c) => c.heroKey === t.key))
+            .map((template) => (
+              <button
+                key={template.key}
+                type="button"
+                className="flex items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-left transition active:scale-95"
+                onClick={() => pick(template)}
+              >
+                <Art name={heroArt(template.key)} className="w-14" />
+                <span>
+                  <span className={`block font-display text-2xl font-bold ${HERO_COLORS[template.color].text}`}>{template.name}</span>
+                  <span className="text-zinc-400">
+                    {template.className} · Speed {template.speed}
+                  </span>
+                </span>
+              </button>
+            ))}
+        </div>
+      )}
+      <div className="flex flex-col items-center gap-2">
+        <Button variant="gold" className="px-10 py-4 text-xl" disabled={!ready} onClick={onStart}>
+          Enter the dungeon
+        </Button>
+        <p className="text-sm text-zinc-500">
+          {others.length > 0
+            ? 'Another iPad has a hero in the lobby. A solo game needs it to pick "Pick a different hero" first.'
+            : mine.length === 0
+              ? 'Pick a hero to start.'
+              : ready
+                ? 'Ready when you are.'
+                : 'Give each hero a name and get them ready.'}
+        </p>
+        <button type="button" className="text-sm text-zinc-500 underline" onClick={onLeave}>
+          Back to the normal lobby
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watchOnly, onProjector, onLeaveProjector, onArt, onSolo }) {
+  const cards = useCards()
+  const [solo, setSolo] = useState(false)
+  const lobby = state.lobby ?? []
+  const canSolo = !watchOnly && cards.tiles.some((t) => t.id === 'start')
+  if (solo && canSolo) {
+    const leave = () => {
+      for (const slot of SOLO_SLOTS) dispatch({ type: 'RELEASE_HERO', deviceId: deviceId + slot })
+      setSolo(false)
+    }
+    const start = () => {
+      dispatch({ type: 'START_GAME', treasureCards: cards.treasures, chambers: cards.chambers, tokens: cards.treasureTokens, random: randomNumbers(128), tileRandom: randomNumbers(8), boardTiles: cards.tiles })
+      onSolo()
+    }
+    return <SoloSetup state={state} dispatch={dispatch} deviceId={deviceId} cards={cards} onStart={start} onLeave={leave} />
+  }
   const mine = lobby.find((c) => c.deviceId === deviceId)
   // A campaign goes on with the same heroes, every one of them.
   const heroChoices = state.campaign ? heroTemplates().filter((t) => campaignHero(state, t.key)) : heroTemplates()
@@ -298,6 +379,16 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
             Start a demo game
           </button>{' '}
           with all five heroes and a few monsters.
+        </p>
+      )}
+
+      {canSolo && !mine && (
+        <p className="text-center text-sm text-zinc-500">
+          Playing alone?{' '}
+          <button type="button" className="font-semibold text-amber-400 underline" onClick={() => setSolo(true)}>
+            Play solo on a virtual board
+          </button>{' '}
+          with one or two heroes, no tiles needed.
         </p>
       )}
 
