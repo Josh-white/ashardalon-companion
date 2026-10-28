@@ -31,14 +31,14 @@ export const VILLAIN_LINES = {
   },
   Otyugh: {
     voice: 'danger',
-    arrive: 'A stench rises from the refuse. Tentacles uncoil from the filth as the otyugh rises, hungry for fresh meat!',
-    fall: 'The otyugh sinks back into the filth, never to rise again.',
+    arrive: '[guttural, snarling] A stench rises from the refuse. Tentacles uncoil from the filth as the otyugh rises, hungry for fresh meat!',
+    fall: '[guttural, snarling] The otyugh sinks back into the filth, never to rise again.',
   },
   'Rage Drake': {
     voice: 'danger',
-    arrive: 'Claws scrape on stone. The rage drake lowers its horned head and charges!',
-    enraged: 'Bloodied and furious, the rage drake rears up with a deafening roar!',
-    fall: 'With a final shriek, the rage drake crashes to the ground.',
+    arrive: '[guttural, snarling] Claws scrape on stone. The rage drake lowers its horned head and charges!',
+    enraged: '[guttural, snarling] Bloodied and furious, the rage drake rears up with a deafening roar!',
+    fall: '[guttural, snarling] With a final shriek, the rage drake crashes to the ground.',
   },
 }
 export const VILLAIN_DEFAULT = {

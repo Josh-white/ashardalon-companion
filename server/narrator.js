@@ -14,7 +14,7 @@ export const DEFAULT_VOICES = {
   narrator: 'oR4uRy4fHDUGGISL0Rev', // the storyteller: tiles, turns, encounters and stories
   herald: 'ZF6FPAbjXT4488VcRRnw', // cheers the heroes on
   danger: 'fs2OqxduwXgp9foh2xjK', // monsters and bad news
-  villain: 'pNInz6obpgDQGcFmaJgB', // Adam: dominant, firm; any villain without its own voice
+  villain: 'IDuDsTbqg77GnVCQrair', // any villain without its own voice (Kraash's)
   meerak: 'Nw7vpAFWzoeAAt8VlVfL', // the kobold dragonlord
   margrath: '09BJBPASOGbr1evokbCu', // the duergar captain
   kraash: 'IDuDsTbqg77GnVCQrair', // the orc storm shaman
@@ -42,6 +42,8 @@ export const DEFAULT_MODEL = 'eleven_v3'
 export const DEFAULT_VILLAIN_MODEL = 'eleven_v3'
 // Lower is more expressive, higher is steadier.
 export const DEFAULT_STABILITY = 0.3
+// How strongly the voice leans into its own style.
+export const DEFAULT_STYLE = 0.5
 // ElevenLabs credits per letter, for the recording estimate.
 export const CREDITS_PER_LETTER = { eleven_flash_v2_5: 0.5, eleven_turbo_v2_5: 0.5 }
 // Models lines may already be saved under, so changing models never pays twice.
@@ -60,6 +62,7 @@ export function createNarrator({
   model: everydayModel = process.env.ELEVENLABS_MODEL || DEFAULT_MODEL,
   villainModel = process.env.ELEVENLABS_VILLAIN_MODEL || DEFAULT_VILLAIN_MODEL,
   stability = Number(process.env.ELEVENLABS_STABILITY || DEFAULT_STABILITY),
+  style = Number(process.env.ELEVENLABS_STYLE || DEFAULT_STYLE),
   cacheDir,
   fetchSpeech = globalThis.fetch,
 } = {}) {
@@ -69,9 +72,9 @@ export function createNarrator({
   // their lines go straight to the narrator.
   const refused = new Set()
 
-  // Stability is part of the name, so changing it records the lines again.
+  // The voice settings are part of the name, so changing them records the lines again.
   const cacheFile = (voice, model, text) =>
-    join(cacheDir, `${createHash('sha1').update(`${voice}|${model}|${stability}|${text}`).digest('hex')}.mp3`)
+    join(cacheDir, `${createHash('sha1').update(`${voice}|${model}|${stability}|${style}|${text}`).digest('hex')}.mp3`)
 
   // The same line in the same voice, recorded with any model.
   const savedFile = (voice, text) => KNOWN_MODELS.map((model) => cacheFile(voice, model, text)).find(existsSync)
@@ -92,7 +95,7 @@ export function createNarrator({
         body: JSON.stringify({
           text: speakable(text, model),
           model_id: model,
-          voice_settings: actsTags(model) ? { stability, similarity_boost: 0.75 } : { stability, similarity_boost: 0.75, style: 0.35 },
+          voice_settings: { stability, similarity_boost: 0.75, style },
         }),
       })
       if (!response.ok) {

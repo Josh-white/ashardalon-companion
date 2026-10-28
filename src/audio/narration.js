@@ -18,6 +18,11 @@ const NEW_TILE = [
   'You step into the unknown…',
 ]
 const SPAWN_OPENERS = ['Beware!', 'Look out!', 'From the shadows…']
+// How each voice acts its lines (v3 performs these; the Pi drops them for older models).
+const STORY = '[dramatic, mysterious]'
+const OMINOUS = '[ominous]'
+const CHEER = '[excited, triumphant]'
+const ALARM = '[urgent, tense]'
 // Lines can carry stage directions in square brackets ([menacing], [laughs]) that the
 // expressive ElevenLabs voices act out; the Pi drops them for older models.
 
@@ -46,39 +51,39 @@ export function momentLines(moment, state) {
   const values = moment.value != null ? [moment.value] : (moment.rolls ?? []).map((r) => r.value)
   switch (moment.kind) {
     case 'crit':
-      return [say('herald', `[excited] A natural twenty for ${heroName(hero)}!`)]
+      return [say('herald', `${CHEER} A natural twenty for ${heroName(hero)}!`)]
     case 'fumble':
-      return [say('danger', values.includes(1) ? `[sighs] Oh no… ${heroName(hero)} rolled a one.` : moment.title)]
+      return [say('danger', values.includes(1) ? `[disappointed sigh] Oh no… ${heroName(hero)} rolled a one.` : `${ALARM} ${moment.title}`)]
     case 'spawn': {
       const villain = villainIn(moment.title, state)
-      if (!villain) return [say('danger', `${pick(SPAWN_OPENERS, moment.title)} ${moment.title}`)]
+      if (!villain) return [say('danger', `${ALARM} ${pick(SPAWN_OPENERS, moment.title)} ${moment.title}`)]
       // The narrator announces a villain, then the villain has its say.
       if (moment.title.includes('enraged')) return [villainSays(villain, 'enraged')]
-      return [say('narrator', `${pick(SPAWN_OPENERS, moment.title)} ${moment.title}`), villainSays(villain, 'arrive')]
+      return [say('narrator', `[dark, suspenseful] ${pick(SPAWN_OPENERS, moment.title)} ${moment.title}`), villainSays(villain, 'arrive')]
     }
     case 'encounter': {
       const card = state.encounter?.card
       // An encounter card being drawn: its name and its story line.
-      if (card && card.name === moment.title) return [say('narrator', `Encounter! ${card.name}. ${card.flavor ?? ''}`.trim())]
+      if (card && card.name === moment.title) return [say('narrator', `${OMINOUS} Encounter! ${card.name}. ${card.flavor ?? ''}`.trim())]
       return [say('narrator', moment.title)]
     }
     case 'treasure':
-      return [say('herald', `Treasure! ${moment.title}`)]
+      return [say('herald', `${CHEER} Treasure! ${moment.title}`)]
     case 'level':
-      return [say('herald', `${moment.title} All hail ${hero?.name ?? 'the hero'}!`)]
+      return [say('herald', `${CHEER} ${moment.title} All hail ${hero?.name ?? 'the hero'}!`)]
     case 'defeat': {
       // A beaten villain gets its last words before the herald cheers.
       const villain = villainIn(moment.title, state)
-      if (villain) return [villainSays(villain, 'fall'), say('herald', moment.title)]
+      if (villain) return [villainSays(villain, 'fall'), say('herald', `${CHEER} ${moment.title}`)]
       // A hero's attack ("Keyleth: Sun Strike!") changes with every power, so it gets
       // a set line per hero that can be recorded ahead of time.
-      return [say('herald', moment.title.includes(':') ? `[excited] ${heroName(hero)} wins the fight!` : moment.title)]
+      return [say('herald', `${CHEER} ${moment.title.includes(':') ? `${heroName(hero)} wins the fight!` : moment.title}`)]
     }
     case 'down':
-      return [say('danger', downLine(moment.title))]
+      return [say('danger', `${ALARM} ${downLine(moment.title)}`)]
     case 'monster-down':
       // The title names the attack; the detail says who went down.
-      return [say('danger', downLine(moment.detail ?? ''))]
+      return [say('danger', `${ALARM} ${downLine(moment.detail ?? '')}`)]
     default:
       return []
   }
@@ -88,26 +93,26 @@ export function narrationFor(before, after, now = Date.now()) {
   if (!before || !after) return []
   const lines = []
   if (before.status === 'setup' && after.status === 'playing') {
-    lines.push(say('narrator', `The adventure begins${after.adventure?.card?.title ? `: ${after.adventure.card.title}` : ''}! Heroes, enter the dungeon.`))
+    lines.push(say('narrator', `${STORY} The adventure begins${after.adventure?.card?.title ? `: ${after.adventure.card.title}` : ''}! Heroes, enter the dungeon.`))
   }
   if (after.status === 'playing' && before.status === 'playing') {
     const turnChanged = before.turn.heroIndex !== after.turn.heroIndex || before.turn.round !== after.turn.round
     const hero = after.heroes[after.turn.heroIndex]
     if (turnChanged && after.turn.phase === 0 && hero) lines.push(say('narrator', `${hero.name}, it's your turn. What will you do?`))
-    if (!before.turn.explored && after.turn.explored) lines.push(say('narrator', pick(NEW_TILE, `${after.turn.round}-${after.turn.heroIndex}`)))
+    if (!before.turn.explored && after.turn.explored) lines.push(say('narrator', `${OMINOUS} ${pick(NEW_TILE, `${after.turn.round}-${after.turn.heroIndex}`)}`))
   }
   // An adventure's red "Read aloud" box: the whole story, not just its title.
   const story = after.adventure?.story
   const newStory = story?.text && story.id !== before.adventure?.story?.id
   if (newStory) {
     const title = story.title === after.adventure.card?.title || story.title === 'Victory!' ? '' : story.title
-    lines.push(say('narrator', `${title} ${story.text}`.trim()))
+    lines.push(say('narrator', `${STORY} ${title} ${story.text}`.replace(/\s+/g, ' ').trim()))
   }
   const moment = after.moment
   if (moment && moment.id !== before.moment?.id && now - moment.at < STALE_MS) {
     lines.push(...momentLines(moment, after))
   }
-  if (before.status !== after.status && after.status === 'won' && !newStory) lines.push(say('herald', '[excited] Victory! The heroes have triumphed. Songs will be sung of this day!'))
-  if (before.status !== after.status && after.status === 'lost') lines.push(say('narrator', 'Alas… the heroes have fallen. The dungeon claims another party.'))
+  if (before.status !== after.status && after.status === 'won' && !newStory) lines.push(say('herald', `${CHEER} Victory! The heroes have triumphed. Songs will be sung of this day!`))
+  if (before.status !== after.status && after.status === 'lost') lines.push(say('narrator', '[somber, tragic] Alas… the heroes have fallen. The dungeon claims another party.'))
   return lines.filter(Boolean)
 }

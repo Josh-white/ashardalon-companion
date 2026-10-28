@@ -23,6 +23,8 @@ services:
       - ELEVENLABS_MODEL=${ELEVENLABS_MODEL:-}
       - ELEVENLABS_VILLAIN_MODEL=${ELEVENLABS_VILLAIN_MODEL:-}
       - ELEVENLABS_STABILITY=${ELEVENLABS_STABILITY:-}
+      - ELEVENLABS_STYLE=${ELEVENLABS_STYLE:-}
+      - ELEVENLABS_WARM_UP=${ELEVENLABS_WARM_UP:-}
     volumes:
       # The current game is saved here, so it survives restarts and updates.
       - game-data:/data
