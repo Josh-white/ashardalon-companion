@@ -44,6 +44,9 @@ const LENGTH_MS = {
   gauth: 1900,
 }
 
+// How long a new tile's music lasts, so background music can make room for it.
+export const TILE_MUSIC_MS = LENGTH_MS.tile
+
 // Each monster's own sound when it's drawn, matched by name in the moment's title.
 // Anything not listed (a chamber, a monster from a newer card file) gets the plain roar.
 const MONSTER_VOICES = {
@@ -162,7 +165,7 @@ export function useSoundEffects(state, on) {
 // Every sound goes through one gentle compressor so a fanfare on top of a clang
 // doesn't clip.
 let master = null
-function output(ctx) {
+export function output(ctx) {
   if (master?.context === ctx) return master
   const volume = ctx.createGain()
   volume.gain.value = 1
@@ -197,7 +200,7 @@ function envelope(ctx, at, peak, attack, decay) {
   return gain
 }
 
-function tone(ctx, out, { at, freq, type = 'sine', peak = 0.3, attack = 0.005, decay = 0.4, slideTo, filter }) {
+export function tone(ctx, out, { at, freq, type = 'sine', peak = 0.3, attack = 0.005, decay = 0.4, slideTo, filter }) {
   const osc = ctx.createOscillator()
   osc.type = type
   osc.frequency.setValueAtTime(freq, at)
@@ -216,7 +219,7 @@ function tone(ctx, out, { at, freq, type = 'sine', peak = 0.3, attack = 0.005, d
   return osc
 }
 
-function burst(ctx, out, { at, type = 'bandpass', freq = 2000, q = 1, peak = 0.3, attack = 0.002, decay = 0.1, sweepTo }) {
+export function burst(ctx, out, { at, type = 'bandpass', freq = 2000, q = 1, peak = 0.3, attack = 0.002, decay = 0.1, sweepTo }) {
   const source = noise(ctx)
   const filter = ctx.createBiquadFilter()
   filter.type = type
@@ -259,7 +262,7 @@ function brass(ctx, out, { at, freq, length, peak = 0.18, wobble = 0, slideTo })
   osc.stop(at + length + 0.05)
 }
 
-const NOTE = (n) => 440 * Math.pow(2, (n - 69) / 12) // MIDI note number to Hz
+export const NOTE = (n) => 440 * Math.pow(2, (n - 69) / 12) // MIDI note number to Hz
 
 // --- The sounds themselves. Each takes (ctx, start time, output). Exported so a
 // browser test can render them offline.
@@ -573,7 +576,7 @@ function snarl(ctx, out, at, length, freq, { rise = 1.4, fall = 0.8, rattle = 23
 }
 
 // A held note with a slow swell, for pads and hums.
-function pad(ctx, out, { at, freq, length, peak = 0.08, type = 'triangle', detune = 0, tremolo = 0 }) {
+export function pad(ctx, out, { at, freq, length, peak = 0.08, type = 'triangle', detune = 0, tremolo = 0 }) {
   const osc = ctx.createOscillator()
   osc.type = type
   osc.frequency.value = freq

@@ -9,7 +9,7 @@ import { activeVillains } from '../state/game.js'
 import { ProjectorAdventure } from './Adventure.jsx'
 import { TilesLeft } from './Tiles.jsx'
 import Art from './Art.jsx'
-import { SoundToggle } from './SoundToggle.jsx'
+import { MusicToggle, SoundToggle } from './SoundToggle.jsx'
 import { HpBar } from './ui.jsx'
 import { useLayoutEffect, useRef, useState } from 'react'
 
@@ -181,6 +181,7 @@ function ProjectorScreen({ state, onSwitchSeat, sound }) {
         <span>{latest ? latest.text : ''}</span>
         <span className="flex items-center gap-[1vw]">
           <SoundToggle on={sound.on} setOn={sound.setOn} className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />
+          <MusicToggle on={sound.musicOn} setOn={sound.setMusicOn} soundOn={sound.on} className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />
           <button type="button" className="text-[1vw] text-zinc-700 hover:text-zinc-400" onClick={onSwitchSeat}>
             switch view
           </button>

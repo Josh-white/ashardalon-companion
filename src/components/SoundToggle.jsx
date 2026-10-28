@@ -14,6 +14,21 @@ export function SoundToggle({ on, setOn, className = '' }) {
   )
 }
 
+// Turns background music on or off for this device. It only plays while sound is on.
+export function MusicToggle({ on, setOn, soundOn, className = '' }) {
+  return (
+    <button
+      type="button"
+      className={`rounded-xl px-3 py-2 transition hover:bg-zinc-800 active:scale-95 ${on && soundOn ? 'text-zinc-300' : 'text-zinc-500'} ${className}`}
+      onClick={() => setOn(!on)}
+      aria-pressed={on}
+      title={soundOn ? undefined : 'Turn sound on to hear the music'}
+    >
+      {on ? '🎵 Music on' : '🎵 Music off'}
+    </button>
+  )
+}
+
 // Browsers won't play anything until someone taps the page. While sound is on and
 // still blocked, this asks for that tap (any tap on the page works).
 export function TapForSound({ locked, big = false }) {

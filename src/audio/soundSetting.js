@@ -56,6 +56,30 @@ export function useSoundSetting(seat) {
   return [on, setOn]
 }
 
+const MUSIC_KEY = 'ashardalon-companion/music'
+
+// Whether this device plays background music (only while sound is on too). Stored per
+// device; only the projector starts with it on.
+export function useMusicSetting(seat) {
+  const [saved, setSaved] = useState(() => {
+    try {
+      return localStorage.getItem(MUSIC_KEY)
+    } catch {
+      return null
+    }
+  })
+  const on = saved ? saved === 'on' : seat === 'projector'
+  const setOn = useCallback((value) => {
+    setSaved(value ? 'on' : 'off')
+    try {
+      localStorage.setItem(MUSIC_KEY, value ? 'on' : 'off')
+    } catch {
+      // Storage blocked: the choice lasts until the page reloads.
+    }
+  }, [])
+  return [on, setOn]
+}
+
 // True while sound is on but the browser is still waiting for a tap before it will
 // play anything. Any tap or key press on the page unlocks it.
 export function useAudioLocked(on) {
