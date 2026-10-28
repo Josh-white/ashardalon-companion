@@ -30,18 +30,20 @@ describe('tile layouts', () => {
   it('keeps good tiles and lists what is wrong with bad ones', () => {
     expect(problems).toEqual([])
     expect(DEFS).toHaveLength(5)
-    expect(def('hall')).toMatchObject({ kind: 'regular', triangle: 'black', walls: [] })
+    expect(def('hall')).toMatchObject({ kind: 'regular', triangle: 'black', walls: [], features: [], source: '' })
     const bad = []
     const kept = normalizeTiles([
       { id: 'a', rows: ['...', '...', '...'], exits: {} },
       { id: 'b', rows: ['....', '..x.', '....', '....'], exits: RAW[0].exits },
       { id: 'c', rows: RAW[0].rows, exits: { ...RAW[0].exits, E: 'oo' } },
       { id: 'd', rows: RAW[0].rows, exits: RAW[0].exits, walls: [{ at: [9, 0], side: 'E' }] },
-      { id: 'room', rows: RAW[0].rows, exits: RAW[0].exits },
+      { id: 'e', rows: RAW[0].rows, exits: RAW[0].exits, features: [{ type: 'stairs', at: [[4, 0]] }] },
+      { id: 'room', rows: RAW[0].rows, exits: RAW[0].exits, features: [{ type: 'stairs', at: [[1, 1], [2, 1]] }] },
       { id: 'room', rows: RAW[0].rows, exits: RAW[0].exits },
     ], bad)
     expect(kept.map((t) => t.id)).toEqual(['room'])
-    expect(bad).toHaveLength(5)
+    expect(kept[0].features).toEqual([{ type: 'stairs', at: [[1, 1], [2, 1]] }])
+    expect(bad).toHaveLength(6)
   })
 
   it('reads tiles from cards.json', () => {

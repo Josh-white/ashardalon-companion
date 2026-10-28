@@ -3,6 +3,8 @@
 //
 // Each tile is drawn as rows of characters with its triangle edge at the bottom (south):
 //   .  floor        #  solid rock        S  scorch mark (floor where a new monster goes)
+// "features" marks squares the rules care about (stairs, a chest, a ladder), and "source"
+// says where the layout was read from, for checking it against the real tile.
 // "exits" says, square by square along each side, whether it is open ("o") or a wall ("x"):
 // north and south read left to right, east and west read top to bottom.
 
@@ -76,6 +78,14 @@ export function normalizeTiles(list, problems) {
         return problems.push(`${label} has a wall that needs "at": [x, y] on the tile and a "side" (N, E, S or W).`)
       }
     }
+    const features = Array.isArray(tile.features) ? tile.features : []
+    for (const feature of features) {
+      const squares = Array.isArray(feature?.at) ? feature.at : []
+      const onTile = squares.length > 0 && squares.every((sq) => Array.isArray(sq) && Number.isInteger(sq[0]) && Number.isInteger(sq[1]) && sq[0] >= 0 && sq[1] >= 0 && sq[0] < width && sq[1] < rows.length)
+      if (typeof feature?.type !== 'string' || !feature.type || !onTile) {
+        return problems.push(`${label} has a feature that needs a "type" and "at": a list of [x, y] squares on the tile.`)
+      }
+    }
     const kind = tile.kind ?? 'regular'
     if (!TILE_KINDS.includes(kind)) return problems.push(`${label} has kind "${kind}"; use one of ${TILE_KINDS.join(', ')}.`)
     const triangle = tile.triangle ?? null
@@ -89,6 +99,8 @@ export function normalizeTiles(list, problems) {
       rows: [...rows],
       exits: Object.fromEntries(SIDES.map((s) => [s, exits[s]])),
       walls: walls.map((w) => ({ at: [...w.at], side: w.side })),
+      features: features.map((f) => ({ type: f.type, at: f.at.map((sq) => [sq[0], sq[1]]) })),
+      source: typeof tile.source === 'string' ? tile.source : '',
     })
   })
   return tiles
