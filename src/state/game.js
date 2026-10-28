@@ -2312,8 +2312,13 @@ function reduce(state, action) {
 
     case 'DRAW_MONSTER': {
       // The deck is built from the card file the first time anyone draws.
+      // A card's "draw a monster for that tile" (a Duergar, a villager) draws once per `drawKey`.
+      if (action.drawKey && state.turn.monsterDraws?.[action.drawKey] !== undefined) return state
       const withDeck = state.monsterDeck ? state : { ...state, monsterDeck: buildDeck(action.cards, action.random) }
-      return drawMonster(withDeck, action.heroId, action.random)
+      const drawn = drawMonster(withDeck, action.heroId, action.random)
+      if (!action.drawKey || drawn.monsterDeck === withDeck.monsterDeck) return drawn
+      const added = drawn.monsters.length > state.monsters.length ? drawn.monsters[drawn.monsters.length - 1].name : 'none'
+      return { ...drawn, turn: { ...drawn.turn, monsterDraws: { ...drawn.turn.monsterDraws, [action.drawKey]: added } } }
     }
 
     case 'MONSTER_ATTACK':

@@ -83,7 +83,7 @@ function VillagerSteps({ state, villager, hero, dispatch }) {
         <>
           <p className="text-xl text-zinc-100">{step.say}</p>
           {step.draw && <DrawTileButton state={state} dispatch={dispatch} drawKey={`villager-${villager.id}`} from="bottom" />}
-          {step.draw && <DrawMonsterButton state={state} heroId={hero.id} dispatch={dispatch} className="w-full" label="🐉 Draw a monster for that tile" />}
+          {step.draw && <DrawMonsterButton state={state} heroId={hero.id} dispatch={dispatch} drawKey={`villager-${villager.id}`} className="w-full" label="🐉 Draw a monster for that tile" />}
           {step.attack && !turnRoll.attacked && (
             <div className="space-y-2">
               <p className="text-lg text-zinc-300">

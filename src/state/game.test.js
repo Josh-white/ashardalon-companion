@@ -258,6 +258,15 @@ describe('monster deck', () => {
     expect(state.moment.kind).toBe('spawn')
   })
 
+  it('draws only once for a card that puts a monster on a new tile', () => {
+    const keyed = (state) => gameReducer(state, { type: 'DRAW_MONSTER', heroId: state.heroes[0].id, drawKey: 'monster-m1', cards: [snake, devils], random: [] })
+    const once = keyed(startGame())
+    expect(once.monsters).toHaveLength(1)
+    expect(once.turn.monsterDraws).toEqual({ 'monster-m1': 'Snake' })
+    expect(keyed(once)).toBe(once)
+    expect(draw(once).monsters).toHaveLength(2)
+  })
+
   it('makes one monster with every figure for a group card', () => {
     const state = draw(startGame(), 0, [devils])
     expect(state.monsters[0]).toMatchObject({ name: 'Devil', hp: 3, maxHp: 3, ac: 16, xp: 3 })

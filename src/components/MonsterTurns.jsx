@@ -26,16 +26,20 @@ const SHUFFLE_NUMBERS = 128
 
 // Draws the top card of the virtual monster deck for a hero. Hidden when the card
 // file has no monsters, so the "+ Monster" form is the way to add them instead.
-export function DrawMonsterButton({ state, heroId, dispatch, className = '', label = '🐉 Draw a monster' }) {
+// `drawKey` makes it draw once, then say what came.
+export function DrawMonsterButton({ state, heroId, dispatch, drawKey, className = '', label = '🐉 Draw a monster' }) {
   const { monsters } = useCards()
   const deck = state.monsterDeck
   if (!deck && monsters.length === 0) return null
+  const drawn = drawKey && state.turn.monsterDraws?.[drawKey]
+  if (drawn === 'none') return <p className={`text-amber-300 ${className}`}>✓ Monster card drawn, but no monster comes this time.</p>
+  if (drawn) return <p className={`text-emerald-300 ${className}`}>✓ {/^[AEIOU]/.test(drawn) ? 'An' : 'A'} {drawn} was drawn. Put its figure on the new tile.</p>
   const left = deck ? deck.draw.length : monsters.reduce((sum, card) => sum + card.copies, 0)
   return (
     <Button
       variant="danger"
       className={`px-5 py-3 text-lg font-bold ${className}`}
-      onClick={() => dispatch({ type: 'DRAW_MONSTER', heroId, cards: monsters, random: randomNumbers(SHUFFLE_NUMBERS) })}
+      onClick={() => dispatch({ type: 'DRAW_MONSTER', heroId, drawKey, cards: monsters, random: randomNumbers(SHUFFLE_NUMBERS) })}
     >
       {label}
       <span className="ml-2 text-sm font-normal opacity-80">
@@ -280,6 +284,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
             state={state}
             heroId={activeHeroId}
             dispatch={dispatch}
+            drawKey={`monster-${monster.id}`}
             className="w-full"
             label="🐉 Draw a monster for that tile"
           />
