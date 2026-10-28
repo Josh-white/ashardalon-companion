@@ -51,7 +51,13 @@ function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitchSeat, s
           </span>
           <Button className="!px-2 !py-0" onClick={() => dispatch({ type: 'ADJUST_SURGES', amount: 1 })}>+</Button>
         </div>
-        <TilesLeft state={state} className="text-lg" />
+        {state.tileStack && (
+          <div className="flex items-center gap-2">
+            <Button className="!px-2 !py-0" onClick={() => dispatch({ type: 'ADJUST_TILES', amount: -1 })}>−</Button>
+            <TilesLeft state={state} className="text-lg" />
+            <Button className="!px-2 !py-0" onClick={() => dispatch({ type: 'ADJUST_TILES', amount: 1 })}>+</Button>
+          </div>
+        )}
         <div className="ml-auto flex flex-wrap gap-2">
           <UndoButton undo={undo} depth={undoDepth} dispatch={dispatch} className="max-w-56 truncate" />
           <SoundToggle on={sound.on} setOn={sound.setOn} className="text-sm" />

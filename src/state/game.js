@@ -11,7 +11,7 @@ import { monsterArt } from '../data/art.js'
 import { PHASES } from '../data/phases.js'
 import { heroItems, itemAttackBonus, itemTrapBonus, tileAcBonus } from '../data/items.js'
 import { effectsOf, heroAc, heroAttackPenalty, maxRolls } from '../data/powerEffects.js'
-import { STARTING_TILES, MAX_TILES, MIN_TILES, bottomToTop, buildTileStack, takeTile } from './tiles.js'
+import { STARTING_TILES, MAX_TILES, MIN_TILES, adjustTiles, bottomToTop, buildTileStack, takeTile } from './tiles.js'
 import { DOOR_KINDS, DOOR_UNLOCK_ROLL, MAX_SURGES, MIN_SURGES, aliveVillagers, checkVictory, countDefeat, escapeBlockers, isPlayable, newAdventure, objectiveInPlay, onceOnlyDraw, playableChambers, revealsReady, showStory, takeToken, villagerForRoll } from './adventure.js'
 import { trackStats } from './stats.js'
 
@@ -2375,6 +2375,9 @@ function reduce(state, action) {
 
     case 'ADJUST_SURGES':
       return { ...state, surges: Math.max(0, state.surges + action.amount) }
+
+    case 'ADJUST_TILES':
+      return adjustTiles(state, action.amount)
 
     case 'NEXT_PHASE': {
       const { heroIndex, phase, round } = state.turn
