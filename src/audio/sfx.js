@@ -303,7 +303,7 @@ export function burst(ctx, out, { at, type = 'bandpass', freq = 2000, q = 1, pea
 }
 
 // A brassy note: a sawtooth whose filter opens as it's blown, for horns and trombones.
-export function brass(ctx, out, { at, freq, length, peak = 0.18, wobble = 0, slideTo }) {
+function brass(ctx, out, { at, freq, length, peak = 0.18, wobble = 0, slideTo }) {
   const osc = ctx.createOscillator()
   osc.type = 'sawtooth'
   osc.frequency.setValueAtTime(freq, at)
@@ -714,7 +714,7 @@ export const SOUNDS = {
 // A growl: a low buzzy voice with a ragged wobble, pushed through distortion. The
 // options shape it into different beasts: how far the pitch rises and falls, how
 // fast it rattles, how bright and how loud it is.
-export function snarl(ctx, out, at, length, freq, { rise = 1.4, fall = 0.8, rattle = 23, cutoff = 900, peak = 0.25, breath = 0.25 } = {}) {
+function snarl(ctx, out, at, length, freq, { rise = 1.4, fall = 0.8, rattle = 23, cutoff = 900, peak = 0.25, breath = 0.25 } = {}) {
   const osc = ctx.createOscillator()
   osc.type = 'sawtooth'
   osc.frequency.setValueAtTime(freq, at)
