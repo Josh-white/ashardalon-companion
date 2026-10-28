@@ -2,14 +2,14 @@
 // limits live here, on the Pi, so no iPad can get around them.
 
 export const BOARD_SOUNDS = [
-  { key: 'fanfare', emoji: '🎺', label: 'Fanfare' },
-  { key: 'trombone', emoji: '😢', label: 'Sad trombone' },
-  { key: 'dragon', emoji: '🐉', label: 'Dragon roar' },
+  { key: 'tada', emoji: '🎉', label: 'Ta-da!' },
+  { key: 'wahwah', emoji: '😢', label: 'Wah-wah' },
+  { key: 'dundun', emoji: '😱', label: 'Dun dun DUNNN' },
+  { key: 'rimshot', emoji: '🥁', label: 'Ba-dum-tss' },
+  { key: 'crickets', emoji: '🦗', label: 'Crickets' },
+  { key: 'laugh', emoji: '😈', label: 'Evil laugh' },
   { key: 'clang', emoji: '⚔️', label: 'Sword clang' },
-  { key: 'thunder', emoji: '⚡', label: 'Thunder' },
-  { key: 'coins', emoji: '💰', label: 'Treasure' },
-  { key: 'drumroll', emoji: '🥁', label: 'Drumroll' },
-  { key: 'applause', emoji: '👏', label: 'Applause' },
+  { key: 'drumroll', emoji: '🪘', label: 'Drumroll' },
 ]
 
 // Each player's taps per hero turn; everyone's count starts over when the turn passes.

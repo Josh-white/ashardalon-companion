@@ -116,7 +116,7 @@ describe('sync server', () => {
     const heroId = started.heroes[0].id
     dad.send({ type: 'ADJUST_HP', heroId, amount: -1 })
     await dad.nextState(3)
-    dad.send({ type: 'PLAY_BOARD_SOUND', who: heroId, sound: 'fanfare' })
+    dad.send({ type: 'PLAY_BOARD_SOUND', who: heroId, sound: 'tada' })
     const played = await dad.nextState(4)
     expect(played.soundboard.used[heroId]).toBe(1)
     expect(dad.messages[3].undo).toBe(dad.messages[2].undo)
