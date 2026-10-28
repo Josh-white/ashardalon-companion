@@ -36,6 +36,10 @@ export function describeAction(state, action) {
       return `Adding ${action.name}`
     case 'DRAW_MONSTER':
       return 'Drawing a monster'
+    case 'DRAW_TILE':
+      return 'Drawing a tile'
+    case 'SET_EXPLORED':
+      return action.explored ? 'Exploring' : 'No new tile'
     case 'MONSTER_ATTACK':
       return monster ? `${monster.name}'s attack` : 'Monster attack'
     case 'HERO_ATTACK': {

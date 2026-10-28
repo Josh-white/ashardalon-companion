@@ -9,7 +9,7 @@ import { checksFor, phaseChecks, phaseTodo, poisonBonus, villagerRollDue } from 
 import { VillagerTurn } from './Villagers.jsx'
 import { useCards } from '../state/useCards.js'
 import { treasurePending } from './Treasure.jsx'
-import { DrawnTile, useTileDraw } from './Tiles.jsx'
+import { DrawnTile, HallwayDraws, useTileDraw } from './Tiles.jsx'
 import { Button } from './ui.jsx'
 
 // Each phase asks only what the app can't see for itself. The checklist each phase
@@ -159,6 +159,7 @@ function ExplorationPhase({ state, hero, dispatch }) {
       {state.tileStack ? (
         <Note>
           <DrawnTile tile={state.turn.tiles?.explore} />
+          <HallwayDraws state={state} dispatch={dispatch} />
         </Note>
       ) : (
         <Note>Draw a dungeon tile and put it on that edge.</Note>
