@@ -70,6 +70,13 @@ describe('dungeon tile stack', () => {
     expect(state.turn.noTiles).toBe(true)
   })
 
+  it('draws another tile for a long hallway, after the explore draw', () => {
+    let state = explore(start(null, 10))
+    state = gameReducer(state, { type: 'DRAW_TILE', key: 'hallway-1', from: 'top', random: [] })
+    expect(state.turn.tiles).toMatchObject({ explore: '', 'hallway-1': '' })
+    expect(state.tileStack.stack).toHaveLength(8)
+  })
+
   it('draws from the bottom for a card, once per key', () => {
     let state = start(null, 10)
     state = { ...state, tileStack: { stack: ['', 'Vault', ''], drawn: 0 } }

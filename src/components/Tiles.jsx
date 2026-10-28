@@ -73,3 +73,35 @@ export function TileSetup({ state, dispatch }) {
     </div>
   )
 }
+
+// A long hallway tile: the explorer draws another tile and puts it at the hallway's far end.
+// Each extra draw has its own key (hallway-1, hallway-2...), so a hallway that leads to
+// another hallway works too.
+export function HallwayDraws({ state, dispatch }) {
+  const payload = useTileDraw()
+  const tiles = state.turn.tiles ?? {}
+  const drawn = []
+  while (tiles[`hallway-${drawn.length + 1}`] !== undefined) drawn.push(tiles[`hallway-${drawn.length + 1}`])
+  const last = drawn.length > 0 ? drawn[drawn.length - 1] : tiles.explore
+  const canDraw = last !== undefined && last !== 'none' && state.tileStack.stack.length > 0
+  return (
+    <>
+      {drawn.map((tile, i) =>
+        tile === '' ? (
+          <p key={i} className="mt-2 text-emerald-300">✓ Long hallway: take the next top tile and put it at the hallway's far end. The monster goes on that tile's scorch mark.</p>
+        ) : (
+          <DrawnTile key={i} tile={tile} className="mt-2" />
+        ),
+      )}
+      {canDraw && (
+        <Button
+          variant="ghost"
+          className="mt-2 w-full"
+          onClick={() => dispatch({ type: 'DRAW_TILE', key: `hallway-${drawn.length + 1}`, from: 'top', ...payload })}
+        >
+          🗺️ Is it a long hallway? Draw another tile for its far end
+        </Button>
+      )}
+    </>
+  )
+}
