@@ -28,10 +28,18 @@ describe('moment sounds', () => {
     expect(names(heroAttack([[17, true]], 'defeat'))).toEqual(['dice', 'clang', 'hurt', 'victory'])
   })
 
-  it('growls before a monster attack and thuds when it hits a hero', () => {
-    expect(names(monsterAttack([[15, true]]))).toEqual(['growl', 'dice', 'thud'])
-    expect(names(monsterAttack([[20, false], [2, false]]))).toEqual(['growl', 'dice', 'whoosh'])
-    expect(names(monsterAttack([[18, true]], 'monster-down'))).toEqual(['growl', 'dice', 'thud', 'down'])
+  it('thuds when a monster hits a hero, after the die lands', () => {
+    expect(names(monsterAttack([[15, true]]))).toEqual(['dice', 'thud'])
+    expect(names(monsterAttack([[20, false], [2, false]]))).toEqual(['dice', 'whoosh'])
+    expect(names(monsterAttack([[18, true]], 'monster-down'))).toEqual(['dice', 'thud', 'down'])
+  })
+
+  it('lets the die roll alone, then plays one sound after another', () => {
+    const sounds = momentSounds({ kind: 'defeat', title: 'Heskan: Ray of Frost!', rolls: [{ monsterId: 'b', label: 'Cave Bear', value: 16, hit: true }] })
+    expect(sounds.map(([s]) => s)).toEqual(['dice', 'frost', 'hurt-big', 'victory'])
+    const starts = sounds.map(([, at]) => at)
+    expect(starts[1]).toBe(DIE_LANDS_MS)
+    for (let i = 2; i < starts.length; i++) expect(starts[i]).toBeGreaterThan(starts[i - 1])
   })
 
   it('gives each moment without dice its own sound', () => {
@@ -107,10 +115,10 @@ describe('spell and hurt sounds', () => {
     expect(spellKind('Inspiring Advice: Hit!')).toBe(null)
   })
 
-  it('casts while the die rolls, then the monster yelps on a hit', () => {
+  it('casts once the die lands, then the monster yelps on a hit', () => {
     expect(names(cast('Heskan: Ray of Frost!', [[15, true]]))).toEqual(['dice', 'frost', 'hurt-big'])
     expect(names(cast('Heskan: Ray of Frost!', [[4, false]]))).toEqual(['dice', 'frost', 'fizzle'])
-    expect(names(cast('Heskan: Ray of Frost!', [[20, true]]))).toEqual(['dice', 'frost', 'fanfare', 'hurt-big'])
+    expect(names(cast('Heskan: Ray of Frost!', [[20, true]]))).toEqual(['dice', 'fanfare', 'frost', 'hurt-big'])
   })
 
   it('a sword hit clangs, then each hit monster yelps (two at most)', () => {

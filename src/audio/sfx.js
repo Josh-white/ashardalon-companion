@@ -4,12 +4,15 @@ import { audioContext } from './soundSetting.js'
 
 // The 3D die lands this long after a roll's moment starts (ROLL_MS in Die3D.jsx).
 export const DIE_LANDS_MS = 900
+// After the die lands, sounds take turns: the next starts this long after the last
+// began, or sooner if the last one is shorter.
+const STEP_MS = 650
 // A device that reconnects shouldn't replay the sound of a moment that's over.
 const STALE_MS = 3000
 
 // How long each sound lasts, so the narrator knows when it can talk.
 const LENGTH_MS = {
-  dice: 850,
+  dice: 800,
   land: 250,
   clang: 900,
   whoosh: 450,
@@ -134,36 +137,41 @@ export function momentSounds(moment) {
   const rolls = moment.rolls ?? (moment.value != null ? [{ value: moment.value }] : [])
   const values = rolls.map((r) => r.value)
 
+  // The die rolls on its own; everything else waits until it lands, then plays one
+  // sound after another (each starts once the last one's main hit is over).
+  const sounds = [['dice', 0]]
+  let next = DIE_LANDS_MS
+  const then = (sound) => {
+    sounds.push([sound, next])
+    next += Math.min(LENGTH_MS[sound], STEP_MS)
+  }
+
   // Monster, trap and encounter attacks roll against heroes; a hero's attack rolls
   // against labeled monsters.
   if (rolls.some((r) => r.heroId && !r.label)) {
-    const hit = rolls.some((r) => r.hit)
-    const sounds = [['growl', 0], ['dice', 150], [hit ? 'thud' : 'whoosh', DIE_LANDS_MS]]
-    if (moment.kind === 'monster-down') sounds.push(['down', DIE_LANDS_MS + 500])
+    then(rolls.some((r) => r.hit) ? 'thud' : 'whoosh')
+    if (moment.kind === 'monster-down') then('down')
     return sounds
   }
 
   if (rolls.length > 0) {
     const anyHit = rolls.some((r) => r.hit)
     const attack = rolls.some((r) => r.hit != null)
-    // A power cast at a monster makes its own sound while the die rolls.
     const spell = attack ? spellKind(moment.title) : null
-    let result = 'land'
-    if (values.includes(20)) result = 'fanfare'
-    else if (attack && anyHit) result = spell ? null : 'clang'
-    else if (values.includes(1)) result = 'trombone'
-    else if (attack) result = spell ? 'fizzle' : 'whoosh'
-    const sounds = [['dice', 0]]
-    if (spell) sounds.push([spell, 100])
-    if (result) sounds.push([result, DIE_LANDS_MS])
-    // Each monster that was hit (up to two) yelps just after.
-    let after = DIE_LANDS_MS + (result ? 250 : 50)
-    for (const row of rolls.filter((r) => r.hit && r.label).slice(0, 2)) {
-      sounds.push([hurtSound(row.label), after])
-      after += 200
+    if (values.includes(20)) then('fanfare')
+    // A power cast at a monster makes its own sound once the die has landed.
+    if (spell) then(spell)
+    if (!values.includes(20)) {
+      if (attack && anyHit) {
+        if (!spell) then('clang')
+      } else if (values.includes(1)) then('trombone')
+      else if (attack) then(spell ? 'fizzle' : 'whoosh')
+      else then('land')
     }
-    // A defeated monster (or an unlocked door) gets a little victory tune after the hit.
-    if (moment.kind === 'defeat') sounds.push(['victory', Math.max(after + 200, DIE_LANDS_MS + (result === 'land' ? 200 : 600))])
+    // Each monster that was hit (up to two) yelps.
+    for (const row of rolls.filter((r) => r.hit && r.label).slice(0, 2)) then(hurtSound(row.label))
+    // A defeated monster (or an unlocked door) gets a little victory tune at the end.
+    if (moment.kind === 'defeat') then('victory')
     return sounds
   }
 
@@ -341,11 +349,18 @@ export const NOTE = (n) => 440 * Math.pow(2, (n - 69) / 12) // MIDI note number 
 export const SOUNDS = {
   // The d20 rattling across the table: clicks that slow down and get quieter.
   dice(ctx, at, out) {
-    let t = at
-    for (let i = 0; i < 9; i++) {
-      burst(ctx, out, { at: t, freq: 2500 + Math.random() * 2500, q: 4, peak: 0.8 * (1 - i / 11), decay: 0.03 })
-      t += 0.04 + i * 0.012 + Math.random() * 0.03
-    }
+    // One die: a few bounces, each closer together and softer, then a little wobble
+    // as it settles. The same pitch throughout, because it's the same die.
+    const pitch = 0.9 + Math.random() * 0.2
+    const bounces = [0, 0.2, 0.36, 0.48, 0.57, 0.63]
+    bounces.forEach((when, i) => {
+      const t = at + when
+      const loud = 0.9 * Math.pow(0.72, i)
+      tone(ctx, out, { at: t, freq: 950 * pitch, slideTo: 700 * pitch, type: 'triangle', peak: loud * 0.5, decay: 0.05 })
+      burst(ctx, out, { at: t, freq: 3200 * pitch, q: 5, peak: loud, decay: 0.025 })
+      tone(ctx, out, { at: t, freq: 160, slideTo: 90, peak: loud * 0.35, decay: 0.06 })
+    })
+    for (let i = 0; i < 4; i++) burst(ctx, out, { at: at + 0.67 + i * 0.035, freq: 3200 * pitch, q: 5, peak: 0.08 / (i + 1), decay: 0.015 })
   },
 
   // The die settling on its number.
