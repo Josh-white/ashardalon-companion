@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import { HERO_TEMPLATES } from '../src/data/heroes.js'
 import { createHero, initialState } from '../src/state/game.js'
-import { listSounds, loadCards, loadSavedGame, startServer } from './server.js'
+import { byteRange, listSounds, loadCards, loadSavedGame, startServer } from './server.js'
 
 // Opens a socket and collects every state the server sends.
 function connect(port) {
@@ -271,5 +271,15 @@ describe('recordings', () => {
     expect(listSounds(dir).dice.file).toBe('dice.mp3')
     expect(listSounds(join(dir, 'missing'))).toEqual({})
     rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('serves part of a long track when a player asks for a range', () => {
+    expect(byteRange(undefined, 1000)).toBe(null)
+    expect(byteRange('bytes=0-', 1000)).toEqual([0, 999])
+    expect(byteRange('bytes=100-199', 1000)).toEqual([100, 199])
+    expect(byteRange('bytes=900-5000', 1000)).toEqual([900, 999])
+    expect(byteRange('bytes=-100', 1000)).toEqual([900, 999])
+    expect(byteRange('bytes=2000-', 1000)).toBe(false)
+    expect(byteRange('bytes=0-1,5-9', 1000)).toBe(null)
   })
 })

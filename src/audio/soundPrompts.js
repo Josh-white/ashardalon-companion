@@ -2,21 +2,17 @@
 // becomes cards/sounds/<name>.mp3 on the Pi (kept out of git, like the card art), and
 // plays in place of the made-up sound it's named for (see RECORDING_NAMES in sfx.js).
 // JJ picked these prompts on 2026-10-28. The war horn and the grell were made again
-// with fuller prompts after the first takes sounded like a car horn and too plain.
+// with fuller prompts after the first takes sounded like a car horn and too plain. The
+// background music is JJ's Tabletop Audio tracks instead of ElevenLabs loops (see
+// ambience.js).
 //
 //   seconds   how long it is: ElevenLabs charges 40 credits a second
 //   takes     how many versions to make, to pick the best from on the #audition page
-//   loop      made to repeat with no gap (the ambient loops)
 //   follow    how closely it follows the prompt, 0 to 1 (higher sticks to the words)
 
-const loop = (name, seconds, prompt) => ({ name, group: 'Ambient loops', seconds, takes: 2, loop: true, follow: 0.4, prompt })
 const shot = (group, name, seconds, prompt, takes = 3) => ({ name, group, seconds, takes, loop: false, follow: 0.6, prompt })
 
 export const SOUND_PROMPTS = [
-  loop('loop-explore', 25, 'Ambient cave atmosphere, slow water drips echoing in a vast stone cavern, distant low volcanic rumble, faint wind through tunnels, no music'),
-  loop('loop-battle', 20, 'Tense dungeon combat ambience, low steady tribal war drum pulse, dark subterranean tension, crackling torch fire in stone halls, unobtrusive, no melody'),
-  loop('loop-boss', 25, 'Ominous boss chamber, slow heavy war drums, deep rumble of lava, low droning tension, huge creature breathing far off, no melody'),
-
   shot('Table', 'slide', 2, 'Heavy stone slab sliding across a stone floor and settling with a dull thud, dungeon echo'),
   shot('Table', 'trap', 1.5, 'Hidden blade trap springing, sharp metal click then a fast blade swoosh and slice'),
   shot('Table', 'fanfare', 4, 'Ancient Viking war horn made from a giant animal horn, one long deep bellowing blast echoing through a stone hall, then two steel swords clash and ring out', 4),

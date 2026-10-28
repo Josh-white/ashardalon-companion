@@ -9,11 +9,9 @@ const TARGET_DB = -17
 // Anything quieter than this at the start is silence to skip.
 const SILENCE = 0.01
 
-// Ambient loops (cards/sounds/loop-<mood>.mp3) are long, so they're left out here and
-// loaded only by a screen that plays background music; see loadLoop.
+// Background music tracks (cards/sounds/loop-<mood>.mp3) are long, so they're left out
+// here and streamed by ambience.js on screens that play music.
 export const isLoop = (sound) => sound.startsWith('loop-')
-// Loops are evened out on their average loudness instead, since they have no one big hit.
-const LOOP_TARGET_DB = -20
 
 const recordings = new Map() // sound -> { buffer, gain, offset }
 let loading = null
@@ -34,14 +32,6 @@ export function measure(data, sampleRate) {
   while (start < data.length && Math.abs(data[start]) < SILENCE) start++
   const gain = rms > 0 ? Math.min(10, Math.pow(10, TARGET_DB / 20) / rms) : 1
   return { gain, offset: start < data.length ? start / sampleRate : 0 }
-}
-
-// How loud a loop is on average, as the gain that brings it to LOOP_TARGET_DB.
-export function loopGain(data) {
-  let sum = 0
-  for (let i = 0; i < data.length; i++) sum += data[i] * data[i]
-  const rms = Math.sqrt(sum / Math.max(1, data.length))
-  return rms > 0 ? Math.min(10, Math.pow(10, LOOP_TARGET_DB / 20) / rms) : 1
 }
 
 // The Pi's list of recordings ({ sound: { file, v } }), fetched once per page.
@@ -80,28 +70,6 @@ export function loadSamples(ctx) {
     )
   })()
   return loading
-}
-
-const loops = new Map() // sound -> Promise of { buffer, gain }, or of null without one
-
-// The ambient loop `sound` (say 'loop-explore'), decoded and evened out, or null if the
-// Pi has none. Fetched the first time it's asked for.
-export function loadLoop(ctx, sound) {
-  if (!loops.has(sound)) {
-    loops.set(
-      sound,
-      soundList().then(async (list) => {
-        if (!list[sound]) return null
-        try {
-          const buffer = await decode(ctx, list[sound])
-          return { buffer, gain: loopGain(buffer.getChannelData(0)) }
-        } catch {
-          return null
-        }
-      }),
-    )
-  }
-  return loops.get(sound)
 }
 
 // How long the recording for `sound` lasts in ms, or null if there isn't one.

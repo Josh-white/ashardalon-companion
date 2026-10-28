@@ -51,14 +51,16 @@ It records every encounter card, adventure story, monster, villain, treasure, ti
 
 ### Make the sound effects and ambient loops
 
-The same key can make the game's recorded sounds with ElevenLabs' sound effects: three ambient loops (exploring, battle, boss) and 25 one-shots (tiles, traps, natural 20s, treasure, each monster, each kind of spell). The prompts are in `src/audio/soundPrompts.js`. On the Pi:
+The same key can make the game's recorded sounds with ElevenLabs' sound effects: 25 one-shots (tiles, traps, natural 20s, treasure, each monster, each kind of spell). The prompts are in `src/audio/soundPrompts.js`. On the Pi:
 
 ```sh
 docker compose exec ashardalon node server/generate-sounds.js --dry-run   # what's left and how many credits
 docker compose exec ashardalon node server/generate-sounds.js             # make the takes
 ```
 
-Each sound gets two or three takes in `cards/sounds/takes/`. Open the app at `/#audition` to listen and tap **Use this** on your favourite, which copies it to `cards/sounds/` where the game plays it (anything it replaces is kept in `takes/replaced/`). A loop plays in place of the made-up music for its mood, fading over 1.5 seconds when the mood changes, and the music and loops dip to a third of their volume while the narrator talks.
+Each sound gets two or three takes in `cards/sounds/takes/`. Open the app at `/#audition` to listen and tap **Use this** on your favourite, which copies it to `cards/sounds/` where the game plays it (anything it replaces is kept in `takes/replaced/`). ### Background music tracks
+
+Put a music track for each mood in `cards/sounds/` as `loop-explore.mp3`, `loop-battle.mp3` and `loop-boss.mp3` (JJ uses free tracks from Tabletop Audio: Dungeon I, Light the Beacons and Red Dragon Dawn). Each one streams in place of the made-up music for its mood, starting somewhere in the track and fading over 1.5 seconds when the mood changes. Music dips from 30% to 10% while the narrator talks, and the 🎵 switch turns it on or off on each screen. A mood with no track gets the made-up music.
 
 ## Run it on the Raspberry Pi
 

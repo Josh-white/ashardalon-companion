@@ -107,8 +107,33 @@ function serveSound(soundsDir, req, res) {
     return
   }
   // Screens ask for ?v=<version>, so a recording never changes under one URL.
-  res.writeHead(200, { 'Content-Type': SOUND_TYPES[ext], 'Cache-Control': 'public, max-age=31536000, immutable' })
+  const headers = { 'Content-Type': SOUND_TYPES[ext], 'Cache-Control': 'public, max-age=31536000, immutable', 'Accept-Ranges': 'bytes' }
+  const size = statSync(file).size
+  // The long music tracks stream in pieces, and Safari only plays audio that can.
+  const range = byteRange(req.headers.range, size)
+  if (range === false) {
+    res.writeHead(416, { 'Content-Range': `bytes */${size}` }).end()
+    return
+  }
+  if (range) {
+    const [start, end] = range
+    res.writeHead(206, { ...headers, 'Content-Range': `bytes ${start}-${end}/${size}`, 'Content-Length': end - start + 1 })
+    createReadStream(file, { start, end }).pipe(res)
+    return
+  }
+  res.writeHead(200, { ...headers, 'Content-Length': size })
   createReadStream(file).pipe(res)
+}
+
+// The bytes a Range header asks for, as [start, end], null for the whole file, or false
+// for a range outside it. Only one range is served.
+export function byteRange(header, size) {
+  const [, from, to] = /^bytes=(\d*)-(\d*)$/.exec(header ?? '') ?? []
+  if (from === undefined || (from === '' && to === '')) return null
+  // "bytes=-500" is the last 500 bytes.
+  const start = from === '' ? Math.max(0, size - Number(to)) : Number(from)
+  const end = from === '' || to === '' ? size - 1 : Math.min(Number(to), size - 1)
+  return start <= end && start < size ? [start, end] : false
 }
 
 // The #audition page: the list of sounds and their takes, each take's audio, and

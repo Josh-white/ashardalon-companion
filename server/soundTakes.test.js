@@ -13,11 +13,11 @@ const soundsDir = () => {
 }
 
 describe('ElevenLabs sound takes', () => {
-  it("costs what JJ's list adds up to: 2 takes of 3 loops, 3 of most one-shots, 4 of the remade horn and grell", () => {
-    expect(SOUND_PROMPTS.filter((p) => p.loop)).toHaveLength(3)
-    expect(SOUND_PROMPTS.filter((p) => !p.loop)).toHaveLength(25)
+  it("costs what JJ's list adds up to: 3 takes of most one-shots, 4 of the remade horn and grell", () => {
+    expect(SOUND_PROMPTS.filter((p) => p.loop)).toHaveLength(0)
+    expect(SOUND_PROMPTS).toHaveLength(25)
     expect(promptCredits(SOUND_PROMPTS.filter((p) => ['fanfare', 'monster-grell'].includes(p.name)))).toBe(1040)
-    expect(promptCredits(SOUND_PROMPTS)).toBe(11980)
+    expect(promptCredits(SOUND_PROMPTS)).toBe(6380)
   })
 
   it('plans only the takes not made yet', () => {
@@ -36,7 +36,7 @@ describe('ElevenLabs sound takes', () => {
       asked = { url, body: JSON.parse(init.body), key: init.headers['xi-api-key'] }
       return { ok: true, arrayBuffer: async () => new TextEncoder().encode('mp3').buffer }
     }
-    const loop = { ...SOUND_PROMPTS[0], take: 2 }
+    const loop = { name: 'loop-explore', take: 2, prompt: 'a cave', seconds: 25, loop: true, follow: 0.4 }
     await makeTake(dir, loop, { apiKey: 'k', fetchSound })
     expect(asked.url).toContain('/v1/sound-generation?output_format=mp3_44100_192')
     expect(asked.body).toMatchObject({ duration_seconds: 25, loop: true, model_id: 'eleven_text_to_sound_v2' })
