@@ -2,8 +2,8 @@
 // Like card text, the layouts stay on the Pi and never go in the repo.
 //
 // Each tile is drawn as rows of characters with its triangle edge at the bottom (south):
-//   .  floor        #  solid rock        S  scorch mark (floor where a new monster goes)
-// "features" marks squares the rules care about (stairs, a chest, a ladder, a door: the pale slabs where some adventures put a door marker), and "source"
+//   .  floor        #  wall (solid black)        S  scorch mark (floor where a new monster goes)
+// "features" marks squares the rules care about (stairs, a desk, a ladder, a door: the pale slabs where some adventures put a door marker), and "source"
 // says where the layout was read from, for checking it against the real tile.
 // "exits" says, square by square along each side, whether it is open ("o") or a wall ("x"):
 // north and south read left to right, east and west read top to bottom.

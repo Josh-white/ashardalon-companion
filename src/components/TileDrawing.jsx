@@ -1,9 +1,9 @@
-// One dungeon tile drawn from its layout in cards.json: floor, rock, the scorch mark,
-// the triangle and anything the rules care about (stairs, a chest, a ladder, a door). The board
+// One dungeon tile drawn from its layout in cards.json: floor, walls, the scorch mark,
+// the triangle and anything the rules care about (stairs, a desk, a ladder, a door). The board
 // uses the same drawing for every tile it lays down.
 
 const SQUARE = 40
-const FEATURE_MARKS = { stairs: '≡', chest: '💰', ladder: '🪜', door: '🚪' }
+const FEATURE_MARKS = { stairs: '≡', desk: '📖', ladder: '🪜', door: '🚪' }
 const TRIANGLE_COLORS = { black: '#09090b', white: '#fafafa', red: '#b91c1c' }
 
 export default function TileDrawing({ tile, className = '' }) {
@@ -11,7 +11,7 @@ export default function TileDrawing({ tile, className = '' }) {
   const height = tile.rows.length
   const squares = []
   tile.rows.forEach((row, y) =>
-    [...row].forEach((ch, x) => squares.push({ x, y, rock: ch === '#', scorch: ch === 'S' })),
+    [...row].forEach((ch, x) => squares.push({ x, y, wall: ch === '#', scorch: ch === 'S' })),
   )
   const marks = tile.features.flatMap((f) => f.at.map(([x, y]) => ({ x, y, type: f.type })))
   // The triangle sits on the bottom edge, between the middle two squares.
@@ -24,15 +24,15 @@ export default function TileDrawing({ tile, className = '' }) {
       role="img"
       aria-label={tile.name}
     >
-      {squares.map(({ x, y, rock }) => (
+      {squares.map(({ x, y, wall }) => (
         <rect
           key={`${x},${y}`}
           x={x * SQUARE}
           y={y * SQUARE}
           width={SQUARE}
           height={SQUARE}
-          fill={rock ? '#18181b' : '#a1a1aa'}
-          stroke={rock ? '#18181b' : '#52525b'}
+          fill={wall ? '#18181b' : '#a1a1aa'}
+          stroke={wall ? '#18181b' : '#52525b'}
           strokeWidth="1"
         />
       ))}

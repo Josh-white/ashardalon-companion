@@ -10,7 +10,7 @@ export default function TileCheck() {
     <main className="min-h-screen bg-zinc-950 p-4 text-zinc-100">
       <h1 className="font-display text-3xl text-amber-400">Tile check</h1>
       <p className="mt-1 max-w-2xl text-zinc-400">
-        Each tile is drawn with its triangle at the bottom. Grey is floor, black is rock, the dark circle is the scorch mark
+        Each tile is drawn with its triangle at the bottom. Grey is floor, black is wall, the dark circle is the scorch mark
         where a new monster goes. If a drawing doesn't match your tile, the tile is right: tell Claude which one.
       </p>
       {tileProblems.length > 0 && (
