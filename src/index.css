@@ -62,3 +62,24 @@ body {
   mask-image: linear-gradient(to left, black 35%, transparent);
   -webkit-mask-image: linear-gradient(to left, black 35%, transparent);
 }
+
+/* The dungeon area's background fades in when the party moves somewhere new, and
+   its border glows (and breathes while a villain is about). */
+@keyframes area-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes area-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 0.35vmin rgb(var(--glow) / 0.55), inset 0 0 7vmin rgb(var(--glow) / 0.35); }
+  50% { box-shadow: inset 0 0 0 0.5vmin rgb(var(--glow) / 0.95), inset 0 0 13vmin rgb(var(--glow) / 0.6); }
+}
+.area-fade { animation: area-fade 2.5s ease-out both; }
+.area-frame {
+  box-shadow: inset 0 0 0 0.35vmin rgb(var(--glow) / 0.6), inset 0 0 8vmin rgb(var(--glow) / 0.4);
+  transition: box-shadow 2.5s ease;
+}
+.area-pulse { animation: area-pulse 3s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .area-fade, .area-pulse { animation: none; }
+}
