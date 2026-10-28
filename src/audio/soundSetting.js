@@ -46,6 +46,15 @@ export function unlockAudio() {
   }
 }
 
+// Whether someone switched sound off on this device (not just the quiet default).
+export function soundSwitchedOff() {
+  try {
+    return localStorage.getItem(SOUND_KEY) === 'off'
+  } catch {
+    return false
+  }
+}
+
 // Whether this device plays sound effects and the narrator. Stored per device once
 // someone flips the switch; until then see soundOnByDefault.
 export function useSoundSetting(seat, projectorOpen) {

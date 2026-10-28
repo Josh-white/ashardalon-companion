@@ -16,6 +16,7 @@ import { DOOR_KINDS, DOOR_UNLOCK_ROLL, MAX_SURGES, MIN_SURGES, aliveVillagers, c
 import { trackStats } from './stats.js'
 import { campaignHero, campaignOutcome, campaignSurges, isCampaign, newCampaign, shopCards, shopSize } from './campaign.js'
 import { playBoardSound, setBoardOff, setBoardUnlimited } from './soundboard.js'
+import { newFirstRoll, rollFirst } from './firstRoll.js'
 
 export const SAVE_VERSION = 1
 
@@ -68,6 +69,8 @@ export const initialState = {
   campaign: null,
   // Treasure tokens left in a campaign adventure's stack: { gold, treasure }.
   tokenStack: null,
+  // The roll for first turn at the start of a game (state/firstRoll.js), or null.
+  firstRoll: null,
 }
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
@@ -1381,7 +1384,11 @@ function dealStartingTreasure(state, cards, random, deck = null) {
     next = withLog(next, `${heroLabel(hero)} starts with ${/^\S+s'?(\s|$)/.test(card.name) ? '' : `${article(card.name)} `}${card.name}.`)
     found.push(`${hero.name}: ${card.name}`)
   }
-  return withMoment(next, { kind: 'treasure', title: 'Starting treasure!', detail: found.join(' · ') })
+  const moment = { kind: 'treasure', title: 'Starting treasure!', detail: found.join(' · ') }
+  // With a roll for first turn coming, the treasure waits until it's decided, so the
+  // two don't land on top of each other.
+  if (next.firstRoll) return { ...next, firstRoll: { ...next.firstRoll, after: moment } }
+  return withMoment(next, moment)
 }
 
 // The treasure card goes in front of a hero: the one who found it, or one they hand it to.
@@ -1593,6 +1600,8 @@ function nextCampaignAdventure(state, action) {
     boons: [...state.campaign.boons, ...outcome.boons],
     heroes: state.heroes.map((hero) => heroRecord(hero, campaignHero(state, hero.key)?.deviceId ?? null)),
     games: state.campaign.games + 1,
+    // For the Chronicle in the next lobby: how the last adventure went.
+    last: { won: outcome.won, chamber: outcome.chamber?.name ?? null },
   }
   const held = campaign.heroes.flatMap((h) => h.items.map((i) => i.cardId))
   const shop = shopCards(action.treasureCards, held, shopSize({ campaign }, action.boons), action.random)
@@ -1943,6 +1952,37 @@ function reduce(state, action) {
     case 'CAMPAIGN_NEXT':
       return nextCampaignAdventure(state, action)
 
+    case 'ROLL_FIRST': {
+      if (state.status !== 'playing') return state
+      const out = rollFirst(state.firstRoll, action.heroId, action.value, Date.now())
+      if (!out) return state
+      const hero = state.heroes.find((h) => h.id === action.heroId)
+      const value = Math.min(20, Math.max(1, Math.round(Number(action.value)) || 1))
+      let next = withLog({ ...state, firstRoll: out.firstRoll }, `${heroLabel(hero)} rolled ${value} for first turn.`)
+      if (value === 20) next = withMoment(next, { kind: 'crit', heroId: hero.id, value: 20, title: 'NATURAL 20!' })
+      if (out.result?.winner) {
+        const index = state.heroes.findIndex((h) => h.id === out.result.winner)
+        next = withLog({ ...next, turn: { ...next.turn, heroIndex: index } }, `${state.heroes[index].name} goes first!`)
+      }
+      if (out.result?.tie) {
+        const names = out.result.tie.map((id) => state.heroes.find((h) => h.id === id)?.name).join(' and ')
+        next = withLog(next, `A tie! ${names} roll again.`)
+      }
+      return next
+    }
+
+    case 'SKIP_FIRST_ROLL': {
+      if (!state.firstRoll || state.firstRoll.winner) return state
+      const next = withLog({ ...state, firstRoll: null }, 'The heroes skipped the roll for first turn.')
+      return state.firstRoll.after ? withMoment(next, state.firstRoll.after) : next
+    }
+
+    // The "X goes first!" screen has finished: show what waited for it (the starting
+    // treasure). Every screen sends this when its roll screen closes; only the first counts.
+    case 'FIRST_ROLL_DONE':
+      if (!state.firstRoll?.winner || !state.firstRoll.after) return state
+      return withMoment({ ...state, firstRoll: { ...state.firstRoll, after: null } }, state.firstRoll.after)
+
     case 'CAMPAIGN_BUY':
       return buyFromShop(state, action)
 
@@ -1977,6 +2017,7 @@ function reduce(state, action) {
         tileStack: buildTileStack(tiles, card, action.tileRandom),
         campaign: campaign && { ...campaign, heroes: campaignHeroes(campaign, heroes, state.lobby ?? []) },
         tokenStack: campaign ? shuffle(Array.isArray(action.tokens) ? action.tokens : [], action.random) : null,
+        firstRoll: newFirstRoll(heroes),
       }
       // The Vast Gate Opens: the gate is on the Start tile, and its Flares! card is in the top 3 encounters.
       const objective = card?.startObjective
@@ -2134,6 +2175,8 @@ function reduce(state, action) {
         xp: 3,
         turn: { ...initialState.turn, round: 2 },
         tileStack: buildTileStack(STARTING_TILES - 4, null),
+        // The roll for first turn too, so it can be tried out (or skipped).
+        firstRoll: newFirstRoll(heroes),
       }
       // With monster cards, the demo's monsters come off the virtual deck instead.
       if (action.monsterCards?.length > 0) {

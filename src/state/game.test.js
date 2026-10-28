@@ -878,7 +878,12 @@ describe('treasure deck', () => {
     const state = gameReducer(initialState, { type: 'START_GAME', heroes, treasureCards: treasures, random: [] })
     expect(state.heroes.map((h) => h.items.map((i) => i.name))).toEqual([['Sword'], ['Amulet'], ['Shield']])
     expect(state.treasureDeck.draw).toHaveLength(8)
-    expect(state.moment).toMatchObject({ kind: 'treasure', title: 'Starting treasure!' })
+    // The treasure moment waits for the roll for first turn.
+    expect(state.moment).toBeNull()
+    expect(state.firstRoll.after).toMatchObject({ kind: 'treasure', title: 'Starting treasure!' })
+    // A lone hero has no roll, so the treasure shows straight away.
+    const solo = gameReducer(initialState, { type: 'START_GAME', heroes: heroes.slice(0, 1), treasureCards: treasures, random: [] })
+    expect(solo.moment).toMatchObject({ kind: 'treasure', title: 'Starting treasure!' })
     // Without treasure cards, nobody gets one.
     expect(startGame().heroes[0].items).toBeUndefined()
   })

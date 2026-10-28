@@ -125,6 +125,12 @@ export function describeAction(state, action) {
       return action.name ? `${action.name}'s turn done` : 'Turn done'
     case 'CAMPAIGN_NEXT':
       return 'On to the next adventure'
+    case 'ROLL_FIRST':
+      return hero ? `${hero.name}'s roll for first turn` : 'Roll for first turn'
+    case 'SKIP_FIRST_ROLL':
+      return 'Skipping the roll for first turn'
+    case 'FIRST_ROLL_DONE':
+      return 'Starting treasure'
     case 'CAMPAIGN_BUY':
       return 'Shop purchase'
     case 'END_CAMPAIGN':
