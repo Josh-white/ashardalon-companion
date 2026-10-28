@@ -162,6 +162,7 @@ function serveStatic(staticDir, req, res) {
   createReadStream(file).pipe(res)
 }
 
+const SEEN_LIMIT = 500
 const NOT_UNDOABLE = new Set(['ROLL_DIE', 'ATTACH_MONSTER_CARDS', 'UPDATE_ENCOUNTER_CARDS', 'CLAIM_HERO', 'RELEASE_HERO', 'SET_LOBBY_PLAYER', 'SET_LOBBY_PICK', 'SET_LOBBY_READY'])
 
 export function startServer({
@@ -183,6 +184,8 @@ export function startServer({
   const build = existsSync(indexFile) ? createHash('sha1').update(readFileSync(indexFile)).digest('hex').slice(0, 12) : null
   // Earlier versions of the game, newest last, each with what changed after it.
   const history = []
+  // The ids of the latest actions, so a resent one isn't applied twice.
+  const seenActions = new Set()
 
   const server = createServer((req, res) => {
     if (req.url === '/health') {
@@ -232,6 +235,15 @@ export function startServer({
       }
       if (message?.type !== 'action' || typeof message.action?.type !== 'string') return
       const action = message.action
+      // A screen keeps an action until the server says it got it, and sends it again after
+      // a reconnect. Each action has an id, so one that arrived twice only counts once.
+      const id = typeof message.id === 'string' ? message.id : null
+      if (id) socket.send(JSON.stringify({ type: 'ack', id }))
+      if (id && seenActions.has(id)) return
+      if (id) {
+        seenActions.add(id)
+        if (seenActions.size > SEEN_LIMIT) seenActions.delete(seenActions.values().next().value)
+      }
       if (action.type === 'UNDO') {
         // Two people tapping Undo at once both saw the same history depth; only
         // the first tap counts, so one tap never undoes two changes.

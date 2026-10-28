@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { refreshArt } from './useArt.js'
 
 const RECONNECT_DELAY_MS = 1500
+// How long a tap may wait for the Pi to say it got it before this screen reconnects.
+const ACK_TIMEOUT_MS = 4000
 // The build of the screens the Pi handed out when this screen loaded.
 let loadedBuild = null
 
@@ -19,16 +21,32 @@ export function useSharedGame() {
   const [undoDepth, setUndoDepth] = useState(0)
   const [instance, setInstance] = useState(null)
   const socketRef = useRef(null)
+  // Taps the Pi hasn't confirmed yet: { id, action, sentAt }. They're sent again after a
+  // reconnect, so a tap made while the iPad was off the Wi-Fi isn't lost.
+  const pendingRef = useRef([])
+  const reloadRef = useRef(false)
 
   useEffect(() => {
     let stopped = false
     let retryTimer
+
+    const sendPending = (socket) => {
+      for (const p of pendingRef.current) {
+        socket.send(JSON.stringify({ type: 'action', action: p.action, id: p.id }))
+        p.sentAt = Date.now()
+      }
+    }
+    // Reload for a new build only once nothing is waiting to be sent.
+    const reloadWhenIdle = () => {
+      if (reloadRef.current && pendingRef.current.length === 0) window.location.reload()
+    }
 
     const connect = () => {
       const socket = new WebSocket(socketUrl())
       socketRef.current = socket
       socket.onopen = () => {
         setConnected(true)
+        sendPending(socket)
         // A sleeping iPad misses news of new card pictures, so look again on every (re)connect.
         refreshArt()
       }
@@ -43,18 +61,41 @@ export function useSharedGame() {
           // The game itself lives on the Pi, so nothing is lost.
           if (message.build) {
             if (loadedBuild === null) loadedBuild = message.build
-            else if (message.build !== loadedBuild) window.location.reload()
+            else if (message.build !== loadedBuild) {
+              reloadRef.current = true
+              reloadWhenIdle()
+            }
           }
+        } else if (message.type === 'ack') {
+          pendingRef.current = pendingRef.current.filter((p) => p.id !== message.id)
+          reloadWhenIdle()
         } else if (message.type === 'art') {
           // Someone saved a card picture: show it here too.
           refreshArt()
         }
       }
       socket.onclose = () => {
+        if (socketRef.current !== socket) return // replaced by a fresh one already
         setConnected(false)
         if (!stopped) retryTimer = setTimeout(connect, RECONNECT_DELAY_MS)
       }
     }
+
+    // A socket can look open after the iPad lost the Wi-Fi. If a tap goes unconfirmed,
+    // drop that socket and start a fresh one, which sends the tap again.
+    const reconnectNow = () => {
+      const old = socketRef.current
+      socketRef.current = null
+      old?.close()
+      setConnected(false)
+      clearTimeout(retryTimer)
+      connect()
+    }
+    const watchdog = setInterval(() => {
+      const socket = socketRef.current
+      const stale = pendingRef.current.some((p) => p.sentAt && Date.now() - p.sentAt > ACK_TIMEOUT_MS)
+      if (stale && socket?.readyState === WebSocket.OPEN) reconnectNow()
+    }, 1000)
 
     connect()
     // iPads drop sockets when they sleep; reconnect as soon as the page is visible again.
@@ -70,13 +111,19 @@ export function useSharedGame() {
       stopped = true
       clearTimeout(retryTimer)
       document.removeEventListener('visibilitychange', onVisible)
+      clearInterval(watchdog)
       socketRef.current?.close()
     }
   }, [])
 
   const dispatch = useCallback((action) => {
+    const pending = { id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`, action, sentAt: null }
+    pendingRef.current.push(pending)
     const socket = socketRef.current
-    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'action', action }))
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: 'action', action, id: pending.id }))
+      pending.sentAt = Date.now()
+    }
   }, [])
 
   return { state, connected, dispatch, undo, undoDepth, instance }

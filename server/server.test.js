@@ -42,6 +42,18 @@ describe('sync server', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
+  it('confirms each tap and applies a resent one only once', async () => {
+    const dad = connect(server.port)
+    await dad.nextState(1)
+    const tap = JSON.stringify({ type: 'action', id: 'tap-1', action: { type: 'START_GAME', heroes: [createHero(HERO_TEMPLATES[0])] } })
+    dad.socket.send(tap)
+    await dad.nextState(3) // the ack, then the new state
+    dad.socket.send(tap)
+    dad.socket.send(JSON.stringify({ type: 'action', id: 'tap-2', action: { type: 'ADJUST_XP', amount: 1 } }))
+    expect((await dad.nextState(6)).xp).toBe(1) // ack, ack, new state
+    expect(dad.messages.filter((m) => m.type === 'ack').map((m) => m.id)).toEqual(['tap-1', 'tap-1', 'tap-2'])
+  })
+
   it('sends one iPad the change another iPad made, and saves it', async () => {
     const dad = connect(server.port)
     const son = connect(server.port)
