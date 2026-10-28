@@ -7,6 +7,7 @@
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { narrationScript } from '../src/audio/script.js'
+import { setHeroTemplates } from '../src/data/heroes.js'
 import { CREDITS_PER_LETTER, createNarrator, speakable } from './narrator.js'
 import { loadCards } from './server.js'
 
@@ -24,6 +25,7 @@ async function main() {
   const saveFile = process.env.SAVE_FILE ?? join(ROOT, 'data', 'game.json')
   const cards = loadCards(process.env.CARDS_FILE ?? join(ROOT, 'cards', 'cards.json'), join(ROOT, 'cards', 'cards.example.json'))
   const narrator = createNarrator({ cacheDir: join(dirname(saveFile), 'narration') })
+  setHeroTemplates(cards.heroes)
   const lines = narrationScript(cards)
   const { todo, letters, credits } = plan(narrator, lines)
   console.log(`${lines.length} lines in all, ${lines.length - todo.length} already recorded.`)

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ART_SIZE, CARD_ART_HEIGHT, cardArt, heroArt, heroCardArt } from '../data/art.js'
-import { HERO_COLORS, HERO_TEMPLATES } from '../data/heroes.js'
+import { HERO_COLORS, heroTemplates } from '../data/heroes.js'
 import { artUrl, saveArt, useArt } from '../state/useArt.js'
 import { useCards } from '../state/useCards.js'
 import { Button } from './ui.jsx'
@@ -222,7 +222,7 @@ export default function ArtScreen({ onDone }) {
       <section>
         <h2 className="mb-3 font-display text-2xl font-bold text-zinc-200">Heroes</h2>
         <div className={GRID}>
-          {HERO_TEMPLATES.map((t) => (
+          {heroTemplates().map((t) => (
             <ArtTile key={t.key} name={heroArt(t.key)} title={t.name} subtitle={t.className} titleClass={HERO_COLORS[t.color].text} onPhoto={setCropping} />
           ))}
         </div>
@@ -232,7 +232,7 @@ export default function ArtScreen({ onDone }) {
         <h2 className="font-display text-2xl font-bold text-zinc-200">Hero card art</h2>
         <p className="mb-3 text-zinc-400">The big picture from each hero card. It shows faded behind that hero's card on the player's own iPad.</p>
         <div className={GRID}>
-          {HERO_TEMPLATES.map((t) => (
+          {heroTemplates().map((t) => (
             <ArtTile key={t.key} tall name={heroCardArt(t.key)} title={t.name} subtitle={t.className} titleClass={HERO_COLORS[t.color].text} />
           ))}
         </div>

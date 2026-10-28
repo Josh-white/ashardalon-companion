@@ -1,8 +1,8 @@
 import { heroArt } from '../data/art.js'
 import { cardStats } from '../data/cards.js'
-import { HERO_COLORS, HERO_TEMPLATES, LEVEL_UP_AC_BONUS, LEVEL_UP_HP_BONUS, LEVEL_UP_SURGE_BONUS } from '../data/heroes.js'
+import { HERO_COLORS, HERO_TEMPLATES, heroTemplates, statsAtLevel, templateFor } from '../data/heroes.js'
 import { campaignHero } from '../state/campaign.js'
-import { powerSlotsFor } from '../state/game.js'
+import { levelSlots, powerSlotsFor } from '../state/game.js'
 import { randomNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { AdventurePicker, ChosenAdventure } from './Adventure.jsx'
@@ -11,8 +11,6 @@ import { CampaignLobby, HeroCampaign } from './Campaign.jsx'
 import Chronicle from './Chronicle.jsx'
 import { HeroHall, HoldToPick } from './HeroHall.jsx'
 import { Button } from './ui.jsx'
-
-const templateFor = (key) => HERO_TEMPLATES.find((t) => t.key === key)
 
 // Fills a new claim's slots with the cards the hero always has, then the
 // rulebook's suggested picks. Players can swap any suggested card.
@@ -29,9 +27,10 @@ export function startingPicks(template, cards) {
 
 const hasName = (claim) => Boolean(claim.player?.trim())
 
-// The claim's power slots: a level 2 campaign hero has one more daily.
+// The claim's power slots: a campaign hero who levelled up has the cards each level added.
 const claimSlots = (claim) => {
-  const slots = powerSlotsFor(templateFor(claim.heroKey))
+  const template = templateFor(claim.heroKey)
+  const slots = levelSlots(template, claim.picks.length - powerSlotsFor(template).length + 1)
   return claim.picks.map((_, i) => slots[i] ?? 'daily')
 }
 
@@ -40,7 +39,7 @@ const powersChosen = (claim, cards) =>
     (type, i) => claim.picks[i] || !cards.some((c) => c.hero === claim.heroKey && c.type === type),
   )
 
-// Starting picks for every hero, for a demo game.
+// Starting picks for every hero in the box, for a demo game.
 export const demoPicks = (cards) => Object.fromEntries(HERO_TEMPLATES.map((t) => [t.key, startingPicks(t, cards)]))
 
 // A claim can get ready once the player has typed a name and every slot that has
@@ -50,12 +49,12 @@ export function claimReady(claim, cards) {
 }
 
 function Stats({ template, level = 1 }) {
-  const up = level >= 2
+  const at = statsAtLevel(template, level)
   const stats = [
-    ['AC', template.ac + (up ? LEVEL_UP_AC_BONUS : 0)],
-    ['HP', template.maxHp + (up ? LEVEL_UP_HP_BONUS : 0)],
-    ['Speed', template.speed],
-    ['Surge', `${template.surgeValue + (up ? LEVEL_UP_SURGE_BONUS : 0)} HP`],
+    ['AC', at.ac],
+    ['HP', at.maxHp],
+    ['Speed', at.speed],
+    ['Surge', `${at.surgeValue} HP`],
   ]
   return (
     <div className="mt-3 grid grid-cols-4 gap-2 text-center">
@@ -181,7 +180,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
   const lobby = state.lobby ?? []
   const mine = lobby.find((c) => c.deviceId === deviceId)
   // A campaign goes on with the same heroes, every one of them.
-  const heroChoices = state.campaign ? HERO_TEMPLATES.filter((t) => campaignHero(state, t.key)) : HERO_TEMPLATES
+  const heroChoices = state.campaign ? heroTemplates().filter((t) => campaignHero(state, t.key)) : heroTemplates()
   const ready = lobby.length > 0 && lobby.every((c) => c.ready) && (!state.campaign || heroChoices.every((t) => lobby.some((c) => c.heroKey === t.key)))
 
   const claim = (template) => {

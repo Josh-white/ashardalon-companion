@@ -20,6 +20,8 @@ import { itemAc } from './items.js'
 //   free        doesn't use up the hero's attack (a trap can still be disabled after it).
 // Other powers have a `use`, done from the power's tile:
 //   healSelf, heal + pick ('other': one other hero), tokens, endCondition, refuge, invisible, causeFear, note.
+// A card in cards.json can carry its own `effect` with these fields (a homebrew power);
+// a power listed below by name always uses the entry here instead.
 // `reaction` powers are offered where they happen: 'reroll', 'furious', 'dodge', 'evade', 'noble-shield', 'perseverance',
 // 'bravery' (offered when a monster activates, and still usable from its tile).
 const EFFECTS = {
@@ -99,7 +101,14 @@ const BY_KEY = Object.fromEntries(Object.entries(EFFECTS).map(([name, effect]) =
 // The old card list calls Arcing Smite "Arcing Strike".
 BY_KEY.arcingstrike = BY_KEY.arcingsmite
 
-const entryFor = (powerOrCard) => BY_KEY[key(powerOrCard?.card?.name ?? powerOrCard?.name)]
+// The fields an effect can have, for checking a card's own `effect` in cards.json.
+export const EFFECT_FIELDS = [
+  'targets', 'attacks', 'sameTarget', 'before', 'ask', 'evenBonus', 'onHit', 'after',
+  'note', 'hitNote', 'missNote', 'keepOnMiss', 'free', 'use', 'reaction',
+]
+
+const cardOf = (powerOrCard) => powerOrCard?.card ?? powerOrCard
+const entryFor = (powerOrCard) => BY_KEY[key(cardOf(powerOrCard)?.name)] ?? cardOf(powerOrCard)?.effect
 
 // The effects of a power slot (or a card), or {} for a plain power.
 export const effectsOf = (powerOrCard) => entryFor(powerOrCard) ?? {}

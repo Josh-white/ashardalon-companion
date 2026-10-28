@@ -1,4 +1,5 @@
-import { CONDITIONS, HERO_TEMPLATES } from './heroes.js'
+import { ABILITY_EFFECTS, CONDITIONS, HERO_COLORS, HERO_TEMPLATES } from './heroes.js'
+import { EFFECT_FIELDS } from './powerEffects.js'
 
 // "Attack +8 · Damage 1", to compare cards while choosing.
 export function cardStats(card) {
@@ -6,7 +7,6 @@ export function cardStats(card) {
 }
 
 export const POWER_TYPES = ['at-will', 'utility', 'daily']
-const HERO_KEYS = HERO_TEMPLATES.map((t) => t.key)
 
 // Checks a card file and keeps the cards that can be used. Problems are listed
 // so a typo in cards.json is easy to find instead of silently hiding a card.
@@ -15,8 +15,10 @@ export function normalizeCardFile(data) {
   const powers = []
   const seen = new Set()
   const list = Array.isArray(data?.powers) ? data.powers : null
-  if (!list) return { powers, abilities: [], monsters: [], villains: [], encounters: [], adventures: [], chambers: [], treasures: [], villagers: [], boons: [], treasureTokens: [], problems: ['The file needs a "powers" list.'] }
+  if (!list) return { powers, heroes: HERO_TEMPLATES, abilities: [], monsters: [], villains: [], encounters: [], adventures: [], chambers: [], treasures: [], villagers: [], boons: [], treasureTokens: [], problems: ['The file needs a "powers" list.'] }
 
+  const { heroes, abilities } = normalizeHeroes(data?.heroes, problems)
+  const HERO_KEYS = heroes.map((t) => t.key)
   list.forEach((card, i) => {
     const label = card?.name ? `"${card.name}"` : `power #${i + 1}`
     if (!card || typeof card !== 'object') return problems.push(`${label} is not a card.`)
@@ -42,11 +44,13 @@ export function normalizeCardFile(data) {
       // "suggested" ones are the rulebook's picks and can be swapped.
       always: card.always === true,
       suggested: card.suggested === true,
+      ...cardEffect(card, label, problems),
     })
   })
   return {
     powers,
-    abilities: normalizeAbilities(data?.heroes, problems),
+    heroes,
+    abilities,
     monsters: normalizeMonsters(data?.monsters, problems),
     villains: normalizeVillains(data?.villains, problems),
     encounters: normalizeEncounters(data?.encounters, problems),
@@ -60,33 +64,123 @@ export function normalizeCardFile(data) {
   }
 }
 
-// Hero card abilities, such as Keyleth's Healing Hands. Optional; `level` 2 means
-// the ability is only on the 2nd-level side of the card.
-function normalizeAbilities(list, problems) {
-  if (list === undefined) return []
+// What a power does besides its attack roll, for a card the app doesn't know by name
+// (a homebrew power): the same fields as src/data/powerEffects.js. Unknown fields are
+// listed as problems so a typo shows, and the rest of the effect is kept.
+function cardEffect(card, label, problems) {
+  if (card.effect === undefined) return {}
+  if (!card.effect || typeof card.effect !== 'object' || Array.isArray(card.effect)) {
+    problems.push(`${label} has an "effect" that isn't a list of fields; it's left out.`)
+    return {}
+  }
+  const unknown = Object.keys(card.effect).filter((field) => !EFFECT_FIELDS.includes(field))
+  if (unknown.length > 0) problems.push(`${label} has effect fields the app doesn't know: ${unknown.join(', ')}.`)
+  return { effect: Object.fromEntries(Object.entries(card.effect).filter(([field]) => EFFECT_FIELDS.includes(field))) }
+}
+
+const HERO_KEY = /^[a-z][a-z0-9-]*$/
+const isCount = (n) => Number.isInteger(n) && n > 0
+// A level row in cards.json says hp and surge; the app calls them maxHp and surgeValue.
+const ROW_STATS = { hp: 'maxHp', ac: 'ac', surge: 'surgeValue', speed: 'speed' }
+
+function levelRows(entry, label, problems) {
+  const rows = []
+  for (const row of entry.levels) {
+    if (!Number.isInteger(row?.level) || row.level < 1 || row.level > 10) {
+      problems.push(`${label} has a level row without a "level" from 1 to 10.`)
+      continue
+    }
+    const stats = {}
+    for (const [from, to] of Object.entries(ROW_STATS)) {
+      if (row[from] === undefined) continue
+      if (isCount(row[from])) stats[to] = row[from]
+      else problems.push(`${label} level ${row.level} has ${from} "${row[from]}"; use a whole number.`)
+    }
+    if (row.addSlot !== undefined && !POWER_TYPES.includes(row.addSlot)) {
+      problems.push(`${label} level ${row.level} adds slot "${row.addSlot}"; use one of ${POWER_TYPES.join(', ')}.`)
+    }
+    rows.push({ level: row.level, ...stats, ...(POWER_TYPES.includes(row.addSlot) ? { addSlot: row.addSlot } : {}) })
+  }
+  return rows
+}
+
+// The heroes in the "heroes" list: abilities for the box's five (Keyleth's Healing Hands), and
+// whole hero cards for homebrew heroes. A homebrew hero needs a name and a level 1 row with
+// hp, ac, surge and speed. Optional: className, color, powerSlots, spellSound, more level rows.
+// An ability can name an `effect` (ABILITY_EFFECTS) for the app to do; `level` 2 means the
+// ability is only on the 2nd-level side of the card.
+function normalizeHeroes(list, problems) {
+  const heroes = HERO_TEMPLATES.map((t) => ({ ...t }))
+  const abilities = []
+  if (list === undefined) return { heroes: HERO_TEMPLATES, abilities }
   if (!Array.isArray(list)) {
     problems.push('"heroes" should be a list.')
-    return []
+    return { heroes: HERO_TEMPLATES, abilities }
   }
-  const abilities = []
   list.forEach((entry, i) => {
-    if (!HERO_KEYS.includes(entry?.hero)) {
-      return problems.push(`Hero entry #${i + 1} has hero "${entry?.hero}"; use one of ${HERO_KEYS.join(', ')}.`)
+    const key = entry?.hero
+    if (typeof key !== 'string' || !HERO_KEY.test(key)) {
+      return problems.push(`Hero entry #${i + 1} needs a "hero" key in small letters, such as "monk".`)
+    }
+    let template = heroes.find((t) => t.key === key)
+    const label = `Hero "${key}"`
+    if (!template) {
+      const rows = Array.isArray(entry.levels) ? levelRows(entry, label, problems) : []
+      const first = rows.find((r) => r.level === 1)
+      if (!entry.name || typeof entry.name !== 'string') return problems.push(`${label} isn't in the box, so it needs a "name".`)
+      if (!first || !Object.values(ROW_STATS).every((stat) => first[stat])) {
+        return problems.push(`${label} needs a level 1 row with hp, ac, surge and speed.`)
+      }
+      const used = heroes.map((t) => t.color)
+      let color = entry.color
+      if (!HERO_COLORS[color]) {
+        color = Object.keys(HERO_COLORS).find((c) => !used.includes(c)) ?? 'sky'
+        if (entry.color !== undefined) problems.push(`${label} has color "${entry.color}"; use one of ${Object.keys(HERO_COLORS).join(', ')}.`)
+      }
+      let powerSlots
+      if (entry.powerSlots !== undefined) {
+        if (Array.isArray(entry.powerSlots) && entry.powerSlots.length > 0 && entry.powerSlots.every((t) => POWER_TYPES.includes(t))) {
+          powerSlots = entry.powerSlots
+        } else {
+          problems.push(`${label} has "powerSlots" that aren't a list of ${POWER_TYPES.join(', ')}.`)
+        }
+      }
+      const { level, ...stats } = first
+      template = {
+        key,
+        name: entry.name,
+        className: typeof entry.className === 'string' ? entry.className : '',
+        color,
+        ...stats,
+        ...(powerSlots ? { powerSlots } : {}),
+        levels: rows.filter((r) => r.level > 1).sort((a, b) => a.level - b.level),
+        abilityEffects: [],
+        ...(typeof entry.spellSound === 'string' ? { spellSound: entry.spellSound } : {}),
+        homebrew: true,
+      }
+      heroes.push(template)
+    } else if (entry.levels !== undefined) {
+      problems.push(template.homebrew ? `${label} is listed twice; the first one's stats are used.` : `${label} is in the box, so its stats come from the app and "levels" is left out.`)
     }
     for (const ability of Array.isArray(entry.abilities) ? entry.abilities : []) {
       if (!ability?.name || typeof ability.name !== 'string') {
-        problems.push(`An ability for ${entry.hero} needs a "name".`)
+        problems.push(`An ability for ${key} needs a "name".`)
         continue
       }
+      if (ability.effect !== undefined && !ABILITY_EFFECTS.includes(ability.effect)) {
+        problems.push(`${ability.name} has effect "${ability.effect}"; use one of ${ABILITY_EFFECTS.join(', ')}.`)
+      } else if (ability.effect && !template.abilityEffects?.includes(ability.effect)) {
+        template.abilityEffects = [...(template.abilityEffects ?? []), ability.effect]
+      }
       abilities.push({
-        hero: entry.hero,
+        hero: key,
         name: ability.name,
         text: typeof ability.text === 'string' ? ability.text : '',
         level: ability.level === 2 ? 2 : 1,
       })
     }
   })
-  return abilities
+  return { heroes, abilities }
 }
 
 // What a monster's (or villain's) tactics can ask about the board, in the order a card checks them.

@@ -30,7 +30,7 @@ Changes show up the next time an iPad reloads the page; no restart needed. Cards
 ```
 
 - `id`: any unique name for the card.
-- `hero`: `cleric`, `fighter`, `paladin`, `rogue`, or `wizard`.
+- `hero`: `cleric`, `fighter`, `paladin`, `rogue`, `wizard`, or a homebrew hero's key (see below).
 - `type`: `at-will`, `utility`, or `daily`.
 - `attack`, `damage`, `text`: optional, shown on the hero card.
 - `suggested`: optional, `true` for the rulebook's suggested picks. They're filled in on the setup screen, and players can swap them.
@@ -39,6 +39,15 @@ Changes show up the next time an iPad reloads the page; no restart needed. Cards
 ### What powers do
 
 The app knows what each of the 50 powers in the box does besides its attack roll (healing, Cleric's Shield, Inspiring Advice, Mirror Image and so on) and does it for you. It finds a power by its `name`, so keep the names as they are on the cards. The list is in `src/data/powerEffects.js`, in short words of our own. A power the app doesn't know still works; it just flips over when used.
+
+A homebrew power can say what it does with an `effect`, using the same fields as `src/data/powerEffects.js` (the list of fields is at the top of that file). A power the app already knows by name always uses the app's own effect.
+
+```json
+{ "id": "monk-flurry", "hero": "monk", "type": "at-will", "name": "Flurry of Blows", "attack": "+7", "damage": "1",
+  "text": "What the card says.", "effect": { "targets": 2, "note": "Then move 1 square." } }
+```
+
+Anything the app can't do yet goes in a `note`, shown as a reminder when the power is used.
 
 ### Hero abilities (optional)
 
@@ -58,6 +67,41 @@ Abilities printed on a hero card show under the hero's name. Use `"level": 2` fo
   ]
 }
 ```
+
+An ability can also name what it does with an `effect`, so the app does it for any hero who has it: `saving-grace` (a healed hero can end a condition), `healing-hands` (a healing surge heals 1 more), `brutal-recovery` (a natural 20 can flip Furious Assault back over), `cast-iron-stomach` (+5 to end Poisoned) or `mage-hand` (open doors anywhere on your tile). The five heroes in the box already have theirs.
+
+### Homebrew heroes (optional)
+
+A hero who isn't in the box (a Bard, Druid, Monk or Warlock from BoardGameGeek) goes in the same `heroes` list with its whole hero card. It shows up in the lobby after the five in the box, and its powers use its key as their `hero`.
+
+```json
+{
+  "powers": [],
+  "heroes": [
+    {
+      "hero": "monk",
+      "name": "Sen",
+      "className": "Human Monk",
+      "color": "teal",
+      "levels": [
+        { "level": 1, "hp": 8, "ac": 16, "surge": 4, "speed": 7 },
+        { "level": 2, "hp": 10, "ac": 17, "surge": 5, "addSlot": "daily" }
+      ],
+      "powerSlots": ["at-will", "at-will", "utility", "daily"],
+      "spellSound": "arcane",
+      "abilities": [{ "name": "Iron Body", "text": "What the card says.", "effect": "cast-iron-stomach" }]
+    }
+  ]
+}
+```
+
+- `hero`: a short key in small letters. It also names the hero's pictures: `hero-monk.png` and `card-hero-monk.jpg` in `cards/art`.
+- `name` and a `levels` row for level 1 with `hp`, `ac`, `surge` and `speed` are needed. `className` is optional.
+- `levels`: later rows list only what changes. `addSlot` is the power card that level adds (`daily` if left out). Without a level 2 row the hero levels up like the box heroes: +2 HP, +1 AC, +1 surge and a daily. Heroes stop at level 2 for now.
+- `color`: `sky`, `red`, `amber`, `emerald`, `violet`, `teal`, `rose`, `orange`, `lime` or `fuchsia`. Left out, the hero gets one no one else has.
+- `powerSlots`: the level 1 power slots, counting any `always` card. Left out: 2 at-wills, 2 utilities and a daily, like Keyleth.
+- `spellSound`: optional, the sound for an attack whose name doesn't suggest one (`arcane`, `holy`, `fire`, `frost`, `zap` and so on).
+- To record the narrator's lines for a new hero, run `node server/record-narration.js` on the Pi once the hero is in the file.
 
 If a card has a mistake, the app lists it on the hero card's power picker so it's easy to fix.
 

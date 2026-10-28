@@ -1,6 +1,6 @@
 import { previouslyLine } from '../audio/narration.js'
 import { heroArt } from '../data/art.js'
-import { HERO_TEMPLATES } from '../data/heroes.js'
+import { templateFor } from '../data/heroes.js'
 import { useCards } from '../state/useCards.js'
 import Art from './Art.jsx'
 
@@ -41,7 +41,7 @@ export default function Chronicle({ campaign }) {
           {campaign.heroes.map((h) => (
             <div key={h.key} className="flex flex-col items-center gap-1">
               <Art name={heroArt(h.key)} className="w-[5vw]" />
-              <span className="font-display text-[1.2vw] font-bold">{HERO_TEMPLATES.find((t) => t.key === h.key)?.name}</span>
+              <span className="font-display text-[1.2vw] font-bold">{templateFor(h.key)?.name ?? h.key}</span>
               <span className="text-[1vw]">Level {h.level}</span>
             </div>
           ))}

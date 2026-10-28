@@ -2,14 +2,16 @@
 // server/record-narration.js records them all once, so the narrator can keep
 // playing them after the ElevenLabs key is gone. The lines come from the same
 // functions the projector uses, so the words match exactly.
-import { HERO_TEMPLATES } from '../data/heroes.js'
+import { heroTemplates } from '../data/heroes.js'
 import { VILLAIN_LINES } from '../data/villainLines.js'
 import { INTRO_LINE, firstTurnLine, momentLines, narrationFor, previouslyLine } from './narration.js'
 
 const article = (name) => (/^[aeiou]/i.test(name) ? 'An' : 'A')
 
 export function narrationScript(cards) {
-  const heroes = HERO_TEMPLATES.map((h, i) => ({ id: `h${i}`, name: h.name }))
+  // Every hero in cards.json, homebrew ones too, so their lines are recorded with the rest.
+  const templates = cards.heroes ?? heroTemplates()
+  const heroes = templates.map((h, i) => ({ id: `h${i}`, name: h.name }))
   const villains = (cards.villains ?? []).map((v, i) => ({ id: `v${i}`, name: v.name, fullName: v.fullName ?? v.name }))
   const base = { status: 'playing', heroes, villains, turn: { heroIndex: 0, phase: 0, round: 1 }, moment: null, encounter: null, adventure: null }
   const lines = []
@@ -18,7 +20,7 @@ export function narrationScript(cards) {
 
   // The intro screen, and the herald calling out each hero in the lobby.
   lines.push(INTRO_LINE)
-  for (const hero of HERO_TEMPLATES) change({ status: 'setup', lobby: [] }, { status: 'setup', lobby: [{ heroKey: hero.key }] })
+  for (const hero of templates) change({ status: 'setup', lobby: [] }, { status: 'setup', lobby: [{ heroKey: hero.key }] })
   // Who won the roll for first turn, and the Chronicle's look back between campaign adventures.
   for (const hero of heroes) lines.push(firstTurnLine(hero))
   for (const won of [true, false]) {
