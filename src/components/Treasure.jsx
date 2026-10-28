@@ -70,11 +70,13 @@ export function TreasureStep({ state, dispatch, heroId = null }) {
   const { treasures } = useCards()
   const owed = state.turn.treasureOwed
   const active = state.heroes[state.turn.heroIndex]?.id
-  const finderId = state.treasure?.heroId ?? owed
+  const finderId = state.treasure?.heroId ?? owed ?? state.turn.tokenOwed
   if (!finderId || (heroId && heroId !== active && heroId !== finderId)) return null
   const finder = state.heroes.find((h) => h.id === finderId)
   let body
-  if (state.treasure) {
+  if (!state.treasure && !owed) {
+    body = <TokenDraw state={state} dispatch={dispatch} finder={finder} />
+  } else if (state.treasure) {
     body = <TreasureCard key={state.treasure.id} state={state} dispatch={dispatch} />
   } else if (!state.treasureDeck && treasures.length === 0) {
     body = <div className="rounded-xl bg-amber-950/60 p-3 text-lg text-amber-100">💰 {finder?.name} draws a treasure card from the deck.</div>
@@ -96,9 +98,43 @@ export function TreasureStep({ state, dispatch, heroId = null }) {
   )
 }
 
-// True while a treasure card is waiting to be drawn or handed out, so the turn can't pass.
+// A campaign: defeating a monster earns a Treasure token. The app draws from its own stack
+// when the card file lists the tokens; otherwise the player draws a real one and says what it is.
+const TOKEN_GOLD = [50, 100, 150, 200, 250, 500]
+
+function TokenDraw({ state, dispatch, finder }) {
+  const virtual = state.tokenStack?.length > 0
+  if (virtual) {
+    return (
+      <Button variant="gold" className="w-full px-5 py-4 text-xl font-bold" onClick={() => dispatch({ type: 'DRAW_TREASURE_TOKEN' })}>
+        💰 Draw a Treasure token for {finder?.name}
+        {state.environment?.cardId === 'dragon-s-tribute' && <span className="block text-base font-normal">Dragon's Tribute: the app draws two and keeps the lower one.</span>}
+      </Button>
+    )
+  }
+  return (
+    <div className="rounded-xl bg-amber-950/60 p-3">
+      <p className="text-lg text-amber-100">💰 {finder?.name} draws a Treasure token from the stack. What does it say?</p>
+      <div className="mt-2 grid grid-cols-3 gap-2">
+        {TOKEN_GOLD.map((gold) => (
+          <Button key={gold} onClick={() => dispatch({ type: 'DRAW_TREASURE_TOKEN', token: { gold } })}>
+            {gold} gold
+          </Button>
+        ))}
+        <Button variant="gold" className="col-span-2" onClick={() => dispatch({ type: 'DRAW_TREASURE_TOKEN', token: { treasure: true } })}>
+          Treasure!
+        </Button>
+        <Button variant="ghost" onClick={() => dispatch({ type: 'DRAW_TREASURE_TOKEN', token: { gold: 0 } })}>
+          None left
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+// True while a treasure card or token is waiting to be drawn or handed out, so the turn can't pass.
 export function treasurePending(state, treasures) {
-  return Boolean(state.treasure) || Boolean(state.turn.treasureOwed && (state.treasureDeck || treasures.length > 0))
+  return Boolean(state.treasure) || Boolean(state.turn.tokenOwed) || Boolean(state.turn.treasureOwed && (state.treasureDeck || treasures.length > 0))
 }
 
 // Using an item: asks who or what it's for when it needs to know, then the app does it.

@@ -1,11 +1,13 @@
 import { heroArt } from '../data/art.js'
 import { cardStats } from '../data/cards.js'
-import { HERO_COLORS, HERO_TEMPLATES } from '../data/heroes.js'
+import { HERO_COLORS, HERO_TEMPLATES, LEVEL_UP_AC_BONUS, LEVEL_UP_HP_BONUS, LEVEL_UP_SURGE_BONUS } from '../data/heroes.js'
+import { campaignHero } from '../state/campaign.js'
 import { powerSlotsFor } from '../state/game.js'
 import { randomNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { AdventurePicker, ChosenAdventure } from './Adventure.jsx'
 import Art from './Art.jsx'
+import { CampaignLobby, HeroCampaign } from './Campaign.jsx'
 import { Button } from './ui.jsx'
 
 const templateFor = (key) => HERO_TEMPLATES.find((t) => t.key === key)
@@ -25,8 +27,14 @@ export function startingPicks(template, cards) {
 
 const hasName = (claim) => Boolean(claim.player?.trim())
 
+// The claim's power slots: a level 2 campaign hero has one more daily.
+const claimSlots = (claim) => {
+  const slots = powerSlotsFor(templateFor(claim.heroKey))
+  return claim.picks.map((_, i) => slots[i] ?? 'daily')
+}
+
 const powersChosen = (claim, cards) =>
-  powerSlotsFor(templateFor(claim.heroKey)).every(
+  claimSlots(claim).every(
     (type, i) => claim.picks[i] || !cards.some((c) => c.hero === claim.heroKey && c.type === type),
   )
 
@@ -39,12 +47,13 @@ export function claimReady(claim, cards) {
   return hasName(claim) && powersChosen(claim, cards)
 }
 
-function Stats({ template }) {
+function Stats({ template, level = 1 }) {
+  const up = level >= 2
   const stats = [
-    ['AC', template.ac],
-    ['HP', template.maxHp],
+    ['AC', template.ac + (up ? LEVEL_UP_AC_BONUS : 0)],
+    ['HP', template.maxHp + (up ? LEVEL_UP_HP_BONUS : 0)],
     ['Speed', template.speed],
-    ['Surge', `${template.surgeValue} HP`],
+    ['Surge', `${template.surgeValue + (up ? LEVEL_UP_SURGE_BONUS : 0)} HP`],
   ]
   return (
     <div className="mt-3 grid grid-cols-4 gap-2 text-center">
@@ -58,11 +67,12 @@ function Stats({ template }) {
   )
 }
 
-function MyHero({ claim, cards, deviceId, dispatch }) {
+function MyHero({ state, claim, cards, deviceId, dispatch }) {
   const template = templateFor(claim.heroKey)
   const color = HERO_COLORS[template.color]
-  const slots = powerSlotsFor(template)
-  const abilities = cards.abilities.filter((a) => a.hero === template.key && a.level === 1)
+  const slots = claimSlots(claim)
+  const level = campaignHero(state, template.key)?.level ?? 1
+  const abilities = cards.abilities.filter((a) => a.hero === template.key && a.level <= level)
   const pickedIds = claim.picks.map((card) => card?.id)
 
   return (
@@ -85,7 +95,8 @@ function MyHero({ claim, cards, deviceId, dispatch }) {
         onChange={(e) => dispatch({ type: 'SET_LOBBY_PLAYER', deviceId, player: e.target.value })}
       />
 
-      <Stats template={template} />
+      <Stats template={template} level={level} />
+      {state.campaign && <HeroCampaign state={state} heroKey={template.key} dispatch={dispatch} />}
       {abilities.length > 0 && (
         <ul className="mt-3 space-y-1 text-sm text-zinc-300">
           {abilities.map((ability) => (
@@ -167,7 +178,9 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
   const cards = useCards()
   const lobby = state.lobby ?? []
   const mine = lobby.find((c) => c.deviceId === deviceId)
-  const ready = lobby.length > 0 && lobby.every((c) => c.ready)
+  // A campaign goes on with the same heroes, every one of them.
+  const heroChoices = state.campaign ? HERO_TEMPLATES.filter((t) => campaignHero(state, t.key)) : HERO_TEMPLATES
+  const ready = lobby.length > 0 && lobby.every((c) => c.ready) && (!state.campaign || heroChoices.every((t) => lobby.some((c) => c.heroKey === t.key)))
 
   const claim = (template) => {
     dispatch({ type: 'CLAIM_HERO', deviceId, heroKey: template.key, picks: startingPicks(template, cards.powers) })
@@ -183,12 +196,16 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
         </p>
       </header>
 
-      {watchOnly ? <AdventurePicker state={state} dispatch={dispatch} /> : <ChosenAdventure state={state} />}
+      {watchOnly ? (
+        state.campaign ? <CampaignLobby state={state} dispatch={dispatch} /> : <AdventurePicker state={state} dispatch={dispatch} />
+      ) : (
+        <ChosenAdventure state={state} />
+      )}
 
-      {mine && !watchOnly && <MyHero claim={mine} cards={cards} deviceId={deviceId} dispatch={dispatch} />}
+      {mine && !watchOnly && <MyHero state={state} claim={mine} cards={cards} deviceId={deviceId} dispatch={dispatch} />}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {HERO_TEMPLATES.map((template) => {
+        {heroChoices.map((template) => {
           const owner = lobby.find((c) => c.heroKey === template.key)
           if (owner && owner === mine) return null
           const color = HERO_COLORS[template.color]
@@ -231,7 +248,9 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
         {/* Only the projector starts the game, once every hero is ready. */}
         {watchOnly && (
           <Button variant="gold" className="px-10 py-4 text-xl" disabled={!ready}
-            onClick={() => dispatch({ type: 'START_GAME', treasureCards: cards.treasures, random: randomNumbers(128), tileRandom: randomNumbers(8) })}
+            onClick={() =>
+              dispatch({ type: 'START_GAME', treasureCards: cards.treasures, chambers: cards.chambers, tokens: cards.treasureTokens, random: randomNumbers(128), tileRandom: randomNumbers(8) })
+            }
           >
             Enter the dungeon
           </Button>
@@ -241,7 +260,9 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
             ? 'Each player picks a hero on their own iPad.'
             : ready
               ? `Everyone's ready! Turn order: ${lobby.map((c) => templateFor(c.heroKey).name).join(', ')}.`
-              : 'Waiting for every hero to be ready.'}
+              : state.campaign
+                ? `Waiting for ${heroChoices.map((t) => t.name).join(', ')} to be ready.`
+                : 'Waiting for every hero to be ready.'}
           {!watchOnly && lobby.length > 0 && ' The projector starts the game.'}
         </p>
       </div>

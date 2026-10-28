@@ -14,6 +14,7 @@ import { effectsOf, heroAc, heroAttackPenalty, maxRolls } from '../data/powerEff
 import { STARTING_TILES, MAX_TILES, MIN_TILES, adjustTiles, bottomToTop, buildTileStack, takeTile } from './tiles.js'
 import { DOOR_KINDS, DOOR_UNLOCK_ROLL, MAX_SURGES, MIN_SURGES, aliveVillagers, checkVictory, countDefeat, escapeBlockers, isPlayable, newAdventure, objectiveInPlay, onceOnlyDraw, playableChambers, revealsReady, showStory, takeToken, villagerForRoll } from './adventure.js'
 import { trackStats } from './stats.js'
+import { campaignHero, campaignOutcome, campaignSurges, isCampaign, newCampaign, shopCards, shopSize } from './campaign.js'
 import { playBoardSound, setBoardOff } from './soundboard.js'
 
 export const SAVE_VERSION = 1
@@ -63,6 +64,10 @@ export const initialState = {
   lobbyTiles: STARTING_TILES,
   soundboard: null, // the players' sound board (state/soundboard.js): { off, last, turn, used }
   stats: {}, // each hero's bragging rights for the end-of-game recap (state/stats.js), by hero id
+  // A campaign (state/campaign.js) lasts across games: New game keeps it until it's over.
+  campaign: null,
+  // Treasure tokens left in a campaign adventure's stack: { gold, treasure }.
+  tokenStack: null,
 }
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
@@ -667,13 +672,19 @@ function defeatDetails(state, defeated, heroId) {
   if (defeated.length === 0) return { state, details: [] }
   if (defeated.every((m) => m.villain || m.objective)) return { state, details: [`${defeated.map((m) => m.name).join(' and ')} defeated!`] }
   const treasure = !state.turn.treasureDrawn
-  const next = treasure ? { ...state, turn: { ...state.turn, treasureDrawn: true, treasureOwed: heroId ?? null } } : state
+  const next = treasure ? { ...state, turn: oweTreasure(state, heroId ?? null) } : state
   const xp = defeated.reduce((sum, m) => sum + (m.xp ?? 0), 0)
   return {
     state: next,
-    details: [`${defeated.map((m) => m.name).join(' and ')} defeated! +${xp} XP`, treasure && 'Draw a treasure card!'].filter(Boolean),
+    details: [`${defeated.map((m) => m.name).join(' and ')} defeated! +${xp} XP`, treasure && treasureWords(state)].filter(Boolean),
   }
 }
+
+// The first monster defeated in a turn earns a treasure card, or in a campaign a Treasure
+// token (gold, or now and then a treasure card).
+const oweTreasure = (state, heroId) =>
+  state.campaign ? { ...state.turn, treasureDrawn: true, tokenOwed: heroId } : { ...state.turn, treasureDrawn: true, treasureOwed: heroId }
+const treasureWords = (state) => (state.campaign ? 'Draw a Treasure token!' : 'Draw a treasure card!')
 
 const markUsed = (state, heroId, powerId) =>
   updateHero(state, heroId, (h) => ({ powers: h.powers.map((p) => (p.id === powerId ? { ...p, used: true } : p)) }))
@@ -1180,7 +1191,8 @@ export function phaseTodo(state, cards = {}) {
 // triangle), plus curses (Bad Luck), the adventure's extras and "draw another" cards.
 export function encounterCount(state, hero) {
   const { explored, triangle, encountersDrawn = 0, encountersOwed = 0 } = state.turn
-  const base = explored !== true || triangle === true ? 1 : 0
+  // After the Elite Regiment is found (Assault on Firestorm Peak), every encounter card is two.
+  const base = (explored !== true || triangle === true ? 1 : 0) * (state.adventure?.doubleEncounters ? 2 : 1)
   const badLuck = (hero.curses ?? []).reduce((sum, c) => sum + (c.card?.extraEncounter ?? 0), 0)
   // Some adventures add an encounter to every Villain Phase (Roghar's Gear, once the Vault is found).
   const adventure = state.adventure?.extraEncounters ?? 0
@@ -1290,15 +1302,18 @@ function endHeroPhase(state, hero, roll) {
 }
 
 // Level 2: the 2nd-level side of the hero card, and one more daily power to choose.
+// The 2nd-level side of the hero card, with an empty slot for the new daily power.
+const levelTwo = (h) => ({
+  level: 2,
+  maxHp: h.maxHp + LEVEL_UP_HP_BONUS,
+  hp: h.hp + LEVEL_UP_HP_BONUS,
+  ac: h.ac + LEVEL_UP_AC_BONUS,
+  surgeValue: h.surgeValue + LEVEL_UP_SURGE_BONUS,
+  powers: [...h.powers, newPower('daily')],
+})
+
 function levelUp(state, hero) {
-  const leveled = updateHero(state, hero.id, (h) => ({
-    level: 2,
-    maxHp: h.maxHp + LEVEL_UP_HP_BONUS,
-    hp: h.hp + LEVEL_UP_HP_BONUS,
-    ac: h.ac + LEVEL_UP_AC_BONUS,
-    surgeValue: h.surgeValue + LEVEL_UP_SURGE_BONUS,
-    powers: [...h.powers, newPower('daily')],
-  }))
+  const leveled = updateHero(state, hero.id, levelTwo)
   return withMoment(withLog(leveled, `${hero.name} reached level 2!`), {
     kind: 'level',
     heroId: hero.id,
@@ -1470,6 +1485,8 @@ function monsterControl(state, action) {
 export const STARTING_POWER_SLOTS = ['at-will', 'at-will', 'utility', 'utility', 'daily']
 
 export const powerSlotsFor = (template) => template.powerSlots ?? STARTING_POWER_SLOTS
+// A level 2 hero has one more daily power.
+export const levelSlots = (template, level = 1) => [...powerSlotsFor(template), ...(level >= 2 ? ['daily'] : [])]
 
 // The card is copied into the game, so later edits to the card file don't change a game in progress.
 const copyCard = (card) =>
@@ -1501,12 +1518,159 @@ const withPicks = (hero, picks = []) => ({
 // True when another slot already holds this card, so no hero gets the same power twice.
 const pickedElsewhere = (cards, slot, card) => Boolean(card) && cards.some((c, i) => i !== slot && c?.id === card.id)
 
-function heroesFromLobby(lobby) {
+function heroesFromLobby(lobby, campaign = null) {
   return lobby.flatMap((claim) => {
     const template = HERO_TEMPLATES.find((t) => t.key === claim.heroKey)
     if (!template) return []
-    return [{ ...withPicks(createHero(template), claim.picks), player: claim.player }]
+    // A campaign hero who reached level 2 starts there, with the extra daily power.
+    const saved = (campaign?.heroes ?? []).find((h) => h.key === template.key)
+    const hero = createHero(template)
+    return [{ ...withPicks(saved?.level >= 2 ? { ...hero, ...levelTwo(hero) } : hero, claim.picks), player: claim.player }]
   })
+}
+
+// ---- Campaigns (state/campaign.js) ----
+
+const sameHeroes = (heroes, saved) => heroes.length === saved.length && saved.every((s) => heroes.some((h) => h.key === s.key))
+
+// What a campaign hero takes into the next adventure: level, gold, items (face up again) and powers.
+const heroRecord = (hero, deviceId = null) => ({
+  key: hero.key,
+  deviceId,
+  player: hero.player ?? '',
+  level: hero.level,
+  gold: hero.gold ?? 0,
+  items: (hero.items ?? []).map((item) => ({ ...item, used: false })),
+  picks: hero.powers.map((p) => p.card ?? null),
+})
+
+const campaignHeroes = (campaign, heroes, lobby) =>
+  heroes.map((hero) => heroRecord(hero, lobby.find((c) => c.heroKey === hero.key)?.deviceId ?? campaign.heroes.find((h) => h.key === hero.key)?.deviceId ?? null))
+
+// A hero entering a later campaign adventure gets back the gold and items they had.
+const fromCampaign = (hero, saved) => (saved ? { ...hero, gold: saved.gold, items: saved.items.map((item) => ({ ...item, id: newId('item') })) } : hero)
+
+// The lobby for the campaign's next adventure: each iPad gets its hero back, waiting to get ready.
+function campaignLobby(state) {
+  const lobby = state.campaign.heroes
+    .filter((h) => h.deviceId)
+    .map((h) => {
+      const template = HERO_TEMPLATES.find((t) => t.key === h.key)
+      return { deviceId: h.deviceId, heroKey: h.key, player: h.player, picks: levelSlots(template, h.level).map((_, i) => copyCard(h.picks[i])), ready: false }
+    })
+  return { ...state, lobby, lobbyAdventure: state.campaign.card }
+}
+
+// A deck without the cards the heroes already hold (one copy each).
+function buildDeckWithout(cards, heldIds, random) {
+  if (!Array.isArray(cards) || cards.length === 0) return null
+  const deck = buildDeck(cards, random)
+  const held = [...heldIds]
+  const draw = deck.draw.filter((id) => {
+    const i = held.indexOf(id)
+    if (i === -1) return true
+    held.splice(i, 1)
+    return false
+  })
+  return { ...deck, draw }
+}
+
+// After the recap: the campaign takes in what happened, and the lobby opens for the next
+// adventure with the shop. A finished campaign stays on the recap until New game.
+function nextCampaignAdventure(state, action) {
+  const outcome = campaignOutcome(state)
+  if (!outcome || outcome.over) return state
+  const campaign = {
+    ...state.campaign,
+    deck: outcome.deck,
+    beaten: outcome.beaten,
+    defeats: outcome.defeats,
+    hard: state.campaign.hard || Boolean(state.adventure?.doubleEncounters),
+    boons: [...state.campaign.boons, ...outcome.boons],
+    heroes: state.heroes.map((hero) => heroRecord(hero, campaignHero(state, hero.key)?.deviceId ?? null)),
+    games: state.campaign.games + 1,
+  }
+  const held = campaign.heroes.flatMap((h) => h.items.map((i) => i.cardId))
+  const shop = shopCards(action.treasureCards, held, shopSize({ campaign }, action.boons), action.random)
+  return campaignLobby({ ...initialState, campaign: { ...campaign, shop }, lobbySurges: state.lobbySurges, lobbyTiles: state.lobbyTiles })
+}
+
+// Between adventures a hero buys a shop card with their own gold.
+function buyFromShop(state, action) {
+  const campaign = state.campaign
+  const hero = campaignHero(state, action.heroKey)
+  const index = (campaign?.shop ?? []).findIndex((c) => c.id === action.cardId)
+  if (state.status !== 'setup' || !hero || index === -1) return state
+  const card = campaign.shop[index]
+  if (!(card.cost > 0) || hero.gold < card.cost) return state
+  const item = { id: newId('item'), cardId: card.id, name: card.name, used: false, card }
+  const heroes = campaign.heroes.map((h) => (h.key === hero.key ? { ...h, gold: h.gold - card.cost, items: [...h.items, item] } : h))
+  return { ...state, campaign: { ...campaign, heroes, shop: campaign.shop.filter((_, i) => i !== index) } }
+}
+
+// A hero defeated a monster in a campaign adventure: a Treasure token from the stack, or
+// the one the player drew from the real stack (`token`: { gold } or { treasure: true }).
+// Dragon's Tribute: draw two and keep the lower value; a Treasure one is discarded.
+function drawTreasureToken(state, action) {
+  const hero = state.heroes.find((h) => h.id === state.turn.tokenOwed)
+  if (!hero) return state
+  const done = { ...state, turn: { ...state.turn, tokenOwed: null } }
+  const manual = action.token && (action.token.treasure === true || (Number.isInteger(action.token.gold) && action.token.gold > 0))
+  let stack = state.tokenStack ?? []
+  let drawn
+  if (manual) {
+    drawn = [{ gold: action.token.treasure ? 0 : action.token.gold, treasure: action.token.treasure === true }]
+  } else {
+    const count = state.environment?.cardId === 'dragon-s-tribute' ? 2 : 1
+    drawn = stack.slice(0, count)
+    stack = stack.slice(count)
+  }
+  if (drawn.length === 0) return withLog(done, 'There are no Treasure tokens left.')
+  let token = drawn[0]
+  if (drawn.length > 1) {
+    const gold = drawn.filter((t) => !t.treasure)
+    token = gold.length > 0 ? gold.reduce((low, t) => (t.gold < low.gold ? t : low)) : null
+  }
+  const next = { ...done, tokenStack: stack }
+  if (!token) return withMoment(withLog(next, `${hero.name} drew two Treasure tokens, but Dragon's Tribute takes both.`), { kind: 'treasure', heroId: hero.id, title: 'Dragon’s Tribute!', detail: 'Both tokens are lost.' })
+  if (token.treasure) {
+    return withMoment(withLog({ ...next, turn: { ...next.turn, treasureOwed: hero.id } }, `${hero.name}'s Treasure token says Treasure!`), { kind: 'treasure', heroId: hero.id, title: 'Treasure!', detail: `${hero.name} draws a treasure card.` })
+  }
+  const rich = updateHero(next, hero.id, (h) => ({ gold: (h.gold ?? 0) + token.gold }))
+  return withMoment(withLog(rich, `${hero.name} found ${token.gold} gold.`), { kind: 'treasure', heroId: hero.id, title: `${token.gold} gold!`, detail: drawn.length > 1 ? `Dragon’s Tribute: ${hero.name} keeps the lower token.` : `${hero.name} has ${(hero.gold ?? 0) + token.gold} gold.` })
+}
+
+// Turn order key, so a boon can tell which monsters were drawn this turn.
+export const turnKey = (state) => `${state.turn.round}-${state.turn.heroIndex}`
+
+// Using one of the campaign's boons, once per adventure. `boon` is its card from the card file.
+function useBoon(state, action) {
+  const boon = action.boon
+  const used = state.adventure?.boonsUsed ?? []
+  if (!boon || !state.campaign?.boons.includes(boon.id) || used.includes(boon.id) || state.status !== 'playing') return state
+  const spent = (next) => ({ ...next, adventure: { ...next.adventure, boonsUsed: [...used, boon.id] } })
+  if (boon.use === 'startTile') {
+    // Before anyone's first turn: the top dungeon tile goes down, with no monster and no encounter.
+    const { round, heroIndex, phase, tiles } = state.turn
+    if (round !== 1 || heroIndex !== 0 || phase !== 0 || tiles?.explore !== undefined) return state
+    const next = drawDungeonTile(state, { ...action, key: `boon-${boon.id}` })
+    if (next === state) return state
+    return withMoment(spent(withLog(next, `The party used ${boon.name}.`)), { kind: 'roll', title: boon.name, detail: 'Place the top dungeon tile next to any unexplored edge. No monster and no encounter card for it.' })
+  }
+  if (boon.use === 'discardMonster') {
+    const monster = state.monsters.find((m) => m.id === action.monsterId)
+    if (!monster || monster.drawnAt !== turnKey(state) || !(monster.card?.types ?? []).some((t) => sameName(t, boon.monsterType))) return state
+    const next = discardMonsterCard({ ...state, monsters: state.monsters.filter((m) => m.id !== monster.id) }, monster)
+    return withMoment(spent(withLog(next, `${boon.name}: the ${monster.name} card is discarded.`)), { kind: 'defeat', art: monsterArt(monster), title: boon.name, detail: `Take the ${monster.name} off the board. Its card is discarded.` })
+  }
+  return state
+}
+
+// Marks monsters with the turn they came out, for boons that work on a monster just drawn.
+function tagDrawn(state) {
+  if (!state.monsters?.some((m) => !m.drawnAt)) return state
+  const key = turnKey(state)
+  return { ...state, monsters: state.monsters.map((m) => (m.drawnAt ? m : { ...m, drawnAt: key })) }
 }
 
 const POWER_LABELS = { 'at-will': 'At-will power', utility: 'Utility power', daily: 'Daily power' }
@@ -1586,7 +1750,7 @@ function placeVillain(state, action) {
 }
 
 // Every action, then a check for an adventure's victory, then the recap's counts.
-export const gameReducer = (state, action) => trackStats(state, checkVictory(reduce(state, action)), action)
+export const gameReducer = (state, action) => trackStats(state, checkVictory(tagDrawn(reduce(state, action))), action)
 
 // A dungeon tile drawn from the stack, from the top when exploring or the bottom for a
 // card that says so. `key` says what it was for (explore, a monster, an encounter), so
@@ -1678,12 +1842,18 @@ const sameName = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase()
 function openChamber(state, step, action, hero) {
   const random = Array.isArray(action.random) ? action.random : []
   const deck = playableChambers(action.chambers)
-  const card = step.name ? deck.find((c) => c.id === step.name || sameName(c.name, step.name)) : deck.length > 0 ? pick(deck, random[0]) : null
+  // A campaign has its own Chamber deck, and the top card is the one found.
+  const top = !step.name && state.campaign ? deck.find((c) => c.id === state.campaign.deck[0]) : null
+  const card = step.name ? deck.find((c) => c.id === step.name || sameName(c.name, step.name)) : state.campaign ? top : deck.length > 0 ? pick(deck, random[0]) : null
   if (!card) return withLog(state, step.name ? `The app has no chamber card called "${step.name}".` : 'There are no chamber cards to draw.')
   const from = card.villainFrom.filter((name) => !(step.exclude ?? []).some((x) => sameName(x, name)))
   const villain = card.villain || (from.length > 0 ? pick(from, random[1]) : '')
   let next = { ...state, adventure: { ...state.adventure, chamber: { card, villain, objectivePlaced: false, done: false } } }
   next = withLog(next, step.name ? `The chamber is the ${card.name}.` : `${hero.name} drew the ${card.name} chamber card!`)
+  // Finding the Elite Regiment makes this adventure and every later one draw two encounter cards.
+  if (state.campaign && card.id === state.campaign.card.campaign.hard) {
+    next = withLog({ ...next, adventure: { ...next.adventure, doubleEncounters: true } }, 'The Elite Regiment! From now on, every encounter card is two.')
+  }
   if (villain) next = reduce(next, { type: 'PLACE_VILLAIN', name: villain, cards: action.villains ?? [] })
   if (card.objective) {
     const { name, hp, ac } = card.objective
@@ -1759,25 +1929,50 @@ function monsterSteps(state, before) {
 
 function reduce(state, action) {
   switch (action.type) {
-    case 'NEW_GAME':
-      return initialState
+    case 'NEW_GAME': {
+      // A campaign goes on until it's over (or someone ends it), so its heroes come back to the lobby.
+      const outcome = campaignOutcome(state)
+      if (!state.campaign || outcome?.over) return initialState
+      return campaignLobby({ ...initialState, campaign: state.campaign, lobbySurges: state.lobbySurges, lobbyTiles: state.lobbyTiles })
+    }
+
+    case 'CAMPAIGN_NEXT':
+      return nextCampaignAdventure(state, action)
+
+    case 'CAMPAIGN_BUY':
+      return buyFromShop(state, action)
+
+    case 'END_CAMPAIGN':
+      if (state.status !== 'setup' || !state.campaign) return state
+      return { ...state, campaign: null, lobbyAdventure: null, lobby: [] }
+
+    case 'DRAW_TREASURE_TOKEN':
+      return drawTreasureToken(state, action)
+
+    case 'USE_BOON':
+      return useBoon(state, action)
 
     case 'START_GAME': {
       // Without a hero list, the heroes come from the lobby.
       // Everyone in the lobby has to be ready first.
       if (!action.heroes && !(state.lobby ?? []).every((c) => c.ready)) return state
-      const heroes = action.heroes ?? heroesFromLobby(state.lobby ?? [])
+      const heroes = action.heroes ?? heroesFromLobby(state.lobby ?? [], state.campaign)
       if (state.status !== 'setup' || heroes.length === 0) return state
-      const card = state.lobbyAdventure
-      const surges = clamp(Number(state.lobbySurges) || STARTING_SURGES, MIN_SURGES, MAX_SURGES)
+      const card = state.campaign?.card ?? state.lobbyAdventure
+      // A campaign's adventure needs every hero of the campaign, and only them.
+      if (state.campaign && !sameHeroes(heroes, state.campaign.heroes)) return state
+      const campaign = state.campaign ?? (isCampaign(card) ? newCampaign(card, action.chambers, action.random) : null)
+      const surges = campaignSurges(campaign, clamp(Number(state.lobbySurges) || STARTING_SURGES, MIN_SURGES, MAX_SURGES))
       const tiles = clamp(Number(state.lobbyTiles) || STARTING_TILES, MIN_TILES, MAX_TILES)
       let started = {
         ...initialState,
         status: 'playing',
-        heroes,
+        heroes: state.campaign ? heroes.map((h) => fromCampaign(h, campaignHero(state, h.key))) : heroes,
         surges,
-        adventure: card ? newAdventure(card) : null,
+        adventure: card ? { ...newAdventure(card), doubleEncounters: Boolean(campaign?.hard) } : null,
         tileStack: buildTileStack(tiles, card, action.tileRandom),
+        campaign: campaign && { ...campaign, heroes: campaignHeroes(campaign, heroes, state.lobby ?? []) },
+        tokenStack: campaign ? shuffle(Array.isArray(action.tokens) ? action.tokens : [], action.random) : null,
       }
       // The Vast Gate Opens: the gate is on the Start tile, and its Flares! card is in the top 3 encounters.
       const objective = card?.startObjective
@@ -1787,16 +1982,19 @@ function reduce(state, action) {
       }
       if (card?.startEncounters?.length > 0) started = { ...started, encounterAdds: [...card.startEncounters] }
       const names = heroes.map((h) => h.name).join(', ')
-      return dealStartingTreasure(
-        withLog(started, card ? `${card.title} begins with ${names}.` : `The adventure begins with ${names}.`),
-        action.treasureCards,
-        action.random,
-      )
+      const begun = withLog(started, card ? `${card.title} begins with ${names}.` : `The adventure begins with ${names}.`)
+      // Later campaign adventures: the heroes still have their treasure, so nobody draws a starting card,
+      // and the cards they hold stay out of the treasure deck.
+      if (state.campaign) {
+        const held = started.heroes.flatMap((h) => (h.items ?? []).map((i) => i.cardId))
+        return { ...begun, treasureDeck: buildDeckWithout(action.treasureCards, held, action.random) }
+      }
+      return dealStartingTreasure(begun, action.treasureCards, action.random)
     }
 
     case 'CHOOSE_ADVENTURE': {
       // Only before the game, and only an adventure the app can run.
-      if (state.status !== 'setup') return state
+      if (state.status !== 'setup' || state.campaign) return state
       const card = action.adventure ?? null
       if (card && !isPlayable(card)) return state
       return { ...state, lobbyAdventure: card }
@@ -1881,10 +2079,13 @@ function reduce(state, action) {
       if (state.status !== 'setup' || !template || !action.deviceId) return state
       // One hero per iPad, and nobody can take a hero another iPad already has.
       if (lobby.some((c) => c.heroKey === template.key && c.deviceId !== action.deviceId)) return state
+      // A campaign's heroes come back with their level, name and powers.
+      const saved = campaignHero(state, template.key)
+      if (state.campaign && !saved) return state
       const previous = lobby.find((c) => c.deviceId === action.deviceId)
-      const slots = powerSlotsFor(template)
-      const picks = slots.map((_, i) => copyCard(action.picks?.[i]))
-      const claim = { deviceId: action.deviceId, heroKey: template.key, player: previous?.player ?? '', picks, ready: false }
+      const slots = levelSlots(template, saved?.level)
+      const picks = slots.map((_, i) => copyCard((saved ? saved.picks : action.picks)?.[i]))
+      const claim = { deviceId: action.deviceId, heroKey: template.key, player: saved?.player ?? previous?.player ?? '', picks, ready: false }
       return { ...state, lobby: [...lobby.filter((c) => c.deviceId !== action.deviceId), claim] }
     }
 
@@ -2171,13 +2372,13 @@ function reduce(state, action) {
         ...counted,
         xp: state.xp + monster.xp,
         monsters: state.monsters.filter((m) => m.id !== monster.id),
-        turn: { ...state.turn, treasureDrawn: true, treasureOwed: treasure ? winner : state.turn.treasureOwed ?? null },
+        turn: treasure ? oweTreasure(state, winner) : state.turn,
       }
       return withMoment(withLog(next, `The ${monster.name} was defeated! +${monster.xp} XP`), {
         kind: 'defeat',
         art: monsterArt(monster),
         title: `${monster.name} defeated!`,
-        detail: `+${monster.xp} XP for the party${treasure ? '. Draw a treasure card!' : ''}`,
+        detail: `+${monster.xp} XP for the party${treasure ? `. ${treasureWords(state)}` : ''}`,
       })
     }
 

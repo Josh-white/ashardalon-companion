@@ -3,7 +3,7 @@
 
 // Bigger features an adventure can need. The picker only offers an adventure once the
 // app has every feature it needs; the others show what they're waiting for.
-export const SUPPORTED_FEATURES = ['villains', 'chambers', 'doors', 'villagers', 'adventure-encounters', 'time-tokens', 'vast-gate']
+export const SUPPORTED_FEATURES = ['villains', 'chambers', 'doors', 'villagers', 'adventure-encounters', 'time-tokens', 'vast-gate', 'campaign']
 
 export const FEATURE_LABELS = {
   villains: 'villains',

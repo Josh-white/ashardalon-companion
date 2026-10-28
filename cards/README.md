@@ -147,6 +147,7 @@ Treasure cards make a virtual treasure deck. The first monster defeated in a tur
 - `attack`: the item makes its own attack roll from the attack box. `note` is a reminder shown with it.
 - `use`: what tapping it does: `heal` (with `heal`), `endCondition`, `refreshPower`, `refreshAny` (a power or an item), `reduceDamage` (1 HP back after a hit), `levelUp`, `polymorph` (swap a monster for a new monster card), `reroll` (offered on a missed attack), `caltrops` (with `tokens`), `monsterControl` (on a monster's turn, with a `monsterAttack`), or `note`.
 - `after`: `flip` or `discard` once used. Leave it out for items that can be used again.
+- `cost`: the gold price in a campaign's shop. A card without one isn't for sale.
 
 ## Adventures (optional)
 
@@ -283,3 +284,29 @@ The 5 Villager cards (Free the Captives). A chamber with `villagers` puts them i
 ```
 
 - `tactics`: steps in order. `ask` is a yes/no question (a step without it is the "otherwise"), `say` what to do, `attack: true` lets the villager punch a monster, `draw: true` shows a Draw a monster button.
+
+### Campaigns (optional)
+
+Campaign Against the Clans and Assault on Firestorm Peak are played again and again with the same heroes. An adventure with `campaign` (and `"needs": ["campaign"]`) keeps its own Chamber deck: each game, the chamber `reveal` (an action `{ "type": "chamber" }` with no `name`) opens the deck's top card. After the recap, **On to the next adventure** saves each hero's level, gold, treasure and powers, opens a shop, and brings every iPad back to the lobby with its hero. New game keeps a campaign until it's over; the projector's lobby has **End the campaign**.
+
+```json
+{
+  "adventures": [
+    { "id": "adventure-13", "title": "Assault on Firestorm Peak", "needs": ["chambers", "villains", "campaign"],
+      "reveals": [{ "tile": "Dire Chamber Entrance", "actions": [{ "type": "chamber", "exclude": ["Ashardalon"] }] }],
+      "win": { "chamber": true },
+      "campaign": { "chambers": [], "final": "ashardalons-lair", "finalWith": 3, "hard": "elite-regiment",
+        "boonsFor": { "kobold-clan-lair": "kobolds-clobbered" }, "boonsAfter": { "1": "bypassed-guards" }, "secondChance": true } }
+  ],
+  "boons": [
+    { "id": "kobolds-clobbered", "name": "Kobolds Clobbered!", "text": "What the card says.", "use": "discardMonster", "monsterType": "Reptile" },
+    { "id": "short-cut", "name": "Short Cut!", "text": "What the card says.", "use": "startTile" },
+    { "id": "dwarven-traders", "name": "Dwarven Traders!", "text": "What the card says.", "use": "shop", "shopCards": 5 }
+  ],
+  "treasureTokens": [{ "gold": 100, "count": 8 }, { "treasure": true, "count": 4 }]
+}
+```
+
+- `campaign.chambers`: the Chamber deck's card ids (empty for every chamber the app can run). `final`: the chamber that ends the campaign, shuffled into the last `finalWith` + 1 cards. `hard`: the chamber that makes this and every later adventure draw two encounter cards. `boonsFor`: the boon for beating a chamber; `boonsAfter`: the boon for the nth chamber beaten. `secondChance`: the first defeat only costs one healing surge for the rest of the campaign; without it, a defeat ends the campaign.
+- `boons`: `use` is `startTile` (place the top dungeon tile before the first turn), `discardMonster` (discard a monster card of `monsterType` drawn this turn) or `shop` (`shopCards` cards in the shop instead of 3). Each boon works once per adventure.
+- `treasureTokens`: in a campaign, the first monster defeated in a turn gives a Treasure token instead of a treasure card: gold, or a treasure card. Without this list, the player draws from the real stack and taps what the token says.

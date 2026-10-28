@@ -6,6 +6,7 @@ import { useCards } from '../state/useCards.js'
 import { tileSpots } from '../state/tiles.js'
 import { TileSetup } from './Tiles.jsx'
 import { Button, Chip } from './ui.jsx'
+import { CampaignBoons } from './Campaign.jsx'
 import { VillagerList } from './Villagers.jsx'
 
 const SHUFFLE_NUMBERS = 128
@@ -218,6 +219,7 @@ export function AdventurePanel({ state, dispatch }) {
   return (
     <section className="space-y-3">
       {adventure.story && <Story story={adventure.story} dispatch={dispatch} />}
+      <CampaignBoons state={state} dispatch={dispatch} />
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900">
         <button type="button" className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left" onClick={() => setOpen(!shown)}>
           <span className="min-w-0">

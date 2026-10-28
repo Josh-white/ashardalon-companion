@@ -16,7 +16,7 @@ const { adventures, chambers, monsters, villains, problems } = normalizeCardFile
     { id: 'regiment', name: 'Regiment', setup: ['Fill it.'], goal: 'Destroy all of the Monsters in this chamber!', monsters: { redrawXp: [1] }, win: { chamberMonsters: true } },
     { id: 'lair', name: 'Lair', goal: 'Destroy the Big Boss!', villain: 'Big Boss', monsters: { types: ['Aberrant'] }, win: { villain: true } },
     { id: 'altar', name: 'Altar Room', goal: 'Destroy the Altar!', objective: { name: 'Altar', hp: 2, ac: 5 }, win: { objective: true } },
-    { id: 'prison', name: 'Prison', goal: 'Later.', win: { chamberMonsters: true }, needs: ['campaign'] },
+    { id: 'prison', name: 'Prison', goal: 'Later.', win: { chamberMonsters: true }, needs: ['flying-carpets'] },
   ],
   adventures: [
     {
