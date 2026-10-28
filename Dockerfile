@@ -16,6 +16,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY server ./server
 COPY src/state ./src/state
 COPY src/data ./src/data
+COPY src/board ./src/board
 COPY src/audio/narration.js src/audio/script.js src/audio/soundPrompts.js ./src/audio/
 COPY cards ./cards
 COPY --from=build /app/dist ./dist
