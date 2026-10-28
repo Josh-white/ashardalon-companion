@@ -128,6 +128,19 @@ describe('sync server', () => {
     dad.socket.close()
   })
 
+  it('only lets the test copy turn off the sound board limits', async () => {
+    const dad = connect(server.port)
+    await dad.nextState(1)
+    dad.send({ type: 'START_GAME', heroes: [createHero(HERO_TEMPLATES[0])] })
+    await dad.nextState(2)
+    dad.send({ type: 'SET_SOUNDBOARD_UNLIMITED', unlimited: true })
+    dad.send({ type: 'ADJUST_XP', amount: 1 })
+    const after = await dad.nextState(3)
+    expect(after.xp).toBe(1)
+    expect(after.soundboard?.unlimited ?? false).toBe(false)
+    dad.socket.close()
+  })
+
   it('ignores messages that are not actions', async () => {
     const client = connect(server.port)
     await client.nextState(1)

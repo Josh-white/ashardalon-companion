@@ -63,4 +63,11 @@ describe('sound board', () => {
     const next = gameReducer(state, { type: 'PLAY_BOARD_SOUND', who: state.heroes[0].id, sound: 'laugh' })
     expect(next.soundboard.last.sound).toBe('laugh')
   })
+  it('has no limits while unlimited is on (test copy only)', () => {
+    let state = gameReducer(startGame(), { type: 'SET_SOUNDBOARD_UNLIMITED', unlimited: true })
+    const hero = state.heroes[0]
+    state = { ...state, moment: { id: 'm', kind: 'roll', at: 1000 } }
+    for (let i = 0; i < 5; i++) state = tap(state, hero.id, 1000 + i)
+    expect(state.soundboard.used[hero.id]).toBe(5)
+  })
 })

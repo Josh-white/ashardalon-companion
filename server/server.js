@@ -194,7 +194,7 @@ function serveStatic(staticDir, req, res) {
 }
 
 const SEEN_LIMIT = 500
-const NOT_UNDOABLE = new Set(['ROLL_DIE', 'ATTACH_MONSTER_CARDS', 'UPDATE_ENCOUNTER_CARDS', 'CLAIM_HERO', 'RELEASE_HERO', 'SET_LOBBY_PLAYER', 'SET_LOBBY_PICK', 'SET_LOBBY_READY', 'PLAY_BOARD_SOUND', 'SET_SOUNDBOARD_OFF'])
+const NOT_UNDOABLE = new Set(['ROLL_DIE', 'ATTACH_MONSTER_CARDS', 'UPDATE_ENCOUNTER_CARDS', 'CLAIM_HERO', 'RELEASE_HERO', 'SET_LOBBY_PLAYER', 'SET_LOBBY_PICK', 'SET_LOBBY_READY', 'PLAY_BOARD_SOUND', 'SET_SOUNDBOARD_OFF', 'SET_SOUNDBOARD_UNLIMITED'])
 
 export function startServer({
   port = Number(process.env.PORT ?? 3000),
@@ -286,6 +286,8 @@ export function startServer({
         seenActions.add(id)
         if (seenActions.size > SEEN_LIMIT) seenActions.delete(seenActions.values().next().value)
       }
+      // Turning off the sound board's limits is only for trying sounds on the test copy.
+      if (action.type === 'SET_SOUNDBOARD_UNLIMITED' && !instance) return
       if (action.type === 'UNDO') {
         // Two people tapping Undo at once both saw the same history depth; only
         // the first tap counts, so one tap never undoes two changes.
