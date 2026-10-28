@@ -83,3 +83,21 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .area-fade, .area-pulse { animation: none; }
 }
+
+/* The dungeon scenes' torches flicker, lava glows, embers rise. */
+@keyframes scene-flicker { 0%, 100% { opacity: 1; } 30% { opacity: 0.75; } 55% { opacity: 0.95; } 80% { opacity: 0.7; } }
+@keyframes scene-flame { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(1.12) scaleX(0.92); } }
+@keyframes scene-glow { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+@keyframes scene-rise { from { transform: translateY(0); opacity: 0; } 15% { opacity: 1; } to { transform: translateY(-700px); opacity: 0; } }
+@keyframes scene-twinkle { 0%, 80%, 100% { opacity: 1; } 90% { opacity: 0.2; } }
+@keyframes scene-blink { 0%, 92%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }
+.scene-flicker { animation: scene-flicker 1.7s ease-in-out infinite; }
+.scene-flame { transform-box: fill-box; transform-origin: bottom; animation: scene-flame 0.6s ease-in-out infinite; }
+.scene-glow { animation: scene-glow 4s ease-in-out infinite; }
+.scene-rise { animation: scene-rise 9s linear infinite; }
+.scene-twinkle { animation: scene-twinkle 3s ease-in-out infinite; }
+.scene-blink { transform-box: fill-box; transform-origin: center; animation: scene-blink 5s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .scene-flicker, .scene-flame, .scene-glow, .scene-rise, .scene-twinkle, .scene-blink { animation: none; }
+}
