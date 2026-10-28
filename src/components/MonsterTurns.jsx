@@ -142,6 +142,9 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
   const [results, setResults] = useState(null)
   const [tiePick, setTiePick] = useState(null) // the players' pick when heroes tie for the most HP
   const [controlling, setControlling] = useState(false)
+  // The answers given so far, so a wrong tap can be taken back. They stay on this
+  // iPad until the dice roll, so the Undo button can't reach them.
+  const [trail, setTrail] = useState([])
   // Heroes in the Astral Refuge are off the board, so monsters can't find or attack them.
   // With nobody left on the board, only the steps that don't need a hero are asked.
   const away = state.heroes.filter((h) => h.tokens?.refuge)
@@ -158,10 +161,26 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
   const attack = card.attacks.find((a) => a.id === step?.attack) ?? (table.length > 0 ? { ...table[0], id: step.attack, name: step.attack.replace(/-/g, ' ') } : null)
   const asking = step?.when && !answered
 
+  const answer = (yes) => {
+    setTrail((list) => [...list, { stepIndex, answered }])
+    if (yes) setAnswered(true)
+    else setStepIndex(index + 1)
+  }
+  const changeAnswer = () => {
+    const previous = trail[trail.length - 1]
+    setTrail((list) => list.slice(0, -1))
+    setStepIndex(previous.stepIndex)
+    setAnswered(previous.answered)
+    setChosen([])
+    setGuarded([])
+    setTiePick(null)
+  }
+
   const nextFigure = () => {
     setFigure((f) => f + 1)
     setStepIndex(0)
     setAnswered(false)
+    setTrail([])
     setChosen([])
     setGuarded([])
     setResults(null)
@@ -243,10 +262,10 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
           <p className="text-2xl font-semibold text-zinc-100">{QUESTIONS[step.when](name)}</p>
           {HINTS[step.when] && <p className="text-zinc-400">{HINTS[step.when]}</p>}
           <div className="grid grid-cols-2 gap-3">
-            <Button variant="gold" className="py-4 text-2xl" onClick={() => setAnswered(true)}>
+            <Button variant="gold" className="py-4 text-2xl" onClick={() => answer(true)}>
               Yes
             </Button>
-            <Button className="py-4 text-2xl" onClick={() => setStepIndex(index + 1)}>
+            <Button className="py-4 text-2xl" onClick={() => answer(false)}>
               No
             </Button>
           </div>
@@ -389,6 +408,12 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
             {figure < figures ? `Next ${name} →` : `Done with the ${name}`}
           </Button>
         </>
+      )}
+
+      {!controlling && !results && trail.length > 0 && (
+        <Button variant="ghost" className="w-full" onClick={changeAnswer}>
+          ↶ Oops, change my last answer
+        </Button>
       )}
 
       {step?.text && (
