@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { narrationFor } from './narration.js'
 import { momentSoundMs } from './sfx.js'
-import { duckMusic } from './music.js'
 import { serverNow, useGameStates } from '../state/useSharedGame.js'
-import { TAP_EVENTS, voicePlayer, voiceSpeaking } from './soundSetting.js'
+import { TAP_EVENTS, audioContext } from './soundSetting.js'
+import { VOICE_DUCK, VOICE_HOLD_S, holdQuiet, layer, releaseQuiet } from './mixer.js'
 
 // A short pause after the sound effects end, so the voice doesn't step on them.
 const DELAY_MS = 300
@@ -11,6 +11,43 @@ const DELAY_MS = 300
 const MAX_QUEUE = 3
 
 const lineUrl = (line) => `/narrate?voice=${line.voice}&text=${encodeURIComponent(line.text)}`
+
+// Lines are fetched from the Pi and decoded into the page's one audio context, so they
+// play through the mixer: the music dips under them, and they never stop a sound effect.
+// The last few are kept, for a line that's said again.
+const KEEP_LINES = 8
+const decoded = new Map() // url -> Promise of an AudioBuffer
+function fetchLine(ctx, line) {
+  const url = lineUrl(line)
+  if (!decoded.has(url)) {
+    const buffer = fetch(url)
+      .then((response) => {
+        if (!response.ok) throw new Error(`narrator: ${response.status}`)
+        return response.arrayBuffer()
+      })
+      // Older Safari only has the callback form.
+      .then((data) => new Promise((resolve, reject) => ctx.decodeAudioData(data, resolve, reject)))
+    // A line that failed can be tried again later.
+    buffer.catch(() => decoded.delete(url))
+    decoded.set(url, buffer)
+    while (decoded.size > KEEP_LINES) decoded.delete(decoded.keys().next().value)
+  }
+  return decoded.get(url)
+}
+
+// What's being said right now on this page, if anything.
+let speaking = null // { source, stopped }
+function stopSpeaking(ctx) {
+  if (!speaking) return
+  speaking.stopped = true
+  try {
+    speaking.source?.stop()
+  } catch {
+    // Not started yet, or already over.
+  }
+  speaking = null
+  releaseQuiet(ctx, 'voice')
+}
 
 // The narrator: speaks new tiles, monsters, encounters and big rolls through the Pi's
 // /narrate endpoint, on every screen whose sound is on. It hears every state the Pi
@@ -30,33 +67,42 @@ export function useNarrator(on) {
   }, [])
 
   const playNext = useCallback(() => {
-    if (voiceSpeaking()) return
+    if (speaking || queue.current.length === 0) return
+    const ctx = audioContext()
+    if (!ctx) return
+    if (ctx.state !== 'running') {
+      // Paused until a tap (or after a phone call on an iPad): try to start again, and
+      // keep the line for after the tap if that isn't allowed yet.
+      ctx.resume().then(
+        () => (ctx.state === 'running' ? playNext() : setBlocked(true)),
+        () => setBlocked(true),
+      )
+      return
+    }
+    setBlocked(false)
     const line = queue.current.shift()
-    if (!line) return
-    const player = voicePlayer()
-    if (!player) return
-    voiceSpeaking(true)
+    const turn = { source: null, stopped: false }
+    speaking = turn
     const done = () => {
-      voiceSpeaking(false)
+      if (speaking !== turn) return
+      speaking = null
+      // The music waits a moment before coming back, in case another line follows.
+      releaseQuiet(ctx, 'voice', VOICE_HOLD_S)
       playNext()
     }
-    player.onended = done
-    player.onerror = done
-    // Music dips while the narrator talks, and comes back when it's done.
-    player.onplaying = () => {
-      if (Number.isFinite(player.duration)) duckMusic(player.duration * 1000)
-    }
-    player.src = lineUrl(line)
-    player.play().then(
-      () => setBlocked(false),
-      (error) => {
-        voiceSpeaking(false)
-        if (error?.name === 'NotAllowedError') {
-          // Keep the line for after the tap.
-          queue.current.unshift(line)
-          setBlocked(true)
-        } else done()
+    fetchLine(ctx, line).then(
+      (buffer) => {
+        if (turn.stopped) return
+        const source = ctx.createBufferSource()
+        source.buffer = buffer
+        source.connect(layer(ctx, 'voice'))
+        source.onended = done
+        turn.source = source
+        // The music dips while the narrator talks, and comes back when it's done.
+        holdQuiet(ctx, 'voice', VOICE_DUCK)
+        source.start()
       },
+      done,
     )
   }, [])
 
@@ -72,7 +118,8 @@ export function useNarrator(on) {
       queue.current = [...queue.current, ...lines].slice(-MAX_QUEUE)
       // Ask for every waiting line now, so the Pi records the next one (a villain's
       // reply, say) while the current one is still playing.
-      for (const line of queue.current) fetch(lineUrl(line)).catch(() => {})
+      const ctx = audioContext()
+      if (ctx) for (const line of queue.current) fetchLine(ctx, line).catch(() => {})
       playNext()
     }, (moment ? momentSoundMs(moment) : 0) + DELAY_MS)
     timers.current.add(timer)
@@ -82,8 +129,7 @@ export function useNarrator(on) {
     const pending = timers.current
     return () => {
       pending.forEach(clearTimeout)
-      voicePlayer()?.pause()
-      voiceSpeaking(false)
+      stopSpeaking(audioContext())
     }
   }, [])
 
@@ -105,8 +151,7 @@ export function useNarrator(on) {
   useEffect(() => {
     if (on) return
     queue.current = []
-    voicePlayer()?.pause()
-    voiceSpeaking(false)
+    stopSpeaking(audioContext())
   }, [on])
 
   return { available, blocked: available && on && blocked }

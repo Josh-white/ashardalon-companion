@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DIE_LANDS_MS, changeSounds, hurtSound, momentSoundMs, momentSounds, monsterVoice, spellKind, tileRevealed } from './sfx.js'
+import { DIE_LANDS_MS, castSound, changeSounds, hurtSound, momentSoundMs, momentSounds, monsterVoice, spellKind, tileRevealed } from './sfx.js'
 
 const names = (moment) => momentSounds(moment).map(([sound]) => sound)
 const heroAttack = (rolls, kind = 'roll') => ({ kind, rolls: rolls.map(([value, hit]) => ({ monsterId: 'm', label: 'Kobold', value, hit })) })
@@ -16,16 +16,16 @@ describe('moment sounds', () => {
     expect(momentSounds({ kind: 'roll', value: 12 })[1]).toEqual(['land', DIE_LANDS_MS])
   })
 
-  it('clangs on a hero hit and whooshes on a miss', () => {
-    expect(names(heroAttack([[14, true]]))).toEqual(['dice', 'clang', 'hurt'])
+  it('plays a weapon hit on a hero hit and whooshes on a miss', () => {
+    expect(names(heroAttack([[14, true]]))).toEqual(['dice', 'weapon', 'hurt'])
     expect(names(heroAttack([[5, false]]))).toEqual(['dice', 'whoosh'])
     expect(names(heroAttack([[1, false]]))).toEqual(['dice', 'trombone'])
     expect(names(heroAttack([[20, false], [3, false]], 'crit'))).toEqual(['dice', 'fanfare'])
-    expect(names(heroAttack([[1, false], [15, true]]))).toEqual(['dice', 'clang', 'hurt'])
+    expect(names(heroAttack([[1, false], [15, true]]))).toEqual(['dice', 'weapon', 'hurt'])
   })
 
   it('adds a victory tune when the attack defeats a monster', () => {
-    expect(names(heroAttack([[17, true]], 'defeat'))).toEqual(['dice', 'clang', 'hurt', 'victory'])
+    expect(names(heroAttack([[17, true]], 'defeat'))).toEqual(['dice', 'weapon', 'hurt', 'victory'])
   })
 
   it('thuds when a monster hits a hero, after the die lands', () => {
@@ -121,9 +121,9 @@ describe('spell and hurt sounds', () => {
     expect(names(cast('Heskan: Ray of Frost!', [[20, true]]))).toEqual(['dice', 'fanfare', 'frost', 'hurt-big'])
   })
 
-  it('a sword hit clangs, then each hit monster yelps (two at most)', () => {
+  it('a sword hit plays the weapon, then each hit monster yelps (two at most)', () => {
     const three = cast('Vistra: Reaping Strike!', [[15, true, 'Snake'], [16, true, 'Kobold Dragonshield'], [18, true, 'Grell']])
-    expect(names(three)).toEqual(['dice', 'clang', 'hurt-snake', 'hurt-small'])
+    expect(names(three)).toEqual(['dice', 'weapon', 'hurt-snake', 'hurt-small'])
   })
 
   it('sizes each monster yelp', () => {
@@ -131,6 +131,30 @@ describe('spell and hurt sounds', () => {
     expect(hurtSound('Kobold Dragonshield')).toBe('hurt-small')
     expect(hurtSound('Snake')).toBe('hurt-snake')
     expect(hurtSound('Human Cultist')).toBe('hurt')
+  })
+
+  it('uses the sounds JJ picked for powers whose words would pick another', () => {
+    expect(spellKind('Quinn: Blade Barrier!')).toBe('arcane')
+    expect(spellKind("Quinn: Cleric's Shield!")).toBe('holy')
+    expect(spellKind('Heskan: Hypnotism!')).toBe('psychic')
+    expect(spellKind('Quinn: Wrathful Thunder!')).toBe('boom')
+  })
+
+  it('shimmers after an attack that heals on a hit', () => {
+    expect(names(cast('Vistra: Comeback Strike!', [[15, true]]))).toEqual(['dice', 'weapon', 'hurt-big', 'power-heal'])
+    expect(names(cast('Vistra: Comeback Strike!', [[3, false]]))).toEqual(['dice', 'whoosh'])
+  })
+
+  it('gives a power used from its tile a healing, spell or trick sound', () => {
+    expect(castSound('Lay On Hands')).toBe('power-heal')
+    expect(castSound('Healing Hymn')).toBe('power-heal')
+    expect(castSound("Virtue's Touch")).toBe('power-heal')
+    expect(castSound('Dwarven Resilience')).toBe('power-heal')
+    expect(castSound('Bravery')).toBe('power-utility')
+    expect(castSound('Invisibility')).toBe('power-utility')
+    expect(castSound('Tumbling Escape')).toBe('power-utility')
+    expect(castSound('Blade Barrier')).toBe('arcane')
+    expect(castSound('Cause Fear')).toBe('psychic')
   })
 })
 
@@ -147,7 +171,20 @@ describe('sounds for each change', () => {
 
   it('plays a sound board tap and a new tile in the same change', () => {
     const after = { ...playing, turn: { explored: true, tiles: {} }, soundboard: { last: { id: 's', sound: 'tada', at: Date.now() } } }
-    expect(changeSounds(playing, after).map(([s]) => s)).toEqual(['tada', 'tile'])
+    expect(changeSounds(playing, after).map(([s]) => s)).toEqual(['tada', 'slide', 'tile'])
+  })
+
+  it('plays a power used from its tile once', () => {
+    const after = { ...playing, cast: { id: 'c1', at: Date.now(), power: 'Lay On Hands' } }
+    expect(changeSounds(playing, after)).toEqual([['power-heal', 0]])
+    expect(changeSounds(after, after)).toEqual([])
+  })
+
+  it('lets a monster snarl as it attacks, but not a trap or an encounter', () => {
+    const attack = (title, extra) => names({ kind: 'monster', title, rolls: [{ heroId: 'h', value: 15, hit: true }], ...extra })
+    expect(attack('Cave Bear: Claw!')).toEqual(['dice', 'bear', 'thud'])
+    expect(attack('Rolling Boulder!', { trap: true })).toEqual(['dice', 'trap', 'thud'])
+    expect(attack('Cave In!')).toEqual(['dice', 'thud'])
   })
 
   it('springs a trap before it hits', () => {

@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { WebSocketServer } from 'ws'
 import { ART_NAME, MAX_ART_BYTES } from '../src/data/art.js'
 import { createNarrator } from './narrator.js'
+import { auditionList, pickTake, takesDir } from './soundTakes.js'
 import { normalizeCardFile } from '../src/data/cards.js'
 import { describeAction } from '../src/state/describeAction.js'
 import { gameReducer, initialState, SAVE_VERSION } from '../src/state/game.js'
@@ -107,6 +108,35 @@ function serveSound(soundsDir, req, res) {
   }
   // Screens ask for ?v=<version>, so a recording never changes under one URL.
   res.writeHead(200, { 'Content-Type': SOUND_TYPES[ext], 'Cache-Control': 'public, max-age=31536000, immutable' })
+  createReadStream(file).pipe(res)
+}
+
+// The #audition page: the list of sounds and their takes, each take's audio, and
+// POST /sound-takes/pick { name, take } to make a take the one the game plays.
+const TAKE_NAME = /^[a-z0-9-]+-\d+\.mp3$/
+async function handleTakes(soundsDir, req, res) {
+  const path = decodeURIComponent(new URL(req.url, 'http://localhost').pathname)
+  if (path === '/sound-takes.json') {
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(auditionList(soundsDir)))
+    return
+  }
+  if (path === '/sound-takes/pick' && req.method === 'POST') {
+    try {
+      const { name, take } = JSON.parse(String(await readBody(req, 1000)))
+      const ok = typeof name === 'string' && pickTake(soundsDir, name, take)
+      res.writeHead(ok ? 200 : 404, { 'Content-Type': 'application/json' }).end(JSON.stringify({ ok }))
+    } catch {
+      res.writeHead(400).end('Bad request')
+    }
+    return
+  }
+  const name = path.slice('/sound-takes/'.length)
+  const file = TAKE_NAME.test(name) && join(takesDir(soundsDir), name)
+  if (!file || !existsSync(file)) {
+    res.writeHead(404).end('Not found')
+    return
+  }
+  res.writeHead(200, { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store' })
   createReadStream(file).pipe(res)
 }
 
@@ -246,6 +276,10 @@ export function startServer({
     }
     if (req.url.startsWith('/sounds/')) {
       serveSound(soundsDir, req, res)
+      return
+    }
+    if (req.url === '/sound-takes.json' || req.url.startsWith('/sound-takes/')) {
+      handleTakes(soundsDir, req, res)
       return
     }
     if (req.url.startsWith('/art/')) {

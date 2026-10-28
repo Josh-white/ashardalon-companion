@@ -3,6 +3,8 @@ import { serverNow, useGameStates } from '../state/useSharedGame.js'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { audioContext } from './soundSetting.js'
 import { loadSamples, playSample, sampleMs } from './samples.js'
+import { layer } from './mixer.js'
+import { effectsOf } from '../data/powerEffects.js'
 
 // The 3D die lands this long after a roll's moment starts (ROLL_MS in Die3D.jsx).
 export const DIE_LANDS_MS = 900
@@ -41,6 +43,10 @@ const LENGTH_MS = {
   psychic: 1000,
   arrow: 600,
   fizzle: 600,
+  weapon: 900,
+  slide: 1300,
+  'power-heal': 1300,
+  'power-utility': 900,
   hurt: 450,
   'hurt-big': 600,
   'hurt-small': 350,
@@ -72,8 +78,38 @@ const LENGTH_MS = {
   drumroll: 1700,
 }
 
+// The recording that plays for a sound, where the file on the Pi has another name:
+// cards/sounds/monster-bear.mp3 is the cave bear's "bear". Others use their own name.
+export const RECORDING_NAMES = {
+  bear: 'monster-bear',
+  hiss: 'monster-snake',
+  bow: 'monster-orc-archer',
+  smasher: 'monster-orc-smasher',
+  chant: 'monster-cultist',
+  duergar: 'monster-duergar',
+  devil: 'monster-devil',
+  gibber: 'monster-mouther',
+  grell: 'monster-grell',
+  kobold: 'monster-kobold',
+  holy: 'spell-holy',
+  fire: 'spell-fire',
+  zap: 'spell-lightning',
+  frost: 'spell-frost',
+  psychic: 'spell-psychic',
+  arcane: 'spell-arcane',
+  boom: 'spell-thunder',
+}
+const recordingOf = (sound) => RECORDING_NAMES[sound] ?? sound
+
+// Until it has a recording of its own, a weapon hit plays the clang (or its recording).
+const STAND_INS = { weapon: 'clang' }
+const resolve = (sound) => (STAND_INS[sound] && sampleMs(recordingOf(sound)) == null ? STAND_INS[sound] : sound)
+
 // How long a sound lasts, in ms.
-export const soundMs = (sound) => sampleMs(sound) ?? LENGTH_MS[sound] ?? 0
+export function soundMs(sound) {
+  const played = resolve(sound)
+  return sampleMs(recordingOf(played)) ?? LENGTH_MS[played] ?? 0
+}
 
 // Each monster's own sound when it's drawn, matched by name in the moment's title.
 // Anything not listed (a chamber, a monster from a newer card file) gets the plain roar.
@@ -106,20 +142,47 @@ const SPELL_WORDS = [
   ['zap', /lightning|shock|spark/],
   ['boom', /thunder/],
   ['psychic', /fear|hypno|daze|dread|mind/],
-  ['holy', /holy|sacred|smite|divine|radiant|righteous|hymn|blade barrier|bless/],
+  ['holy', /holy|sacred|smite|divine|radiant|righteous|hymn|bless/],
   ['arcane', /missile|spectral|arcane|magic|force|ray\b/],
   ['arrow', /shot|arrow|bow\b|sling/],
 ]
 const HERO_SPELLS = { wizard: 'arcane', cleric: 'holy' }
+// Powers whose sound JJ picked by name, where the words alone would pick another.
+const POWER_SPELLS = {
+  'blade barrier': 'arcane',
+  'spectral ram': 'arcane',
+  'cause fear': 'psychic',
+  hypnotism: 'psychic',
+  'clerics shield': 'holy',
+  'divine challenge': 'holy',
+  'righteous advance': 'holy',
+}
+// Powers that heal, which shimmer when used (and after the hit, for an attack that heals).
+const HEALING_POWERS = new Set(['lay on hands', 'healing hymn', 'virtues touch', 'dwarven resilience', 'comeback strike'])
+// Powers with a healing effect that still sound like a trick.
+const UTILITY_POWERS = new Set(['bravery'])
+const powerKey = (name = '') => name.toLowerCase().replace(/[^a-z ]/g, '').trim()
 
 export function spellKind(title = '') {
   // A hero attack's title is "Hero: Power name!".
   const [heroName, power = ''] = title.split(': ')
   const lower = power.toLowerCase()
+  if (POWER_SPELLS[powerKey(power)]) return POWER_SPELLS[powerKey(power)]
   const match = SPELL_WORDS.find(([, words]) => words.test(lower))
   if (match) return match[0]
   const hero = HERO_TEMPLATES.find((h) => h.name === heroName)
   return HERO_SPELLS[hero?.key] ?? null
+}
+
+// The sound of a power used from its tile, or as a reaction (state.cast): its spell if
+// it has one, a warm shimmer if it heals, and a quick magic swoosh for the rest.
+export function castSound(name) {
+  const key = powerKey(name)
+  if (POWER_SPELLS[key]) return POWER_SPELLS[key]
+  if (UTILITY_POWERS.has(key)) return 'power-utility'
+  const use = effectsOf({ name }).use
+  if (HEALING_POWERS.has(key) || use?.heal || use?.healSelf) return 'power-heal'
+  return 'power-utility'
 }
 
 // How a monster yelps when it's hit: big ones grunt low, small ones squeak, snakes hiss.
@@ -131,9 +194,14 @@ const HURT_SIZES = {
 export const hurtSound = (name) => HURT_SIZES[monsterVoice(name)] ?? 'hurt'
 
 export function monsterVoice(title = '') {
+  return knownVoice(title) ?? 'roar'
+}
+
+// The voice of the monster or villain named in a title, or null if there isn't one.
+function knownVoice(title = '') {
   const lower = title.toLowerCase()
   const name = Object.keys(MONSTER_VOICES).find((n) => lower.includes(n))
-  return name ? MONSTER_VOICES[name] : 'roar'
+  return name ? MONSTER_VOICES[name] : null
 }
 
 // What a moment sounds like, as [sound, delay in ms] pairs. Rolls clatter straight
@@ -155,6 +223,9 @@ export function momentSounds(moment) {
   // Monster, trap and encounter attacks roll against heroes; a hero's attack rolls
   // against labeled monsters.
   if (rolls.some((r) => r.heroId && !r.label)) {
+    // A monster or villain snarls as it attacks, while the die rolls.
+    const voice = !moment.trap && knownVoice(moment.title)
+    if (voice) sounds.push([voice, 0])
     if (moment.trap) then('trap')
     then(rolls.some((r) => r.hit) ? 'thud' : 'whoosh')
     if (moment.kind === 'monster-down') then('down')
@@ -170,13 +241,15 @@ export function momentSounds(moment) {
     if (spell) then(spell)
     if (!values.includes(20)) {
       if (attack && anyHit) {
-        if (!spell) then('clang')
+        if (!spell) then('weapon')
       } else if (values.includes(1)) then('trombone')
       else if (attack) then(spell ? 'fizzle' : 'whoosh')
       else then('land')
     }
     // Each monster that was hit (up to two) yelps.
     for (const row of rolls.filter((r) => r.hit && r.label).slice(0, 2)) then(hurtSound(row.label))
+    // An attack that heals on a hit (Comeback Strike) shimmers after it.
+    if (anyHit && HEALING_POWERS.has(powerKey(moment.title?.split(': ')[1]))) then('power-heal')
     // A defeated monster (or an unlocked door) gets a little victory tune at the end.
     if (moment.kind === 'defeat') then('victory')
     return sounds
@@ -225,6 +298,9 @@ const LEVEL_DB = {
   whoosh: 11,
   thud: 13,
   trap: 11,
+  slide: 10,
+  'power-heal': 2,
+  'power-utility': 6,
   growl: -3,
   roar: -5,
   fanfare: -1,
@@ -269,14 +345,15 @@ const PITCH_VARIETY = 0.04
 let pitch = 1
 
 // Plays one sound at `at`, at its level and a slightly different pitch each time.
-export function playSound(ctx, sound, at) {
+export function playSound(ctx, wanted, at) {
   loadSamples(ctx)
+  const sound = resolve(wanted)
   const level = ctx.createGain()
   level.connect(output(ctx))
   pitch = 1 + (Math.random() - 0.5) * PITCH_VARIETY
   try {
     // A recording is evened out in the file itself; a made-up sound gets its level here.
-    if (playSample(ctx, sound, at, level, pitch)) return
+    if (playSample(ctx, recordingOf(sound), at, level, pitch)) return
     level.gain.value = Math.pow(10, (LEVEL_DB[sound] ?? 0) / 20)
     SOUNDS[sound](ctx, at, level)
   } finally {
@@ -309,6 +386,9 @@ function play(sounds) {
   )
 }
 
+// A new tile's stone scrapes into place, then its music starts.
+const SLIDE_LEAD_MS = 600
+
 // A moment, board sound or new tile is news only once, and only while it's fresh.
 const isNew = (now, then) => now && now.id !== then?.id && serverNow() - now.at < STALE_MS
 
@@ -319,7 +399,8 @@ export function changeSounds(before, after) {
   if (isNew(after?.moment, before?.moment)) sounds.push(...momentSounds(after.moment))
   const board = after?.soundboard?.last
   if (isNew(board, before?.soundboard?.last) && SOUNDS[board.sound]) sounds.push([board.sound, 0])
-  if (tileRevealed(before, after)) sounds.push(['tile', 0])
+  if (tileRevealed(before, after)) sounds.push(['slide', 0], ['tile', SLIDE_LEAD_MS])
+  if (isNew(after?.cast, before?.cast)) sounds.push([castSound(after.cast.power), 0])
   return sounds
 }
 
@@ -338,20 +419,8 @@ export function useSoundEffects(on) {
   })
 }
 
-// Every sound goes through one gentle compressor so a fanfare on top of a clang
-// doesn't clip.
-let master = null
-export function output(ctx) {
-  if (master?.context === ctx) return master
-  const volume = ctx.createGain()
-  volume.gain.value = 1
-  const limiter = ctx.createDynamicsCompressor()
-  // Fast enough to catch the first crack of a clang or a hit.
-  limiter.attack.value = 0.001
-  volume.connect(limiter).connect(ctx.destination)
-  master = volume
-  return master
-}
+// Sound effects go into the mixer's sfx layer, which the narrator never quiets.
+export const output = (ctx) => layer(ctx, 'sfx')
 
 // --- Building blocks. Everything is made here from oscillators and noise, so there
 // are no sound files to license or download.
@@ -485,6 +554,26 @@ export const SOUNDS = {
     burst(ctx, out, { at: at + 0.07, freq: 1800, q: 8, peak: 0.5, decay: 0.02 })
     burst(ctx, out, { at: at + 0.16, type: 'highpass', freq: 1500, peak: 1, attack: 0.04, decay: 0.18, sweepTo: 6000 })
     for (const [freq, decay] of [[2900, 0.5], [4100, 0.35], [5600, 0.25]]) tone(ctx, out, { at: at + 0.22, freq, slideTo: freq * 0.97, peak: 0.08, decay })
+  },
+
+  // A stone slab scraping across the floor and settling with a thump: a new tile.
+  slide(ctx, at, out) {
+    burst(ctx, out, { at, type: 'lowpass', freq: 500, peak: 0.6, attack: 0.25, decay: 0.75, sweepTo: 250 })
+    burst(ctx, out, { at, freq: 900, q: 3, peak: 0.25, attack: 0.2, decay: 0.7, sweepTo: 600 })
+    tone(ctx, out, { at: at + 0.95, freq: 90, slideTo: 45, peak: 0.6, decay: 0.3 })
+    burst(ctx, out, { at: at + 0.95, type: 'lowpass', freq: 700, peak: 0.7, decay: 0.2 })
+  },
+
+  // A healing power: a gentle rising harp run over a warm chord.
+  'power-heal'(ctx, at, out) {
+    for (const note of [65, 69, 72]) pad(ctx, out, { at, freq: NOTE(note), length: 1.2, peak: 0.06, type: 'sine' })
+    ;[72, 76, 79, 84, 88].forEach((note, i) => tone(ctx, out, { at: at + i * 0.08, freq: NOTE(note), type: 'triangle', peak: 0.14, decay: 0.7 }))
+  },
+
+  // Any other power: a quick magic swoosh and a sparkle.
+  'power-utility'(ctx, at, out) {
+    burst(ctx, out, { at, freq: 800, q: 2, peak: 0.6, attack: 0.1, decay: 0.2, sweepTo: 5000 })
+    for (let i = 0; i < 4; i++) tone(ctx, out, { at: at + 0.15 + i * 0.05, freq: NOTE(91 + i * 3), peak: 0.12, decay: 0.2 })
   },
 
   // A swing that cuts through air and nothing else.
