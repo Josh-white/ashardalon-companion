@@ -13,8 +13,14 @@ function connect(port) {
   const states = []
   const messages = []
   const waiters = []
+  const screens = []
   socket.on('message', (raw) => {
     const message = JSON.parse(raw)
+    // Which screens are open comes on its own, whenever that changes.
+    if (message.type === 'screens') {
+      screens.push(message.seats)
+      return
+    }
     messages.push(message)
     states.push(message.state)
     waiters.splice(0).forEach((resolve) => resolve())
@@ -25,7 +31,12 @@ function connect(port) {
       check()
     })
   const send = (action) => socket.send(JSON.stringify({ type: 'action', action }))
-  return { socket, nextState, send, messages }
+  return { socket, nextState, send, messages, screens }
+}
+
+const until = async (check) => {
+  for (let i = 0; i < 100 && !check(); i++) await new Promise((r) => setTimeout(r, 10))
+  return check()
 }
 
 describe('sync server', () => {
@@ -52,6 +63,21 @@ describe('sync server', () => {
     dad.socket.send(JSON.stringify({ type: 'action', id: 'tap-2', action: { type: 'ADJUST_XP', amount: 1 } }))
     expect((await dad.nextState(6)).xp).toBe(1) // ack, ack, new state
     expect(dad.messages.filter((m) => m.type === 'ack').map((m) => m.id)).toEqual(['tap-1', 'tap-1', 'tap-2'])
+  })
+
+  it("tells every screen which seats are open, and stamps each state with the Pi's clock", async () => {
+    const before = Date.now()
+    const table = connect(server.port)
+    const projector = connect(server.port)
+    await table.nextState(1)
+    await projector.nextState(1)
+    expect(table.messages[0].now).toBeGreaterThanOrEqual(before)
+    projector.socket.send(JSON.stringify({ type: 'seat', seat: 'projector' }))
+    table.socket.send(JSON.stringify({ type: 'seat', seat: 'table' }))
+    expect(await until(() => table.screens.at(-1)?.join() === 'projector,table')).toBe(true)
+    projector.socket.close()
+    expect(await until(() => table.screens.at(-1)?.join() === 'table')).toBe(true)
+    table.socket.close()
   })
 
   it('sends one iPad the change another iPad made, and saves it', async () => {

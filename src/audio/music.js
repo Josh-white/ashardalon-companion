@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { activeVillains } from '../state/game.js'
-import { NOTE, TILE_MUSIC_MS, burst, momentSoundMs, output, soundMs, pad, tileRevealed, tone } from './sfx.js'
+import { NOTE, burst, changeSounds, output, soundMs, pad, tone } from './sfx.js'
+import { useGameStates } from '../state/useSharedGame.js'
 import { audioContext } from './soundSetting.js'
 
 // Background music, like an RPG's: calm and eerie while exploring, drums when
@@ -182,20 +183,13 @@ export function useMusic(state, on) {
   }, [mood])
   useEffect(() => () => player.setMood(null), [])
 
-  const moment = state?.moment
-  useEffect(() => {
-    if (on && moment && Date.now() - moment.at < 3000) player.duck(momentSoundMs(moment))
-  }, [moment?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const board = state?.soundboard?.last
-  useEffect(() => {
-    if (on && board && Date.now() - board.at < 3000) player.duck(soundMs(board.sound))
-  }, [board?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const last = useRef(null)
-  useEffect(() => {
-    const before = last.current
-    last.current = state
-    if (on && tileRevealed(before, state)) player.duck(TILE_MUSIC_MS)
-  }, [state, on])
+  // Every state from the Pi, so two changes that land together both duck the music.
+  useGameStates((before, after) => {
+    if (!on) return
+    const ms = Math.max(0, ...changeSounds(before, after).map(([sound, delay]) => delay + soundMs(sound)))
+    player.duck(ms)
+  })
 }
+
+// Dips the music while the narrator speaks for `ms`, then brings it back.
+export const duckMusic = (ms) => player.duck(ms)

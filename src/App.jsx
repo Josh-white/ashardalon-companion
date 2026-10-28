@@ -5,7 +5,6 @@ import ArtScreen from './components/ArtScreen.jsx'
 import { AreaBackdrop, AreaName } from './components/AreaBackdrop.jsx'
 import HeroCard from './components/HeroCard.jsx'
 import MomentOverlay from './components/MomentOverlay.jsx'
-import Narrator from './components/Narrator.jsx'
 import MonsterList, { VillainList } from './components/MonsterList.jsx'
 import ProjectorView from './components/ProjectorView.jsx'
 import Recap from './components/Recap.jsx'
@@ -19,7 +18,8 @@ import { MusicToggle, SoundToggle, TapForSound } from './components/SoundToggle.
 import { BoardSwitch, BoardToast, SoundBoard } from './components/SoundBoard.jsx'
 import { Button, HpBar } from './components/ui.jsx'
 import { heroArt } from './data/art.js'
-import { useBoardSounds, useSoundEffects } from './audio/sfx.js'
+import { useSoundEffects } from './audio/sfx.js'
+import { useNarrator } from './audio/useNarrator.js'
 import { useMusic } from './audio/music.js'
 import { useAudioLocked, useMusicSetting, useSoundSetting } from './audio/soundSetting.js'
 import { HERO_COLORS } from './data/heroes.js'
@@ -64,7 +64,7 @@ function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitchSeat, s
         <AreaName state={state} className="font-semibold" />
         <div className="ml-auto flex flex-wrap gap-2">
           <UndoButton undo={undo} depth={undoDepth} dispatch={dispatch} className="max-w-56 truncate" />
-          <SoundToggle on={sound.on} setOn={sound.setOn} className="text-sm" />
+          <SoundToggle on={sound.on} setOn={sound.setOn} elsewhere={sound.elsewhere} className="text-sm" />
           <MusicToggle on={sound.musicOn} setOn={sound.setMusicOn} soundOn={sound.on} className="text-sm" />
           {boardSwitch && <BoardSwitch state={state} dispatch={dispatch} className="text-sm" />}
           <Button variant="ghost" className="text-sm" onClick={onSwitchSeat}>
@@ -226,8 +226,8 @@ function Connecting() {
 }
 
 export default function App() {
-  const { state, connected, dispatch, undo, undoDepth, instance } = useSharedGame()
   const [seat, setSeat] = useSeat()
+  const { state, connected, dispatch, undo, undoDepth, instance, screens } = useSharedGame(seat)
   const deviceId = useDeviceId()
   const cards = useCards()
   const [artOpen, setArtOpen] = useState(false)
@@ -244,13 +244,16 @@ export default function App() {
     if (encountersOutdated) dispatch({ type: 'UPDATE_ENCOUNTER_CARDS', cards: cards.encounters })
   }, [encountersOutdated]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [soundOn, setSoundOn] = useSoundSetting(seat)
+  const projectorOpen = screens.includes(PROJECTOR_SEAT)
+  const [soundOn, setSoundOn] = useSoundSetting(seat, projectorOpen)
   const [musicOn, setMusicOn] = useMusicSetting(seat)
-  const sound = { on: soundOn, setOn: setSoundOn, musicOn, setMusicOn }
-  const soundLocked = useAudioLocked(soundOn)
-  useSoundEffects(state, soundOn)
-  useBoardSounds(state, soundOn)
+  // Every screen can play the sound; until someone flips its switch, only the projector
+  // does (or the table, in a game without one).
+  const sound = { on: soundOn, setOn: setSoundOn, musicOn, setMusicOn, elsewhere: !soundOn && projectorOpen && seat !== PROJECTOR_SEAT }
+  useSoundEffects(soundOn)
   useMusic(state, soundOn && musicOn)
+  const narrator = useNarrator(soundOn)
+  const soundLocked = useAudioLocked(soundOn) || narrator.blocked
 
   if (!state) return <Connecting />
 
@@ -266,7 +269,6 @@ export default function App() {
           Reconnecting to the game… changes won't be saved until it's back.
         </p>
       )}
-      {seat === PROJECTOR_SEAT && <Narrator state={state} on={soundOn} />}
     </>
   )
 
@@ -344,7 +346,7 @@ export default function App() {
       />
       {myHero ? <HeroView state={state} dispatch={dispatch} hero={myHero} /> : <TableView state={state} dispatch={dispatch} />}
       <MomentOverlay moment={state.moment} heroes={state.heroes} />
-      <TapForSound locked={soundLocked} />
+      <TapForSound locked={soundLocked} ipad={Boolean(myHero)} />
       <SoundBoard state={state} dispatch={dispatch} who={myHero ? myHero.id : 'table'} testCopy={Boolean(instance)} />
       {!myHero && <BoardToast state={state} />}
       {(state.status === 'won' || state.status === 'lost') && <Recap state={state} dispatch={dispatch} />}

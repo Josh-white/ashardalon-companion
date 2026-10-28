@@ -259,7 +259,8 @@ export function startServer({
   const wss = new WebSocketServer({ server, path: '/ws' })
 
   const stateMessage = () =>
-    JSON.stringify({ type: 'state', state, undo: history.at(-1)?.label ?? null, undoDepth: history.length, instance, build })
+    // `now` lets each screen tell how old a moment is by the Pi's clock, not its own.
+    JSON.stringify({ type: 'state', state, undo: history.at(-1)?.label ?? null, undoDepth: history.length, instance, build, now: Date.now() })
 
   function broadcastRaw(message) {
     for (const client of wss.clients) {
@@ -268,13 +269,31 @@ export function startServer({
   }
   const broadcast = () => broadcastRaw(stateMessage())
 
+  // Which seats have a screen open right now, so a table screen knows whether the
+  // projector is there to play the sound.
+  const screensMessage = () =>
+    JSON.stringify({ type: 'screens', seats: [...new Set([...wss.clients].map((c) => c.seat).filter(Boolean))].sort() })
+  const broadcastScreens = () => broadcastRaw(screensMessage())
+
   wss.on('connection', (socket) => {
     socket.send(stateMessage())
+    socket.send(screensMessage())
+    socket.on('close', () => {
+      if (socket.seat) broadcastScreens()
+    })
     socket.on('message', (raw) => {
       let message
       try {
         message = JSON.parse(raw)
       } catch {
+        return
+      }
+      if (message?.type === 'seat') {
+        const seat = typeof message.seat === 'string' ? message.seat.slice(0, 40) : null
+        if (seat !== (socket.seat ?? null)) {
+          socket.seat = seat
+          broadcastScreens()
+        }
         return
       }
       if (message?.type !== 'action' || typeof message.action?.type !== 'string') return

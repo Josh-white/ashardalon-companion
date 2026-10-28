@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DIE_LANDS_MS, hurtSound, momentSoundMs, momentSounds, monsterVoice, spellKind, tileRevealed } from './sfx.js'
+import { DIE_LANDS_MS, changeSounds, hurtSound, momentSoundMs, momentSounds, monsterVoice, spellKind, tileRevealed } from './sfx.js'
 
 const names = (moment) => momentSounds(moment).map(([sound]) => sound)
 const heroAttack = (rolls, kind = 'roll') => ({ kind, rolls: rolls.map(([value, hit]) => ({ monsterId: 'm', label: 'Kobold', value, hit })) })
@@ -131,5 +131,27 @@ describe('spell and hurt sounds', () => {
     expect(hurtSound('Kobold Dragonshield')).toBe('hurt-small')
     expect(hurtSound('Snake')).toBe('hurt-snake')
     expect(hurtSound('Human Cultist')).toBe('hurt')
+  })
+})
+
+describe('sounds for each change', () => {
+  const playing = { status: 'playing', turn: { explored: false, tiles: {} } }
+  const at = (moment) => ({ ...playing, moment: { at: Date.now(), ...moment } })
+
+  it('plays a new moment once, and not one that is old news', () => {
+    const before = at({ id: 'a', kind: 'treasure' })
+    expect(changeSounds(before, at({ id: 'b', kind: 'level' })).map(([s]) => s)).toEqual(['levelup'])
+    expect(changeSounds(before, before)).toEqual([])
+    expect(changeSounds(null, { ...playing, moment: { id: 'c', kind: 'level', at: Date.now() - 10000 } })).toEqual([])
+  })
+
+  it('plays a sound board tap and a new tile in the same change', () => {
+    const after = { ...playing, turn: { explored: true, tiles: {} }, soundboard: { last: { id: 's', sound: 'tada', at: Date.now() } } }
+    expect(changeSounds(playing, after).map(([s]) => s)).toEqual(['tada', 'tile'])
+  })
+
+  it('springs a trap before it hits', () => {
+    expect(names({ kind: 'monster', trap: true, rolls: [{ heroId: 'h', value: 15, hit: true }] })).toEqual(['dice', 'trap', 'thud'])
+    expect(names({ kind: 'monster', trap: true })).toEqual(['trap', 'thud'])
   })
 })
