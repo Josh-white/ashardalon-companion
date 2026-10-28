@@ -36,7 +36,18 @@ read -rsp "Paste ElevenLabs key: " K; echo; printf 'ELEVENLABS_API_KEY=%s\n' "$K
 docker compose up -d --build
 ```
 
-Only the Pi talks to ElevenLabs, and every line it has spoken is saved in the `game-data` volume, so repeats are free. Optional `.env` settings: `ELEVENLABS_VOICE_ID` (default: George) and `ELEVENLABS_MODEL` (default: `eleven_multilingual_v2`; `eleven_flash_v2_5` costs half as much). The narrator follows the projector's sound switch and waits for the sound effects to finish before it speaks. Browsers only play sound after a tap, so the projector asks for one if it needs it.
+Only the Pi talks to ElevenLabs, and every line it has spoken is saved in the `game-data` volume, so repeats are free. It uses a small cast: a storyteller (George) for the story, tiles and turns, a herald (Alice) for natural 20s, treasure and victories, a menacing voice (Callum) for monsters and bad news, and a voice for each villain in the box (Meerak: Harry, Margrath: Bill, Kraash: Adam, Ashardalon: Brian, Bellax: Lily), with its own lines when it arrives and when it falls. The villain lines are recorded in the background when the Pi starts, so they play without a wait. Optional `.env` settings: `ELEVENLABS_VOICE_ID`, `ELEVENLABS_VOICE_HERALD`, `ELEVENLABS_VOICE_DANGER`, `ELEVENLABS_VOICE_VILLAIN` and one per villain (`ELEVENLABS_VOICE_MEERAK`, `_MARGRATH`, `_KRAASH`, `_ASHARDALON`, `_BELLAX`), each a voice id (the free plan only allows ElevenLabs' built-in voices) and `ELEVENLABS_MODEL` (everyday lines, default `eleven_flash_v2_5`, about half a credit per letter) and `ELEVENLABS_VILLAIN_MODEL` (villains, default `eleven_v3`, which acts out stage directions like [menacing] or [laughs] but costs about twice as much). The narrator follows the projector's sound switch and waits for the sound effects to finish before it speaks. Browsers only play sound after a tap, so the projector asks for one if it needs it.
+
+### Record every line once
+
+The narrator saves every line it speaks, so you can record the whole script once and then play it back with no ElevenLabs key at all. On the Pi:
+
+```sh
+docker compose exec ashardalon node server/record-narration.js --dry-run   # what's left and roughly how many credits
+docker compose exec ashardalon node server/record-narration.js             # record it
+```
+
+It records every encounter card, adventure story, monster, villain, treasure, tile and hero line from your cards, skips anything already recorded, and stops cleanly if the credits run out (run it again later for the rest). Once it's done you can take `ELEVENLABS_API_KEY` out of `.env`: recorded lines keep playing, and anything never recorded just stays quiet. Lines use the hero's name ("Keyleth, it's your turn") rather than the player's, so they can all be recorded ahead of time. The backup script also copies the recordings to `~/ashardalon-backups/narration`; to put them back, `docker cp -a ~/ashardalon-backups/narration ashardalon-companion:/data/`.
 
 ## Run it on the Raspberry Pi
 

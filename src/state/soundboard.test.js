@@ -4,14 +4,14 @@ import { createHero, gameReducer, initialState } from './game.js'
 import { COOLDOWN_MS, MOMENT_QUIET_MS, USES_PER_TURN, boardStatus, playBoardSound } from './soundboard.js'
 
 const startGame = () => gameReducer(initialState, { type: 'START_GAME', heroes: HERO_TEMPLATES.slice(0, 2).map((t) => createHero(t)) })
-const tap = (state, who, now, sound = 'fanfare') => playBoardSound(state, { who, sound }, now)
+const tap = (state, who, now, sound = 'tada') => playBoardSound(state, { who, sound }, now)
 
 describe('sound board', () => {
   it('plays a sound and remembers who tapped it', () => {
     const state = startGame()
     const hero = state.heroes[0]
     const next = tap(state, hero.id, 1000)
-    expect(next.soundboard.last).toMatchObject({ sound: 'fanfare', who: hero.id, at: 1000 })
+    expect(next.soundboard.last).toMatchObject({ sound: 'tada', who: hero.id, at: 1000 })
   })
 
   it('makes everyone wait out the cooldown after any sound', () => {
@@ -60,7 +60,14 @@ describe('sound board', () => {
 
   it('goes through the game reducer', () => {
     const state = startGame()
-    const next = gameReducer(state, { type: 'PLAY_BOARD_SOUND', who: state.heroes[0].id, sound: 'applause' })
-    expect(next.soundboard.last.sound).toBe('applause')
+    const next = gameReducer(state, { type: 'PLAY_BOARD_SOUND', who: state.heroes[0].id, sound: 'laugh' })
+    expect(next.soundboard.last.sound).toBe('laugh')
+  })
+  it('has no limits while unlimited is on (test copy only)', () => {
+    let state = gameReducer(startGame(), { type: 'SET_SOUNDBOARD_UNLIMITED', unlimited: true })
+    const hero = state.heroes[0]
+    state = { ...state, moment: { id: 'm', kind: 'roll', at: 1000 } }
+    for (let i = 0; i < 5; i++) state = tap(state, hero.id, 1000 + i)
+    expect(state.soundboard.used[hero.id]).toBe(5)
   })
 })

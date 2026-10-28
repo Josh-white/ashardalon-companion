@@ -1,6 +1,13 @@
-// What the narrator says. Compares the game before and after a change and
-// returns the lines to speak, in order. Pure, so it is easy to test; the
-// projector's useNarrator hook does the talking.
+// What the narrator says, and in whose voice. Compares the game before and after
+// a change and returns the lines to speak, in order, as { text, voice }. Pure, so
+// it is easy to test; the projector's useNarrator hook does the talking.
+
+// The cast (the Pi's server/narrator.js picks the actual ElevenLabs voice for each):
+// narrator tells the story, herald cheers the heroes on, danger brings bad news,
+// and each villain speaks for itself in its own voice.
+import { VILLAIN_DEFAULT, VILLAIN_LINES } from '../data/villainLines.js'
+
+export const VOICES = [...new Set(['narrator', 'herald', 'danger', 'villain', ...Object.values(VILLAIN_LINES).map((v) => v.voice)])]
 
 // A moment older than this is a device catching up, not news.
 export const STALE_MS = 8000
@@ -11,38 +18,69 @@ const NEW_TILE = [
   'You step into the unknown…',
 ]
 const SPAWN_OPENERS = ['Beware!', 'Look out!', 'From the shadows…']
+// Lines can carry stage directions in square brackets ([menacing], [laughs]) that the
+// expressive ElevenLabs voices act out; the Pi drops them for older models.
+
+// A villain's line, in its own voice, or the danger voice for a beast.
+const villainSays = (villain, when) => {
+  const lines = VILLAIN_LINES[villain.name] ?? VILLAIN_DEFAULT
+  return say(lines.voice, lines[when] ?? VILLAIN_DEFAULT[when])
+}
 
 const pick = (list, seed = '') => list[[...String(seed)].reduce((sum, c) => sum + c.charCodeAt(0), 0) % list.length]
-const who = (hero) => hero?.player || hero?.name || 'Someone'
+const say = (voice, text) => (text ? { text, voice } : null)
+// Lines use hero names, not the players' names typed in each game, so every line
+// can be recorded once on the Pi and played back without ElevenLabs.
+const heroName = (hero) => hero?.name ?? 'the hero'
+// "Keyleth is down!" for one hero; anything longer gets one set line.
+const downLine = (text) => text.match(/^[\w' -]+ is down!/)?.[0] ?? 'The heroes are falling!'
 
-// One moment's line, or null for the everyday ones (plain rolls, monster attacks
+// A villain on the board whose name is in the moment's title, if any.
+const villainIn = (title, state) =>
+  (state.villains ?? []).find((v) => title.includes(v.fullName ?? v.name) || title.includes(v.name))
+
+// One moment's lines, or none for the everyday ones (plain rolls, monster attacks
 // that hurt nobody badly) so the narrator doesn't talk over the whole game.
-export function momentLine(moment, state) {
+export function momentLines(moment, state) {
   const hero = state.heroes.find((h) => h.id === moment.heroId)
   const values = moment.value != null ? [moment.value] : (moment.rolls ?? []).map((r) => r.value)
   switch (moment.kind) {
     case 'crit':
-      return hero ? `A natural twenty for ${who(hero)}! ${moment.title.includes(':') ? moment.title : ''}`.trim() : 'A natural twenty!'
+      return [say('herald', `[excited] A natural twenty for ${heroName(hero)}!`)]
     case 'fumble':
-      return values.includes(1) ? `Oh no… ${who(hero)} rolled a one.` : moment.title
-    case 'spawn':
-      return `${pick(SPAWN_OPENERS, moment.title)} ${moment.title}`
+      return [say('danger', values.includes(1) ? `[sighs] Oh no… ${heroName(hero)} rolled a one.` : moment.title)]
+    case 'spawn': {
+      const villain = villainIn(moment.title, state)
+      if (!villain) return [say('danger', `${pick(SPAWN_OPENERS, moment.title)} ${moment.title}`)]
+      // The narrator announces a villain, then the villain has its say.
+      if (moment.title.includes('enraged')) return [villainSays(villain, 'enraged')]
+      return [say('narrator', `${pick(SPAWN_OPENERS, moment.title)} ${moment.title}`), villainSays(villain, 'arrive')]
+    }
     case 'encounter': {
       const card = state.encounter?.card
       // An encounter card being drawn: its name and its story line.
-      if (card && card.name === moment.title) return `Encounter! ${card.name}. ${card.flavor ?? ''}`.trim()
-      return moment.title
+      if (card && card.name === moment.title) return [say('narrator', `Encounter! ${card.name}. ${card.flavor ?? ''}`.trim())]
+      return [say('narrator', moment.title)]
     }
     case 'treasure':
-      return `Treasure! ${moment.title}`
+      return [say('herald', `Treasure! ${moment.title}`)]
     case 'level':
-      return `${moment.title} All hail ${hero?.name ?? 'the hero'}!`
-    case 'defeat':
+      return [say('herald', `${moment.title} All hail ${hero?.name ?? 'the hero'}!`)]
+    case 'defeat': {
+      // A beaten villain gets its last words before the herald cheers.
+      const villain = villainIn(moment.title, state)
+      if (villain) return [villainSays(villain, 'fall'), say('herald', moment.title)]
+      // A hero's attack ("Keyleth: Sun Strike!") changes with every power, so it gets
+      // a set line per hero that can be recorded ahead of time.
+      return [say('herald', moment.title.includes(':') ? `[excited] ${heroName(hero)} wins the fight!` : moment.title)]
+    }
     case 'down':
+      return [say('danger', downLine(moment.title))]
     case 'monster-down':
-      return moment.title
+      // The title names the attack; the detail says who went down.
+      return [say('danger', downLine(moment.detail ?? ''))]
     default:
-      return null
+      return []
   }
 }
 
@@ -50,27 +88,26 @@ export function narrationFor(before, after, now = Date.now()) {
   if (!before || !after) return []
   const lines = []
   if (before.status === 'setup' && after.status === 'playing') {
-    lines.push(`The adventure begins${after.adventure?.card?.title ? `: ${after.adventure.card.title}` : ''}! Heroes, enter the dungeon.`)
+    lines.push(say('narrator', `The adventure begins${after.adventure?.card?.title ? `: ${after.adventure.card.title}` : ''}! Heroes, enter the dungeon.`))
   }
   if (after.status === 'playing' && before.status === 'playing') {
     const turnChanged = before.turn.heroIndex !== after.turn.heroIndex || before.turn.round !== after.turn.round
     const hero = after.heroes[after.turn.heroIndex]
-    if (turnChanged && after.turn.phase === 0 && hero) lines.push(`${who(hero)}, it's your turn. What will ${hero.name} do?`)
-    if (!before.turn.explored && after.turn.explored) lines.push(pick(NEW_TILE, `${after.turn.round}-${after.turn.heroIndex}`))
+    if (turnChanged && after.turn.phase === 0 && hero) lines.push(say('narrator', `${hero.name}, it's your turn. What will you do?`))
+    if (!before.turn.explored && after.turn.explored) lines.push(say('narrator', pick(NEW_TILE, `${after.turn.round}-${after.turn.heroIndex}`)))
   }
   // An adventure's red "Read aloud" box: the whole story, not just its title.
   const story = after.adventure?.story
   const newStory = story?.text && story.id !== before.adventure?.story?.id
   if (newStory) {
     const title = story.title === after.adventure.card?.title || story.title === 'Victory!' ? '' : story.title
-    lines.push(`${title} ${story.text}`.trim())
+    lines.push(say('narrator', `${title} ${story.text}`.trim()))
   }
   const moment = after.moment
   if (moment && moment.id !== before.moment?.id && now - moment.at < STALE_MS) {
-    const line = momentLine(moment, after)
-    if (line) lines.push(line)
+    lines.push(...momentLines(moment, after))
   }
-  if (before.status !== after.status && after.status === 'won' && !newStory) lines.push('Victory! The heroes have triumphed. Songs will be sung of this day!')
-  if (before.status !== after.status && after.status === 'lost') lines.push('Alas… the heroes have fallen. The dungeon claims another party.')
-  return lines
+  if (before.status !== after.status && after.status === 'won' && !newStory) lines.push(say('herald', '[excited] Victory! The heroes have triumphed. Songs will be sung of this day!'))
+  if (before.status !== after.status && after.status === 'lost') lines.push(say('narrator', 'Alas… the heroes have fallen. The dungeon claims another party.'))
+  return lines.filter(Boolean)
 }

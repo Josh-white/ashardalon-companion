@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { AdventurePanel } from './components/Adventure.jsx'
 import Art from './components/Art.jsx'
 import ArtScreen from './components/ArtScreen.jsx'
+import { AreaBackdrop, AreaName } from './components/AreaBackdrop.jsx'
 import HeroCard from './components/HeroCard.jsx'
 import MomentOverlay from './components/MomentOverlay.jsx'
 import Narrator from './components/Narrator.jsx'
@@ -60,6 +61,7 @@ function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitchSeat, s
             <Button className="!px-2 !py-0" onClick={() => dispatch({ type: 'ADJUST_TILES', amount: 1 })}>+</Button>
           </div>
         )}
+        <AreaName state={state} className="font-semibold" />
         <div className="ml-auto flex flex-wrap gap-2">
           <UndoButton undo={undo} depth={undoDepth} dispatch={dispatch} className="max-w-56 truncate" />
           <SoundToggle on={sound.on} setOn={sound.setOn} className="text-sm" />
@@ -306,7 +308,8 @@ export default function App() {
   const myHero = state.heroes.find((h) => h.key === seat)
   if (seat === PROJECTOR_SEAT) {
     return (
-      <main className="min-h-screen bg-zinc-950 text-zinc-100">
+      <main className="isolate min-h-screen bg-zinc-950 text-zinc-100">
+        <AreaBackdrop state={state} />
         {banners}
         <ProjectorView state={state} dispatch={dispatch} onSwitchSeat={() => setSeat(null)} sound={sound} />
         <BoardToast state={state} big />
@@ -326,7 +329,8 @@ export default function App() {
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-zinc-100">
+    <main className="isolate min-h-screen bg-zinc-950 text-zinc-100">
+      <AreaBackdrop state={state} />
       {banners}
       <PartyBar
         undo={undo}
@@ -341,7 +345,7 @@ export default function App() {
       {myHero ? <HeroView state={state} dispatch={dispatch} hero={myHero} /> : <TableView state={state} dispatch={dispatch} />}
       <MomentOverlay moment={state.moment} heroes={state.heroes} />
       <TapForSound locked={soundLocked} />
-      <SoundBoard state={state} dispatch={dispatch} who={myHero ? myHero.id : 'table'} />
+      <SoundBoard state={state} dispatch={dispatch} who={myHero ? myHero.id : 'table'} testCopy={Boolean(instance)} />
       {!myHero && <BoardToast state={state} />}
       {(state.status === 'won' || state.status === 'lost') && <Recap state={state} dispatch={dispatch} />}
     </main>

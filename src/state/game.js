@@ -15,7 +15,7 @@ import { STARTING_TILES, MAX_TILES, MIN_TILES, adjustTiles, bottomToTop, buildTi
 import { DOOR_KINDS, DOOR_UNLOCK_ROLL, MAX_SURGES, MIN_SURGES, aliveVillagers, checkVictory, countDefeat, escapeBlockers, isPlayable, newAdventure, objectiveInPlay, onceOnlyDraw, playableChambers, revealsReady, showStory, takeToken, villagerForRoll } from './adventure.js'
 import { trackStats } from './stats.js'
 import { campaignHero, campaignOutcome, campaignSurges, isCampaign, newCampaign, shopCards, shopSize } from './campaign.js'
-import { playBoardSound, setBoardOff } from './soundboard.js'
+import { playBoardSound, setBoardOff, setBoardUnlimited } from './soundboard.js'
 
 export const SAVE_VERSION = 1
 
@@ -2630,6 +2630,9 @@ function reduce(state, action) {
 
     case 'SET_SOUNDBOARD_OFF':
       return setBoardOff(state, action.off)
+
+    case 'SET_SOUNDBOARD_UNLIMITED':
+      return setBoardUnlimited(state, action.unlimited)
 
     default:
       return state

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import { HERO_TEMPLATES } from '../src/data/heroes.js'
 import { createHero, initialState } from '../src/state/game.js'
-import { loadCards, loadSavedGame, startServer } from './server.js'
+import { listSounds, loadCards, loadSavedGame, startServer } from './server.js'
 
 // Opens a socket and collects every state the server sends.
 function connect(port) {
@@ -116,7 +116,7 @@ describe('sync server', () => {
     const heroId = started.heroes[0].id
     dad.send({ type: 'ADJUST_HP', heroId, amount: -1 })
     await dad.nextState(3)
-    dad.send({ type: 'PLAY_BOARD_SOUND', who: heroId, sound: 'fanfare' })
+    dad.send({ type: 'PLAY_BOARD_SOUND', who: heroId, sound: 'tada' })
     const played = await dad.nextState(4)
     expect(played.soundboard.used[heroId]).toBe(1)
     expect(dad.messages[3].undo).toBe(dad.messages[2].undo)
@@ -125,6 +125,19 @@ describe('sync server', () => {
     const undone = await dad.nextState(5)
     expect(undone.heroes[0].hp).toBe(HERO_TEMPLATES[0].maxHp)
     expect(undone.soundboard.used[heroId]).toBe(1)
+    dad.socket.close()
+  })
+
+  it('only lets the test copy turn off the sound board limits', async () => {
+    const dad = connect(server.port)
+    await dad.nextState(1)
+    dad.send({ type: 'START_GAME', heroes: [createHero(HERO_TEMPLATES[0])] })
+    await dad.nextState(2)
+    dad.send({ type: 'SET_SOUNDBOARD_UNLIMITED', unlimited: true })
+    dad.send({ type: 'ADJUST_XP', amount: 1 })
+    const after = await dad.nextState(3)
+    expect(after.xp).toBe(1)
+    expect(after.soundboard?.unlimited ?? false).toBe(false)
     dad.socket.close()
   })
 
@@ -219,5 +232,18 @@ describe('card art', () => {
     const huge = Buffer.concat([jpeg, Buffer.alloc(3 * 1024 * 1024)])
     expect((await fetch(url('/art/hero-cleric.jpg'), { method: 'PUT', body: huge }).catch(() => ({ status: 413 }))).status).toBe(413)
     expect(await (await fetch(url('/art.json'))).json()).toEqual({})
+  })
+})
+
+describe('recordings', () => {
+  it('lists the recordings on the Pi by the sound they replace', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ashardalon-sounds-'))
+    writeFileSync(join(dir, 'dice.mp3'), 'x')
+    writeFileSync(join(dir, 'CREDITS.csv'), 'x')
+    writeFileSync(join(dir, 'Bad Name.mp3'), 'x')
+    expect(Object.keys(listSounds(dir))).toEqual(['dice'])
+    expect(listSounds(dir).dice.file).toBe('dice.mp3')
+    expect(listSounds(join(dir, 'missing'))).toEqual({})
+    rmSync(dir, { recursive: true, force: true })
   })
 })

@@ -19,7 +19,7 @@ const whoName = (state, who) => {
 
 // A 🔊 button in the corner that opens the sound board. `who` is this iPad's hero id
 // (or 'table'). The sounds play on the projector; the limits are in state/soundboard.js.
-export function SoundBoard({ state, dispatch, who }) {
+export function SoundBoard({ state, dispatch, who, testCopy = false }) {
   const [open, setOpen] = useState(false)
   // A tap waits for the Pi's answer before the next one, so a double tap doesn't count twice.
   const [sentAt, setSentAt] = useState(0)
@@ -28,7 +28,8 @@ export function SoundBoard({ state, dispatch, who }) {
   const status = boardStatus(state, who)
   useTicking(open && !status.ok)
   if (state.status !== 'playing') return null
-  const waiting = Date.now() - sentAt < 2000
+  // With no limits (test copy), only wait for the Pi's answer briefly.
+  const waiting = Date.now() - sentAt < (board.unlimited ? 300 : 2000)
   const ready = status.ok && !waiting
 
   const play = (sound) => {
@@ -63,8 +64,17 @@ export function SoundBoard({ state, dispatch, who }) {
             ))}
           </div>
           <p className="mt-2 min-h-5 text-center text-sm text-zinc-400">
-            {ready ? `${status.usesLeft} left this turn · plays on the big screen` : waiting ? 'Playing…' : status.reason}
+            {ready ? (board.unlimited ? 'No limits · plays on the big screen' : `${status.usesLeft} left this turn · plays on the big screen`) : waiting ? 'Playing…' : status.reason}
           </p>
+          {testCopy && (
+            <button
+              type="button"
+              onClick={() => dispatch({ type: 'SET_SOUNDBOARD_UNLIMITED', unlimited: !board.unlimited })}
+              className="mt-2 w-full rounded-xl border border-fuchsia-700 px-2 py-1 text-sm text-fuchsia-300 active:scale-95"
+            >
+              🧪 Test copy: limits {board.unlimited ? 'off' : 'on'}
+            </button>
+          )}
         </div>
       )}
       <button
