@@ -296,6 +296,11 @@ function EncounterCard({ state, hero, dispatch }) {
         </div>
       ) : (
         <>
+          {placesMarker && markerChecked && !attacked && (
+            <Button variant="ghost" className="w-full" onClick={() => setMarkerChecked(false)}>
+              ↶ Oops, {hero.name}'s tile does have a marker
+            </Button>
+          )}
           {card.attack && villainHere && (
             <AttackStep
               state={state}
@@ -321,6 +326,11 @@ function EncounterCard({ state, hero, dispatch }) {
           )}
           {!needsAttack && !asksTile && (
             <>
+              {monsterOnTile === false && (
+                <Button variant="ghost" className="w-full" onClick={() => setMonsterOnTile(null)}>
+                  ↶ Oops, a monster is on {hero.name}'s tile
+                </Button>
+              )}
               {card.id === 'occupied-lair' && (
                 <DrawTileButton state={state} dispatch={dispatch} drawKey={`encounter-${state.encounter.id}`} from="bottom" />
               )}
