@@ -1,5 +1,6 @@
 import { ABILITY_EFFECTS, CONDITIONS, HERO_COLORS, HERO_TEMPLATES } from './heroes.js'
 import { EFFECT_FIELDS } from './powerEffects.js'
+import { normalizeTiles } from '../board/tileDefs.js'
 
 // "Attack +8 · Damage 1", to compare cards while choosing.
 export function cardStats(card) {
@@ -15,7 +16,7 @@ export function normalizeCardFile(data) {
   const powers = []
   const seen = new Set()
   const list = Array.isArray(data?.powers) ? data.powers : null
-  if (!list) return { powers, heroes: HERO_TEMPLATES, abilities: [], monsters: [], villains: [], encounters: [], adventures: [], chambers: [], treasures: [], villagers: [], boons: [], treasureTokens: [], problems: ['The file needs a "powers" list.'] }
+  if (!list) return { powers, heroes: HERO_TEMPLATES, abilities: [], monsters: [], villains: [], encounters: [], adventures: [], chambers: [], treasures: [], villagers: [], boons: [], treasureTokens: [], tiles: [], problems: ['The file needs a "powers" list.'] }
 
   const { heroes, abilities } = normalizeHeroes(data?.heroes, problems)
   const HERO_KEYS = heroes.map((t) => t.key)
@@ -60,6 +61,7 @@ export function normalizeCardFile(data) {
     villagers: normalizeVillagers(data?.villagers, problems),
     boons: normalizeBoons(data?.boons, problems),
     treasureTokens: normalizeTreasureTokens(data?.treasureTokens, problems),
+    tiles: normalizeTiles(data?.tiles, problems),
     problems,
   }
 }
