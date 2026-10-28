@@ -333,6 +333,12 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
 
           {power && (
             <>
+              {/* Always open, right under the powers, so nobody has to dig for what it does. */}
+              {power.card.text && (
+                <p className="whitespace-pre-line rounded-lg border-l-4 border-amber-500 bg-zinc-900 px-3 py-2 text-sm leading-snug text-zinc-200">
+                  <b className="text-amber-300">{power.name}:</b> {power.card.text}
+                </p>
+              )}
               {effects.before && <p className="rounded-lg bg-amber-950/60 p-3 text-amber-200">{effects.before}</p>}
               {moving && (
                 <>
@@ -378,12 +384,6 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
                 />
               )}
               {item?.card.note && <p className="rounded-lg bg-amber-950/60 p-3 text-amber-200">{item.card.note}</p>}
-              {power.card.text && (
-                <details className="text-sm text-zinc-500">
-                  <summary>What {power.name} says</summary>
-                  <p className="mt-1 whitespace-pre-line">{power.card.text}</p>
-                </details>
-              )}
               {unknownAc && (
                 <p className="text-amber-300">
                   The app doesn't know the {monsterName(state, unknownAc)}'s AC. Roll the die yourself and use its card.
