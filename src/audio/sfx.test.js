@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DIE_LANDS_MS, momentSoundMs, momentSounds, monsterVoice, tileRevealed } from './sfx.js'
+import { DIE_LANDS_MS, hurtSound, momentSoundMs, momentSounds, monsterVoice, spellKind, tileRevealed } from './sfx.js'
 
 const names = (moment) => momentSounds(moment).map(([sound]) => sound)
 const heroAttack = (rolls, kind = 'roll') => ({ kind, rolls: rolls.map(([value, hit]) => ({ monsterId: 'm', label: 'Kobold', value, hit })) })
@@ -17,15 +17,15 @@ describe('moment sounds', () => {
   })
 
   it('clangs on a hero hit and whooshes on a miss', () => {
-    expect(names(heroAttack([[14, true]]))).toEqual(['dice', 'clang'])
+    expect(names(heroAttack([[14, true]]))).toEqual(['dice', 'clang', 'hurt'])
     expect(names(heroAttack([[5, false]]))).toEqual(['dice', 'whoosh'])
     expect(names(heroAttack([[1, false]]))).toEqual(['dice', 'trombone'])
     expect(names(heroAttack([[20, false], [3, false]], 'crit'))).toEqual(['dice', 'fanfare'])
-    expect(names(heroAttack([[1, false], [15, true]]))).toEqual(['dice', 'clang'])
+    expect(names(heroAttack([[1, false], [15, true]]))).toEqual(['dice', 'clang', 'hurt'])
   })
 
   it('adds a victory tune when the attack defeats a monster', () => {
-    expect(names(heroAttack([[17, true]], 'defeat'))).toEqual(['dice', 'clang', 'victory'])
+    expect(names(heroAttack([[17, true]], 'defeat'))).toEqual(['dice', 'clang', 'hurt', 'victory'])
   })
 
   it('growls before a monster attack and thuds when it hits a hero', () => {
@@ -88,5 +88,40 @@ describe('new tile music', () => {
     expect(tileRevealed(game({}), game({ tiles: { explore: 'none' } }))).toBe(false)
     expect(tileRevealed(null, game({ explored: true }))).toBe(false)
     expect(tileRevealed({ ...game({}), status: 'setup' }, game({ explored: true }))).toBe(false)
+  })
+})
+
+describe('spell and hurt sounds', () => {
+  const cast = (title, rolls) => ({ kind: 'roll', title, rolls: rolls.map(([value, hit, label = 'Cave Bear']) => ({ monsterId: label, label, value, hit })) })
+
+  it('knows a spell from its name, or from the hero who cast it', () => {
+    expect(spellKind('Heskan: Ray of Frost!')).toBe('frost')
+    expect(spellKind('Heskan: Arc Lightning!')).toBe('zap')
+    expect(spellKind('Heskan: Hurled Breath!')).toBe('fire')
+    expect(spellKind('Quinn: Sacred Flame!')).toBe('fire')
+    expect(spellKind('Keyleth: Holy Strike!')).toBe('holy')
+    expect(spellKind('Quinn: Cause Fear!')).toBe('psychic')
+    expect(spellKind('Tarak: Positioning Shot!')).toBe('arrow')
+    expect(spellKind('Heskan: Wizard Eye!')).toBe('arcane')
+    expect(spellKind('Vistra: Reaping Strike!')).toBe(null)
+    expect(spellKind('Inspiring Advice: Hit!')).toBe(null)
+  })
+
+  it('casts while the die rolls, then the monster yelps on a hit', () => {
+    expect(names(cast('Heskan: Ray of Frost!', [[15, true]]))).toEqual(['dice', 'frost', 'hurt-big'])
+    expect(names(cast('Heskan: Ray of Frost!', [[4, false]]))).toEqual(['dice', 'frost', 'fizzle'])
+    expect(names(cast('Heskan: Ray of Frost!', [[20, true]]))).toEqual(['dice', 'frost', 'fanfare', 'hurt-big'])
+  })
+
+  it('a sword hit clangs, then each hit monster yelps (two at most)', () => {
+    const three = cast('Vistra: Reaping Strike!', [[15, true, 'Snake'], [16, true, 'Kobold Dragonshield'], [18, true, 'Grell']])
+    expect(names(three)).toEqual(['dice', 'clang', 'hurt-snake', 'hurt-small'])
+  })
+
+  it('sizes each monster yelp', () => {
+    expect(hurtSound('Cave Bear')).toBe('hurt-big')
+    expect(hurtSound('Kobold Dragonshield')).toBe('hurt-small')
+    expect(hurtSound('Snake')).toBe('hurt-snake')
+    expect(hurtSound('Human Cultist')).toBe('hurt')
   })
 })
