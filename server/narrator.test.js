@@ -2,7 +2,7 @@ import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createNarrator, DEFAULT_MODEL, DEFAULT_VILLAIN_MODEL, DEFAULT_VOICES, speakable, villainLines } from './narrator.js'
+import { createNarrator, DEFAULT_MODEL, DEFAULT_STABILITY, DEFAULT_VILLAIN_MODEL, DEFAULT_VOICES, speakable, villainLines } from './narrator.js'
 import { startServer } from './server.js'
 
 describe('narrator endpoint', () => {
@@ -129,11 +129,27 @@ describe('narrator endpoint', () => {
     expect(calls).toHaveLength(lines.length)
   })
 
-  it('uses the cheap model for everyday lines and v3 for villains', async () => {
+  it('records every voice with v3 at the chosen stability', async () => {
     const base = await start('secret-key')
     await fetch(`${base}/narrate?voice=herald&text=Hello`)
     await fetch(`${base}/narrate?voice=ashardalon&text=Hello`)
-    expect(calls.map((c) => JSON.parse(c.options.body).model_id)).toEqual([DEFAULT_MODEL, DEFAULT_VILLAIN_MODEL])
+    const bodies = calls.map((c) => JSON.parse(c.options.body))
+    expect(bodies.map((b) => b.model_id)).toEqual([DEFAULT_MODEL, DEFAULT_VILLAIN_MODEL])
+    expect(DEFAULT_MODEL).toBe('eleven_v3')
+    expect(bodies.map((b) => b.voice_settings.stability)).toEqual([DEFAULT_STABILITY, DEFAULT_STABILITY])
+  })
+
+  it('records a line again when the stability changes', async () => {
+    const made = []
+    const fetchSpeech = async (url, options) => {
+      made.push(JSON.parse(options.body).voice_settings.stability)
+      return new Response(new Uint8Array([9]), { status: 200 })
+    }
+    for (const stability of [0.5, 0.3, 0.3]) {
+      const narrator = createNarrator({ apiKey: 'k', stability, cacheDir: join(dir, 'narration'), fetchSpeech })
+      await narrator.speakAs('herald', 'Hello')
+    }
+    expect(made).toEqual([0.5, 0.3])
   })
 
   it('reuses a line already recorded with another model', async () => {
@@ -148,9 +164,9 @@ describe('narrator endpoint', () => {
       await fetch(`http://localhost:${one.port}/narrate?voice=herald&text=Hello`)
       await one.close()
     }
-    await ask('eleven_v3')
+    await ask('eleven_flash_v2_5')
     await ask(DEFAULT_MODEL)
-    expect(made).toEqual(['eleven_v3'])
+    expect(made).toEqual(['eleven_flash_v2_5'])
   })
 
   it('refuses very long lines', async () => {

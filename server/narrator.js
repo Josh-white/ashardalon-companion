@@ -7,19 +7,19 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFile
 import { join } from 'node:path'
 import { VILLAIN_DEFAULT, VILLAIN_LINES } from '../src/data/villainLines.js'
 
-// The cast: ElevenLabs' built-in voices, which every plan can use. Each can be
+// The cast, picked by JJ from the ElevenLabs voice library. Each can be
 // swapped with a voice id in .env: ELEVENLABS_VOICE_ID for the narrator, and
 // ELEVENLABS_VOICE_<ROLE> for the rest (ELEVENLABS_VOICE_HERALD, _MEERAK, ...).
 export const DEFAULT_VOICES = {
-  narrator: 'JBFqnCBsd6RMkjVDRZzb', // George: warm storyteller
-  herald: 'Xb7hH8MSUJpSbSDYk0k2', // Alice: clear and bright; cheers the heroes on
-  danger: 'N2lVS1w4EtoT3dr4eOWO', // Callum: husky and menacing; monsters and bad news
+  narrator: 'oR4uRy4fHDUGGISL0Rev', // the storyteller: tiles, turns, encounters and stories
+  herald: 'ZF6FPAbjXT4488VcRRnw', // cheers the heroes on
+  danger: 'fs2OqxduwXgp9foh2xjK', // monsters and bad news
   villain: 'pNInz6obpgDQGcFmaJgB', // Adam: dominant, firm; any villain without its own voice
-  meerak: 'SOYHLrjzK2X1ezoPC6cr', // Harry: fierce warrior; the kobold dragonlord
-  margrath: 'pqHfZKP75CvOlQylNhV4', // Bill: old and gruff; the duergar captain
-  kraash: 'pNInz6obpgDQGcFmaJgB', // Adam: dominant, firm; the orc storm shaman
-  ashardalon: 'nPczCjzI2devNBz1zQrb', // Brian: deep and resonant; the red dragon
-  bellax: 'pFZP5JQG7iQjIQuC4Bku', // Lily: velvety; the gauth's whisper of madness
+  meerak: 'Nw7vpAFWzoeAAt8VlVfL', // the kobold dragonlord
+  margrath: '09BJBPASOGbr1evokbCu', // the duergar captain
+  kraash: 'IDuDsTbqg77GnVCQrair', // the orc storm shaman
+  ashardalon: 'd5zuFgodxfQobkK5AfKH', // the red dragon
+  bellax: 'mLw8kuDeVGqVstOYjRII', // the gauth's whisper of madness
 }
 export const DEFAULT_VOICE = DEFAULT_VOICES.narrator
 
@@ -36,11 +36,12 @@ export const villainLines = () =>
   [...Object.values(VILLAIN_LINES), VILLAIN_DEFAULT].flatMap((lines) =>
     ['arrive', 'enraged', 'fall'].filter((when) => lines[when]).map((when) => ({ role: lines.voice, text: lines[when] })),
   )
-// Everyday lines use the quick, cheap flash model (about half a credit a letter).
-export const DEFAULT_MODEL = 'eleven_flash_v2_5'
-// Villains use v3, which acts out stage directions like [menacing] or [laughs] but
-// costs about twice as much; their lines are few and get recorded once.
+// Every line uses v3, which acts out stage directions like [menacing] or [laughs].
+// It costs about twice as much as flash, but each line is recorded only once.
+export const DEFAULT_MODEL = 'eleven_v3'
 export const DEFAULT_VILLAIN_MODEL = 'eleven_v3'
+// Lower is more expressive, higher is steadier.
+export const DEFAULT_STABILITY = 0.3
 // ElevenLabs credits per letter, for the recording estimate.
 export const CREDITS_PER_LETTER = { eleven_flash_v2_5: 0.5, eleven_turbo_v2_5: 0.5 }
 // Models lines may already be saved under, so changing models never pays twice.
@@ -58,6 +59,7 @@ export function createNarrator({
   voices = castFromEnv(process.env),
   model: everydayModel = process.env.ELEVENLABS_MODEL || DEFAULT_MODEL,
   villainModel = process.env.ELEVENLABS_VILLAIN_MODEL || DEFAULT_VILLAIN_MODEL,
+  stability = Number(process.env.ELEVENLABS_STABILITY || DEFAULT_STABILITY),
   cacheDir,
   fetchSpeech = globalThis.fetch,
 } = {}) {
@@ -67,7 +69,9 @@ export function createNarrator({
   // their lines go straight to the narrator.
   const refused = new Set()
 
-  const cacheFile = (voice, model, text) => join(cacheDir, `${createHash('sha1').update(`${voice}|${model}|${text}`).digest('hex')}.mp3`)
+  // Stability is part of the name, so changing it records the lines again.
+  const cacheFile = (voice, model, text) =>
+    join(cacheDir, `${createHash('sha1').update(`${voice}|${model}|${stability}|${text}`).digest('hex')}.mp3`)
 
   // The same line in the same voice, recorded with any model.
   const savedFile = (voice, text) => KNOWN_MODELS.map((model) => cacheFile(voice, model, text)).find(existsSync)
@@ -88,8 +92,7 @@ export function createNarrator({
         body: JSON.stringify({
           text: speakable(text, model),
           model_id: model,
-          // v3 only takes stability 0, 0.5 or 1; 0.5 keeps a voice steady but expressive.
-          voice_settings: actsTags(model) ? { stability: 0.5, similarity_boost: 0.75 } : { stability: 0.4, similarity_boost: 0.75, style: 0.35 },
+          voice_settings: actsTags(model) ? { stability, similarity_boost: 0.75 } : { stability, similarity_boost: 0.75, style: 0.35 },
         }),
       })
       if (!response.ok) {

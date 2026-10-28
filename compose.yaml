@@ -22,6 +22,7 @@ services:
       - ELEVENLABS_VOICE_BELLAX=${ELEVENLABS_VOICE_BELLAX:-}
       - ELEVENLABS_MODEL=${ELEVENLABS_MODEL:-}
       - ELEVENLABS_VILLAIN_MODEL=${ELEVENLABS_VILLAIN_MODEL:-}
+      - ELEVENLABS_STABILITY=${ELEVENLABS_STABILITY:-}
     volumes:
       # The current game is saved here, so it survives restarts and updates.
       - game-data:/data
