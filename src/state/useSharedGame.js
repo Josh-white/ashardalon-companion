@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { refreshArt } from './useArt.js'
 
 const RECONNECT_DELAY_MS = 1500
+// The build of the screens the Pi handed out when this screen loaded.
+let loadedBuild = null
 
 function socketUrl() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -37,6 +39,12 @@ export function useSharedGame() {
           setUndo(message.undo ?? null)
           setUndoDepth(message.undoDepth ?? 0)
           setInstance(message.instance ?? null)
+          // The Pi was updated since this screen loaded: reload to get the new screens.
+          // The game itself lives on the Pi, so nothing is lost.
+          if (message.build) {
+            if (loadedBuild === null) loadedBuild = message.build
+            else if (message.build !== loadedBuild) window.location.reload()
+          }
         } else if (message.type === 'art') {
           // Someone saved a card picture: show it here too.
           refreshArt()

@@ -1,6 +1,7 @@
 // Serves the built app and keeps the one shared game. Every iPad connects over
 // a WebSocket, sends actions, and receives the new state after each change.
 import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { createServer } from 'node:http'
 import { dirname, extname, join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -176,6 +177,10 @@ export function startServer({
   narrator = createNarrator({ cacheDir: join(dirname(saveFile), 'narration') }),
 } = {}) {
   let state = loadSavedGame(saveFile)
+  // Which build of the screens this server hands out. A screen that loaded an older
+  // build reloads itself when it sees a new one, so an update reaches the iPads.
+  const indexFile = join(staticDir, 'index.html')
+  const build = existsSync(indexFile) ? createHash('sha1').update(readFileSync(indexFile)).digest('hex').slice(0, 12) : null
   // Earlier versions of the game, newest last, each with what changed after it.
   const history = []
 
@@ -207,7 +212,7 @@ export function startServer({
   const wss = new WebSocketServer({ server, path: '/ws' })
 
   const stateMessage = () =>
-    JSON.stringify({ type: 'state', state, undo: history.at(-1)?.label ?? null, undoDepth: history.length, instance })
+    JSON.stringify({ type: 'state', state, undo: history.at(-1)?.label ?? null, undoDepth: history.length, instance, build })
 
   function broadcastRaw(message) {
     for (const client of wss.clients) {
