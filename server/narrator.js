@@ -36,7 +36,8 @@ export function createNarrator({
 } = {}) {
   // Lines being fetched right now, so two screens asking at once cost one call.
   const pending = new Map()
-  // Voices ElevenLabs refused since the server started; their lines go to the narrator.
+  // Voices ElevenLabs refused (missing, or not on this plan) since the server started;
+  // their lines go straight to the narrator.
   const refused = new Set()
 
   const speak = async (text, voice) => {
@@ -55,7 +56,7 @@ export function createNarrator({
       })
       if (!response.ok) {
         const reason = await response.text().catch(() => '')
-        throw new Error(`ElevenLabs said ${response.status}: ${reason.slice(0, 200)}`)
+        throw Object.assign(new Error(`ElevenLabs said ${response.status}: ${reason.slice(0, 200)}`), { status: response.status })
       }
       const audio = Buffer.from(await response.arrayBuffer())
       mkdirSync(cacheDir, { recursive: true })
@@ -98,7 +99,8 @@ export function createNarrator({
     const spoken = speak(text, voice).catch((error) => {
       if (voice === voices.narrator) throw error
       console.error(`Narrator: the ${role} voice failed, using the narrator instead.`, error.message)
-      refused.add(voice)
+      // Not found or not on this plan won't fix itself; a network blip might.
+      if (error.status === 402 || error.status === 403 || error.status === 404) refused.add(voice)
       return speak(text, voices.narrator)
     })
     spoken.then(
