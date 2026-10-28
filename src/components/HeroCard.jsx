@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { heroArt, heroCardArt } from '../data/art.js'
-import { CONDITIONS, HERO_COLORS, XP_TO_LEVEL_UP } from '../data/heroes.js'
+import { CONDITIONS, HERO_COLORS, MAX_LEVEL, XP_TO_LEVEL_UP, hasAbility } from '../data/heroes.js'
 import { itemSpeed } from '../data/items.js'
 import { heroAc } from '../data/powerEffects.js'
 import { artUrl, useArt } from '../state/useArt.js'
@@ -113,11 +113,11 @@ function PowerMarkers({ state, hero, dispatch }) {
 // whose tile: Quinn's Saving Grace, Keyleth's Healing Hands and Tarak's Brutal Recovery.
 function AbilityOffers({ state, hero, dispatch }) {
   const offers = state.turn.abilityOffers ?? {}
-  const quinn = state.heroes.find((h) => h.key === 'cleric')
-  const keyleth = state.heroes.find((h) => h.key === 'paladin')
+  const quinn = state.heroes.find((h) => hasAbility(h, 'saving-grace'))
+  const keyleth = state.heroes.find((h) => hasAbility(h, 'healing-hands'))
   const grace = offers.savingGrace?.includes(hero.id) && hero.conditions.length > 0
   const hands = offers.healingHands?.includes(hero.id) && hero.hp < hero.maxHp
-  const brutal = offers.brutalRecovery && hero.key === 'rogue'
+  const brutal = offers.brutalRecovery && hasAbility(hero, 'brutal-recovery')
   if (!grace && !hands && !brutal) return null
   const onTile = (other) => (other.id === hero.id ? '' : ` (if ${hero.name} is on ${other.name}'s tile)`)
   return (
@@ -178,7 +178,7 @@ export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, 
         <div className="mr-auto">
           <h3 className={`font-display text-2xl font-bold ${color.text}`}>
             {hero.name}
-            {hero.level === 2 && <span className="ml-2 text-base text-amber-400">★ Lv 2</span>}
+            {hero.level >= 2 && <span className="ml-2 text-base text-amber-400">★ Lv {hero.level}</span>}
           </h3>
           <p className="text-sm text-zinc-400">
             {hero.className}
@@ -262,7 +262,7 @@ export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, 
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        {hero.level === 1 && (
+        {hero.level < MAX_LEVEL && (
           <Button
             variant="ghost"
             className="text-sm"

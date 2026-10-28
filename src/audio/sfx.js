@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { serverNow, useGameStates } from '../state/useSharedGame.js'
-import { HERO_TEMPLATES } from '../data/heroes.js'
+import { heroTemplates } from '../data/heroes.js'
 import { audioContext } from './soundSetting.js'
 import { loadSamples, playSample, sampleMs } from './samples.js'
 import { layer } from './mixer.js'
@@ -147,7 +147,6 @@ const SPELL_WORDS = [
   ['arcane', /missile|spectral|arcane|magic|force|ray\b/],
   ['arrow', /shot|arrow|bow\b|sling/],
 ]
-const HERO_SPELLS = { wizard: 'arcane', cleric: 'holy' }
 // Powers whose sound JJ picked by name, where the words alone would pick another.
 const POWER_SPELLS = {
   'blade barrier': 'arcane',
@@ -171,8 +170,8 @@ export function spellKind(title = '') {
   if (POWER_SPELLS[powerKey(power)]) return POWER_SPELLS[powerKey(power)]
   const match = SPELL_WORDS.find(([, words]) => words.test(lower))
   if (match) return match[0]
-  const hero = HERO_TEMPLATES.find((h) => h.name === heroName)
-  return HERO_SPELLS[hero?.key] ?? null
+  // Otherwise the hero's own kind of magic (Heskan's arcane, Quinn's holy), from their template.
+  return heroTemplates().find((h) => h.name === heroName)?.spellSound ?? null
 }
 
 // The sound of a power used from its tile, or as a reaction (state.cast): its spell if

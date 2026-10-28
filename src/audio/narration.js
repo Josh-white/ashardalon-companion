@@ -5,7 +5,7 @@
 // The cast (the Pi's server/narrator.js picks the actual ElevenLabs voice for each):
 // narrator tells the story, herald cheers the heroes on, danger brings bad news,
 // and each villain speaks for itself in its own voice.
-import { HERO_TEMPLATES } from '../data/heroes.js'
+import { templateFor } from '../data/heroes.js'
 import { VILLAIN_DEFAULT, VILLAIN_LINES } from '../data/villainLines.js'
 
 export const VOICES = [...new Set(['narrator', 'herald', 'danger', 'villain', ...Object.values(VILLAIN_LINES).map((v) => v.voice)])]
@@ -95,7 +95,7 @@ export const INTRO_LINE = say('narrator', `${STORY} Beneath Firestorm Peak, the 
 
 // The herald calls out each hero as their torch is lit in the lobby.
 export const arrivalLine = (heroKey) => {
-  const template = HERO_TEMPLATES.find((t) => t.key === heroKey)
+  const template = templateFor(heroKey)
   return template ? say('herald', `${CHEER} ${template.name} the ${template.className} has arrived!`) : null
 }
 

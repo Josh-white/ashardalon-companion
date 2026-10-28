@@ -10,6 +10,7 @@ import { ART_NAME, MAX_ART_BYTES } from '../src/data/art.js'
 import { createNarrator } from './narrator.js'
 import { auditionList, pickTake, takesDir } from './soundTakes.js'
 import { normalizeCardFile } from '../src/data/cards.js'
+import { setHeroTemplates } from '../src/data/heroes.js'
 import { describeAction } from '../src/state/describeAction.js'
 import { gameReducer, initialState } from '../src/state/game.js'
 import { migrateSave } from '../src/state/saves.js'
@@ -280,6 +281,8 @@ export function startServer({
   warmNarrator = process.env.ELEVENLABS_WARM_UP !== 'off',
 } = {}) {
   let state = loadSavedGame(saveFile)
+  // The heroes players can pick, homebrew ones too. Read again whenever a screen loads the cards.
+  setHeroTemplates(loadCards(cardsFile, exampleCardsFile).heroes)
   // Which build of the screens this server hands out. A screen that loaded an older
   // build reloads itself when it sees a new one, so an update reaches the iPads.
   const indexFile = join(staticDir, 'index.html')
@@ -295,9 +298,9 @@ export function startServer({
       return
     }
     if (req.url === '/cards.json') {
-      res
-        .writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
-        .end(JSON.stringify(loadCards(cardsFile, exampleCardsFile)))
+      const cards = loadCards(cardsFile, exampleCardsFile)
+      setHeroTemplates(cards.heroes)
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(cards))
       return
     }
     if (req.url === '/art.json') {

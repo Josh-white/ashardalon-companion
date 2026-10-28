@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { HERO_COLORS } from '../data/heroes.js'
+import { HERO_COLORS, hasAbility } from '../data/heroes.js'
 import { DOOR_UNLOCK_ROLL, FEATURE_LABELS, MAX_SURGES, MIN_SURGES, escapeBlockers, goalParts, missingFeatures, playableChambers, revealsReady, usesDoors } from '../state/adventure.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
@@ -338,7 +338,7 @@ export function Doors({ state, hero, dispatch }) {
   const reveal = (kind, heroIds) => dispatch({ type: 'DOOR_REVEALED', kind, heroId: hero.id, heroIds })
   const special = revealsReady(state.adventure, true)
   // Heskan's Mage Hand opens any door on his tile, not just one next to him.
-  const near = hero.key === 'wizard' ? 'On your tile (Mage Hand)' : 'Next to'
+  const near = hasAbility(hero, 'mage-hand') ? 'On your tile (Mage Hand)' : 'Next to'
   return (
     <details className="mt-4 rounded-xl bg-zinc-950/50 p-3" open={special.length > 0 || undefined}>
       <summary className="cursor-pointer text-lg text-zinc-100">

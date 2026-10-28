@@ -1,4 +1,4 @@
-import { HERO_COLORS, HERO_TEMPLATES } from '../data/heroes.js'
+import { HERO_COLORS, templateFor } from '../data/heroes.js'
 import { campaignBoons, campaignHero, campaignOutcome, outcomeLines, shopSize } from '../state/campaign.js'
 import { turnKey } from '../state/game.js'
 import { randomNumbers } from '../state/random.js'
@@ -7,7 +7,7 @@ import { Button } from './ui.jsx'
 
 const SHUFFLE_NUMBERS = 128
 const gold = (n) => `${(n ?? 0).toLocaleString()} gold`
-const heroName = (key) => HERO_TEMPLATES.find((t) => t.key === key)?.name ?? key
+const heroName = (key) => templateFor(key)?.name ?? key
 
 // Boons the party can use right now: a free tile before the first turn (Short Cut!,
 // Bypassed Guards), or discarding a monster card just drawn (Kobolds Clobbered!...).
@@ -109,7 +109,7 @@ export function CampaignLobby({ state, dispatch }) {
       <ul className="mt-1 space-y-1 text-zinc-300">
         {campaign.heroes.map((h) => (
           <li key={h.key}>
-            <span className={`font-semibold ${HERO_COLORS[HERO_TEMPLATES.find((t) => t.key === h.key)?.color]?.text ?? ''}`}>{heroName(h.key)}</span>
+            <span className={`font-semibold ${HERO_COLORS[templateFor(h.key)?.color]?.text ?? ''}`}>{heroName(h.key)}</span>
             {h.player && ` (${h.player})`} · level {h.level} · {gold(h.gold)}
             {h.items.length > 0 && ` · ${h.items.map((i) => i.name).join(', ')}`}
           </li>

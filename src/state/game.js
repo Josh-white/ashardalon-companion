@@ -1,9 +1,12 @@
 import {
   HERO_TEMPLATES,
-  LEVEL_UP_AC_BONUS,
-  LEVEL_UP_HP_BONUS,
-  LEVEL_UP_SURGE_BONUS,
+  LEVEL_STATS,
+  MAX_LEVEL,
   STARTING_SURGES,
+  addedSlot,
+  hasAbility,
+  statsAtLevel,
+  templateFor,
   XP_TO_CANCEL_ENCOUNTER,
   XP_TO_LEVEL_UP,
 } from '../data/heroes.js'
@@ -707,7 +710,7 @@ function healHero(state, heroId, amount, source) {
 
 // The heroes' own abilities (the hero cards), offered for the rest of the turn on the hero
 // card they help: turn.abilityOffers = { savingGrace: [heroId], healingHands: [heroId], brutalRecovery }.
-const heroWith = (state, key) => state.heroes.find((h) => h.key === key)
+const heroWith = (state, effect) => state.heroes.find((h) => hasAbility(h, effect))
 const offers = (state) => state.turn.abilityOffers ?? {}
 function addOffer(state, kind, value) {
   const now = offers(state)
@@ -722,19 +725,19 @@ function dropOffer(state, kind, heroId) {
 
 // Quinn's Saving Grace: a hero on Quinn's tile who regains HP can also end a condition.
 function offerSavingGrace(state, hero) {
-  if (!heroWith(state, 'cleric') || hero.conditions.length === 0) return state
+  if (!heroWith(state, 'saving-grace') || hero.conditions.length === 0) return state
   return addOffer(state, 'savingGrace', hero.id)
 }
 
 // Tarak's Brutal Recovery: a natural 20 by a hero on Tarak's tile can flip Furious Assault back over.
 function offerBrutalRecovery(state) {
-  const tarak = heroWith(state, 'rogue')
+  const tarak = heroWith(state, 'brutal-recovery')
   if (!tarak?.powers.some((p) => p.used && effectsOf(p).reaction === 'furious')) return state
   return addOffer(state, 'brutalRecovery', true)
 }
 
 // Vistra's Cast-Iron Stomach: +5 to rolls to end Poisoned.
-export const poisonBonus = (hero) => (hero?.key === 'fighter' ? 5 : 0)
+export const poisonBonus = (hero) => (hasAbility(hero, 'cast-iron-stomach') ? 5 : 0)
 
 const validRoll = (roll) => Number.isInteger(roll) && roll >= 1 && roll <= 20
 
@@ -1307,24 +1310,27 @@ function endHeroPhase(state, hero, roll) {
   })
 }
 
-// Level 2: the 2nd-level side of the hero card, and one more daily power to choose.
-// The 2nd-level side of the hero card, with an empty slot for the new daily power.
-const levelTwo = (h) => ({
-  level: 2,
-  maxHp: h.maxHp + LEVEL_UP_HP_BONUS,
-  hp: h.hp + LEVEL_UP_HP_BONUS,
-  ac: h.ac + LEVEL_UP_AC_BONUS,
-  surgeValue: h.surgeValue + LEVEL_UP_SURGE_BONUS,
-  powers: [...h.powers, newPower('daily')],
-})
+// The next level's side of the hero card (level 2 in the box), with an empty slot for the
+// power card it adds. HP goes up as much as max HP does. A hero whose template is gone
+// from cards.json levels up the box way.
+const nextLevel = (h) => {
+  const template = templateFor(h.key) ?? h
+  const level = h.level + 1
+  const before = statsAtLevel(template, h.level)
+  const after = statsAtLevel(template, level)
+  const change = Object.fromEntries(LEVEL_STATS.map((stat) => [stat, h[stat] + after[stat] - before[stat]]))
+  return { level, ...change, hp: h.hp + after.maxHp - before.maxHp, powers: [...h.powers, newPower(addedSlot(template, level))] }
+}
 
 function levelUp(state, hero) {
-  const leveled = updateHero(state, hero.id, levelTwo)
-  return withMoment(withLog(leveled, `${hero.name} reached level 2!`), {
+  const leveled = updateHero(state, hero.id, nextLevel)
+  const level = hero.level + 1
+  const slot = addedSlot(templateFor(hero.key), level)
+  return withMoment(withLog(leveled, `${hero.name} reached level ${level}!`), {
     kind: 'level',
     heroId: hero.id,
-    title: `${hero.name} reached level 2!`,
-    detail: 'Flip your hero card and choose another daily power!',
+    title: `${hero.name} reached level ${level}!`,
+    detail: `Flip your hero card and choose another ${slot} power!`,
   })
 }
 
@@ -1496,8 +1502,11 @@ function monsterControl(state, action) {
 export const STARTING_POWER_SLOTS = ['at-will', 'at-will', 'utility', 'utility', 'daily']
 
 export const powerSlotsFor = (template) => template.powerSlots ?? STARTING_POWER_SLOTS
-// A level 2 hero has one more daily power.
-export const levelSlots = (template, level = 1) => [...powerSlotsFor(template), ...(level >= 2 ? ['daily'] : [])]
+// Each level after the first adds a power card: one more daily in the box.
+export const levelSlots = (template, level = 1) => [
+  ...powerSlotsFor(template),
+  ...Array.from({ length: Math.max(0, level - 1) }, (_, i) => addedSlot(template, i + 2)),
+]
 
 // The card is copied into the game, so later edits to the card file don't change a game in progress.
 const copyCard = (card) =>
@@ -1508,6 +1517,8 @@ const copyCard = (card) =>
         text: String(card.text ?? ''),
         attack: card.attack ? String(card.attack) : '',
         damage: card.damage ? String(card.damage) : '',
+        // A homebrew power's own effect (powerEffects.js), kept with the card.
+        ...(card.effect && typeof card.effect === 'object' ? { effect: card.effect } : {}),
       }
     : null
 
@@ -1531,12 +1542,13 @@ const pickedElsewhere = (cards, slot, card) => Boolean(card) && cards.some((c, i
 
 function heroesFromLobby(lobby, campaign = null) {
   return lobby.flatMap((claim) => {
-    const template = HERO_TEMPLATES.find((t) => t.key === claim.heroKey)
+    const template = templateFor(claim.heroKey)
     if (!template) return []
-    // A campaign hero who reached level 2 starts there, with the extra daily power.
+    // A campaign hero who levelled up starts at that level, with the power cards it added.
     const saved = (campaign?.heroes ?? []).find((h) => h.key === template.key)
-    const hero = createHero(template)
-    return [{ ...withPicks(saved?.level >= 2 ? { ...hero, ...levelTwo(hero) } : hero, claim.picks), player: claim.player }]
+    let hero = createHero(template)
+    while (hero.level < Math.min(saved?.level ?? 1, MAX_LEVEL)) hero = { ...hero, ...nextLevel(hero) }
+    return [{ ...withPicks(hero, claim.picks), player: claim.player }]
   })
 }
 
@@ -1564,9 +1576,9 @@ const fromCampaign = (hero, saved) => (saved ? { ...hero, gold: saved.gold, item
 // The lobby for the campaign's next adventure: each iPad gets its hero back, waiting to get ready.
 function campaignLobby(state) {
   const lobby = state.campaign.heroes
-    .filter((h) => h.deviceId)
+    .filter((h) => h.deviceId && templateFor(h.key))
     .map((h) => {
-      const template = HERO_TEMPLATES.find((t) => t.key === h.key)
+      const template = templateFor(h.key)
       return { deviceId: h.deviceId, heroKey: h.key, player: h.player, picks: levelSlots(template, h.level).map((_, i) => copyCard(h.picks[i])), ready: false }
     })
   return { ...state, lobby, lobbyAdventure: state.campaign.card }
@@ -1704,6 +1716,8 @@ export function createHero(template, overrides = {}) {
     surgeValue: hero.surgeValue,
     speed: hero.speed,
     level: 1,
+    // Saved with the hero, so a game in progress keeps them if cards.json changes.
+    abilityEffects: hero.abilityEffects ?? [],
     conditions: [],
     // Power tokens (Mirror Image, Blade Barrier, Flaming Sphere) and markers (invisible, refuge).
     tokens: {},
@@ -2120,7 +2134,7 @@ function reduce(state, action) {
       return withLog({ ...state, adventure: { ...state.adventure, escaped: Boolean(action.escaped) } }, action.escaped ? 'The heroes escaped the dungeon!' : 'Not escaped after all.')
 
     case 'CLAIM_HERO': {
-      const template = HERO_TEMPLATES.find((t) => t.key === action.heroKey)
+      const template = templateFor(action.heroKey)
       const lobby = state.lobby ?? []
       if (state.status !== 'setup' || !template || !action.deviceId) return state
       // One hero per iPad, and nobody can take a hero another iPad already has.
@@ -2224,11 +2238,11 @@ function reduce(state, action) {
       }
       // Keyleth's Healing Hands: her own surge heals 1 more. Anyone else's is offered,
       // since only the players know who is on Keyleth's tile.
-      const own = hero.key === 'paladin' ? 1 : 0
+      const own = hasAbility(hero, 'healing-hands') ? 1 : 0
       let healed = updateHero({ ...state, surges: state.surges - 1 }, hero.id, (h) => ({
         hp: Math.min(h.maxHp, h.surgeValue + own),
       }))
-      if (!own && heroWith(state, 'paladin')) healed = addOffer(healed, 'healingHands', hero.id)
+      if (!own && heroWith(state, 'healing-hands')) healed = addOffer(healed, 'healingHands', hero.id)
       healed = offerSavingGrace(healed, hero)
       const logged = withLog(healed, `${hero.name} used a healing surge${own ? ', +1 HP from Healing Hands' : ''}.`)
       if (state.turn.startDamageDue !== hero.id) return logged
@@ -2250,7 +2264,7 @@ function reduce(state, action) {
     }
 
     case 'BRUTAL_RECOVERY': {
-      const tarak = heroWith(state, 'rogue')
+      const tarak = heroWith(state, 'brutal-recovery')
       const assault = tarak?.powers.find((p) => p.used && effectsOf(p).reaction === 'furious')
       if (!offers(state).brutalRecovery || !assault) return state
       const next = updateHero(dropOffer(state, 'brutalRecovery'), tarak.id, (h) => ({
@@ -2293,7 +2307,7 @@ function reduce(state, action) {
 
     case 'LEVEL_UP': {
       const hero = state.heroes.find((h) => h.id === action.heroId)
-      if (!hero || hero.level >= 2 || state.xp < XP_TO_LEVEL_UP || state.turn.natural20 !== hero.id) return state
+      if (!hero || hero.level >= MAX_LEVEL || state.xp < XP_TO_LEVEL_UP || state.turn.natural20 !== hero.id) return state
       return levelUp({ ...state, xp: state.xp - XP_TO_LEVEL_UP }, hero)
     }
 
