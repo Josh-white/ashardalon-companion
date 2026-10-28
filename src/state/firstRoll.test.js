@@ -52,6 +52,25 @@ describe('roll for first turn', () => {
     expect(state.log[0].text).toBe(`${party[1].name} goes first!`)
   })
 
+  it('holds the starting treasure until the roll is decided', () => {
+    const party = HERO_TEMPLATES.slice(0, 2).map((t) => createHero(t))
+    const treasureCards = [{ id: 't1', name: 'Sword', count: 2 }]
+    let state = gameReducer(initialState, { type: 'START_GAME', heroes: party, treasureCards, random: [] })
+    expect(state.moment).toBeNull()
+    // Too early: nobody has won yet.
+    expect(gameReducer(state, { type: 'FIRST_ROLL_DONE' })).toBe(state)
+    state = gameReducer(state, { type: 'ROLL_FIRST', heroId: party[0].id, value: 6 })
+    state = gameReducer(state, { type: 'ROLL_FIRST', heroId: party[1].id, value: 9 })
+    expect(state.moment).toBeNull()
+    state = gameReducer(state, { type: 'FIRST_ROLL_DONE' })
+    expect(state.moment).toMatchObject({ kind: 'treasure', title: 'Starting treasure!' })
+    // Every screen sends it; only the first one counts.
+    expect(gameReducer(state, { type: 'FIRST_ROLL_DONE' })).toBe(state)
+    // Skipping the roll shows the treasure right away.
+    const skipped = gameReducer(gameReducer(initialState, { type: 'START_GAME', heroes: party, treasureCards, random: [] }), { type: 'SKIP_FIRST_ROLL' })
+    expect(skipped.moment).toMatchObject({ kind: 'treasure', title: 'Starting treasure!' })
+  })
+
   it('can be skipped', () => {
     const party = HERO_TEMPLATES.slice(0, 2).map((t) => createHero(t))
     const state = gameReducer(gameReducer(initialState, { type: 'START_GAME', heroes: party }), { type: 'SKIP_FIRST_ROLL' })

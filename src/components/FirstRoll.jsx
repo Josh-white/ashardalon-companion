@@ -61,6 +61,11 @@ function HeroRoll({ hero, roll, rolled, waiting, winner, big, onRoll }) {
 // projector shows everyone's rolls; the table screen can roll for anyone.
 export default function FirstRoll({ state, dispatch, heroId = null, big = false }) {
   const showing = useShowing(state)
+  // Once "X goes first!" has had its few seconds, release the starting treasure.
+  const held = Boolean(state.firstRoll?.winner && state.firstRoll.after)
+  useEffect(() => {
+    if (held && !showing) dispatch({ type: 'FIRST_ROLL_DONE' })
+  }, [held, showing, dispatch])
   if (!showing) return null
   const roll = state.firstRoll
   const waiting = waitingToRoll(roll)

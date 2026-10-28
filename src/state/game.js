@@ -1384,7 +1384,11 @@ function dealStartingTreasure(state, cards, random, deck = null) {
     next = withLog(next, `${heroLabel(hero)} starts with ${/^\S+s'?(\s|$)/.test(card.name) ? '' : `${article(card.name)} `}${card.name}.`)
     found.push(`${hero.name}: ${card.name}`)
   }
-  return withMoment(next, { kind: 'treasure', title: 'Starting treasure!', detail: found.join(' · ') })
+  const moment = { kind: 'treasure', title: 'Starting treasure!', detail: found.join(' · ') }
+  // With a roll for first turn coming, the treasure waits until it's decided, so the
+  // two don't land on top of each other.
+  if (next.firstRoll) return { ...next, firstRoll: { ...next.firstRoll, after: moment } }
+  return withMoment(next, moment)
 }
 
 // The treasure card goes in front of a hero: the one who found it, or one they hand it to.
@@ -1967,9 +1971,17 @@ function reduce(state, action) {
       return next
     }
 
-    case 'SKIP_FIRST_ROLL':
+    case 'SKIP_FIRST_ROLL': {
       if (!state.firstRoll || state.firstRoll.winner) return state
-      return withLog({ ...state, firstRoll: null }, 'The heroes skipped the roll for first turn.')
+      const next = withLog({ ...state, firstRoll: null }, 'The heroes skipped the roll for first turn.')
+      return state.firstRoll.after ? withMoment(next, state.firstRoll.after) : next
+    }
+
+    // The "X goes first!" screen has finished: show what waited for it (the starting
+    // treasure). Every screen sends this when its roll screen closes; only the first counts.
+    case 'FIRST_ROLL_DONE':
+      if (!state.firstRoll?.winner || !state.firstRoll.after) return state
+      return withMoment({ ...state, firstRoll: { ...state.firstRoll, after: null } }, state.firstRoll.after)
 
     case 'CAMPAIGN_BUY':
       return buyFromShop(state, action)
