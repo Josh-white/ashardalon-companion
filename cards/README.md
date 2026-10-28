@@ -354,3 +354,23 @@ Campaign Against the Clans and Assault on Firestorm Peak are played again and ag
 - `campaign.chambers`: the Chamber deck's card ids (empty for every chamber the app can run). `final`: the chamber that ends the campaign, shuffled into the last `finalWith` + 1 cards. `hard`: the chamber that makes this and every later adventure draw two encounter cards. `boonsFor`: the boon for beating a chamber; `boonsAfter`: the boon for the nth chamber beaten. `secondChance`: the first defeat only costs one healing surge for the rest of the campaign; without it, a defeat ends the campaign.
 - `boons`: `use` is `startTile` (place the top dungeon tile before the first turn), `discardMonster` (discard a monster card of one of `monsterTypes` drawn this turn) or `shop` (`shopCards` cards in the shop instead of 3). Each boon works once per adventure.
 - `treasureTokens`: in a campaign, the first monster defeated in a turn gives a Treasure token instead of a treasure card: gold, or a treasure card. Without this list, the player draws from the real stack and taps what the token says.
+
+### Dungeon tiles for the virtual board (optional)
+
+The virtual board (solo mode, still being built) needs each tile's layout. Draw every tile with its triangle edge at the bottom:
+
+```json
+{
+  "tiles": [
+    { "id": "tile-07", "name": "Tile 7", "kind": "regular", "triangle": "black",
+      "rows": ["..##", "....", ".S..", "...."],
+      "exits": { "N": "oooo", "E": "xxoo", "S": "oooo", "W": "xxxx" },
+      "walls": [{ "at": [1, 0], "side": "E" }] }
+  ]
+}
+```
+
+- `rows`: 4 rows of 4 squares (8 rows for a long tile): `.` floor, `#` solid rock, `S` the scorch mark where a new monster goes.
+- `exits`: each side square by square, `o` open or `x` wall. North and south read left to right, east and west top to bottom. South is the triangle edge.
+- `walls`: thin walls between two floor squares: the square (`at`, counted from the top left as `[0, 0]`) and the `side` of it the wall is on.
+- `kind`: `regular` (default), `start`, `special` or `chamber`. `triangle`: `black`, `white`, or left out.

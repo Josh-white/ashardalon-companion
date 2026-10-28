@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { setHeroTemplates } from '../data/heroes.js'
 
-const EMPTY = { source: 'loading', powers: [], heroes: [], abilities: [], monsters: [], villains: [], encounters: [], adventures: [], chambers: [], treasures: [], villagers: [], boons: [], treasureTokens: [], problems: [] }
+const EMPTY = { source: 'loading', powers: [], heroes: [], abilities: [], monsters: [], villains: [], encounters: [], adventures: [], chambers: [], treasures: [], villagers: [], boons: [], treasureTokens: [], tiles: [], problems: [] }
 let request = null
 
 // Loads the power cards from the Pi once per page load and shares them with
@@ -16,7 +16,7 @@ export function useCards() {
       .then((data) => (setHeroTemplates(data.heroes), data))
       .catch((error) => {
         request = null
-        return { source: 'error', powers: [], abilities: [], monsters: [], villains: [], encounters: [], adventures: [], chambers: [], treasures: [], villagers: [], boons: [], treasureTokens: [], problems: [`Could not load power cards: ${error.message}`] }
+        return { source: 'error', powers: [], abilities: [], monsters: [], villains: [], encounters: [], adventures: [], chambers: [], treasures: [], villagers: [], boons: [], treasureTokens: [], tiles: [], problems: [`Could not load power cards: ${error.message}`] }
       })
     request.then((data) => active && setCards(data))
     return () => {
