@@ -8,6 +8,7 @@ import { useCards } from '../state/useCards.js'
 import { AdventurePicker, ChosenAdventure } from './Adventure.jsx'
 import Art from './Art.jsx'
 import { CampaignLobby, HeroCampaign } from './Campaign.jsx'
+import Chronicle from './Chronicle.jsx'
 import { HeroHall, HoldToPick } from './HeroHall.jsx'
 import { Button } from './ui.jsx'
 
@@ -197,6 +198,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
         </p>
       </header>
 
+      {watchOnly && <Chronicle campaign={state.campaign} />}
       {watchOnly && <HeroHall heroes={heroChoices} lobby={lobby} />}
 
       {watchOnly ? (

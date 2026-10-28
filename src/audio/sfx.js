@@ -397,7 +397,10 @@ const isNew = (now, then) => now && now.id !== then?.id && serverNow() - now.at 
 // someone tapped on the sound board, and music when a new tile is revealed.
 export function changeSounds(before, after) {
   const sounds = []
-  if (isNew(after?.moment, before?.moment)) sounds.push(...momentSounds(after.moment))
+  const moment = isNew(after?.moment, before?.moment)
+  if (moment) sounds.push(...momentSounds(after.moment))
+  // A roll for first turn (a natural 20 brings its own moment and sounds).
+  else if ((after?.firstRoll?.count ?? 0) > (before?.firstRoll?.count ?? 0)) sounds.push(['dice', 0], ['land', DIE_LANDS_MS])
   const board = after?.soundboard?.last
   if (isNew(board, before?.soundboard?.last) && SOUNDS[board.sound]) sounds.push([board.sound, 0])
   if (tileRevealed(before, after)) sounds.push(['slide', 0], ['tile', SLIDE_LEAD_MS])

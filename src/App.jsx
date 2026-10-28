@@ -5,6 +5,7 @@ import ArtScreen from './components/ArtScreen.jsx'
 import { AreaBackdrop, AreaName } from './components/AreaBackdrop.jsx'
 import HeroCard from './components/HeroCard.jsx'
 import DragonIntro, { useIntro } from './components/Intro.jsx'
+import FirstRoll from './components/FirstRoll.jsx'
 import MomentOverlay from './components/MomentOverlay.jsx'
 import MonsterList, { VillainList } from './components/MonsterList.jsx'
 import ProjectorView from './components/ProjectorView.jsx'
@@ -318,6 +319,7 @@ export default function App() {
         {banners}
         <ProjectorView state={state} dispatch={dispatch} onSwitchSeat={() => setSeat(null)} sound={sound} />
         <BoardToast state={state} big />
+        <FirstRoll state={state} dispatch={dispatch} big />
         <MomentOverlay moment={state.moment} heroes={state.heroes} big />
         <TapForSound locked={soundLocked} big />
         {(state.status === 'won' || state.status === 'lost') && <Recap state={state} big />}
@@ -348,6 +350,7 @@ export default function App() {
         boardSwitch={!myHero}
       />
       {myHero ? <HeroView state={state} dispatch={dispatch} hero={myHero} /> : <TableView state={state} dispatch={dispatch} />}
+      <FirstRoll state={state} dispatch={dispatch} heroId={myHero?.id ?? null} />
       <MomentOverlay moment={state.moment} heroes={state.heroes} />
       <TapForSound locked={soundLocked} ipad={Boolean(myHero)} />
       <SoundBoard state={state} dispatch={dispatch} who={myHero ? myHero.id : 'table'} testCopy={Boolean(instance)} />

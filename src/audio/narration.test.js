@@ -112,3 +112,22 @@ describe('the lobby', () => {
   })
 })
 
+describe('the first turn and the chronicle', () => {
+  it('names who won the roll for first turn', () => {
+    const before = { ...game(), firstRoll: { winner: null } }
+    const after = { ...game(), firstRoll: { winner: 'h2' } }
+    expect(narrationFor(before, after)).toContain('Tarak wins the roll and goes first!')
+    expect(narrationFor(after, after)).toEqual([])
+  })
+
+  it('looks back at the last adventure when a campaign comes back to the lobby', () => {
+    const lobby = (last) => ({ status: 'setup', heroes: [], lobby: [], campaign: { last } })
+    expect(narrationFor(game({ status: 'won' }), lobby({ won: true, chamber: 'Orc Clan Lair' }))).toEqual([
+      'Previously… the heroes conquered the Orc Clan Lair. But greater dangers still wait below.',
+    ])
+    expect(narrationFor(game({ status: 'lost' }), lobby({ won: false, chamber: "Ashardalon's Lair" }))).toEqual([
+      "Previously… the heroes were driven back from Ashardalon's Lair. They return, wiser and warier.",
+    ])
+  })
+})
+

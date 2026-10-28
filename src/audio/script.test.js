@@ -24,6 +24,8 @@ describe('the narration script', () => {
     expect(texts).toContain('You won!')
     expect(texts).toContain('Beneath Firestorm Peak, the red dragon stirs. Who dares enter his halls?')
     expect(texts).toContain('Heskan the Dragonborn Wizard has arrived!')
+    expect(texts).toContain('Keyleth wins the roll and goes first!')
+    expect(texts).toContain('Previously… the heroes conquered the Dragon Hoard. But greater dangers still wait below.')
   })
 
   it('has each villain speak in its own voice', () => {

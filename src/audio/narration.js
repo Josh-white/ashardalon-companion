@@ -106,9 +106,23 @@ export const newArrivals = (before, after) => {
   return (after.lobby ?? []).map((c) => c.heroKey).filter((key) => !had.has(key))
 }
 
+// The herald names who won the roll for first turn.
+export const firstTurnLine = (hero) => say('herald', `${CHEER} ${heroName(hero)} wins the roll and goes first!`)
+
+// The Chronicle: back in the lobby between campaign adventures, the narrator recalls
+// how the last one went.
+const chamberPlace = (name) => (!name ? 'the chamber' : /'s\b/.test(name) ? name : `the ${name}`)
+export const previouslyLine = (last) =>
+  last.won
+    ? say('narrator', `${STORY} Previously… the heroes conquered ${chamberPlace(last.chamber)}. But greater dangers still wait below.`)
+    : say('narrator', `${STORY} Previously… the heroes were driven back from ${chamberPlace(last.chamber)}. They return, wiser and warier.`)
+
 export function narrationFor(before, after, now = Date.now()) {
   if (!before || !after) return []
   const lines = newArrivals(before, after).map(arrivalLine)
+  if (before.status !== 'setup' && after.status === 'setup' && after.campaign?.last) lines.push(previouslyLine(after.campaign.last))
+  const winner = after.firstRoll?.winner
+  if (winner && !before.firstRoll?.winner) lines.push(firstTurnLine(after.heroes.find((h) => h.id === winner)))
   if (before.status === 'setup' && after.status === 'playing') {
     lines.push(say('narrator', `${STORY} The adventure begins${after.adventure?.card?.title ? `: ${after.adventure.card.title}` : ''}! Heroes, enter the dungeon.`))
   }
