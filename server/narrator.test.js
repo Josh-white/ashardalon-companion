@@ -2,7 +2,7 @@ import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createNarrator, DEFAULT_VOICES, speakable } from './narrator.js'
+import { createNarrator, DEFAULT_VOICES, speakable, villainLines } from './narrator.js'
 import { startServer } from './server.js'
 
 describe('narrator endpoint', () => {
@@ -20,6 +20,7 @@ describe('narrator endpoint', () => {
       port: 0,
       saveFile: join(dir, 'game.json'),
       staticDir: dir,
+      warmNarrator: false,
       narrator: createNarrator({ apiKey, cacheDir: join(dir, 'narration'), fetchSpeech }),
     })
     return `http://localhost:${server.port}`
@@ -87,6 +88,7 @@ describe('narrator endpoint', () => {
       port: 0,
       saveFile: join(dir, 'game.json'),
       staticDir: dir,
+      warmNarrator: false,
       narrator: createNarrator({ apiKey: 'k', cacheDir: join(dir, 'narration'), fetchSpeech }),
     })
     const response = await fetch(`http://localhost:${server.port}/narrate?voice=villain&text=Hello`)
@@ -97,6 +99,23 @@ describe('narrator endpoint', () => {
   it('keeps stage directions only for models that act them out', () => {
     expect(speakable('[menacing] Kneel… [laughs] or burn!', 'eleven_v3')).toBe('[menacing] Kneel… [laughs] or burn!')
     expect(speakable('[menacing] Kneel… [laughs] or burn!', 'eleven_multilingual_v2')).toBe('Kneel… or burn!')
+  })
+
+  it('records every villain line ahead of time, once', async () => {
+    calls = []
+    const fetchSpeech = async (url, options) => {
+      calls.push({ url, options })
+      return new Response(new Uint8Array([1]), { status: 200 })
+    }
+    const narrator = createNarrator({ apiKey: 'k', cacheDir: join(dir, 'narration'), fetchSpeech })
+    await narrator.warmUp()
+    const lines = villainLines()
+    expect(calls).toHaveLength(lines.length)
+    // Ashardalon speaks in his own voice.
+    const ashardalon = calls.find((c) => JSON.parse(c.options.body).text.includes('lair of Ashardalon'))
+    expect(ashardalon.url).toContain(DEFAULT_VOICES.ashardalon)
+    await narrator.warmUp()
+    expect(calls).toHaveLength(lines.length)
   })
 
   it('refuses very long lines', async () => {

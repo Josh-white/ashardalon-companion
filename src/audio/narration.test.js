@@ -84,10 +84,10 @@ describe('narrator lines', () => {
     expect(voices({ kind: 'down', title: 'Keyleth is down!' })).toEqual(['danger'])
     expect(voices({ kind: 'encounter', title: 'Hall of Spiders' })).toEqual(['narrator'])
     // A villain is announced, then speaks for itself.
-    expect(voices({ kind: 'spawn', title: 'Meerak, Kobold Dragonlord appears!' }, game({ villains }))).toEqual(['narrator', 'villain'])
+    expect(voices({ kind: 'spawn', title: 'Meerak, Kobold Dragonlord appears!' }, game({ villains }))).toEqual(['narrator', 'meerak'])
     expect(momentLines({ kind: 'spawn', title: 'Meerak, Kobold Dragonlord appears!' }, game({ villains }))[1].text).toMatch(/^\[shouting\] Intruders/)
     // A villain's last words come before the cheer.
-    expect(voices({ kind: 'defeat', title: 'Kobold Dragonlord defeated!' }, game({ villains }))).toEqual(['villain', 'herald'])
+    expect(voices({ kind: 'defeat', title: 'Kobold Dragonlord defeated!' }, game({ villains }))).toEqual(['meerak', 'herald'])
     // Beasts don't talk: the danger voice describes them.
     expect(voices({ kind: 'spawn', title: 'Rage Drake appears!' }, game({ villains }))).toEqual(['narrator', 'danger'])
     expect(voices({ kind: 'spawn', title: 'The Rage Drake is enraged!' }, game({ villains }))).toEqual(['danger'])

@@ -5,23 +5,37 @@
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { VILLAIN_DEFAULT, VILLAIN_LINES } from '../src/data/villainLines.js'
 
-// The cast, from the ElevenLabs voice library. Each can be swapped with a voice id
-// in .env: ELEVENLABS_VOICE_ID (narrator), ELEVENLABS_VOICE_HERALD, _DANGER, _VILLAIN.
+// The cast: ElevenLabs' built-in voices, which every plan can use. Each can be
+// swapped with a voice id in .env: ELEVENLABS_VOICE_ID for the narrator, and
+// ELEVENLABS_VOICE_<ROLE> for the rest (ELEVENLABS_VOICE_HERALD, _MEERAK, ...).
 export const DEFAULT_VOICES = {
   narrator: 'JBFqnCBsd6RMkjVDRZzb', // George: warm storyteller
   herald: 'Xb7hH8MSUJpSbSDYk0k2', // Alice: clear and bright; cheers the heroes on
   danger: 'N2lVS1w4EtoT3dr4eOWO', // Callum: husky and menacing; monsters and bad news
-  villain: 'pNInz6obpgDQGcFmaJgB', // Adam: dominant, firm; villains speak for themselves
+  villain: 'pNInz6obpgDQGcFmaJgB', // Adam: dominant, firm; any villain without its own voice
+  meerak: 'SOYHLrjzK2X1ezoPC6cr', // Harry: fierce warrior; the kobold dragonlord
+  margrath: 'pqHfZKP75CvOlQylNhV4', // Bill: old and gruff; the duergar captain
+  kraash: 'pNInz6obpgDQGcFmaJgB', // Adam: dominant, firm; the orc storm shaman
+  ashardalon: 'nPczCjzI2devNBz1zQrb', // Brian: deep and resonant; the red dragon
+  bellax: 'pFZP5JQG7iQjIQuC4Bku', // Lily: velvety; the gauth's whisper of madness
 }
 export const DEFAULT_VOICE = DEFAULT_VOICES.narrator
 
-const castFromEnv = (env) => ({
-  narrator: env.ELEVENLABS_VOICE_ID || DEFAULT_VOICES.narrator,
-  herald: env.ELEVENLABS_VOICE_HERALD || DEFAULT_VOICES.herald,
-  danger: env.ELEVENLABS_VOICE_DANGER || DEFAULT_VOICES.danger,
-  villain: env.ELEVENLABS_VOICE_VILLAIN || DEFAULT_VOICES.villain,
-})
+const castFromEnv = (env) =>
+  Object.fromEntries(
+    Object.entries(DEFAULT_VOICES).map(([role, id]) => [
+      role,
+      (role === 'narrator' ? env.ELEVENLABS_VOICE_ID : env[`ELEVENLABS_VOICE_${role.toUpperCase()}`]) || id,
+    ]),
+  )
+
+// Every villain line, so they can be recorded before a villain ever shows up.
+export const villainLines = () =>
+  [...Object.values(VILLAIN_LINES), VILLAIN_DEFAULT].flatMap((lines) =>
+    ['arrive', 'enraged', 'fall'].filter((when) => lines[when]).map((when) => ({ role: lines.voice, text: lines[when] })),
+  )
 // v3 acts out stage directions in the text, like [menacing] or [laughs].
 export const DEFAULT_MODEL = 'eleven_v3'
 // Older models read stage directions out loud, so they're taken out for those.
@@ -77,6 +91,30 @@ export function createNarrator({
     }
   }
 
+  // Speaks a line as one of the cast's roles; anything else is the narrator, so a
+  // page can't ask for any voice it likes. A voice this ElevenLabs account can't
+  // use falls back to the narrator, so the line is still heard.
+  const speakAs = (role, text) => {
+    const chosen = Object.hasOwn(voices, role ?? '') ? voices[role] : voices.narrator
+    const voice = refused.has(chosen) ? voices.narrator : chosen
+    return speak(text, voice).catch((error) => {
+      if (voice === voices.narrator) throw error
+      console.error(`Narrator: the ${role} voice failed, using the narrator instead.`, error.message)
+      // Not found or not on this plan won't fix itself; a network blip might.
+      if (error.status === 402 || error.status === 403 || error.status === 404) refused.add(voice)
+      return speak(text, voices.narrator)
+    })
+  }
+
+  // Records every villain line ahead of time, one at a time, so a villain speaks the
+  // moment it appears instead of after a long wait. Lines already saved cost nothing.
+  const warmUp = async () => {
+    if (!apiKey) return
+    for (const { role, text } of villainLines()) {
+      await speakAs(role, text).catch((error) => console.error('Narrator warm-up:', error.message))
+    }
+  }
+
   // Handles /narrate (is the narrator set up?) and /narrate?text=... (the mp3).
   // Returns false for any other path.
   const handle = (req, res) => {
@@ -95,20 +133,7 @@ export function createNarrator({
       res.writeHead(413, { 'Content-Type': 'text/plain' }).end('Line too long')
       return true
     }
-    // Only the cast's roles, so a page can't ask for any voice it likes.
-    const role = url.searchParams.get('voice')
-    const chosen = Object.hasOwn(voices, role ?? '') ? voices[role] : voices.narrator
-    const voice = refused.has(chosen) ? voices.narrator : chosen
-    // A voice this ElevenLabs account can't use falls back to the narrator, so the
-    // line is still heard.
-    const spoken = speak(text, voice).catch((error) => {
-      if (voice === voices.narrator) throw error
-      console.error(`Narrator: the ${role} voice failed, using the narrator instead.`, error.message)
-      // Not found or not on this plan won't fix itself; a network blip might.
-      if (error.status === 402 || error.status === 403 || error.status === 404) refused.add(voice)
-      return speak(text, voices.narrator)
-    })
-    spoken.then(
+    speakAs(url.searchParams.get('voice'), text).then(
       (audio) => res.writeHead(200, { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'public, max-age=31536000, immutable' }).end(audio),
       (error) => {
         console.error('Narrator:', error.message)
@@ -118,5 +143,5 @@ export function createNarrator({
     return true
   }
 
-  return { enabled: Boolean(apiKey), handle }
+  return { enabled: Boolean(apiKey), handle, warmUp }
 }

@@ -176,6 +176,7 @@ export function startServer({
   instance = process.env.INSTANCE_LABEL || null,
   // Spoken lines are saved next to the game, so they survive updates.
   narrator = createNarrator({ cacheDir: join(dirname(saveFile), 'narration') }),
+  warmNarrator = true,
 } = {}) {
   let state = loadSavedGame(saveFile)
   // Which build of the screens this server hands out. A screen that loaded an older
@@ -275,6 +276,8 @@ export function startServer({
 
   return new Promise((resolve) => {
     server.listen(port, () => {
+      // Villain lines get recorded in the background, so they're ready before game night.
+      if (warmNarrator) narrator.warmUp?.()
       resolve({
         port: server.address().port,
         close: () =>

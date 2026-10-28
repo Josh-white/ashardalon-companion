@@ -7,6 +7,8 @@ const DELAY_MS = 300
 // If the game moves faster than the narrator can talk, old lines are dropped.
 const MAX_QUEUE = 3
 
+const lineUrl = (line) => `/narrate?voice=${line.voice}&text=${encodeURIComponent(line.text)}`
+
 // The last game this page saw. Kept outside the hook so that going from the
 // setup screen to the game (a new component) still hears "The adventure begins".
 let lastSeen = null
@@ -41,7 +43,7 @@ export function useNarrator(state, on) {
     }
     player.onended = done
     player.onerror = done
-    player.src = `/narrate?voice=${line.voice}&text=${encodeURIComponent(line.text)}`
+    player.src = lineUrl(line)
     player.play().then(
       () => setBlocked(false),
       (error) => {
@@ -67,6 +69,9 @@ export function useNarrator(state, on) {
     const timer = setTimeout(() => {
       timers.current.delete(timer)
       queue.current = [...queue.current, ...lines].slice(-MAX_QUEUE)
+      // Ask for every waiting line now, so the Pi records the next one (a villain's
+      // reply, say) while the current one is still playing.
+      for (const line of queue.current) fetch(lineUrl(line)).catch(() => {})
       playNext()
     }, (moment ? momentSoundMs(moment) : 0) + DELAY_MS)
     timers.current.add(timer)
