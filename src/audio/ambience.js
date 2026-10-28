@@ -13,6 +13,10 @@ import { soundList } from './samples.js'
 
 // Tracks sit at about the same level as the made-up music.
 const VOLUME = 0.3
+// Each mood's track can sit higher or lower. JJ found the battle track (Light the
+// Beacons, -15 LUFS and all drums) too loud next to Dungeon I (-27) and Red Dragon Dawn
+// (-17), so it plays at half volume.
+export const MOOD_LEVELS = { explore: 1, battle: 0.5, boss: 1 }
 // A change of mood fades one track out while the next fades in.
 export const CROSSFADE_S = 1.5
 
@@ -86,7 +90,7 @@ export async function playLoop(ctx, mood) {
     // Not allowed until a tap (iPads); the next tap starts it.
     whenTapped(() => playing === mood && track.audio.play().catch(() => {}))
   })
-  fadeTo(ctx, track.gain, VOLUME, CROSSFADE_S)
+  fadeTo(ctx, track.gain, VOLUME * (MOOD_LEVELS[mood] ?? 1), CROSSFADE_S)
   return true
 }
 
