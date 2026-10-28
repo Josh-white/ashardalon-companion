@@ -100,7 +100,7 @@ export function TreasureStep({ state, dispatch, heroId = null }) {
 
 // A campaign: defeating a monster earns a Treasure token. The app draws from its own stack
 // when the card file lists the tokens; otherwise the player draws a real one and says what it is.
-const TOKEN_GOLD = [50, 100, 150, 200, 250, 500]
+const TOKEN_GOLD = [100, 200, 300, 400, 500]
 
 function TokenDraw({ state, dispatch, finder }) {
   const virtual = state.tokenStack?.length > 0
@@ -121,7 +121,7 @@ function TokenDraw({ state, dispatch, finder }) {
             {gold} gold
           </Button>
         ))}
-        <Button variant="gold" className="col-span-2" onClick={() => dispatch({ type: 'DRAW_TREASURE_TOKEN', token: { treasure: true } })}>
+        <Button variant="gold" onClick={() => dispatch({ type: 'DRAW_TREASURE_TOKEN', token: { treasure: true } })}>
           Treasure!
         </Button>
         <Button variant="ghost" onClick={() => dispatch({ type: 'DRAW_TREASURE_TOKEN', token: { gold: 0 } })}>

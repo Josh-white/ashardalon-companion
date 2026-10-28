@@ -598,7 +598,7 @@ function normalizeCampaign(campaign) {
 
 // Boon cards, earned in a campaign. `use` says what the app does with one:
 // startTile (place the top dungeon tile before anyone's turn), discardMonster (discard a
-// drawn monster card of `monsterType`) or shop (`shopCards` treasure cards between adventures).
+// drawn monster card of one of `monsterTypes`) or shop (`shopCards` treasure cards between adventures).
 export const BOON_USES = ['startTile', 'discardMonster', 'shop']
 
 function normalizeBoons(list, problems) {
@@ -616,7 +616,9 @@ function normalizeBoons(list, problems) {
     if (seen.has(card.id)) return problems.push(`${label} reuses the id "${card.id}".`)
     if (!card.name || typeof card.name !== 'string') return problems.push(`${label} needs a "name".`)
     if (!BOON_USES.includes(card.use)) return problems.push(`${label} has use "${card.use}"; use one of ${BOON_USES.join(', ')}.`)
-    if (card.use === 'discardMonster' && !text(card.monsterType)) return problems.push(`${label} needs a "monsterType".`)
+    // `monsterTypes` (Orcs Overwhelmed!: Orc or Animal), or just `monsterType`.
+    const monsterTypes = [...strings(card.monsterTypes), ...strings([card.monsterType])]
+    if (card.use === 'discardMonster' && monsterTypes.length === 0) return problems.push(`${label} needs "monsterTypes".`)
     seen.add(card.id)
     boons.push({
       id: card.id,
@@ -624,7 +626,7 @@ function normalizeBoons(list, problems) {
       flavor: text(card.flavor),
       text: text(card.text),
       use: card.use,
-      monsterType: text(card.monsterType),
+      monsterTypes,
       shopCards: wholeNumber(card.shopCards, 1) ? card.shopCards : 0,
     })
   })

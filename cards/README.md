@@ -299,14 +299,14 @@ Campaign Against the Clans and Assault on Firestorm Peak are played again and ag
         "boonsFor": { "kobold-clan-lair": "kobolds-clobbered" }, "boonsAfter": { "1": "bypassed-guards" }, "secondChance": true } }
   ],
   "boons": [
-    { "id": "kobolds-clobbered", "name": "Kobolds Clobbered!", "text": "What the card says.", "use": "discardMonster", "monsterType": "Reptile" },
+    { "id": "kobolds-clobbered", "name": "Kobolds Clobbered!", "text": "What the card says.", "use": "discardMonster", "monsterTypes": ["Reptile"] },
     { "id": "short-cut", "name": "Short Cut!", "text": "What the card says.", "use": "startTile" },
     { "id": "dwarven-traders", "name": "Dwarven Traders!", "text": "What the card says.", "use": "shop", "shopCards": 5 }
   ],
-  "treasureTokens": [{ "gold": 100, "count": 8 }, { "treasure": true, "count": 4 }]
+  "treasureTokens": [{ "gold": 100, "count": 9 }, { "gold": 200, "count": 11 }, { "treasure": true, "count": 5 }]
 }
 ```
 
 - `campaign.chambers`: the Chamber deck's card ids (empty for every chamber the app can run). `final`: the chamber that ends the campaign, shuffled into the last `finalWith` + 1 cards. `hard`: the chamber that makes this and every later adventure draw two encounter cards. `boonsFor`: the boon for beating a chamber; `boonsAfter`: the boon for the nth chamber beaten. `secondChance`: the first defeat only costs one healing surge for the rest of the campaign; without it, a defeat ends the campaign.
-- `boons`: `use` is `startTile` (place the top dungeon tile before the first turn), `discardMonster` (discard a monster card of `monsterType` drawn this turn) or `shop` (`shopCards` cards in the shop instead of 3). Each boon works once per adventure.
+- `boons`: `use` is `startTile` (place the top dungeon tile before the first turn), `discardMonster` (discard a monster card of one of `monsterTypes` drawn this turn) or `shop` (`shopCards` cards in the shop instead of 3). Each boon works once per adventure.
 - `treasureTokens`: in a campaign, the first monster defeated in a turn gives a Treasure token instead of a treasure card: gold, or a treasure card. Without this list, the player draws from the real stack and taps what the token says.

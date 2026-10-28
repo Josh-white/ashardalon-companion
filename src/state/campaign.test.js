@@ -34,7 +34,7 @@ const cards = normalizeCardFile({
     { id: 'blessing', name: 'Blessing', copies: 3 },
   ],
   boons: [
-    { id: 'kobolds-clobbered', name: 'Kobolds Clobbered!', use: 'discardMonster', monsterType: 'Reptile' },
+    { id: 'kobolds-clobbered', name: 'Kobolds Clobbered!', use: 'discardMonster', monsterTypes: ['Reptile', 'Animal'] },
     { id: 'short-cut', name: 'Short Cut!', use: 'startTile' },
     { id: 'traders', name: 'Traders!', use: 'shop', shopCards: 5 },
   ],

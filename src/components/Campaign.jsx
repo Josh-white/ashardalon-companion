@@ -23,7 +23,7 @@ export function CampaignBoons({ state, dispatch }) {
     if (boon.use === 'startTile' && atStart) return [{ boon, label: `Use ${boon.name}: place the top dungeon tile now` }]
     if (boon.use === 'discardMonster') {
       return drawnNow
-        .filter((m) => (m.card?.types ?? []).some((t) => t.toLowerCase() === boon.monsterType.toLowerCase()))
+        .filter((m) => (m.card?.types ?? []).some((t) => boon.monsterTypes.some((want) => t.toLowerCase() === want.toLowerCase())))
         .map((m) => ({ boon, monster: m, label: `Use ${boon.name}: discard the ${m.name}` }))
     }
     return []
