@@ -1,5 +1,7 @@
 import { HERO_COLORS } from '../data/heroes.js'
 import { recap } from '../state/stats.js'
+import { campaignOutcome } from '../state/campaign.js'
+import { CampaignRecap } from './Campaign.jsx'
 import { Button } from './ui.jsx'
 
 // The end-of-game recap, win or lose: what the party did, and an award for every
@@ -30,6 +32,7 @@ export default function Recap({ state, dispatch, big }) {
           <p className="mx-auto mt-[0.5em] max-w-[40em] italic text-zinc-300">{state.adventure.card.story.victory}</p>
         )}
         <p className="mt-[0.5em] text-[1.1em] text-zinc-300">{totals.join(' · ')}</p>
+        <CampaignRecap state={state} dispatch={dispatch} big={big} />
       </div>
 
       <div className={`mx-auto mt-[1.5em] grid gap-[1em] ${big ? BIG_COLUMNS[heroes.length] : 'max-w-[70em] sm:grid-cols-2 lg:grid-cols-3'}`}>
@@ -74,12 +77,13 @@ export default function Recap({ state, dispatch, big }) {
       {!big && (
         <div className="mt-6 flex justify-center gap-3 pb-6">
           <Button onClick={() => dispatch({ type: 'RESUME' })}>Back to the game</Button>
-          <Button
+          {/* Mid-campaign, the way on is the campaign's own button above. */}
+          {(!state.campaign || campaignOutcome(state)?.over) && <Button
             variant="gold"
             onClick={() => window.confirm('Start a new game? This clears the recap for everyone.') && dispatch({ type: 'NEW_GAME' })}
           >
             New game
-          </Button>
+          </Button>}
         </div>
       )}
     </div>

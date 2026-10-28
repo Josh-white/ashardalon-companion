@@ -123,6 +123,16 @@ export function describeAction(state, action) {
       return 'Ending the game'
     case 'MARK_ACTED':
       return action.name ? `${action.name}'s turn done` : 'Turn done'
+    case 'CAMPAIGN_NEXT':
+      return 'On to the next adventure'
+    case 'CAMPAIGN_BUY':
+      return 'Shop purchase'
+    case 'END_CAMPAIGN':
+      return 'End the campaign'
+    case 'DRAW_TREASURE_TOKEN':
+      return 'Treasure token'
+    case 'USE_BOON':
+      return action.boon?.name ?? 'Boon'
     default:
       return 'Last change'
   }

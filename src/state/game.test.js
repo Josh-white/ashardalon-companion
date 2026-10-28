@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { normalizeCardFile } from '../data/cards.js'
+import { itemAc, itemAttackBonus } from '../data/items.js'
 import { heroAc, heroAttackPenalty } from '../data/powerEffects.js'
 import { checksFor, createHero, encounterCardsOutdated, gameReducer, initialState, phaseChecks, phaseTodo } from './game.js'
 
@@ -918,12 +919,22 @@ describe('treasure deck', () => {
     const [quinn, vistra] = state.heroes
     expect(heroAc(quinn)).toBe(quinn.ac + 1)
     expect(heroAc(vistra)).toBe(vistra.ac + 2)
-    // The Ogre's 9 + 8 = 17 hits Quinn's AC 17 (16 + 1 for the amulet), but not 19 on the shield's tile.
+    // The Ogre's 9 + 8 = 17 hits Quinn's AC 17 (16 + 1 for the amulet), but not 18 on the shield's tile:
+    // only the best defense bonus from items counts, so the shield's +2 replaces the amulet's +1.
     const ogre = state.monsters[0]
     const hit = gameReducer(state, { type: 'MONSTER_ATTACK', monsterId: ogre.id, attackId: 'slam', targets: [{ heroId: quinn.id, roll: 9 }] })
     expect(hit.turn.lastMonsterAttack.results[0].hit).toBe(true)
     const guarded = gameReducer(state, { type: 'MONSTER_ATTACK', monsterId: ogre.id, attackId: 'slam', targets: [{ heroId: quinn.id, roll: 9 }], tileGuarded: [quinn.id] })
-    expect(guarded.turn.lastMonsterAttack.results[0]).toMatchObject({ hit: false, ac: 19 })
+    expect(guarded.turn.lastMonsterAttack.results[0]).toMatchObject({ hit: false, ac: 18 })
+  })
+
+  it('counts only the best attack bonus and the best defense bonus from items (Rulebook p. 13)', () => {
+    const items = (...cards) => ({ items: cards.map((card, i) => ({ id: `i${i}`, cardId: card.id, name: card.name, used: false, card })) })
+    const [sword, amulet, shield] = ['sword', 'amulet', 'shield'].map((id) => treasures.find((t) => t.id === id))
+    const pick = { ...sword, attackBonus: 1, damageBonus: 1, damageRange: 'adjacent' }
+    expect(itemAttackBonus(items(sword, pick), 'adjacent')).toMatchObject({ bonus: 2, damage: 1 })
+    expect(itemAc(items(amulet, shield))).toBe(2)
+    expect(itemAc(items(amulet, { ...amulet, id: 'amulet2' }))).toBe(1)
   })
 
   it('uses a potion on another hero and discards it', () => {

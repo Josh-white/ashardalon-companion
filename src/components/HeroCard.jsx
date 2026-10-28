@@ -188,6 +188,7 @@ export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, 
         <div className="text-right text-sm text-zinc-400">
           <div>AC {heroAc(hero)}{(hero.curses ?? []).some((c) => c.card?.acPenalty) && <span className="text-red-400"> (cursed)</span>}</div>
           <div>Speed {hero.speed + itemSpeed(hero)}</div>
+          {hero.gold != null && <div className="text-amber-300">💰 {hero.gold.toLocaleString()} gold</div>}
         </div>
       </div>
 

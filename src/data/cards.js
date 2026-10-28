@@ -15,7 +15,7 @@ export function normalizeCardFile(data) {
   const powers = []
   const seen = new Set()
   const list = Array.isArray(data?.powers) ? data.powers : null
-  if (!list) return { powers, abilities: [], monsters: [], villains: [], encounters: [], adventures: [], chambers: [], treasures: [], villagers: [], problems: ['The file needs a "powers" list.'] }
+  if (!list) return { powers, abilities: [], monsters: [], villains: [], encounters: [], adventures: [], chambers: [], treasures: [], villagers: [], boons: [], treasureTokens: [], problems: ['The file needs a "powers" list.'] }
 
   list.forEach((card, i) => {
     const label = card?.name ? `"${card.name}"` : `power #${i + 1}`
@@ -54,6 +54,8 @@ export function normalizeCardFile(data) {
     chambers: normalizeChambers(data?.chambers, problems),
     treasures: normalizeTreasures(data?.treasures, problems),
     villagers: normalizeVillagers(data?.villagers, problems),
+    boons: normalizeBoons(data?.boons, problems),
+    treasureTokens: normalizeTreasureTokens(data?.treasureTokens, problems),
     problems,
   }
 }
@@ -463,6 +465,8 @@ function normalizeTreasures(list, problems) {
       heal: count(card.heal),
       tokens: wholeNumber(card.tokens, 1) ? card.tokens : 0,
       note: typeof card.note === 'string' ? card.note : '',
+      // What the dwarven traders charge for it between campaign adventures, in gold.
+      cost: count(card.cost),
     })
   })
   return treasures
@@ -562,11 +566,89 @@ function normalizeAdventures(list, problems) {
       checks: normalizeChecks(adv.checks),
       // Monster cards that come out once per game; later copies are discarded with no replacement.
       onceOnly: strings(adv.onceOnly),
+      // A campaign (Campaign Against the Clans, Assault on Firestorm Peak): see normalizeCampaign.
+      campaign: normalizeCampaign(adv.campaign),
       // Bigger features the adventure needs, such as "villains" or "chambers".
       needs: strings(adv.needs),
     })
   })
   return adventures
+}
+
+// A campaign adventure is played again and again with the same heroes, one Chamber card
+// each time. `chambers`: the Chamber deck (empty = every chamber the app can run).
+// `final`: the chamber that ends the campaign, shuffled into the last `finalWith` cards.
+// `hard`: the chamber that makes every later adventure draw two encounter cards.
+// `boonsFor`: boon earned for beating a chamber; `boonsAfter`: for the nth chamber beaten.
+// `secondChance`: the first defeat only costs a healing surge for the rest of the campaign.
+function normalizeCampaign(campaign) {
+  if (!campaign || typeof campaign !== 'object') return null
+  const map = (value, key) =>
+    Object.fromEntries(Object.entries(value && typeof value === 'object' ? value : {}).filter(([k, v]) => key(k) && typeof v === 'string' && v))
+  return {
+    chambers: strings(campaign.chambers),
+    final: text(campaign.final),
+    finalWith: wholeNumber(campaign.finalWith) ? campaign.finalWith : 0,
+    hard: text(campaign.hard),
+    boonsFor: map(campaign.boonsFor, Boolean),
+    boonsAfter: map(campaign.boonsAfter, (k) => wholeNumber(Number(k), 1)),
+    secondChance: campaign.secondChance === true,
+  }
+}
+
+// Boon cards, earned in a campaign. `use` says what the app does with one:
+// startTile (place the top dungeon tile before anyone's turn), discardMonster (discard a
+// drawn monster card of one of `monsterTypes`) or shop (`shopCards` treasure cards between adventures).
+export const BOON_USES = ['startTile', 'discardMonster', 'shop']
+
+function normalizeBoons(list, problems) {
+  if (list === undefined) return []
+  if (!Array.isArray(list)) {
+    problems.push('"boons" should be a list.')
+    return []
+  }
+  const boons = []
+  const seen = new Set()
+  list.forEach((card, i) => {
+    const label = card?.name ? `"${card.name}"` : `boon #${i + 1}`
+    if (!card || typeof card !== 'object') return problems.push(`${label} is not a card.`)
+    if (!card.id || typeof card.id !== 'string') return problems.push(`${label} needs an "id".`)
+    if (seen.has(card.id)) return problems.push(`${label} reuses the id "${card.id}".`)
+    if (!card.name || typeof card.name !== 'string') return problems.push(`${label} needs a "name".`)
+    if (!BOON_USES.includes(card.use)) return problems.push(`${label} has use "${card.use}"; use one of ${BOON_USES.join(', ')}.`)
+    // `monsterTypes` (Orcs Overwhelmed!: Orc or Animal), or just `monsterType`.
+    const monsterTypes = [...strings(card.monsterTypes), ...strings([card.monsterType])]
+    if (card.use === 'discardMonster' && monsterTypes.length === 0) return problems.push(`${label} needs "monsterTypes".`)
+    seen.add(card.id)
+    boons.push({
+      id: card.id,
+      name: card.name,
+      flavor: text(card.flavor),
+      text: text(card.text),
+      use: card.use,
+      monsterTypes,
+      shopCards: wholeNumber(card.shopCards, 1) ? card.shopCards : 0,
+    })
+  })
+  return boons
+}
+
+// The campaign's Treasure tokens: [{ gold, count }] for gold, [{ treasure: true, count }]
+// for the ones that give a Treasure card. Returns one entry per token.
+function normalizeTreasureTokens(list, problems) {
+  if (list === undefined) return []
+  if (!Array.isArray(list)) {
+    problems.push('"treasureTokens" should be a list.')
+    return []
+  }
+  const tokens = []
+  for (const entry of list) {
+    const copies = wholeNumber(entry?.count, 1) ? entry.count : 1
+    if (entry?.treasure === true) tokens.push(...Array.from({ length: copies }, () => ({ gold: 0, treasure: true })))
+    else if (wholeNumber(entry?.gold, 1)) tokens.push(...Array.from({ length: copies }, () => ({ gold: entry.gold, treasure: false })))
+    else problems.push('Each Treasure token needs "gold" (a number) or "treasure": true.')
+  }
+  return tokens
 }
 
 // Chamber cards: what fills a chamber when its entrance turns up, and the goal that
