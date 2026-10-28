@@ -8,7 +8,7 @@ export const BOARD_SOUNDS = [
   { key: 'rimshot', emoji: '🥁', label: 'Ba-dum-tss' },
   { key: 'crickets', emoji: '🦗', label: 'Crickets' },
   { key: 'laugh', emoji: '😈', label: 'Evil laugh' },
-  { key: 'clang', emoji: '⚔️', label: 'Sword clang' },
+  { key: 'swords', emoji: '⚔️', label: 'Sword fight' },
   { key: 'drumroll', emoji: '🪘', label: 'Drumroll' },
 ]
 

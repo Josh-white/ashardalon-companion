@@ -49,6 +49,7 @@ const LENGTH_MS = {
   rimshot: 1100,
   crickets: 1200,
   laugh: 1350,
+  swords: 1500,
   drumroll: 1700,
 }
 
@@ -191,6 +192,7 @@ const LEVEL_DB = {
   rimshot: -5,
   crickets: 10,
   laugh: 6,
+  swords: 9,
   drumroll: -4,
 }
 
@@ -689,6 +691,12 @@ export const SOUNDS = {
       burst(ctx, out, { at: at + when, freq: 1400, q: 0.8, peak: 0.15, attack: 0.01, decay: 0.05 })
       voice(ctx, out, { at: at + when + 0.03, freq, length })
     }
+  },
+
+  // A quick sword fight: a few clangs, not quite evenly spaced. (The game's own hit
+  // sound is the single clang.)
+  swords(ctx, at, out) {
+    for (const when of [0, 0.32, 0.55, 1.0]) SOUNDS.clang(ctx, at + when, out)
   },
 
   // A short snare roll that builds to a cymbal crash.
