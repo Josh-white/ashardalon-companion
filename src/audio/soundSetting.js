@@ -26,51 +26,11 @@ export function audioContext() {
   return context
 }
 
-// The page's one voice player, for the narrator. iPads only let an audio player talk
-// after it has played something inside a tap, so it's kept and unlocked by taps.
-let voice = null
-let speaking = false
-export function voicePlayer() {
-  if (!voice && typeof Audio === 'function') voice = new Audio()
-  return voice
-}
-// Whether the narrator is talking; pass a value to change it.
-export function voiceSpeaking(value) {
-  if (value !== undefined) speaking = value
-  return speaking
-}
-
-// A twentieth of a second of silence as a WAV file, for unlocking the voice player.
-let silence = null
-function silentClip() {
-  if (silence || typeof URL?.createObjectURL !== 'function') return silence
-  const rate = 8000
-  const samples = 400
-  const bytes = new Uint8Array(44 + samples).fill(128)
-  const view = new DataView(bytes.buffer)
-  const text = (at, s) => [...s].forEach((c, i) => view.setUint8(at + i, c.charCodeAt(0)))
-  text(0, 'RIFF')
-  view.setUint32(4, 36 + samples, true)
-  text(8, 'WAVEfmt ')
-  view.setUint32(16, 16, true)
-  view.setUint16(20, 1, true) // plain PCM
-  view.setUint16(22, 1, true) // one channel
-  view.setUint32(24, rate, true)
-  view.setUint32(28, rate, true)
-  view.setUint16(32, 1, true)
-  view.setUint16(34, 8, true)
-  text(36, 'data')
-  view.setUint32(40, samples, true)
-  silence = URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }))
-  return silence
-}
-
 // Call from a tap or key press: that's the only time a browser lets sound start.
-// iPads also need something to actually play inside the tap, both for the sound
-// effects (Web Audio) and for the narrator's player.
+// iPads also need something to actually play inside the tap. The narrator plays
+// through the same audio context, so this one unlock covers everything.
 export function unlockAudio() {
-  // Sound plays even with the iPad's silent mode on, and mixes with the narrator
-  // instead of pausing for it (Safari 16.4 and later).
+  // Sound plays even with the iPad's silent mode on (Safari 16.4 and later).
   try {
     if (navigator.audioSession) navigator.audioSession.type = 'playback'
   } catch {
@@ -83,12 +43,6 @@ export function unlockAudio() {
     source.buffer = ctx.createBuffer(1, 1, 22050)
     source.connect(ctx.destination)
     source.start(0)
-  }
-  const player = voicePlayer()
-  const clip = silentClip()
-  if (player && clip && !speaking && player.paused) {
-    player.src = clip
-    player.play().catch(() => {})
   }
 }
 

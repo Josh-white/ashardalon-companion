@@ -49,6 +49,17 @@ docker compose exec ashardalon node server/record-narration.js             # rec
 
 It records every encounter card, adventure story, monster, villain, treasure, tile and hero line from your cards, skips anything already recorded, and stops cleanly if the credits run out (run it again later for the rest). Once it's done you can take `ELEVENLABS_API_KEY` out of `.env`: recorded lines keep playing, and anything never recorded just stays quiet. Lines use the hero's name ("Keyleth, it's your turn") rather than the player's, so they can all be recorded ahead of time. The backup script also copies the recordings to `~/ashardalon-backups/narration`; to put them back, `docker cp -a ~/ashardalon-backups/narration ashardalon-companion:/data/`.
 
+### Make the sound effects and ambient loops
+
+The same key can make the game's recorded sounds with ElevenLabs' sound effects: three ambient loops (exploring, battle, boss) and 25 one-shots (tiles, traps, natural 20s, treasure, each monster, each kind of spell). The prompts are in `src/audio/soundPrompts.js`. On the Pi:
+
+```sh
+docker compose exec ashardalon node server/generate-sounds.js --dry-run   # what's left and how many credits
+docker compose exec ashardalon node server/generate-sounds.js             # make the takes
+```
+
+Each sound gets two or three takes in `cards/sounds/takes/`. Open the app at `/#audition` to listen and tap **Use this** on your favourite, which copies it to `cards/sounds/` where the game plays it (anything it replaces is kept in `takes/replaced/`). A loop plays in place of the made-up music for its mood, fading over 1.5 seconds when the mood changes, and the music and loops dip to a third of their volume while the narrator talks.
+
 ## Run it on the Raspberry Pi
 
 ```sh

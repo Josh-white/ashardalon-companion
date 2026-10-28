@@ -82,6 +82,9 @@ const withMoment = (state, moment) => ({
   moment: { id: newId('moment'), at: Date.now(), ...moment },
 })
 
+// A power used outside an attack (healing, a token, a dodge), so screens can play its sound.
+const withCast = (state, power) => ({ ...state, cast: { id: newId('cast'), at: Date.now(), power: power.name } })
+
 const heroLabel = (hero) => hero.player || hero.name
 
 const updateHero = (state, heroId, change) => ({
@@ -983,7 +986,7 @@ function usePower(state, action) {
   if (use.pick && !picked && !use.optional) return state
   if (use.pick === 'other' && picked?.id === hero.id) return state
 
-  let next = power.type === 'at-will' ? state : markUsed(state, hero.id, power.id)
+  let next = withCast(power.type === 'at-will' ? state : markUsed(state, hero.id, power.id), power)
   next = withLog(next, `${heroLabel(hero)} used ${power.name}.`)
   if (use.healSelf) next = healHero(next, hero.id, use.healSelf, power.name)
   if (use.heal && picked) next = healHero(next, picked.id, use.heal, power.name)
@@ -1013,7 +1016,7 @@ function dodgeHit(state, action) {
   const power = hero?.powers.find((p) => p.id === action.powerId)
   const row = last?.results.find((r) => r.heroId === hero?.id && r.hit && !r.dodged)
   if (!row || !power || power.used || effectsOf(power).reaction !== 'dodge') return state
-  let next = markUsed(state, hero.id, power.id)
+  let next = withCast(markUsed(state, hero.id, power.id), power)
   next = updateHero(next, hero.id, (h) => ({
     hp: clamp(h.hp + row.dealt - row.miss, 0, h.maxHp),
     conditions: h.conditions.filter((c) => !row.conditions.includes(c)),
@@ -1032,7 +1035,7 @@ function evadeHit(state, action) {
   const power = hero?.powers.find((p) => p.id === action.powerId)
   const row = last?.results.find((r) => r.heroId === hero?.id && r.hit && !r.evaded)
   if (!row || !power || power.used || effectsOf(power).reaction !== 'evade') return state
-  let next = markUsed(state, hero.id, power.id)
+  let next = withCast(markUsed(state, hero.id, power.id), power)
   next = updateHero(next, hero.id, (h) => {
     const kept = h.conditions.filter((c) => !row.conditions.includes(c))
     return {

@@ -30,6 +30,9 @@ services:
       - game-data:/data
       # Your own power cards (cards/cards.json) stay on the Pi, outside git.
       - ./cards:/app/cards:ro
+      # Recorded sounds can be written, so the #audition page and
+      # server/generate-sounds.js can add new ones. Also only on the Pi.
+      - ./cards/sounds:/app/cards/sounds
       # Photos of your cards, added from the card art screen. Also only on the Pi.
       - ./cards/art:/app/art
     restart: unless-stopped
