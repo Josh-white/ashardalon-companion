@@ -154,5 +154,17 @@ export function useNarrator(on) {
     stopSpeaking(audioContext())
   }, [on])
 
-  return { available, blocked: available && on && blocked }
+  // Says lines straight away (the intro screen's line, say), outside any game change.
+  const say = useCallback(
+    (lines) => {
+      if (!available || !on) return
+      queue.current = [...queue.current, ...lines].slice(-MAX_QUEUE)
+      const ctx = audioContext()
+      if (ctx) for (const line of lines) fetchLine(ctx, line).catch(() => {})
+      playNext()
+    },
+    [available, on, playNext],
+  )
+
+  return { available, blocked: available && on && blocked, say }
 }

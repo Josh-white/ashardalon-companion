@@ -97,3 +97,18 @@ describe('narrator lines', () => {
     expect(narrationFor(game(), game({ status: 'won' }), NOW)[0]).toMatch(/^Victory!/)
   })
 })
+
+describe('the lobby', () => {
+  const lobby = (...keys) => ({ status: 'setup', heroes: [], lobby: keys.map((heroKey) => ({ heroKey })) })
+
+  it('has the herald call out each hero as an iPad picks them', () => {
+    expect(narrationFor(lobby('rogue'), lobby('rogue', 'paladin'))).toEqual(['Keyleth the Elf Paladin has arrived!'])
+    expect(linesFor(lobby(), lobby('wizard'))[0].voice).toBe('herald')
+  })
+
+  it('stays quiet when a hero is let go, or for the first state a screen sees', () => {
+    expect(narrationFor(lobby('rogue', 'paladin'), lobby('rogue'))).toEqual([])
+    expect(narrationFor(null, lobby('rogue'))).toEqual([])
+  })
+})
+

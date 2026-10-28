@@ -4,6 +4,7 @@ import Art from './components/Art.jsx'
 import ArtScreen from './components/ArtScreen.jsx'
 import { AreaBackdrop, AreaName } from './components/AreaBackdrop.jsx'
 import HeroCard from './components/HeroCard.jsx'
+import DragonIntro, { useIntro } from './components/Intro.jsx'
 import MomentOverlay from './components/MomentOverlay.jsx'
 import MonsterList, { VillainList } from './components/MonsterList.jsx'
 import ProjectorView from './components/ProjectorView.jsx'
@@ -254,7 +255,9 @@ export default function App() {
   useMusic(state, soundOn && musicOn)
   const narrator = useNarrator(soundOn)
   const soundLocked = useAudioLocked(soundOn) || narrator.blocked
+  const [showIntro, finishIntro] = useIntro()
 
+  if (showIntro) return <DragonIntro projector={seat === PROJECTOR_SEAT} soundOn={soundOn} say={narrator.say} onDone={finishIntro} />
   if (!state) return <Connecting />
 
   const banners = (

@@ -5,6 +5,7 @@
 // The cast (the Pi's server/narrator.js picks the actual ElevenLabs voice for each):
 // narrator tells the story, herald cheers the heroes on, danger brings bad news,
 // and each villain speaks for itself in its own voice.
+import { HERO_TEMPLATES } from '../data/heroes.js'
 import { VILLAIN_DEFAULT, VILLAIN_LINES } from '../data/villainLines.js'
 
 export const VOICES = [...new Set(['narrator', 'herald', 'danger', 'villain', ...Object.values(VILLAIN_LINES).map((v) => v.voice)])]
@@ -89,9 +90,25 @@ export function momentLines(moment, state) {
   }
 }
 
+// The intro screen's line, spoken when someone taps to wake the dragon.
+export const INTRO_LINE = say('narrator', `${STORY} Beneath Firestorm Peak, the red dragon stirs. Who dares enter his halls?`)
+
+// The herald calls out each hero as their torch is lit in the lobby.
+export const arrivalLine = (heroKey) => {
+  const template = HERO_TEMPLATES.find((t) => t.key === heroKey)
+  return template ? say('herald', `${CHEER} ${template.name} the ${template.className} has arrived!`) : null
+}
+
+// Heroes picked on an iPad since the last state.
+export const newArrivals = (before, after) => {
+  if (before?.status !== 'setup' || after?.status !== 'setup') return []
+  const had = new Set((before.lobby ?? []).map((c) => c.heroKey))
+  return (after.lobby ?? []).map((c) => c.heroKey).filter((key) => !had.has(key))
+}
+
 export function narrationFor(before, after, now = Date.now()) {
   if (!before || !after) return []
-  const lines = []
+  const lines = newArrivals(before, after).map(arrivalLine)
   if (before.status === 'setup' && after.status === 'playing') {
     lines.push(say('narrator', `${STORY} The adventure begins${after.adventure?.card?.title ? `: ${after.adventure.card.title}` : ''}! Heroes, enter the dungeon.`))
   }

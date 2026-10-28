@@ -22,6 +22,8 @@ describe('the narration script', () => {
     expect(texts).toContain('The Tunnel Exit! Light ahead.')
     expect(texts).toContain('Long ago…')
     expect(texts).toContain('You won!')
+    expect(texts).toContain('Beneath Firestorm Peak, the red dragon stirs. Who dares enter his halls?')
+    expect(texts).toContain('Heskan the Dragonborn Wizard has arrived!')
   })
 
   it('has each villain speak in its own voice', () => {

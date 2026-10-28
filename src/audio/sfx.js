@@ -5,6 +5,7 @@ import { audioContext } from './soundSetting.js'
 import { loadSamples, playSample, sampleMs } from './samples.js'
 import { layer } from './mixer.js'
 import { effectsOf } from '../data/powerEffects.js'
+import { newArrivals } from './narration.js'
 
 // The 3D die lands this long after a roll's moment starts (ROLL_MS in Die3D.jsx).
 export const DIE_LANDS_MS = 900
@@ -369,7 +370,7 @@ function schedule(ctx, sounds) {
 // How long a paused page may take to start its sound again and still play the moment.
 const RESUME_MS = 1500
 
-function play(sounds) {
+export function play(sounds) {
   const ctx = audioContext()
   if (!ctx) return
   loadSamples(ctx)
@@ -401,6 +402,8 @@ export function changeSounds(before, after) {
   if (isNew(board, before?.soundboard?.last) && SOUNDS[board.sound]) sounds.push([board.sound, 0])
   if (tileRevealed(before, after)) sounds.push(['slide', 0], ['tile', SLIDE_LEAD_MS])
   if (isNew(after?.cast, before?.cast)) sounds.push([castSound(after.cast.power), 0])
+  // A torch flares in the lobby as each hero joins.
+  if (newArrivals(before, after).length > 0) sounds.push(['fire', 0])
   return sounds
 }
 

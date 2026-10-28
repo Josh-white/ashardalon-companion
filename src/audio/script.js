@@ -4,7 +4,7 @@
 // functions the projector uses, so the words match exactly.
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { VILLAIN_LINES } from '../data/villainLines.js'
-import { momentLines, narrationFor } from './narration.js'
+import { INTRO_LINE, momentLines, narrationFor } from './narration.js'
 
 const article = (name) => (/^[aeiou]/i.test(name) ? 'An' : 'A')
 
@@ -15,6 +15,10 @@ export function narrationScript(cards) {
   const lines = []
   const moment = (m, state = base) => lines.push(...momentLines(m, state))
   const change = (before, after) => lines.push(...narrationFor({ ...base, ...before }, { ...base, ...after }, 0))
+
+  // The intro screen, and the herald calling out each hero in the lobby.
+  lines.push(INTRO_LINE)
+  for (const hero of HERO_TEMPLATES) change({ status: 'setup', lobby: [] }, { status: 'setup', lobby: [{ heroKey: hero.key }] })
 
   // The start of a game, with and without an adventure.
   change({ status: 'setup' }, {})

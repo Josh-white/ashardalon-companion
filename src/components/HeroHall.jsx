@@ -1,0 +1,132 @@
+import { useEffect, useRef, useState } from 'react'
+import { unlockAudio } from '../audio/soundSetting.js'
+import { heroArt } from '../data/art.js'
+import { HERO_COLORS } from '../data/heroes.js'
+import Art from './Art.jsx'
+
+// How long a player holds their hero to light the torch.
+export const HOLD_MS = 800
+
+function Torch({ lit }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 44 70" className="h-[9vh] w-auto">
+      <path d="M18 34h8l-2 36h-4z" fill={lit ? '#57534e' : '#44403c'} />
+      {lit ? (
+        <path
+          className="torch-flame"
+          d="M22 2c6 9 12 14 12 22a12 12 0 0 1-24 0c0-6 4-9 6-13 1 5 3 7 6 7-2-6-2-10 0-16z"
+          fill="#f59e0b"
+        />
+      ) : (
+        <path d="M16 30h12" stroke="#57534e" strokeWidth="3" />
+      )}
+    </svg>
+  )
+}
+
+// "Heroes Assemble", on the projector: an alcove for each hero, dark until an iPad
+// picks that hero, then lit with the player's name and whether they're ready.
+export function HeroHall({ heroes, lobby }) {
+  return (
+    <section className="grid grid-cols-5 gap-[2vw]">
+      {heroes.map((template) => {
+        const claim = lobby.find((c) => c.heroKey === template.key)
+        const color = HERO_COLORS[template.color]
+        return (
+          // A new key when the torch lights, so the arrival animation plays.
+          <div key={`${template.key}-${claim ? 'lit' : 'dark'}`} className={`flex flex-col items-center gap-2 ${claim ? 'torch-arrive' : ''}`}>
+            <Torch lit={Boolean(claim)} />
+            <div
+              className={`flex aspect-[3/4] w-full items-center justify-center rounded-t-full rounded-b-xl border-[3px] ${
+                claim ? `border-transparent ring-[3px] ${color.ring} bg-[radial-gradient(ellipse_at_50%_30%,rgb(245_158_11/0.4),rgb(28_21_16/0.9)_70%)] shadow-[0_0_3vw_rgb(245_158_11/0.35)]` : 'border-dashed border-stone-700 bg-stone-950'
+              }`}
+            >
+              <Art name={heroArt(template.key)} className={`w-3/4 ${claim ? '' : 'brightness-[0.35] grayscale'}`} />
+            </div>
+            <span className={`font-display text-[2vw] font-bold ${claim ? color.text : 'text-stone-500'}`}>{template.name}</span>
+            <span className="text-center text-[1.2vw] text-zinc-400">
+              {claim ? (
+                <>
+                  {claim.player || template.className}
+                  <span className={`block ${claim.ready ? 'text-emerald-400' : 'text-amber-400'}`}>{claim.ready ? 'Ready!' : 'Choosing powers'}</span>
+                </>
+              ) : (
+                'Waiting…'
+              )}
+            </span>
+          </div>
+        )
+      })}
+    </section>
+  )
+}
+
+// A hero button the player holds for a moment to light their torch, so a stray tap
+// doesn't grab the wrong hero. The ring fills while they hold. The tap also lets the
+// browser play sound on this iPad.
+export function HoldToPick({ onPick, disabled, className = '', children, label }) {
+  const [holding, setHolding] = useState(false)
+  const [hint, setHint] = useState(false)
+  const timer = useRef(null)
+
+  useEffect(() => () => clearTimeout(timer.current), [])
+
+  const start = (e) => {
+    if (disabled) return
+    e.preventDefault()
+    unlockAudio()
+    setHint(false)
+    setHolding(true)
+    timer.current = setTimeout(() => {
+      timer.current = null
+      setHolding(false)
+      onPick()
+    }, HOLD_MS)
+  }
+  const stop = () => {
+    if (!timer.current) return
+    clearTimeout(timer.current)
+    timer.current = null
+    setHolding(false)
+    setHint(true)
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      aria-label={label}
+      onPointerDown={start}
+      onPointerUp={stop}
+      onPointerLeave={stop}
+      onPointerCancel={stop}
+      onContextMenu={(e) => e.preventDefault()}
+      // A keyboard has no hold; Enter picks straight away.
+      onKeyDown={(e) => !disabled && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onPick())}
+      style={{ touchAction: 'none', WebkitTouchCallout: 'none', '--hold-ms': `${HOLD_MS}ms` }}
+      className={`relative select-none ${className}`}
+    >
+      {children}
+      {!disabled && (
+        <span className="mt-2 flex items-center gap-2 text-sm text-amber-300">
+          <svg aria-hidden="true" viewBox="0 0 36 36" className="h-6 w-6 -rotate-90">
+            <circle cx="18" cy="18" r="15" fill="none" stroke="#3f3f46" strokeWidth="4" />
+            <circle
+              cx="18"
+              cy="18"
+              r="15"
+              fill="none"
+              stroke="#fbbf24"
+              strokeWidth="4"
+              strokeLinecap="round"
+              strokeDasharray="94.3"
+              strokeDashoffset={holding ? 0 : 94.3}
+              className={holding ? 'hold-ring-filling' : 'hold-ring'}
+            />
+          </svg>
+          {holding ? 'Lighting your torch…' : hint ? 'Keep holding to light your torch!' : 'Hold to light your torch'}
+        </span>
+      )}
+    </button>
+  )
+}
