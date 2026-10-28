@@ -13,6 +13,12 @@ BACKUP_DIR=${BACKUP_DIR:-$HOME/ashardalon-backups}
 KEEP=${KEEP:-14}
 
 mkdir -p "$BACKUP_DIR"
+
+# The narrator's recordings: one copy, kept up to date. They never change once
+# made, and they're what lets the narrator talk without an ElevenLabs key.
+if docker cp "$CONTAINER:/data/narration" "$BACKUP_DIR/" 2>/dev/null; then
+  echo "$(date '+%F %T') Narrator recordings: $(ls "$BACKUP_DIR/narration" | wc -l) files."
+fi
 temp="$BACKUP_DIR/.incoming.json"
 trap 'rm -f "$temp"' EXIT
 
