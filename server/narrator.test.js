@@ -75,6 +75,25 @@ describe('narrator endpoint', () => {
     expect(used.slice(2)).toEqual([DEFAULT_VOICES.narrator])
   })
 
+  it("falls back to the narrator when a voice isn't available", async () => {
+    calls = []
+    const fetchSpeech = async (url) => {
+      calls.push({ url })
+      return url.includes(DEFAULT_VOICES.villain)
+        ? new Response('{"detail":{"status":"voice_not_found"}}', { status: 404 })
+        : new Response(new Uint8Array([7]), { status: 200 })
+    }
+    server = await startServer({
+      port: 0,
+      saveFile: join(dir, 'game.json'),
+      staticDir: dir,
+      narrator: createNarrator({ apiKey: 'k', cacheDir: join(dir, 'narration'), fetchSpeech }),
+    })
+    const response = await fetch(`http://localhost:${server.port}/narrate?voice=villain&text=Hello`)
+    expect(response.status).toBe(200)
+    expect(calls.map((c) => c.url.includes(DEFAULT_VOICES.narrator))).toEqual([false, true])
+  })
+
   it('refuses very long lines', async () => {
     const base = await start('secret-key')
     expect((await fetch(`${base}/narrate?text=${'a'.repeat(1300)}`)).status).toBe(413)

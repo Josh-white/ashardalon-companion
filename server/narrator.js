@@ -36,6 +36,8 @@ export function createNarrator({
 } = {}) {
   // Lines being fetched right now, so two screens asking at once cost one call.
   const pending = new Map()
+  // Voices ElevenLabs refused since the server started; their lines go to the narrator.
+  const refused = new Set()
 
   const speak = async (text, voice) => {
     const file = join(cacheDir, `${createHash('sha1').update(`${voice}|${model}|${text}`).digest('hex')}.mp3`)
@@ -89,8 +91,17 @@ export function createNarrator({
     }
     // Only the cast's roles, so a page can't ask for any voice it likes.
     const role = url.searchParams.get('voice')
-    const voice = Object.hasOwn(voices, role ?? '') ? voices[role] : voices.narrator
-    speak(text, voice).then(
+    const chosen = Object.hasOwn(voices, role ?? '') ? voices[role] : voices.narrator
+    const voice = refused.has(chosen) ? voices.narrator : chosen
+    // A voice this ElevenLabs account can't use falls back to the narrator, so the
+    // line is still heard.
+    const spoken = speak(text, voice).catch((error) => {
+      if (voice === voices.narrator) throw error
+      console.error(`Narrator: the ${role} voice failed, using the narrator instead.`, error.message)
+      refused.add(voice)
+      return speak(text, voices.narrator)
+    })
+    spoken.then(
       (audio) => res.writeHead(200, { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'public, max-age=31536000, immutable' }).end(audio),
       (error) => {
         console.error('Narrator:', error.message)
