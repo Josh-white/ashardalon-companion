@@ -13,10 +13,11 @@ const soundsDir = () => {
 }
 
 describe('ElevenLabs sound takes', () => {
-  it("costs what JJ's list adds up to: 2 takes of 3 loops and 3 of 25 one-shots", () => {
-    expect(SOUND_PROMPTS.filter((p) => p.loop)).toHaveLength(3)
-    expect(SOUND_PROMPTS.filter((p) => !p.loop)).toHaveLength(25)
-    expect(promptCredits(SOUND_PROMPTS)).toBe(11540)
+  it("costs what JJ's list adds up to: 3 takes of most one-shots, 4 of the remade horn and grell", () => {
+    expect(SOUND_PROMPTS.filter((p) => p.loop)).toHaveLength(0)
+    expect(SOUND_PROMPTS).toHaveLength(25)
+    expect(promptCredits(SOUND_PROMPTS.filter((p) => ['fanfare', 'monster-grell'].includes(p.name)))).toBe(1040)
+    expect(promptCredits(SOUND_PROMPTS)).toBe(6380)
   })
 
   it('plans only the takes not made yet', () => {
@@ -35,7 +36,7 @@ describe('ElevenLabs sound takes', () => {
       asked = { url, body: JSON.parse(init.body), key: init.headers['xi-api-key'] }
       return { ok: true, arrayBuffer: async () => new TextEncoder().encode('mp3').buffer }
     }
-    const loop = { ...SOUND_PROMPTS[0], take: 2 }
+    const loop = { name: 'loop-explore', take: 2, prompt: 'a cave', seconds: 25, loop: true, follow: 0.4 }
     await makeTake(dir, loop, { apiKey: 'k', fetchSound })
     expect(asked.url).toContain('/v1/sound-generation?output_format=mp3_44100_192')
     expect(asked.body).toMatchObject({ duration_seconds: 25, loop: true, model_id: 'eleven_text_to_sound_v2' })
@@ -55,5 +56,16 @@ describe('ElevenLabs sound takes', () => {
     expect(pickTake(dir, 'coins', 3)).toBe(false)
     expect(pickTake(dir, '../game', 1)).toBe(false)
     expect(existsSync(join(dir, 'CREDITS.csv'))).toBe(true)
+  })
+})
+
+describe('making a sound again', () => {
+  it('sets aside only that sound’s takes', async () => {
+    const { setAside } = await import('./generate-sounds.js')
+    const dir = soundsDir()
+    for (const f of ['fanfare-1.mp3', 'fanfare-2.mp3', 'monster-grell-1.mp3']) writeFileSync(join(dir, 'takes', f), 'x')
+    expect(setAside(dir, 'fanfare')).toBe(2)
+    expect(listTakes(dir)).toEqual({ 'monster-grell': [1] })
+    expect(readdirSync(join(dir, 'takes', 'rejected'))).toHaveLength(2)
   })
 })

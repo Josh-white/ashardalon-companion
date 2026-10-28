@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isLoop, loopGain, measure } from './samples.js'
+import { isLoop, measure } from './samples.js'
 
 describe('recordings', () => {
   it('skips the silence at the start and evens out the volume', () => {
@@ -17,10 +17,8 @@ describe('recordings', () => {
   })
 })
 
-describe('ambient loops', () => {
-  it('evens a loop out on its average loudness', () => {
-    const data = new Float32Array(1000).map((_, i) => (i % 2 ? 0.1 : -0.1))
-    expect(loopGain(data)).toBeCloseTo(Math.pow(10, -20 / 20) / 0.1, 3)
+describe('background music tracks', () => {
+  it('are left to the streaming player', () => {
     expect(isLoop('loop-boss')).toBe(true)
     expect(isLoop('coins')).toBe(false)
   })
