@@ -208,7 +208,8 @@ export function startServer({
   instance = process.env.INSTANCE_LABEL || null,
   // Spoken lines are saved next to the game, so they survive updates.
   narrator = createNarrator({ cacheDir: join(dirname(saveFile), 'narration') }),
-  warmNarrator = true,
+  // ELEVENLABS_WARM_UP=off skips recording the villain lines on start (to try voices cheaply).
+  warmNarrator = process.env.ELEVENLABS_WARM_UP !== 'off',
 } = {}) {
   let state = loadSavedGame(saveFile)
   // Which build of the screens this server hands out. A screen that loaded an older

@@ -7,19 +7,19 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFile
 import { join } from 'node:path'
 import { VILLAIN_DEFAULT, VILLAIN_LINES } from '../src/data/villainLines.js'
 
-// The cast: ElevenLabs' built-in voices, which every plan can use. Each can be
+// The cast, picked by JJ from the ElevenLabs voice library. Each can be
 // swapped with a voice id in .env: ELEVENLABS_VOICE_ID for the narrator, and
 // ELEVENLABS_VOICE_<ROLE> for the rest (ELEVENLABS_VOICE_HERALD, _MEERAK, ...).
 export const DEFAULT_VOICES = {
-  narrator: 'JBFqnCBsd6RMkjVDRZzb', // George: warm storyteller
-  herald: 'Xb7hH8MSUJpSbSDYk0k2', // Alice: clear and bright; cheers the heroes on
-  danger: 'N2lVS1w4EtoT3dr4eOWO', // Callum: husky and menacing; monsters and bad news
-  villain: 'pNInz6obpgDQGcFmaJgB', // Adam: dominant, firm; any villain without its own voice
-  meerak: 'SOYHLrjzK2X1ezoPC6cr', // Harry: fierce warrior; the kobold dragonlord
-  margrath: 'pqHfZKP75CvOlQylNhV4', // Bill: old and gruff; the duergar captain
-  kraash: 'pNInz6obpgDQGcFmaJgB', // Adam: dominant, firm; the orc storm shaman
-  ashardalon: 'nPczCjzI2devNBz1zQrb', // Brian: deep and resonant; the red dragon
-  bellax: 'pFZP5JQG7iQjIQuC4Bku', // Lily: velvety; the gauth's whisper of madness
+  narrator: 'oR4uRy4fHDUGGISL0Rev', // the storyteller: tiles, turns, encounters and stories
+  herald: 'ZF6FPAbjXT4488VcRRnw', // cheers the heroes on
+  danger: 'fs2OqxduwXgp9foh2xjK', // monsters and bad news
+  villain: 'IDuDsTbqg77GnVCQrair', // any villain without its own voice (Kraash's)
+  meerak: 'Nw7vpAFWzoeAAt8VlVfL', // the kobold dragonlord
+  margrath: '09BJBPASOGbr1evokbCu', // the duergar captain
+  kraash: 'IDuDsTbqg77GnVCQrair', // the orc storm shaman
+  ashardalon: 'd5zuFgodxfQobkK5AfKH', // the red dragon
+  bellax: 'mLw8kuDeVGqVstOYjRII', // the gauth's whisper of madness
 }
 export const DEFAULT_VOICE = DEFAULT_VOICES.narrator
 
@@ -36,11 +36,14 @@ export const villainLines = () =>
   [...Object.values(VILLAIN_LINES), VILLAIN_DEFAULT].flatMap((lines) =>
     ['arrive', 'enraged', 'fall'].filter((when) => lines[when]).map((when) => ({ role: lines.voice, text: lines[when] })),
   )
-// Everyday lines use the quick, cheap flash model (about half a credit a letter).
-export const DEFAULT_MODEL = 'eleven_flash_v2_5'
-// Villains use v3, which acts out stage directions like [menacing] or [laughs] but
-// costs about twice as much; their lines are few and get recorded once.
+// Every line uses v3, which acts out stage directions like [menacing] or [laughs].
+// It costs about twice as much as flash, but each line is recorded only once.
+export const DEFAULT_MODEL = 'eleven_v3'
 export const DEFAULT_VILLAIN_MODEL = 'eleven_v3'
+// Lower is more expressive, higher is steadier.
+export const DEFAULT_STABILITY = 0.3
+// How strongly the voice leans into its own style.
+export const DEFAULT_STYLE = 0.5
 // ElevenLabs credits per letter, for the recording estimate.
 export const CREDITS_PER_LETTER = { eleven_flash_v2_5: 0.5, eleven_turbo_v2_5: 0.5 }
 // Models lines may already be saved under, so changing models never pays twice.
@@ -48,7 +51,15 @@ const KNOWN_MODELS = ['eleven_flash_v2_5', 'eleven_v3', 'eleven_multilingual_v2'
 const VILLAIN_ROLES = new Set(['villain', ...Object.values(VILLAIN_LINES).map((v) => v.voice).filter((v) => v !== 'danger')])
 // Older models read stage directions out loud, so they're taken out for those.
 const actsTags = (model) => /^eleven_v[3-9]/.test(model)
-export const speakable = (text, model) => (actsTags(model) ? text : text.replace(/\[[^\]]*\]\s*/g, '').trim())
+// D&D names spelled the way they're said, in what ElevenLabs hears only; the screen
+// and the saved recording's name keep the real spelling.
+const SAY_AS = [
+  [/otyugh/gi, 'ot-yug'],
+  [/duergar/gi, 'dwer-gar'],
+]
+const sayAs = (text) =>
+  SAY_AS.reduce((t, [word, spoken]) => t.replace(word, (m) => (m[0] === m[0].toUpperCase() ? spoken[0].toUpperCase() + spoken.slice(1) : spoken)), text)
+export const speakable = (text, model) => sayAs(actsTags(model) ? text : text.replace(/\[[^\]]*\]\s*/g, '').trim())
 // Longer than any line the projector sends (the longest adventure story is
 // about 750 characters); a guard against running up the bill.
 export const MAX_TEXT = 1200
@@ -58,6 +69,8 @@ export function createNarrator({
   voices = castFromEnv(process.env),
   model: everydayModel = process.env.ELEVENLABS_MODEL || DEFAULT_MODEL,
   villainModel = process.env.ELEVENLABS_VILLAIN_MODEL || DEFAULT_VILLAIN_MODEL,
+  stability = Number(process.env.ELEVENLABS_STABILITY || DEFAULT_STABILITY),
+  style = Number(process.env.ELEVENLABS_STYLE || DEFAULT_STYLE),
   cacheDir,
   fetchSpeech = globalThis.fetch,
 } = {}) {
@@ -67,7 +80,9 @@ export function createNarrator({
   // their lines go straight to the narrator.
   const refused = new Set()
 
-  const cacheFile = (voice, model, text) => join(cacheDir, `${createHash('sha1').update(`${voice}|${model}|${text}`).digest('hex')}.mp3`)
+  // The voice settings are part of the name, so changing them records the lines again.
+  const cacheFile = (voice, model, text) =>
+    join(cacheDir, `${createHash('sha1').update(`${voice}|${model}|${stability}|${style}|${text}`).digest('hex')}.mp3`)
 
   // The same line in the same voice, recorded with any model.
   const savedFile = (voice, text) => KNOWN_MODELS.map((model) => cacheFile(voice, model, text)).find(existsSync)
@@ -88,8 +103,7 @@ export function createNarrator({
         body: JSON.stringify({
           text: speakable(text, model),
           model_id: model,
-          // v3 only takes stability 0, 0.5 or 1; 0.5 keeps a voice steady but expressive.
-          voice_settings: actsTags(model) ? { stability: 0.5, similarity_boost: 0.75 } : { stability: 0.4, similarity_boost: 0.75, style: 0.35 },
+          voice_settings: { stability, similarity_boost: 0.75, style },
         }),
       })
       if (!response.ok) {
