@@ -3,14 +3,15 @@
 //
 // Each tile is drawn as rows of characters with its triangle edge at the bottom (south):
 //   .  floor        #  solid rock        S  scorch mark (floor where a new monster goes)
-// "features" marks squares the rules care about (stairs, a chest, a ladder), and "source"
+// "features" marks squares the rules care about (stairs, a chest, a ladder, a door: the pale slabs where some adventures put a door marker), and "source"
 // says where the layout was read from, for checking it against the real tile.
 // "exits" says, square by square along each side, whether it is open ("o") or a wall ("x"):
 // north and south read left to right, east and west read top to bottom.
 
 export const SIDES = ['N', 'E', 'S', 'W']
 export const TILE_KINDS = ['regular', 'start', 'special', 'chamber']
-const TRIANGLES = ['black', 'white']
+// The Chamber Entrance tiles have a red triangle.
+const TRIANGLES = ['black', 'white', 'red']
 
 // One tile's squares in its own frame (triangle at the bottom): each square knows
 // whether it is floor, holds the scorch mark, and which of its sides are blocked.
@@ -89,7 +90,7 @@ export function normalizeTiles(list, problems) {
     const kind = tile.kind ?? 'regular'
     if (!TILE_KINDS.includes(kind)) return problems.push(`${label} has kind "${kind}"; use one of ${TILE_KINDS.join(', ')}.`)
     const triangle = tile.triangle ?? null
-    if (triangle !== null && !TRIANGLES.includes(triangle)) return problems.push(`${label} has triangle "${triangle}"; use black, white or leave it out.`)
+    if (triangle !== null && !TRIANGLES.includes(triangle)) return problems.push(`${label} has triangle "${triangle}"; use black, white, red or leave it out.`)
     seen.add(tile.id)
     tiles.push({
       id: tile.id,

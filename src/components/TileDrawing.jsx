@@ -1,9 +1,10 @@
 // One dungeon tile drawn from its layout in cards.json: floor, rock, the scorch mark,
-// the triangle and anything the rules care about (stairs, a chest, a ladder). The board
+// the triangle and anything the rules care about (stairs, a chest, a ladder, a door). The board
 // uses the same drawing for every tile it lays down.
 
 const SQUARE = 40
-const FEATURE_MARKS = { stairs: '≡', chest: '💰', ladder: '🪜' }
+const FEATURE_MARKS = { stairs: '≡', chest: '💰', ladder: '🪜', door: '🚪' }
+const TRIANGLE_COLORS = { black: '#09090b', white: '#fafafa', red: '#b91c1c' }
 
 export default function TileDrawing({ tile, className = '' }) {
   const width = tile.rows[0].length
@@ -54,7 +55,7 @@ export default function TileDrawing({ tile, className = '' }) {
       {tile.triangle && (
         <path
           d={`M${cx - 9} ${by - 16}L${cx + 9} ${by - 16}L${cx} ${by}z`}
-          fill={tile.triangle === 'black' ? '#09090b' : '#fafafa'}
+          fill={TRIANGLE_COLORS[tile.triangle]}
           stroke="#09090b"
           strokeWidth="1"
         />

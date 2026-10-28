@@ -373,4 +373,6 @@ The virtual board (solo mode, still being built) needs each tile's layout. Draw 
 - `rows`: 4 rows of 4 squares (8 rows for a long tile): `.` floor, `#` solid rock, `S` the scorch mark where a new monster goes.
 - `exits`: each side square by square, `o` open or `x` wall. North and south read left to right, east and west top to bottom. South is the triangle edge.
 - `walls`: thin walls between two floor squares: the square (`at`, counted from the top left as `[0, 0]`) and the `side` of it the wall is on.
-- `kind`: `regular` (default), `start`, `special` or `chamber`. `triangle`: `black`, `white`, or left out.
+- `kind`: `regular` (default), `start`, `special` or `chamber`. `triangle`: `black`, `white`, `red` (the Chamber Entrances), or left out.
+- `features`: squares the rules care about, as `{ "type": "stairs", "at": [[1, 3], [2, 3]] }`. Types drawn so far: `stairs`, `chest`, `ladder`, `door` (the pale slabs where some adventures put a door marker).
+- `source`: where the layout was read from, shown on the Tile check page (`#tiles`), which draws every tile to compare with the real ones.
