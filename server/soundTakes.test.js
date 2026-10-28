@@ -13,10 +13,11 @@ const soundsDir = () => {
 }
 
 describe('ElevenLabs sound takes', () => {
-  it("costs what JJ's list adds up to: 2 takes of 3 loops and 3 of 25 one-shots", () => {
+  it("costs what JJ's list adds up to: 2 takes of 3 loops, 3 of most one-shots, 4 of the remade horn and grell", () => {
     expect(SOUND_PROMPTS.filter((p) => p.loop)).toHaveLength(3)
     expect(SOUND_PROMPTS.filter((p) => !p.loop)).toHaveLength(25)
-    expect(promptCredits(SOUND_PROMPTS)).toBe(11540)
+    expect(promptCredits(SOUND_PROMPTS.filter((p) => ['fanfare', 'monster-grell'].includes(p.name)))).toBe(1040)
+    expect(promptCredits(SOUND_PROMPTS)).toBe(11980)
   })
 
   it('plans only the takes not made yet', () => {
@@ -55,5 +56,16 @@ describe('ElevenLabs sound takes', () => {
     expect(pickTake(dir, 'coins', 3)).toBe(false)
     expect(pickTake(dir, '../game', 1)).toBe(false)
     expect(existsSync(join(dir, 'CREDITS.csv'))).toBe(true)
+  })
+})
+
+describe('making a sound again', () => {
+  it('sets aside only that sound’s takes', async () => {
+    const { setAside } = await import('./generate-sounds.js')
+    const dir = soundsDir()
+    for (const f of ['fanfare-1.mp3', 'fanfare-2.mp3', 'monster-grell-1.mp3']) writeFileSync(join(dir, 'takes', f), 'x')
+    expect(setAside(dir, 'fanfare')).toBe(2)
+    expect(listTakes(dir)).toEqual({ 'monster-grell': [1] })
+    expect(readdirSync(join(dir, 'takes', 'rejected'))).toHaveLength(2)
   })
 })

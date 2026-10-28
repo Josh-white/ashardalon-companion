@@ -1,7 +1,8 @@
 // The sounds made with ElevenLabs' sound effects, by server/generate-sounds.js. Each
 // becomes cards/sounds/<name>.mp3 on the Pi (kept out of git, like the card art), and
 // plays in place of the made-up sound it's named for (see RECORDING_NAMES in sfx.js).
-// JJ picked these prompts on 2026-10-28.
+// JJ picked these prompts on 2026-10-28. The war horn and the grell were made again
+// with fuller prompts after the first takes sounded like a car horn and too plain.
 //
 //   seconds   how long it is: ElevenLabs charges 40 credits a second
 //   takes     how many versions to make, to pick the best from on the #audition page
@@ -9,7 +10,7 @@
 //   follow    how closely it follows the prompt, 0 to 1 (higher sticks to the words)
 
 const loop = (name, seconds, prompt) => ({ name, group: 'Ambient loops', seconds, takes: 2, loop: true, follow: 0.4, prompt })
-const shot = (group, name, seconds, prompt) => ({ name, group, seconds, takes: 3, loop: false, follow: 0.6, prompt })
+const shot = (group, name, seconds, prompt, takes = 3) => ({ name, group, seconds, takes, loop: false, follow: 0.6, prompt })
 
 export const SOUND_PROMPTS = [
   loop('loop-explore', 25, 'Ambient cave atmosphere, slow water drips echoing in a vast stone cavern, distant low volcanic rumble, faint wind through tunnels, no music'),
@@ -18,7 +19,7 @@ export const SOUND_PROMPTS = [
 
   shot('Table', 'slide', 2, 'Heavy stone slab sliding across a stone floor and settling with a dull thud, dungeon echo'),
   shot('Table', 'trap', 1.5, 'Hidden blade trap springing, sharp metal click then a fast blade swoosh and slice'),
-  shot('Table', 'fanfare', 3, 'Triumphant war horn blast followed by a ringing sword clash, heroic'),
+  shot('Table', 'fanfare', 4, 'Ancient Viking war horn made from a giant animal horn, one long deep bellowing blast echoing through a stone hall, then two steel swords clash and ring out', 4),
   shot('Table', 'coins', 2, 'Handful of gold coins spilling and clattering onto a wooden table'),
   shot('Table', 'weapon', 1.5, 'Heavy medieval broadsword and battleaxe slash followed by a sharp armor impact'),
   shot('Table', 'arrow', 1.5, 'Heavy composite bowstring twang, fast whistling arrow flight and sharp impact'),
@@ -30,7 +31,7 @@ export const SOUND_PROMPTS = [
   shot('Monsters', 'monster-snake', 2, 'Loud aggressive giant viper hiss and scales slithering rapidly on stone'),
   shot('Monsters', 'monster-devil', 2, 'Infernal hellfire whoosh, dark demonic metallic snarl and clanking legion armor'),
   shot('Monsters', 'monster-mouther', 2, 'Horrifying wet bubbling flesh, multiple alien mouths babbling and chittering in madness'),
-  shot('Monsters', 'monster-grell', 2, 'Eerie floating predator beak snapping clicks and wet tentacles whipping through the air'),
+  shot('Monsters', 'monster-grell', 2.5, 'Alien horror creature: slimy wet tentacles lashing and slapping, a hard beak clacking and snapping rapidly, then a gurgling inhuman shriek, dark dungeon reverb', 4),
   shot('Monsters', 'monster-bear', 2, 'Massive ferocious cave bear bellowing roar, deep reverberating cavern echo'),
   shot('Monsters', 'monster-kobold', 2, 'High-pitched reptilian kobold yip and vicious hiss, small metal shield bash'),
 

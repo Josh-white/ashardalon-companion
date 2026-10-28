@@ -8,7 +8,8 @@
 //   docker compose exec ashardalon node server/generate-sounds.js                 # make every take
 //   docker compose exec ashardalon node server/generate-sounds.js coins trap      # just these sounds
 //   docker compose exec ashardalon node server/generate-sounds.js --pick coins=2  # use take 2 of coins
-import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs'
+//   docker compose exec ashardalon node server/generate-sounds.js --redo fanfare   # set aside its takes and make new ones
+import { existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CREDITS_PER_SECOND, SOUND_PROMPTS, takeFile } from '../src/audio/soundPrompts.js'
@@ -29,6 +30,20 @@ export function plan(soundsDir, prompts) {
   }
   const credits = todo.reduce((sum, t) => sum + Math.ceil(t.seconds * CREDITS_PER_SECOND), 0)
   return { todo, credits }
+}
+
+// Moves every take of `name` into takes/rejected/, so new ones can be made in their place.
+export function setAside(soundsDir, name) {
+  const rejected = join(takesDir(soundsDir), 'rejected')
+  const stamp = Date.now()
+  let moved = 0
+  for (const file of existsSync(takesDir(soundsDir)) ? readdirSync(takesDir(soundsDir)) : []) {
+    if (!file.startsWith(`${name}-`) || !/-\d+\.mp3$/.test(file) || !/^\d+\.mp3$/.test(file.slice(name.length + 1))) continue
+    mkdirSync(rejected, { recursive: true })
+    renameSync(join(takesDir(soundsDir), file), join(rejected, file.replace(/\.mp3$/, `-${stamp}.mp3`)))
+    moved++
+  }
+  return moved
 }
 
 // Asks ElevenLabs for one take and saves it.
@@ -70,6 +85,14 @@ async function main() {
     return
   }
   const prompts = names.length ? SOUND_PROMPTS.filter((p) => names.includes(p.name)) : SOUND_PROMPTS
+  if (args.includes('--redo') && !args.includes('--dry-run')) {
+    if (!names.length) {
+      console.log('Name the sounds to make again, like --redo fanfare.')
+      process.exitCode = 1
+      return
+    }
+    for (const name of names) console.log(`Set aside ${setAside(soundsDir, name)} takes of ${name}.`)
+  }
   const { todo, credits } = plan(soundsDir, prompts)
   console.log(`${todo.length} takes to make, about ${credits} ElevenLabs credits.`)
   if (args.includes('--dry-run')) {
