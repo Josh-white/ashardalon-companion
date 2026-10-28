@@ -42,10 +42,21 @@ describe('narrator endpoint', () => {
     expect(body).not.toContain('secret-key')
   })
 
-  it('is off without a key', async () => {
+  it('is off without a key or any recordings', async () => {
     const base = await start(null)
     expect(await (await fetch(`${base}/narrate`)).json()).toEqual({ enabled: false })
-    expect((await fetch(`${base}/narrate?text=Hello`)).status).toBe(503)
+    expect((await fetch(`${base}/narrate?text=Hello`)).status).toBe(404)
+    expect(calls).toHaveLength(0)
+  })
+
+  it('keeps playing recorded lines after the key is removed', async () => {
+    const withKey = await start('secret-key')
+    await fetch(`${withKey}/narrate?voice=herald&text=Hello`)
+    await server.close()
+    const withoutKey = await start(null)
+    expect(await (await fetch(`${withoutKey}/narrate`)).json()).toEqual({ enabled: true })
+    expect((await fetch(`${withoutKey}/narrate?voice=herald&text=Hello`)).status).toBe(200)
+    expect((await fetch(`${withoutKey}/narrate?voice=herald&text=Something%20new`)).status).toBe(404)
     expect(calls).toHaveLength(0)
   })
 

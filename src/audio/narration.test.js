@@ -24,11 +24,11 @@ describe('narrator lines', () => {
 
   it('announces a monster, a natural 20 and a 1', () => {
     expect(momentLine({ kind: 'spawn', title: 'A Kobold appears!' }, game())).toMatch(/A Kobold appears!$/)
-    expect(momentLine({ kind: 'crit', heroId: 'h1', value: 20, title: 'NATURAL 20!' }, game())).toBe('A natural twenty for Sam!')
+    expect(momentLine({ kind: 'crit', heroId: 'h1', value: 20, title: 'NATURAL 20!' }, game())).toBe('A natural twenty for Keyleth!')
     expect(momentLine({ kind: 'crit', heroId: 'h1', rolls: [{ value: 20 }], title: 'Keyleth: Sun Strike!' }, game())).toBe(
-      'A natural twenty for Sam! Keyleth: Sun Strike!',
+      'A natural twenty for Keyleth!',
     )
-    expect(momentLine({ kind: 'fumble', heroId: 'h2', value: 1, title: 'Oops… a 1' }, game())).toBe('Oh no… Max rolled a one.')
+    expect(momentLine({ kind: 'fumble', heroId: 'h2', value: 1, title: 'Oops… a 1' }, game())).toBe('Oh no… Tarak rolled a one.')
   })
 
   it('reads an encounter card with its story line', () => {
@@ -54,7 +54,7 @@ describe('narrator lines', () => {
     const explored = game({ turn: { heroIndex: 0, phase: 1, round: 1, explored: true } })
     expect(narrationFor(exploring, explored, NOW)).toHaveLength(1)
     expect(narrationFor(game({ turn: { heroIndex: 0, phase: 2, round: 1 } }), game({ turn: { heroIndex: 1, phase: 0, round: 1 } }), NOW)).toEqual([
-      "Max, it's your turn. What will Tarak do?",
+      "Tarak, it's your turn. What will you do?",
     ])
     expect(narrationFor(game({ status: 'setup' }), game({ adventure: { card: { title: 'Into the Mountain' } } }), NOW)[0]).toBe(
       'The adventure begins: Into the Mountain! Heroes, enter the dungeon.',

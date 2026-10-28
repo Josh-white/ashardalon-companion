@@ -29,7 +29,11 @@ const villainSays = (villain, when) => {
 
 const pick = (list, seed = '') => list[[...String(seed)].reduce((sum, c) => sum + c.charCodeAt(0), 0) % list.length]
 const say = (voice, text) => (text ? { text, voice } : null)
-const who = (hero) => hero?.player || hero?.name || 'Someone'
+// Lines use hero names, not the players' names typed in each game, so every line
+// can be recorded once on the Pi and played back without ElevenLabs.
+const heroName = (hero) => hero?.name ?? 'the hero'
+// "Keyleth is down!" for one hero; anything longer gets one set line.
+const downLine = (text) => text.match(/^[\w' -]+ is down!/)?.[0] ?? 'The heroes are falling!'
 
 // A villain on the board whose name is in the moment's title, if any.
 const villainIn = (title, state) =>
@@ -42,9 +46,9 @@ export function momentLines(moment, state) {
   const values = moment.value != null ? [moment.value] : (moment.rolls ?? []).map((r) => r.value)
   switch (moment.kind) {
     case 'crit':
-      return [say('herald', hero ? `[excited] A natural twenty for ${who(hero)}! ${moment.title.includes(':') ? moment.title : ''}`.trim() : 'A natural twenty!')]
+      return [say('herald', `[excited] A natural twenty for ${heroName(hero)}!`)]
     case 'fumble':
-      return [say('danger', values.includes(1) ? `[sighs] Oh no… ${who(hero)} rolled a one.` : moment.title)]
+      return [say('danger', values.includes(1) ? `[sighs] Oh no… ${heroName(hero)} rolled a one.` : moment.title)]
     case 'spawn': {
       const villain = villainIn(moment.title, state)
       if (!villain) return [say('danger', `${pick(SPAWN_OPENERS, moment.title)} ${moment.title}`)]
@@ -65,11 +69,16 @@ export function momentLines(moment, state) {
     case 'defeat': {
       // A beaten villain gets its last words before the herald cheers.
       const villain = villainIn(moment.title, state)
-      return villain ? [villainSays(villain, 'fall'), say('herald', moment.title)] : [say('herald', moment.title)]
+      if (villain) return [villainSays(villain, 'fall'), say('herald', moment.title)]
+      // A hero's attack ("Keyleth: Sun Strike!") changes with every power, so it gets
+      // a set line per hero that can be recorded ahead of time.
+      return [say('herald', moment.title.includes(':') ? `[excited] ${heroName(hero)} wins the fight!` : moment.title)]
     }
     case 'down':
+      return [say('danger', downLine(moment.title))]
     case 'monster-down':
-      return [say('danger', moment.title)]
+      // The title names the attack; the detail says who went down.
+      return [say('danger', downLine(moment.detail ?? ''))]
     default:
       return []
   }
@@ -84,7 +93,7 @@ export function narrationFor(before, after, now = Date.now()) {
   if (after.status === 'playing' && before.status === 'playing') {
     const turnChanged = before.turn.heroIndex !== after.turn.heroIndex || before.turn.round !== after.turn.round
     const hero = after.heroes[after.turn.heroIndex]
-    if (turnChanged && after.turn.phase === 0 && hero) lines.push(say('narrator', `${who(hero)}, it's your turn. What will ${hero.name} do?`))
+    if (turnChanged && after.turn.phase === 0 && hero) lines.push(say('narrator', `${hero.name}, it's your turn. What will you do?`))
     if (!before.turn.explored && after.turn.explored) lines.push(say('narrator', pick(NEW_TILE, `${after.turn.round}-${after.turn.heroIndex}`)))
   }
   // An adventure's red "Read aloud" box: the whole story, not just its title.
