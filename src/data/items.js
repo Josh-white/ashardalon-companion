@@ -8,8 +8,12 @@ export const heroItems = (hero) => hero?.items ?? []
 // throw) still gives them.
 const inPlayTotal = (hero, field) => heroItems(hero).reduce((sum, item) => sum + (item.card?.inPlay ? item.card[field] ?? 0 : 0), 0)
 
+// The best of the bonuses items in play give (Rulebook p. 13: a hero gains only one attack
+// bonus and one defense bonus from items at a time).
+const inPlayBest = (hero, value) => Math.max(0, ...heroItems(hero).map((item) => (item.card?.inPlay ? value(item.card) : 0)))
+
 // Blessed Shield guards its owner too, so it counts toward the owner's own AC.
-export const itemAc = (hero) => inPlayTotal(hero, 'acBonus') + inPlayTotal(hero, 'tileAcBonus')
+export const itemAc = (hero) => inPlayBest(hero, (card) => Math.max(card.acBonus ?? 0, card.tileAcBonus ?? 0))
 export const itemSpeed = (hero) => inPlayTotal(hero, 'speedBonus')
 export const itemTrapBonus = (hero) => inPlayTotal(hero, 'trapBonus')
 
@@ -21,8 +25,10 @@ export function tileGuards(heroes, target) {
     .filter((g) => g.bonus > 0)
 }
 
-// The extra AC a hero gets from standing on a guard's tile. Bonuses from two shields don't add up.
-export const tileAcBonus = (heroes, target) => Math.max(0, ...tileGuards(heroes, target).map((g) => g.bonus))
+// The extra AC a hero gets from standing on a guard's tile. Bonuses from two shields don't
+// add up, and it's a defense bonus from an item, so it replaces the hero's own item bonus
+// when it's bigger instead of adding to it.
+export const tileAcBonus = (heroes, target) => Math.max(0, ...tileGuards(heroes, target).map((g) => g.bonus - itemAc(target)))
 
 // Does a range-limited bonus count for a monster at this distance?
 // distance: 'adjacent', 'within1' (on the tile or one next to it) or 'far'.
@@ -37,7 +43,8 @@ export function itemAttackBonus(hero, distance, stayed = false) {
   for (const item of heroItems(hero)) {
     const card = item.card
     if (!card?.inPlay) continue
-    if (card.attackBonus && inRange(card.attackRange, distance)) bonus += card.attackBonus + (stayed ? card.stillBonus ?? 0 : 0)
+    // Only the best attack bonus counts; damage bonuses still add up.
+    if (card.attackBonus && inRange(card.attackRange, distance)) bonus = Math.max(bonus, card.attackBonus + (stayed ? card.stillBonus ?? 0 : 0))
     if (card.damageBonus && inRange(card.damageRange, distance)) damage += card.damageBonus
     // "A natural 19 or 20 deals +1 damage" works at any range.
     if (card.critFrom) crits.push(card.critFrom)

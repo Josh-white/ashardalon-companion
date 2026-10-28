@@ -1363,10 +1363,11 @@ function drawTreasure(state, action) {
   })
 }
 
-// Before the adventure, each hero draws one treasure card to start with.
-function dealStartingTreasure(state, cards, random) {
-  if (!Array.isArray(cards) || cards.length === 0) return state
-  let next = { ...state, treasureDeck: buildDeck(cards, random) }
+// Before the adventure, each hero draws one treasure card to start with (Rulebook p. 13).
+// A campaign's later adventures pass a deck without the cards the heroes already hold.
+function dealStartingTreasure(state, cards, random, deck = null) {
+  if (!deck && (!Array.isArray(cards) || cards.length === 0)) return state
+  let next = { ...state, treasureDeck: deck ?? buildDeck(cards, random) }
   const found = []
   for (const hero of next.heroes) {
     const drawn = drawTop(next.treasureDeck, random)
@@ -1983,11 +1984,12 @@ function reduce(state, action) {
       if (card?.startEncounters?.length > 0) started = { ...started, encounterAdds: [...card.startEncounters] }
       const names = heroes.map((h) => h.name).join(', ')
       const begun = withLog(started, card ? `${card.title} begins with ${names}.` : `The adventure begins with ${names}.`)
-      // Later campaign adventures: the heroes still have their treasure, so nobody draws a starting card,
-      // and the cards they hold stay out of the treasure deck.
+      // Later campaign adventures: the heroes still have their treasure, so those cards stay out
+      // of the deck. Everyone still draws a starting card, as every adventure begins.
       if (state.campaign) {
         const held = started.heroes.flatMap((h) => (h.items ?? []).map((i) => i.cardId))
-        return { ...begun, treasureDeck: buildDeckWithout(action.treasureCards, held, action.random) }
+        const deck = buildDeckWithout(action.treasureCards, held, action.random)
+        return deck ? dealStartingTreasure(begun, action.treasureCards, action.random, deck) : begun
       }
       return dealStartingTreasure(begun, action.treasureCards, action.random)
     }

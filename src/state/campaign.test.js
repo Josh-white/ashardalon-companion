@@ -130,8 +130,11 @@ describe('Campaign Against the Clans', () => {
     const again = state.heroes[0]
     expect(again).toMatchObject({ key: 'fighter', level: 2, gold: 400, maxHp: 10, ac: 18 })
     expect(again.powers).toHaveLength(6)
-    expect(again.items).toHaveLength(1) // no new starting treasure
-    expect(state.treasureDeck.draw).not.toContain(again.items[0].cardId === 'potion' ? 'none' : again.items[0].cardId)
+    // Kept treasure, plus a new starting card from a deck without the cards the heroes hold.
+    expect(again.items).toHaveLength(2)
+    const held = state.heroes.flatMap((h) => h.items.map((i) => i.cardId))
+    const copies = (id) => cards.treasures.find((t) => t.id === id).copies
+    for (const id of new Set(held)) expect(held.filter((x) => x === id).length + state.treasureDeck.draw.filter((x) => x === id).length).toBe(copies(id))
 
     state = beatChamber(reveal(state))
     expect(state.adventure.chamber.card.id).not.toBe(first)
