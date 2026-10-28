@@ -112,6 +112,10 @@ describe('narrator endpoint', () => {
     expect(speakable('[menacing] Kneel… [laughs] or burn!', 'eleven_multilingual_v2')).toBe('Kneel… or burn!')
   })
 
+  it('spells D&D names the way they are said', () => {
+    expect(speakable('The otyugh rises. Duergar of Firestorm Peak!', 'eleven_v3')).toBe('The ot-yug rises. Dwer-gar of Firestorm Peak!')
+  })
+
   it('records every villain line ahead of time, once', async () => {
     calls = []
     const fetchSpeech = async (url, options) => {

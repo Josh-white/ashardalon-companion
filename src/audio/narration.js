@@ -98,7 +98,7 @@ export function narrationFor(before, after, now = Date.now()) {
   if (after.status === 'playing' && before.status === 'playing') {
     const turnChanged = before.turn.heroIndex !== after.turn.heroIndex || before.turn.round !== after.turn.round
     const hero = after.heroes[after.turn.heroIndex]
-    if (turnChanged && after.turn.phase === 0 && hero) lines.push(say('narrator', `${hero.name}, it's your turn. What will you do?`))
+    if (turnChanged && after.turn.phase === 0 && hero) lines.push(say('narrator', `[commanding, steady] ${hero.name}, it's your turn. What will you do?`))
     if (!before.turn.explored && after.turn.explored) lines.push(say('narrator', `${OMINOUS} ${pick(NEW_TILE, `${after.turn.round}-${after.turn.heroIndex}`)}`))
   }
   // An adventure's red "Read aloud" box: the whole story, not just its title.

@@ -51,7 +51,15 @@ const KNOWN_MODELS = ['eleven_flash_v2_5', 'eleven_v3', 'eleven_multilingual_v2'
 const VILLAIN_ROLES = new Set(['villain', ...Object.values(VILLAIN_LINES).map((v) => v.voice).filter((v) => v !== 'danger')])
 // Older models read stage directions out loud, so they're taken out for those.
 const actsTags = (model) => /^eleven_v[3-9]/.test(model)
-export const speakable = (text, model) => (actsTags(model) ? text : text.replace(/\[[^\]]*\]\s*/g, '').trim())
+// D&D names spelled the way they're said, in what ElevenLabs hears only; the screen
+// and the saved recording's name keep the real spelling.
+const SAY_AS = [
+  [/otyugh/gi, 'ot-yug'],
+  [/duergar/gi, 'dwer-gar'],
+]
+const sayAs = (text) =>
+  SAY_AS.reduce((t, [word, spoken]) => t.replace(word, (m) => (m[0] === m[0].toUpperCase() ? spoken[0].toUpperCase() + spoken.slice(1) : spoken)), text)
+export const speakable = (text, model) => sayAs(actsTags(model) ? text : text.replace(/\[[^\]]*\]\s*/g, '').trim())
 // Longer than any line the projector sends (the longest adventure story is
 // about 750 characters); a guard against running up the bill.
 export const MAX_TEXT = 1200
