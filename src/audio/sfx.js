@@ -1,15 +1,19 @@
 import { useEffect, useRef } from 'react'
+import { HERO_TEMPLATES } from '../data/heroes.js'
 import { audioContext } from './soundSetting.js'
 import { loadSamples, playSample, sampleMs } from './samples.js'
 
 // The 3D die lands this long after a roll's moment starts (ROLL_MS in Die3D.jsx).
 export const DIE_LANDS_MS = 900
+// After the die lands, sounds take turns: the next starts this long after the last
+// began, or sooner if the last one is shorter.
+const STEP_MS = 650
 // A device that reconnects shouldn't replay the sound of a moment that's over.
 const STALE_MS = 3000
 
 // How long each sound lasts, so the narrator knows when it can talk.
 const LENGTH_MS = {
-  dice: 850,
+  dice: 800,
   land: 250,
   clang: 900,
   whoosh: 450,
@@ -26,6 +30,19 @@ const LENGTH_MS = {
   down: 1900,
   chime: 900,
   tile: 4300,
+  fire: 900,
+  frost: 900,
+  zap: 800,
+  boom: 900,
+  arcane: 800,
+  holy: 1000,
+  psychic: 1000,
+  arrow: 600,
+  fizzle: 600,
+  hurt: 450,
+  'hurt-big': 600,
+  'hurt-small': 350,
+  'hurt-snake': 450,
   bear: 2000,
   hiss: 1500,
   bow: 900,
@@ -81,6 +98,39 @@ const MONSTER_VOICES = {
   gauth: 'gauth',
 }
 
+// The sound a power makes as it's cast, from words in its name, or failing that from
+// the hero who used it (Heskan's powers are magic, Quinn's are holy). Null for a plain
+// weapon swing, which keeps the sword clang.
+const SPELL_WORDS = [
+  ['fire', /flam|fire|burn|scorch|breath|blaze/],
+  ['frost', /frost|ice\b|icy|cold|freez/],
+  ['zap', /lightning|shock|spark/],
+  ['boom', /thunder/],
+  ['psychic', /fear|hypno|daze|dread|mind/],
+  ['holy', /holy|sacred|smite|divine|radiant|righteous|hymn|blade barrier|bless/],
+  ['arcane', /missile|spectral|arcane|magic|force|ray\b/],
+  ['arrow', /shot|arrow|bow\b|sling/],
+]
+const HERO_SPELLS = { wizard: 'arcane', cleric: 'holy' }
+
+export function spellKind(title = '') {
+  // A hero attack's title is "Hero: Power name!".
+  const [heroName, power = ''] = title.split(': ')
+  const lower = power.toLowerCase()
+  const match = SPELL_WORDS.find(([, words]) => words.test(lower))
+  if (match) return match[0]
+  const hero = HERO_TEMPLATES.find((h) => h.name === heroName)
+  return HERO_SPELLS[hero?.key] ?? null
+}
+
+// How a monster yelps when it's hit: big ones grunt low, small ones squeak, snakes hiss.
+const HURT_SIZES = {
+  bear: 'hurt-big', smasher: 'hurt-big', otyugh: 'hurt-big', dragon: 'hurt-big', devil: 'hurt-big', warhorn: 'hurt-big',
+  kobold: 'hurt-small', dragonlord: 'hurt-small', gibber: 'hurt-small', grell: 'hurt-small',
+  hiss: 'hurt-snake',
+}
+export const hurtSound = (name) => HURT_SIZES[monsterVoice(name)] ?? 'hurt'
+
 export function monsterVoice(title = '') {
   const lower = title.toLowerCase()
   const name = Object.keys(MONSTER_VOICES).find((n) => lower.includes(n))
@@ -94,26 +144,41 @@ export function momentSounds(moment) {
   const rolls = moment.rolls ?? (moment.value != null ? [{ value: moment.value }] : [])
   const values = rolls.map((r) => r.value)
 
+  // The die rolls on its own; everything else waits until it lands, then plays one
+  // sound after another (each starts once the last one's main hit is over).
+  const sounds = [['dice', 0]]
+  let next = DIE_LANDS_MS
+  const then = (sound) => {
+    sounds.push([sound, next])
+    next += Math.min(LENGTH_MS[sound], STEP_MS)
+  }
+
   // Monster, trap and encounter attacks roll against heroes; a hero's attack rolls
   // against labeled monsters.
   if (rolls.some((r) => r.heroId && !r.label)) {
-    const hit = rolls.some((r) => r.hit)
-    const sounds = [['growl', 0], ['dice', 150], [hit ? 'thud' : 'whoosh', DIE_LANDS_MS]]
-    if (moment.kind === 'monster-down') sounds.push(['down', DIE_LANDS_MS + 500])
+    then(rolls.some((r) => r.hit) ? 'thud' : 'whoosh')
+    if (moment.kind === 'monster-down') then('down')
     return sounds
   }
 
   if (rolls.length > 0) {
     const anyHit = rolls.some((r) => r.hit)
     const attack = rolls.some((r) => r.hit != null)
-    let result = 'land'
-    if (values.includes(20)) result = 'fanfare'
-    else if (attack && anyHit) result = 'clang'
-    else if (values.includes(1)) result = 'trombone'
-    else if (attack) result = 'whoosh'
-    const sounds = [['dice', 0], [result, DIE_LANDS_MS]]
-    // A defeated monster (or an unlocked door) gets a little victory tune after the hit.
-    if (moment.kind === 'defeat') sounds.push(['victory', DIE_LANDS_MS + (result === 'land' ? 200 : 600)])
+    const spell = attack ? spellKind(moment.title) : null
+    if (values.includes(20)) then('fanfare')
+    // A power cast at a monster makes its own sound once the die has landed.
+    if (spell) then(spell)
+    if (!values.includes(20)) {
+      if (attack && anyHit) {
+        if (!spell) then('clang')
+      } else if (values.includes(1)) then('trombone')
+      else if (attack) then(spell ? 'fizzle' : 'whoosh')
+      else then('land')
+    }
+    // Each monster that was hit (up to two) yelps.
+    for (const row of rolls.filter((r) => r.hit && r.label).slice(0, 2)) then(hurtSound(row.label))
+    // A defeated monster (or an unlocked door) gets a little victory tune at the end.
+    if (moment.kind === 'defeat') then('victory')
     return sounds
   }
 
@@ -369,11 +434,18 @@ export const NOTE = (n) => 440 * Math.pow(2, (n - 69) / 12) // MIDI note number 
 export const SOUNDS = {
   // The d20 rattling across the table: clicks that slow down and get quieter.
   dice(ctx, at, out) {
-    let t = at
-    for (let i = 0; i < 9; i++) {
-      burst(ctx, out, { at: t, freq: 2500 + Math.random() * 2500, q: 4, peak: 0.8 * (1 - i / 11), decay: 0.03 })
-      t += 0.04 + i * 0.012 + Math.random() * 0.03
-    }
+    // One die: a few bounces, each closer together and softer, then a little wobble
+    // as it settles. The same pitch throughout, because it's the same die.
+    const pitch = 0.9 + Math.random() * 0.2
+    const bounces = [0, 0.2, 0.36, 0.48, 0.57, 0.63]
+    bounces.forEach((when, i) => {
+      const t = at + when
+      const loud = 0.9 * Math.pow(0.72, i)
+      tone(ctx, out, { at: t, freq: 950 * pitch, slideTo: 700 * pitch, type: 'triangle', peak: loud * 0.5, decay: 0.05 })
+      burst(ctx, out, { at: t, freq: 3200 * pitch, q: 5, peak: loud, decay: 0.025 })
+      tone(ctx, out, { at: t, freq: 160, slideTo: 90, peak: loud * 0.35, decay: 0.06 })
+    })
+    for (let i = 0; i < 4; i++) burst(ctx, out, { at: at + 0.67 + i * 0.035, freq: 3200 * pitch, q: 5, peak: 0.08 / (i + 1), decay: 0.015 })
   },
 
   // The die settling on its number.
@@ -710,6 +782,84 @@ export const SOUNDS = {
     const crash = at + hits * 0.045 + 0.05
     burst(ctx, out, { at: crash, type: 'highpass', freq: 5000, peak: 0.45, decay: 0.6 })
     tone(ctx, out, { at: crash, freq: 110, slideTo: 70, peak: 0.6, decay: 0.3 })
+  },
+
+  // --- Powers cast at a monster, and the monster getting hit.
+
+  // Fire: a roaring whoosh with crackles.
+  fire(ctx, at, out) {
+    burst(ctx, out, { at, freq: 300, q: 0.8, peak: 0.7, attack: 0.15, decay: 0.6, sweepTo: 2000 })
+    burst(ctx, out, { at, type: 'lowpass', freq: 600, peak: 0.5, attack: 0.1, decay: 0.6 })
+    for (let i = 0; i < 8; i++) burst(ctx, out, { at: at + 0.1 + Math.random() * 0.6, freq: 3000, q: 3, peak: 0.25, decay: 0.02 })
+  },
+
+  // Frost: glassy chimes falling, then a crack of ice.
+  frost(ctx, at, out) {
+    ;[96, 91, 88, 84].forEach((note, i) => tone(ctx, out, { at: at + i * 0.07, freq: NOTE(note), type: 'triangle', peak: 0.15, decay: 0.4 }))
+    burst(ctx, out, { at: at + 0.35, type: 'highpass', freq: 3500, peak: 0.3, decay: 0.08 })
+    burst(ctx, out, { at: at + 0.1, type: 'highpass', freq: 6000, peak: 0.12, attack: 0.1, decay: 0.5 })
+  },
+
+  // Lightning: a buzzing electric crackle.
+  zap(ctx, at, out) {
+    for (let i = 0; i < 6; i++) {
+      const t = at + i * 0.09
+      tone(ctx, out, { at: t, freq: 1800 + Math.random() * 1200, slideTo: 200, type: 'sawtooth', peak: 0.08, decay: 0.07, filter: 5000 })
+      burst(ctx, out, { at: t, type: 'highpass', freq: 2500, peak: 0.22, decay: 0.04 })
+    }
+    tone(ctx, out, { at, freq: 60, type: 'square', peak: 0.12, attack: 0.05, decay: 0.55, filter: 800 })
+  },
+
+  // Thunder: a deep boom with a shock wave.
+  boom(ctx, at, out) {
+    tone(ctx, out, { at, freq: 120, slideTo: 40, peak: 0.8, decay: 0.6 })
+    burst(ctx, out, { at, type: 'lowpass', freq: 900, peak: 0.9, decay: 0.7 })
+    burst(ctx, out, { at, type: 'highpass', freq: 2000, peak: 0.3, decay: 0.08 })
+  },
+
+  // Magic missiles and other arcane blasts: a rising "pew" and a sparkle.
+  arcane(ctx, at, out) {
+    for (const t of [0, 0.12, 0.24]) tone(ctx, out, { at: at + t, freq: 500, slideTo: 1800, type: 'square', peak: 0.25, decay: 0.12, filter: 3500 })
+    for (let i = 0; i < 6; i++) tone(ctx, out, { at: at + 0.35 + i * 0.05, freq: NOTE(93 + (i % 3) * 4), peak: 0.2, decay: 0.15 })
+  },
+
+  // Holy power: a bright bell over a shining chord.
+  holy(ctx, at, out) {
+    for (const note of [72, 76, 79, 84]) pad(ctx, out, { at, freq: NOTE(note), length: 0.9, peak: 0.08, type: 'sine', tremolo: 6 })
+    tone(ctx, out, { at: at + 0.05, freq: NOTE(84), peak: 0.25, decay: 0.8 })
+    tone(ctx, out, { at: at + 0.05, freq: NOTE(84) * 2.76, peak: 0.08, decay: 0.5 })
+  },
+
+  // Fear and hypnosis: a woozy, wobbling tone.
+  psychic(ctx, at, out) {
+    for (const [freq, tremolo] of [[300, 7], [450, 5]]) pad(ctx, out, { at, freq, length: 0.9, peak: 0.15, type: 'sine', tremolo })
+    tone(ctx, out, { at, freq: 900, slideTo: 250, type: 'triangle', peak: 0.15, attack: 0.1, decay: 0.8 })
+  },
+
+  // A ranged shot: bowstring and arrow.
+  arrow(ctx, at, out) {
+    tone(ctx, out, { at, freq: 200, slideTo: 160, type: 'sawtooth', peak: 0.25, decay: 0.25, filter: 1500 })
+    burst(ctx, out, { at: at + 0.1, freq: 1500, q: 3, peak: 0.6, attack: 0.15, decay: 0.12, sweepTo: 4000 })
+  },
+
+  // A spell that misses: it sputters out.
+  fizzle(ctx, at, out) {
+    burst(ctx, out, { at, freq: 2500, q: 1, peak: 1, attack: 0.02, decay: 0.45, sweepTo: 400 })
+    tone(ctx, out, { at, freq: 700, slideTo: 150, type: 'triangle', peak: 0.3, decay: 0.4 })
+  },
+
+  // A monster that's been hit.
+  hurt(ctx, at, out) {
+    snarl(ctx, out, at, 0.4, 160, { rise: 1.6, fall: 0.7, rattle: 35, cutoff: 1800, peak: 0.3, breath: 0.1 })
+  },
+  'hurt-big'(ctx, at, out) {
+    snarl(ctx, out, at, 0.55, 90, { rise: 1.5, fall: 0.6, rattle: 25, cutoff: 1300, peak: 0.4, breath: 0.15 })
+  },
+  'hurt-small'(ctx, at, out) {
+    snarl(ctx, out, at, 0.3, 330, { rise: 1.5, fall: 0.8, rattle: 50, cutoff: 3000, peak: 0.25, breath: 0.05 })
+  },
+  'hurt-snake'(ctx, at, out) {
+    burst(ctx, out, { at, type: 'highpass', freq: 4000, peak: 0.45, attack: 0.03, decay: 0.4 })
   },
 }
 
