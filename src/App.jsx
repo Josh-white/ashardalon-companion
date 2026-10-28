@@ -15,9 +15,10 @@ import { TilesLeft } from './components/Tiles.jsx'
 import TurnGuide, { ExtraAttacks } from './components/TurnGuide.jsx'
 import UndoButton from './components/UndoButton.jsx'
 import { MusicToggle, SoundToggle, TapForSound } from './components/SoundToggle.jsx'
+import { BoardSwitch, BoardToast, SoundBoard } from './components/SoundBoard.jsx'
 import { Button, HpBar } from './components/ui.jsx'
 import { heroArt } from './data/art.js'
-import { useSoundEffects } from './audio/sfx.js'
+import { useBoardSounds, useSoundEffects } from './audio/sfx.js'
 import { useMusic } from './audio/music.js'
 import { useAudioLocked, useMusicSetting, useSoundSetting } from './audio/soundSetting.js'
 import { HERO_COLORS } from './data/heroes.js'
@@ -30,7 +31,7 @@ import { useDeviceId, useSeat, useSharedGame } from './state/useSharedGame.js'
 const TABLE_SEAT = 'table'
 const PROJECTOR_SEAT = 'projector'
 
-function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitchSeat, sound }) {
+function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitchSeat, sound, boardSwitch }) {
   const newGame = () => {
     if (window.confirm('Start a new game? This clears the current one for everyone.')) dispatch({ type: 'NEW_GAME' })
   }
@@ -63,6 +64,7 @@ function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitchSeat, s
           <UndoButton undo={undo} depth={undoDepth} dispatch={dispatch} className="max-w-56 truncate" />
           <SoundToggle on={sound.on} setOn={sound.setOn} className="text-sm" />
           <MusicToggle on={sound.musicOn} setOn={sound.setMusicOn} soundOn={sound.on} className="text-sm" />
+          {boardSwitch && <BoardSwitch state={state} dispatch={dispatch} className="text-sm" />}
           <Button variant="ghost" className="text-sm" onClick={onSwitchSeat}>
             {seatLabel} · switch
           </Button>
@@ -245,6 +247,7 @@ export default function App() {
   const sound = { on: soundOn, setOn: setSoundOn, musicOn, setMusicOn }
   const soundLocked = useAudioLocked(soundOn)
   useSoundEffects(state, soundOn)
+  useBoardSounds(state, soundOn)
   useMusic(state, soundOn && musicOn)
 
   if (!state) return <Connecting />
@@ -305,7 +308,8 @@ export default function App() {
     return (
       <main className="min-h-screen bg-zinc-950 text-zinc-100">
         {banners}
-        <ProjectorView state={state} onSwitchSeat={() => setSeat(null)} sound={sound} />
+        <ProjectorView state={state} dispatch={dispatch} onSwitchSeat={() => setSeat(null)} sound={sound} />
+        <BoardToast state={state} big />
         <MomentOverlay moment={state.moment} heroes={state.heroes} big />
         <TapForSound locked={soundLocked} big />
         {(state.status === 'won' || state.status === 'lost') && <Recap state={state} big />}
@@ -332,10 +336,13 @@ export default function App() {
         seatLabel={myHero ? myHero.name : 'Table'}
         onSwitchSeat={() => setSeat(null)}
         sound={sound}
+        boardSwitch={!myHero}
       />
       {myHero ? <HeroView state={state} dispatch={dispatch} hero={myHero} /> : <TableView state={state} dispatch={dispatch} />}
       <MomentOverlay moment={state.moment} heroes={state.heroes} />
       <TapForSound locked={soundLocked} />
+      <SoundBoard state={state} dispatch={dispatch} who={myHero ? myHero.id : 'table'} />
+      {!myHero && <BoardToast state={state} />}
       {(state.status === 'won' || state.status === 'lost') && <Recap state={state} dispatch={dispatch} />}
     </main>
   )

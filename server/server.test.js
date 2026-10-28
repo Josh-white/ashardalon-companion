@@ -108,6 +108,26 @@ describe('sync server', () => {
     son.socket.close()
   })
 
+  it('keeps sound board taps out of Undo, so Undo never hands out more taps', async () => {
+    const dad = connect(server.port)
+    await dad.nextState(1)
+    dad.send({ type: 'START_GAME', heroes: [createHero(HERO_TEMPLATES[0])] })
+    const started = await dad.nextState(2)
+    const heroId = started.heroes[0].id
+    dad.send({ type: 'ADJUST_HP', heroId, amount: -1 })
+    await dad.nextState(3)
+    dad.send({ type: 'PLAY_BOARD_SOUND', who: heroId, sound: 'fanfare' })
+    const played = await dad.nextState(4)
+    expect(played.soundboard.used[heroId]).toBe(1)
+    expect(dad.messages[3].undo).toBe(dad.messages[2].undo)
+
+    dad.send({ type: 'UNDO', depth: dad.messages[3].undoDepth })
+    const undone = await dad.nextState(5)
+    expect(undone.heroes[0].hp).toBe(HERO_TEMPLATES[0].maxHp)
+    expect(undone.soundboard.used[heroId]).toBe(1)
+    dad.socket.close()
+  })
+
   it('ignores messages that are not actions', async () => {
     const client = connect(server.port)
     await client.nextState(1)

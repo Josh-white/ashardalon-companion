@@ -42,7 +42,12 @@ const LENGTH_MS = {
   drake: 1300,
   dragon: 2800,
   gauth: 1900,
+  drumroll: 2900,
+  applause: 2200,
 }
+
+// How long a sound lasts, in ms.
+export const soundMs = (sound) => LENGTH_MS[sound] ?? 0
 
 // How long a new tile's music lasts, so background music can make room for it.
 export const TILE_MUSIC_MS = LENGTH_MS.tile
@@ -160,6 +165,15 @@ export function useSoundEffects(state, on) {
     last.current = state
     if (on && tileRevealed(before, state)) play([['tile', 0]])
   }, [state, on])
+}
+
+// Plays a sound someone tapped on the sound board (state.soundboard.last).
+export function useBoardSounds(state, on) {
+  const last = state?.soundboard?.last
+  useEffect(() => {
+    if (!on || !last || Date.now() - last.at > STALE_MS || !SOUNDS[last.sound]) return
+    play([[last.sound, 0]])
+  }, [last?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 // Every sound goes through one gentle compressor so a fanfare on top of a clang
@@ -536,6 +550,29 @@ export const SOUNDS = {
   gauth(ctx, at, out) {
     for (const [freq, tremolo] of [[220, 6], [233, 7.5], [330, 4]]) pad(ctx, out, { at, freq, length: 1.8, peak: 0.12, type: 'sine', tremolo })
     tone(ctx, out, { at: at + 0.2, freq: 900, slideTo: 1800, peak: 0.08, attack: 0.6, decay: 0.8 })
+  },
+
+  // Sound board: a snare roll that builds, then a cymbal crash.
+  drumroll(ctx, at, out) {
+    const hits = 34
+    for (let i = 0; i < hits; i++) {
+      const t = at + i * 0.045
+      burst(ctx, out, { at: t, type: 'highpass', freq: 1800, peak: 0.15 + 0.5 * (i / hits), decay: 0.05 })
+      tone(ctx, out, { at: t, freq: 190, slideTo: 150, peak: 0.08 + 0.2 * (i / hits), decay: 0.05 })
+    }
+    const crash = at + hits * 0.045 + 0.05
+    burst(ctx, out, { at: crash, type: 'highpass', freq: 5000, peak: 0.7, decay: 1.2 })
+    tone(ctx, out, { at: crash, freq: 80, slideTo: 45, peak: 0.8, decay: 0.4 })
+  },
+
+  // Sound board: a crowd clapping, many quick claps that fade out.
+  applause(ctx, at, out) {
+    for (let i = 0; i < 70; i++) {
+      const t = at + Math.random() * 1.8
+      const fade = 1 - (t - at) / 2.2
+      burst(ctx, out, { at: t, freq: 1000 + Math.random() * 1800, q: 1.5, peak: 0.45 * fade, decay: 0.04 + Math.random() * 0.03 })
+    }
+    tone(ctx, out, { at, freq: NOTE(84), peak: 0.04, decay: 0.3 })
   },
 }
 
