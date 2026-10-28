@@ -341,7 +341,7 @@ export default function App() {
       {myHero ? <HeroView state={state} dispatch={dispatch} hero={myHero} /> : <TableView state={state} dispatch={dispatch} />}
       <MomentOverlay moment={state.moment} heroes={state.heroes} />
       <TapForSound locked={soundLocked} />
-      <SoundBoard state={state} dispatch={dispatch} who={myHero ? myHero.id : 'table'} />
+      <SoundBoard state={state} dispatch={dispatch} who={myHero ? myHero.id : 'table'} testCopy={Boolean(instance)} />
       {!myHero && <BoardToast state={state} />}
       {(state.status === 'won' || state.status === 'lost') && <Recap state={state} dispatch={dispatch} />}
     </main>

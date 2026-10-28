@@ -5,3 +5,5 @@ dist
 .env.*
 cards/cards.json
 cards/art
+cards/sounds
+cards/sound-downloads

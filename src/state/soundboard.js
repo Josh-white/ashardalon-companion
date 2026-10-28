@@ -2,14 +2,14 @@
 // limits live here, on the Pi, so no iPad can get around them.
 
 export const BOARD_SOUNDS = [
-  { key: 'fanfare', emoji: '🎺', label: 'Fanfare' },
-  { key: 'trombone', emoji: '😢', label: 'Sad trombone' },
-  { key: 'dragon', emoji: '🐉', label: 'Dragon roar' },
-  { key: 'clang', emoji: '⚔️', label: 'Sword clang' },
-  { key: 'thunder', emoji: '⚡', label: 'Thunder' },
-  { key: 'coins', emoji: '💰', label: 'Treasure' },
-  { key: 'drumroll', emoji: '🥁', label: 'Drumroll' },
-  { key: 'applause', emoji: '👏', label: 'Applause' },
+  { key: 'tada', emoji: '🎉', label: 'Ta-da!' },
+  { key: 'wahwah', emoji: '😢', label: 'Wah-wah' },
+  { key: 'dundun', emoji: '😱', label: 'Dun dun DUNNN' },
+  { key: 'rimshot', emoji: '🥁', label: 'Ba-dum-tss' },
+  { key: 'crickets', emoji: '🦗', label: 'Crickets' },
+  { key: 'laugh', emoji: '😈', label: 'Evil laugh' },
+  { key: 'swords', emoji: '⚔️', label: 'Sword fight' },
+  { key: 'drumroll', emoji: '🪘', label: 'Drumroll' },
 ]
 
 // Each player's taps per hero turn; everyone's count starts over when the turn passes.
@@ -20,7 +20,8 @@ export const COOLDOWN_MS = 8000
 // talk over the game's own sounds and the narrator.
 export const MOMENT_QUIET_MS = 5000
 
-const EMPTY = { off: false, last: null, turn: null, used: {} }
+// unlimited is for the test copy only (the server refuses it elsewhere), to try sounds quickly.
+const EMPTY = { off: false, unlimited: false, last: null, turn: null, used: {} }
 
 export const boardOf = (state) => ({ ...EMPTY, ...state.soundboard })
 const turnKey = (state) => `${state.turn.round}-${state.turn.heroIndex}`
@@ -38,6 +39,7 @@ export function boardStatus(state, who, now = Date.now()) {
   const usesLeft = Math.max(0, USES_PER_TURN - (usedThisTurn(state)[who] ?? 0))
   if (state.status !== 'playing') return { ok: false, usesLeft, reason: 'The sound board opens in the dungeon.' }
   if (board.off) return { ok: false, usesLeft, reason: 'The sound board is switched off.' }
+  if (board.unlimited) return { ok: true, usesLeft: USES_PER_TURN }
   if (usesLeft === 0) return { ok: false, usesLeft, reason: 'All used up! You get more next turn.' }
   const waits = [board.last && board.last.at + COOLDOWN_MS - now, state.moment && state.moment.at + MOMENT_QUIET_MS - now]
   const waitMs = Math.max(0, ...waits.filter((w) => w > 0))
@@ -63,3 +65,4 @@ export function playBoardSound(state, { who, sound }, now = Date.now()) {
 }
 
 export const setBoardOff = (state, off) => ({ ...state, soundboard: { ...boardOf(state), off: Boolean(off) } })
+export const setBoardUnlimited = (state, unlimited) => ({ ...state, soundboard: { ...boardOf(state), unlimited: Boolean(unlimited) } })
