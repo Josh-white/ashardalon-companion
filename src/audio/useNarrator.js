@@ -155,9 +155,10 @@ export function useNarrator(on) {
   }, [on])
 
   // Says lines straight away (the intro screen's line, say), outside any game change.
+  // force: say them even where this screen's sound is off by default.
   const say = useCallback(
-    (lines) => {
-      if (!available || !on) return
+    (lines, { force = false } = {}) => {
+      if (!available || (!on && !force)) return
       queue.current = [...queue.current, ...lines].slice(-MAX_QUEUE)
       const ctx = audioContext()
       if (ctx) for (const line of lines) fetchLine(ctx, line).catch(() => {})

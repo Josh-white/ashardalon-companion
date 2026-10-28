@@ -258,7 +258,7 @@ export default function App() {
   const soundLocked = useAudioLocked(soundOn) || narrator.blocked
   const [showIntro, finishIntro] = useIntro()
 
-  if (showIntro) return <DragonIntro projector={seat === PROJECTOR_SEAT} soundOn={soundOn} say={narrator.say} onDone={finishIntro} />
+  if (showIntro) return <DragonIntro projector={seat === PROJECTOR_SEAT} say={narrator.say} onDone={finishIntro} />
   if (!state) return <Connecting />
 
   const banners = (

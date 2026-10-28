@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { INTRO_LINE } from '../audio/narration.js'
 import { play } from '../audio/sfx.js'
-import { unlockAudio } from '../audio/soundSetting.js'
+import { soundSwitchedOff, unlockAudio } from '../audio/soundSetting.js'
 import { artUrl, useArt } from '../state/useArt.js'
 
 const SEEN_KEY = 'ashardalon-companion/intro-seen'
@@ -40,9 +40,9 @@ const EMBERS = Array.from({ length: 14 }, (_, i) => ({
 }))
 
 // "The Dragon Wakes": the first thing every screen shows. Ashardalon's eyes open in
-// the dark while embers drift up; a tap wakes him (roar and the narrator, where this
-// screen's sound is on) and lets the browser play sound from then on.
-export default function DragonIntro({ projector = false, soundOn, say, onDone }) {
+// the dark while embers drift up; a tap wakes him (roar and the narrator, unless this
+// screen's sound is switched off) and lets the browser play sound from then on.
+export default function DragonIntro({ projector = false, say, onDone }) {
   const art = useArt()
   const dragon = artUrl(art, 'villain-ashardalon')
   const [waking, setWaking] = useState(false)
@@ -59,9 +59,13 @@ export default function DragonIntro({ projector = false, soundOn, say, onDone })
     // A second tap skips the rest.
     if (waking) return onDone()
     unlockAudio()
-    if (soundOn) {
+    // The roar is the point of the intro, so it plays on every screen that's opened,
+    // iPads too (they're quiet by default only so a game doesn't echo across them),
+    // unless someone switched this one's sound off. Before a seat is picked (a new
+    // device, or cleared settings) there's no setting yet, so it plays then too.
+    if (!soundSwitchedOff()) {
       play([['roar', 0], ['fire', 400]])
-      say?.([INTRO_LINE])
+      say?.([INTRO_LINE], { force: true })
     }
     setWaking(true)
     timer.current = setTimeout(onDone, WAKE_MS)
