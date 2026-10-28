@@ -71,3 +71,23 @@ export const attackItems = (hero) => heroItems(hero).filter((item) => item.card?
 export function itemsWithUse(heroes, use) {
   return heroes.flatMap((hero) => heroItems(hero).filter((item) => !item.used && item.card?.use === use).map((item) => ({ hero, item })))
 }
+
+// How far an attack bonus reaches: no range beats "within 1 tile" beats "next to you".
+const REACH = { adjacent: 0, within1: 1 }
+const reach = (range) => REACH[range] ?? 2
+const bestAttack = (card) => (card.attackBonus ?? 0) + (card.stillBonus ?? 0)
+
+// The item a hero already holds that makes a new treasure card add nothing for them
+// (Rulebook p. 13: only the best attack bonus and the best defense bonus count), or null.
+// Only cards whose every bonus is an attack or AC bonus can be wasted like that.
+export function betterItem(hero, card) {
+  if (!card?.inPlay || card.damageBonus || card.critFrom || card.speedBonus || card.trapBonus || card.tileAcBonus || card.attack) return null
+  if (!card.attackBonus && !card.acBonus) return null
+  const held = heroItems(hero).filter((item) => item.card?.inPlay)
+  const attackCover = card.attackBonus
+    ? held.find((item) => item.card.attackBonus && bestAttack(item.card) >= bestAttack(card) && reach(item.card.attackRange) >= reach(card.attackRange))
+    : true
+  const acCover = card.acBonus ? held.find((item) => Math.max(item.card.acBonus ?? 0, item.card.tileAcBonus ?? 0) >= card.acBonus) : true
+  if (!attackCover || !acCover) return null
+  return [attackCover, acCover].find((cover) => cover !== true) ?? null
+}

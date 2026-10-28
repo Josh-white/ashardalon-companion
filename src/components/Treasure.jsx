@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { CONDITIONS, HERO_COLORS } from '../data/heroes.js'
-import { heroItems, tileGuards } from '../data/items.js'
+import { betterItem, heroItems, tileGuards } from '../data/items.js'
 import { foes } from '../state/game.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
@@ -46,9 +46,19 @@ function TreasureCardFace({ card }) {
 // The treasure card just drawn. The hero who found it keeps it, or hands it to someone.
 function TreasureCard({ state, dispatch }) {
   const { treasure } = state
-  const [ownerId, setOwnerId] = useState(treasure.heroId)
   const finder = state.heroes.find((h) => h.id === treasure.heroId)
+  const covered = new Map(state.heroes.map((h) => [h.id, betterItem(h, treasure.card)]))
+  // Only the best attack and AC bonus from items count, so a card the finder can't use
+  // starts out going to the next hero (in turn order) it would help.
+  const [ownerId, setOwnerId] = useState(() => {
+    if (!covered.get(treasure.heroId)) return treasure.heroId
+    const start = state.heroes.findIndex((h) => h.id === treasure.heroId)
+    const order = [...state.heroes.slice(start + 1), ...state.heroes.slice(0, start)]
+    return order.find((h) => !covered.get(h.id))?.id ?? treasure.heroId
+  })
   const owner = state.heroes.find((h) => h.id === ownerId) ?? finder
+  const wasted = state.heroes.filter((h) => covered.get(h.id))
+  const helped = state.heroes.filter((h) => !covered.get(h.id))
   return (
     <div className="space-y-4 rounded-2xl border-2 border-amber-500 bg-amber-950/40 p-4">
       <TreasureCardFace card={treasure.card} />
@@ -56,6 +66,20 @@ function TreasureCard({ state, dispatch }) {
         {finder?.name} found it. Who keeps it?
       </p>
       <HeroChoice heroes={state.heroes} chosen={[owner.id]} onToggle={setOwnerId} />
+      {wasted.length > 0 && (
+        <div className="space-y-1 rounded-xl bg-zinc-950/60 p-3 text-zinc-200">
+          {wasted.map((h) => (
+            <p key={h.id}>
+              ⚠️ {h.name}&apos;s {covered.get(h.id).name} is already as good or better, so this won&apos;t add anything for {h.name}.
+            </p>
+          ))}
+          <p className="text-amber-200">
+            {helped.length > 0
+              ? `💡 It would help ${helped.map((h) => h.name).join(', ')}. A hero only gets their best item bonus for attack and for AC.`
+              : 'Nobody would gain from it, since a hero only gets their best item bonus for attack and for AC.'}
+          </p>
+        </div>
+      )}
       <Button variant="gold" className="w-full py-3 text-lg" onClick={() => dispatch({ type: 'KEEP_TREASURE', heroId: owner.id })}>
         {treasure.card.inPlay ? `Put it in play for ${owner.name}` : `${owner.name} keeps it`}
       </Button>
