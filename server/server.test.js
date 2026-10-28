@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -184,6 +184,28 @@ describe('loading a saved game', () => {
     expect(loadSavedGame(join(dir, 'missing.json'))).toBe(initialState)
     writeFileSync(join(dir, 'broken.json'), '{not json')
     expect(loadSavedGame(join(dir, 'broken.json'))).toBe(initialState)
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('moves an unusable save aside instead of losing it', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ashardalon-'))
+    const file = join(dir, 'game.json')
+    writeFileSync(file, JSON.stringify({ version: 999, xp: 5 }))
+    expect(loadSavedGame(file)).toBe(initialState)
+    expect(existsSync(file)).toBe(false)
+    const kept = readdirSync(dir).filter((name) => name.startsWith('game-unreadable-'))
+    expect(kept).toHaveLength(1)
+    expect(JSON.parse(readFileSync(join(dir, kept[0]), 'utf8')).xp).toBe(5)
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('keeps a saved game, filling in anything new', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ashardalon-'))
+    const file = join(dir, 'game.json')
+    const older = { ...initialState, xp: 4 }
+    delete older.stats
+    writeFileSync(file, JSON.stringify(older))
+    expect(loadSavedGame(file)).toMatchObject({ xp: 4, stats: {} })
     rmSync(dir, { recursive: true, force: true })
   })
 })
