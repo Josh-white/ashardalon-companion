@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { duckMusic } from '../audio/music.js'
 import { INTRO_LINE } from '../audio/narration.js'
 import { play } from '../audio/sfx.js'
-import { unlockAudio, voicePlayer, voiceSpeaking } from '../audio/soundSetting.js'
+import { unlockAudio } from '../audio/soundSetting.js'
 import { artUrl, useArt } from '../state/useArt.js'
 
 const SEEN_KEY = 'ashardalon-companion/intro-seen'
@@ -34,21 +33,6 @@ export function useIntro() {
   return [!seen, done]
 }
 
-// The narrator's line has to start inside the tap, or an iPad won't play it.
-function speakIntro() {
-  const player = voicePlayer()
-  if (!player || voiceSpeaking()) return
-  voiceSpeaking(true)
-  const done = () => voiceSpeaking(false)
-  player.onended = done
-  player.onerror = done
-  player.onplaying = () => {
-    if (Number.isFinite(player.duration)) duckMusic(player.duration * 1000)
-  }
-  player.src = `/narrate?voice=${INTRO_LINE.voice}&text=${encodeURIComponent(INTRO_LINE.text)}`
-  player.play().catch(done)
-}
-
 const EMBERS = Array.from({ length: 14 }, (_, i) => ({
   left: `${(i * 37 + 11) % 97}%`,
   delay: `${(i * 1.7) % 7}s`,
@@ -58,7 +42,7 @@ const EMBERS = Array.from({ length: 14 }, (_, i) => ({
 // "The Dragon Wakes": the first thing every screen shows. Ashardalon's eyes open in
 // the dark while embers drift up; a tap wakes him (roar and the narrator, where this
 // screen's sound is on) and lets the browser play sound from then on.
-export default function DragonIntro({ projector = false, soundOn, onDone }) {
+export default function DragonIntro({ projector = false, soundOn, say, onDone }) {
   const art = useArt()
   const dragon = artUrl(art, 'villain-ashardalon')
   const [waking, setWaking] = useState(false)
@@ -77,7 +61,7 @@ export default function DragonIntro({ projector = false, soundOn, onDone }) {
     unlockAudio()
     if (soundOn) {
       play([['roar', 0], ['fire', 400]])
-      speakIntro()
+      say?.([INTRO_LINE])
     }
     setWaking(true)
     timer.current = setTimeout(onDone, WAKE_MS)

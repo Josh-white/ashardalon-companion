@@ -1,16 +1,17 @@
 import { useEffect } from 'react'
 import { activeVillains } from '../state/game.js'
-import { NOTE, burst, changeSounds, output, soundMs, pad, tone } from './sfx.js'
+import { NOTE, burst, changeSounds, soundMs, pad, tone } from './sfx.js'
 import { useGameStates } from '../state/useSharedGame.js'
 import { audioContext } from './soundSetting.js'
+import { MOMENT_DUCK, holdQuiet, layer } from './mixer.js'
+import { playLoop, stopLoop } from './ambience.js'
 
 // Background music, like an RPG's: calm and eerie while exploring, drums when
-// monsters are about, darker still when a villain is on the board. It's made up as
-// it plays from a few chords and scales, so it never loops the same way twice.
+// monsters are about, darker still when a villain is on the board. A mood with an
+// ambient loop on the Pi (see ambience.js) plays that; the rest is made up as it plays
+// from a few chords and scales, so it never loops the same way twice.
 
 const VOLUME = 0.3
-// Quieter while a big moment's sound effects or a new tile's music play.
-const DUCKED = 0.06
 const FADE_S = 2.5
 // How far ahead notes are booked, and how often the booking runs.
 const LOOKAHEAD_S = 0.4
@@ -101,6 +102,9 @@ export function playStep(ctx, out, mood, step, at) {
 // The music player: one per page. Each mood gets its own volume control so a
 // change of mood can fade one out while the next fades in.
 const player = {
+  // The mood the game is in, and the one the made-up music is playing (null while a
+  // loop plays instead).
+  wanted: null,
   mood: null,
   step: 0,
   nextAt: 0,
@@ -109,6 +113,22 @@ const player = {
   moodGain: null,
 
   setMood(mood) {
+    if (mood === this.wanted) return
+    this.wanted = mood
+    const ctx = audioContext()
+    if (!ctx) return
+    if (!mood) {
+      stopLoop(ctx)
+      this.makeUp(null)
+      return
+    }
+    playLoop(ctx, mood).then((looped) => {
+      if (this.wanted === mood) this.makeUp(looped ? null : mood)
+    })
+  },
+
+  // Plays the made-up music for `mood`, or none.
+  makeUp(mood) {
     if (mood === this.mood) return
     const ctx = audioContext()
     if (!ctx) return
@@ -123,7 +143,7 @@ const player = {
     if (!this.volume) {
       this.volume = ctx.createGain()
       this.volume.gain.value = VOLUME
-      this.volume.connect(output(ctx))
+      this.volume.connect(layer(ctx, 'background'))
     }
     const gain = ctx.createGain()
     gain.gain.setValueAtTime(0.0001, ctx.currentTime)
@@ -152,19 +172,6 @@ const player = {
       this.nextAt += eighth
     }
   },
-
-  // Dips the music under a sound effect or the tile music, then brings it back.
-  duck(ms) {
-    const ctx = audioContext()
-    if (!ctx || !this.volume || ms <= 0) return
-    const g = this.volume.gain
-    const now = ctx.currentTime
-    g.cancelScheduledValues(now)
-    g.setValueAtTime(g.value, now)
-    g.linearRampToValueAtTime(DUCKED, now + 0.15)
-    g.setValueAtTime(DUCKED, now + ms / 1000)
-    g.linearRampToValueAtTime(VOLUME, now + ms / 1000 + 1.5)
-  },
 }
 
 function fadeOut(ctx, gain) {
@@ -175,7 +182,7 @@ function fadeOut(ctx, gain) {
   setTimeout(() => gain.disconnect(), FADE_S * 1000 + 500)
 }
 
-// Plays the music that fits the game while `on`, and ducks it under big moments.
+// Plays the music that fits the game while `on`, and dips it under big moments.
 export function useMusic(state, on) {
   const mood = on ? musicMood(state) : null
   useEffect(() => {
@@ -187,9 +194,6 @@ export function useMusic(state, on) {
   useGameStates((before, after) => {
     if (!on) return
     const ms = Math.max(0, ...changeSounds(before, after).map(([sound, delay]) => delay + soundMs(sound)))
-    player.duck(ms)
+    if (ms > 0) holdQuiet(audioContext(), 'moment', MOMENT_DUCK, ms)
   })
 }
-
-// Dips the music while the narrator speaks for `ms`, then brings it back.
-export const duckMusic = (ms) => player.duck(ms)
