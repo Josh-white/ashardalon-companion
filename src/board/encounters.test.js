@@ -85,4 +85,25 @@ describe('encounter targets on the virtual board', () => {
     const next = gameReducer(drawn, { type: 'RESOLVE_ENCOUNTER', random: [] })
     expect(next.traps[0].tile).toBe('t1')
   })
+
+  it('puts a monster drawn with no new tile on the closest tile with an unexplored edge (Surrounded!)', () => {
+    const { state, heroes } = game([1, -2])
+    const cards = [{ id: 'cultist', name: 'Cultist', hp: 1, ac: 14, xp: 1 }]
+    const next = gameReducer(state, { type: 'DRAW_MONSTER', heroId: heroes[0].id, cards, random: [] })
+    const monster = next.monsters.at(-1)
+    const at = next.board.tokens[monster.id]
+    expect(at).toBeTruthy()
+    // The Start tile's west side is still unexplored, and hero 1 stands on it.
+    expect(heroTile({ ...next, board: { ...next.board, tokens: { ...next.board.tokens, x: at } } }, 'x')).toBe('start')
+  })
+
+  it('puts Lurker’s Strike’s monster on the active hero’s tile', () => {
+    const { state, heroes } = game([1, -2])
+    const card = { id: 'lurker', name: "Lurker's Strike", type: 'event', text: "Attack the active Hero.\nDraw a Monster Card and place its figure on the active Hero's tile." }
+    const moved = { ...state, board: { ...state.board, tokens: { ...state.board.tokens, [heroes[0].id]: [1, -6] } } }
+    const drawing = { ...moved, encounter: { id: 'e1', cardId: 'lurker', heroId: heroes[0].id, card, attacked: true } }
+    const next = gameReducer(drawing, { type: 'DRAW_MONSTER', heroId: heroes[0].id, cards: [{ id: 'cultist', name: 'Cultist', hp: 1, ac: 14, xp: 1 }], random: [] })
+    const at = next.board.tokens[next.monsters.at(-1).id]
+    expect(heroTile({ ...next, board: { ...next.board, tokens: { ...next.board.tokens, x: at } } }, 'x')).toBe('t2')
+  })
 })
