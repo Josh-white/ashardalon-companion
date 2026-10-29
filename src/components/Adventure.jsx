@@ -1,15 +1,13 @@
 import { useState } from 'react'
 import { HERO_COLORS, hasAbility } from '../data/heroes.js'
 import { DOOR_KINDS, DOOR_UNLOCK_ROLL, FEATURE_LABELS, MAX_SURGES, MIN_SURGES, escapeBlockers, goalParts, missingFeatures, playableChambers, revealsReady, usesDoors } from '../state/adventure.js'
-import { randomNumbers, rollD20 } from '../state/random.js'
+import { randomNumbers, rollD20, shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { tileSpots } from '../state/tiles.js'
 import { TileSetup } from './Tiles.jsx'
 import { Button, Chip } from './ui.jsx'
 import { CampaignBoons } from './Campaign.jsx'
 import { VillagerList } from './Villagers.jsx'
-
-const SHUFFLE_NUMBERS = 128
 
 const heading = (adventure) => (adventure.number ? `Adventure ${adventure.number}: ${adventure.title}` : adventure.title)
 
@@ -320,7 +318,7 @@ export function RevealButtons({ state, dispatch }) {
             <Button
               key={reveal.tile}
               variant="gold"
-              onClick={() => dispatch({ type: 'ADVENTURE_REVEAL', tile: reveal.tile, cards: monsters, villains, chambers, villagerCards, random: randomNumbers(SHUFFLE_NUMBERS) })}
+              onClick={() => dispatch({ type: 'ADVENTURE_REVEAL', tile: reveal.tile, cards: monsters, villains, chambers, villagerCards, random: shuffleNumbers() })}
             >
               It's the {reveal.tile}!
             </Button>
@@ -414,7 +412,7 @@ function SpecialDoors({ special, dispatch }) {
         <Button
           key={reveal.tile}
           variant="gold"
-          onClick={() => dispatch({ type: 'ADVENTURE_REVEAL', tile: reveal.tile, door: true, cards: monsters, villains, chambers, villagerCards, random: randomNumbers(SHUFFLE_NUMBERS) })}
+          onClick={() => dispatch({ type: 'ADVENTURE_REVEAL', tile: reveal.tile, door: true, cards: monsters, villains, chambers, villagerCards, random: shuffleNumbers() })}
         >
           We opened the {reveal.tile}!
         </Button>

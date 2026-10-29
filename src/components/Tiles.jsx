@@ -1,14 +1,12 @@
 import { MAX_TILES, MIN_TILES, STARTING_TILES } from '../state/tiles.js'
-import { randomNumbers } from '../state/random.js'
+import { shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { Button } from './ui.jsx'
-
-const SHUFFLE_NUMBERS = 128
 
 // What a draw sends along, so a special tile can be revealed on the spot.
 export function useTileDraw() {
   const { monsters, villains = [], chambers = [], villagers: villagerCards = [] } = useCards()
-  return { cards: monsters, villains, chambers, villagerCards, random: randomNumbers(SHUFFLE_NUMBERS) }
+  return { cards: monsters, villains, chambers, villagerCards, random: shuffleNumbers() }
 }
 
 // What to do with the tile that was just drawn.

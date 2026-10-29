@@ -3,7 +3,7 @@ import { HERO_COLORS, XP_TO_CANCEL_ENCOUNTER } from '../data/heroes.js'
 import { heroItems, itemTrapBonus, tileAcBonus } from '../data/items.js'
 import { heroAc, reactionsFor } from '../data/powerEffects.js'
 import { ENCOUNTER_LABELS, canSpendAttack, encounterCount, phaseChecks, villainInPlay } from '../state/game.js'
-import { randomNumbers, rollD20 } from '../state/random.js'
+import { rollD20, shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { boardAnswer } from '../board/checks.js'
 import { encounterTargetIds, foeOnHeroTile } from '../board/encounters.js'
@@ -43,9 +43,6 @@ function ThiefStep({ hero, dispatch }) {
     </div>
   )
 }
-
-// Enough random numbers to shuffle the whole encounter deck.
-const SHUFFLE_NUMBERS = 128
 
 const TYPE_STYLES = {
   event: 'border-sky-700 bg-sky-950/60 text-sky-300',
@@ -328,7 +325,7 @@ function EncounterCard({ state, hero, dispatch }) {
   const [tileFromBoard, setTileFromBoard] = useState(() => card.damageIfMonsterOnTile > 0 && foeOnHeroTile(state, hero) !== null)
   const asksTile = card.damageIfMonsterOnTile > 0 && monsterOnTile === null
   const resolve = (extra = {}) =>
-    dispatch({ type: 'RESOLVE_ENCOUNTER', monsterCards, villains, random: randomNumbers(SHUFFLE_NUMBERS), monsterOnTile: monsterOnTile === true, ...extra })
+    dispatch({ type: 'RESOLVE_ENCOUNTER', monsterCards, villains, random: shuffleNumbers(), monsterOnTile: monsterOnTile === true, ...extra })
   const placesMarker = card.type === 'hazard' || card.type === 'trap'
   // Ashardalon Breathes! does nothing (and is discarded) when Ashardalon isn't in play.
   const villainHere = villainInPlay(state, card)
@@ -448,7 +445,7 @@ function EncounterCard({ state, hero, dispatch }) {
                   variant="danger"
                   className="w-full py-3 text-lg font-bold"
                   onClick={() =>
-                    dispatch({ type: 'FILTER_ENCOUNTER_MONSTERS', monsterCards, random: randomNumbers(SHUFFLE_NUMBERS) })
+                    dispatch({ type: 'FILTER_ENCOUNTER_MONSTERS', monsterCards, random: shuffleNumbers() })
                   }
                 >
                   First, stack the monster deck with {card.filterMonsters}s
@@ -524,7 +521,7 @@ export function EncounterStep({ state, hero, dispatch }) {
       <Button
         variant="danger"
         className="mt-4 w-full px-5 py-4 text-xl font-bold"
-        onClick={() => dispatch({ type: 'DRAW_ENCOUNTER', heroId: hero.id, cards: encounters, random: randomNumbers(SHUFFLE_NUMBERS) })}
+        onClick={() => dispatch({ type: 'DRAW_ENCOUNTER', heroId: hero.id, cards: encounters, random: shuffleNumbers() })}
       >
         🃏 Draw {drawn > 0 ? 'another' : 'an'} encounter card
         {left > 1 && <span className="ml-2 text-base font-normal opacity-80">({left} to draw)</span>}
@@ -754,7 +751,7 @@ export function PhaseChecks({ state, hero, phaseKey, dispatch }) {
   const [check] = phaseChecks(state, phaseKey)
   if (!check) return null
   const fill = (text) => text.replaceAll('{hero}', hero.name)
-  const answer = (yes) => dispatch({ type: 'ANSWER_CHECK', key: check.key, answer: yes, cards, random: randomNumbers(SHUFFLE_NUMBERS) })
+  const answer = (yes) => dispatch({ type: 'ANSWER_CHECK', key: check.key, answer: yes, cards, random: shuffleNumbers() })
   const board = check.ask && manualKey !== check.key ? boardAnswer(state, fill(check.ask)) : null
   return (
     <div className="mt-4 rounded-2xl border-2 border-purple-700 bg-purple-950/60 p-4">

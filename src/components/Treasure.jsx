@@ -3,13 +3,10 @@ import { CONDITIONS, HERO_COLORS } from '../data/heroes.js'
 import { betterItem, heroItems, tileGuards } from '../data/items.js'
 import { guardsOnTile } from '../board/checks.js'
 import { foes } from '../state/game.js'
-import { randomNumbers, rollD20 } from '../state/random.js'
+import { rollD20, shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { HeroChoice, MonsterChoice } from './Pickers.jsx'
 import { Button } from './ui.jsx'
-
-// Enough random numbers to shuffle the whole treasure deck.
-const SHUFFLE_NUMBERS = 128
 
 const RANGE_WORDS = { adjacent: 'next to you', within1: 'within 1 tile' }
 
@@ -110,7 +107,7 @@ export function TreasureStep({ state, dispatch, heroId = null }) {
       <Button
         variant="gold"
         className="w-full px-5 py-4 text-xl font-bold"
-        onClick={() => dispatch({ type: 'DRAW_TREASURE', cards: treasures, random: randomNumbers(SHUFFLE_NUMBERS) })}
+        onClick={() => dispatch({ type: 'DRAW_TREASURE', cards: treasures, random: shuffleNumbers() })}
       >
         💰 Draw a treasure card for {finder?.name}
       </Button>
@@ -269,7 +266,7 @@ function ItemPanel({ state, hero, item, dispatch, onClose }) {
           variant="gold"
           className="flex-1"
           disabled={!ready}
-          onClick={() => send(card.use === 'polymorph' ? { monsterId: targetId, cards: monsterCards, random: randomNumbers(SHUFFLE_NUMBERS) } : {})}
+          onClick={() => send(card.use === 'polymorph' ? { monsterId: targetId, cards: monsterCards, random: shuffleNumbers() } : {})}
         >
           Use it
         </Button>

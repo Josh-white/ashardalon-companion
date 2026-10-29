@@ -6,7 +6,7 @@ import { heroAc, reactionsFor } from '../data/powerEffects.js'
 import { activeVillains } from '../state/game.js'
 import { aliveVillagers } from '../state/adventure.js'
 import { useCards } from '../state/useCards.js'
-import { randomNumbers, rollD20 } from '../state/random.js'
+import { rollD20, shuffleNumbers } from '../state/random.js'
 import Art from './Art.jsx'
 import { MonsterControl, TileGuardQuestion } from './Treasure.jsx'
 import { DrawTileButton } from './Tiles.jsx'
@@ -23,9 +23,6 @@ function Bravery({ state, name, dispatch }) {
   ))
 }
 
-// Enough random numbers to shuffle the whole monster deck.
-const SHUFFLE_NUMBERS = 128
-
 // Draws the top card of the virtual monster deck for a hero. Hidden when the card
 // file has no monsters, so the "+ Monster" form is the way to add them instead.
 // `drawKey` makes it draw once, then say what came.
@@ -41,7 +38,7 @@ export function DrawMonsterButton({ state, heroId, dispatch, drawKey, className 
     <Button
       variant="danger"
       className={`px-5 py-3 text-lg font-bold ${className}`}
-      onClick={() => dispatch({ type: 'DRAW_MONSTER', heroId, drawKey, cards: monsters, random: randomNumbers(SHUFFLE_NUMBERS) })}
+      onClick={() => dispatch({ type: 'DRAW_MONSTER', heroId, drawKey, cards: monsters, random: shuffleNumbers() })}
     >
       {label}
       <span className="ml-2 text-sm font-normal opacity-80">
