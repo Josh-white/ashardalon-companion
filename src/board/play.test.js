@@ -132,9 +132,9 @@ describe('solo game on the virtual board', () => {
   it('lets a power move a hero on the same tile a few squares (Righteous Advance)', () => {
     let state = start()
     const [quinn, other] = state.heroes
-    state = { ...state, turn: { ...state.turn, boardMove: { heroId: quinn.id, who: 'tile', squares: 2, source: 'Righteous Advance' } } }
-    expect(gameReducer(state, { type: 'BOARD_MOVE', heroId: other.id, to: [1, 6] })).toBe(state)
-    state = gameReducer(state, { type: 'BOARD_MOVE', heroId: other.id, to: [1, 0] })
+    state = { ...state, turn: { ...state.turn, boardMove: { heroId: quinn.id, source: 'Righteous Advance', steps: [{ pick: 'heroOnTile', to: 'squares', n: 2 }] } } }
+    expect(gameReducer(state, { type: 'BOARD_MOVE', id: other.id, to: [1, 6] })).toBe(state)
+    state = gameReducer(state, { type: 'BOARD_MOVE', id: other.id, to: [1, 0] })
     expect(at(state, other.id)).toEqual([1, 0])
     expect(state.turn.boardMove).toBeNull()
   })

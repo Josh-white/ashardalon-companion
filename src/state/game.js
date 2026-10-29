@@ -20,7 +20,8 @@ import { trackStats } from './stats.js'
 import { campaignHero, campaignOutcome, campaignSurges, isCampaign, newCampaign, shopCards, shopSize } from './campaign.js'
 import { playBoardSound, setBoardOff, setBoardUnlimited } from './soundboard.js'
 import { newFirstRoll, rollFirst } from './firstRoll.js'
-import { boardMove, layTile, moveHero, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
+import { layTile, moveHero, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
+import { boardMove, queueMoves, skipBoardMove } from '../board/powerMoves.js'
 
 export const SAVE_VERSION = 1
 
@@ -837,7 +838,7 @@ function heroAttack(state, action) {
   }
 
   // On the virtual board a power that moves a hero waits for the player to pick the square.
-  if (effects.boardMove && next.board) next = { ...next, turn: { ...next.turn, boardMove: { heroId: hero.id, ...effects.boardMove, source: power.name } } }
+  if (effects.board?.after) next = queueMoves(next, hero, power, effects.board.after, { attacked: targets.map((t) => t.monsterId), hit: anyHit })
 
   // Bloodlust ends when the hero defeats a monster.
   const ending = defeated.length > 0 ? (hero.curses ?? []).filter((c) => c.card?.removeOnDefeat) : []
@@ -1017,6 +1018,7 @@ function usePower(state, action) {
     const extras = heroIds.filter((id) => id !== hero.id).map((heroId) => ({ heroId, bonus: 2, source: power.name }))
     next = { ...next, turn: { ...next.turn, bonusAttacks: [...(next.turn.bonusAttacks ?? []), ...extras] } }
   }
+  if (use.board) next = queueMoves(next, hero, power, use.board)
   return next
 }
 
@@ -1035,6 +1037,7 @@ function dodgeHit(state, action) {
   }))
   const results = last.results.map((r) => (r === row ? { ...r, dodged: true } : r))
   next = { ...next, turn: { ...next.turn, lastMonsterAttack: { ...last, results } } }
+  next = queueMoves(next, hero, power, effectsOf(power).board?.dodge)
   return withLog(next, `${hero.name} used Tumbling Escape: the attack misses!${row.miss > 0 ? ` (${row.miss} miss damage)` : ''} Put ${hero.name} on a tile within 1 tile.`)
 }
 
@@ -2082,7 +2085,14 @@ function reduce(state, action) {
       return boardMove(state, action)
 
     case 'SKIP_BOARD_MOVE':
-      return state.turn.boardMove ? { ...state, turn: { ...state.turn, boardMove: null } } : state
+      return skipBoardMove(state)
+
+    case 'START_BOARD_MOVE': {
+      // A power's "first move..." done on the board before its attack roll.
+      const hero = state.heroes.find((h) => h.id === action.heroId)
+      const power = hero?.powers.find((p) => p.id === action.powerId && !p.used)
+      return queueMoves(state, hero, power, effectsOf(power).board?.before)
+    }
 
     case 'MOVE_HERO':
       return moveHero(state, action)
