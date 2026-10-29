@@ -271,16 +271,24 @@ const FAMILY_NAME = 'Family game'
 export const MAX_GAMES = 10
 const GAME_ID = /^[a-z0-9-]{1,40}$/
 
-// The games other than the family game: [{ id, name, createdAt }]. A missing or
-// broken list means there are none yet; their save files are left alone.
+// How long a finished game stays on the Finished list, where it can be brought back.
+export const FINISHED_DAYS = 30
+const DAY_MS = 24 * 60 * 60 * 1000
+
+// The games other than the family game: { games: [{ id, name, createdAt }], finished:
+// [{ id, name, createdAt, finishedAt }] }. A missing or broken list means there are none
+// yet; their save files are left alone.
 export function loadGameList(file) {
+  const valid = (g) => GAME_ID.test(g?.id) && g.id !== FAMILY_GAME && typeof g.name === 'string'
   try {
     const list = JSON.parse(readFileSync(file, 'utf8'))
-    return Array.isArray(list) ? list.filter((g) => GAME_ID.test(g?.id) && g.id !== FAMILY_GAME && typeof g.name === 'string') : []
+    return { games: (list.games ?? []).filter(valid), finished: (list.finished ?? []).filter(valid) }
   } catch {
-    return []
+    return { games: [], finished: [] }
   }
 }
+
+const cleanName = (name) => (typeof name === 'string' ? name.trim().replace(/\s+/g, ' ').slice(0, 40) : '')
 
 // "Colton's solo!" -> "coltons-solo", made unique against the ids already used.
 export function gameIdFor(name, taken) {
@@ -322,7 +330,8 @@ export function startServer({
 } = {}) {
   const gamesDir = join(dirname(saveFile), 'games')
   const gameListFile = join(gamesDir, 'games.json')
-  let otherGames = loadGameList(gameListFile)
+  const finishedDir = join(gamesDir, 'finished')
+  let { games: otherGames, finished } = loadGameList(gameListFile)
   // Each game in memory: its state, its own Undo steps, and the ids of its latest actions
   // (so a resent one isn't applied twice). Loaded the first time a screen joins it.
   const rooms = new Map()
@@ -344,6 +353,11 @@ export function startServer({
   }
   // The family game loads straight away, as it always has.
   room(FAMILY_GAME)
+  try {
+    clearOldFinished()
+  } catch (error) {
+    console.error('Could not clear old finished games:', error.message)
+  }
   // The heroes players can pick, homebrew ones too. Read again whenever a screen loads the cards.
   setHeroTemplates(loadCards(cardsFile, exampleCardsFile).heroes)
   // Which build of the screens this server hands out. A screen that loaded an older
@@ -424,23 +438,90 @@ export function startServer({
 
   function gameList() {
     const games = [FAMILY_GAME, ...otherGames.map((g) => g.id)].map((id) => gameSummary(room(id), gameName(id), screensIn(room(id)).length))
-    return { games, max: MAX_GAMES }
+    return { games, finished: finished.map(({ id, name, finishedAt }) => ({ id, name, finishedAt })), max: MAX_GAMES, finishedDays: FINISHED_DAYS }
+  }
+
+  function saveList(games, done) {
+    writeSave(gameListFile, { games, finished: done })
+    otherGames = games
+    finished = done
+  }
+
+  // Finished games older than FINISHED_DAYS are gone for good.
+  function clearOldFinished() {
+    const cutoff = Date.now() - FINISHED_DAYS * DAY_MS
+    const old = finished.filter((g) => g.finishedAt < cutoff)
+    if (old.length === 0) return
+    for (const g of old) rmSync(join(finishedDir, `${g.id}.json`), { force: true })
+    saveList(otherGames, finished.filter((g) => !old.includes(g)))
+  }
+
+  // Moves a game to the Finished list. Its screens go to the family game.
+  function finishGame(id) {
+    const game = otherGames.find((g) => g.id === id)
+    if (!game) return
+    mkdirSync(finishedDir, { recursive: true })
+    if (existsSync(gameFile(id))) renameSync(gameFile(id), join(finishedDir, `${id}.json`))
+    saveList(otherGames.filter((g) => g !== game), [...finished, { ...game, finishedAt: Date.now() }])
+    const r = rooms.get(id)
+    rooms.delete(id)
+    const family = room(FAMILY_GAME)
+    for (const client of r ? screensIn(r) : []) {
+      client.room = family
+      if (client.readyState === client.OPEN) client.send(stateMessage(family))
+    }
+    broadcastScreens(family)
+  }
+
+  // Brings a finished game back, if there's room for it.
+  function bringBack(socket, id) {
+    const game = finished.find((g) => g.id === id)
+    if (!game) return
+    if (otherGames.length + 1 >= MAX_GAMES) {
+      socket.send(JSON.stringify({ type: 'new-game-refused', reason: 'full' }))
+      return
+    }
+    const kept = join(finishedDir, `${id}.json`)
+    if (existsSync(kept)) renameSync(kept, gameFile(id))
+    const { finishedAt, ...back } = game // eslint-disable-line no-unused-vars
+    saveList([...otherGames, back], finished.filter((g) => g !== game))
+  }
+
+  function renameGame(id, name) {
+    if (!name || !otherGames.some((g) => g.id === id)) return
+    saveList(otherGames.map((g) => (g.id === id ? { ...g, name } : g)), finished)
+    for (const r of rooms.values()) if (r.id === id) broadcast(r)
+  }
+
+  // Changes to the list of games: start, rename, finish and bring back.
+  function changeGames(socket, message) {
+    if (message.type === 'new-game') {
+      startGame(socket, message)
+      return
+    }
+    try {
+      if (message.type === 'rename-game') renameGame(message.id, cleanName(message.name))
+      if (message.type === 'finish-game') finishGame(message.id)
+      if (message.type === 'bring-back-game') bringBack(socket, message.id)
+      clearOldFinished()
+    } catch (error) {
+      console.error('Could not change the list of games:', error.message)
+    }
+    broadcastGames()
   }
   // Tells every "Which game?" screen that the list changed.
   const broadcastGames = () => broadcastRaw(JSON.stringify({ type: 'games' }))
 
   function startGame(socket, message) {
     const requestId = typeof message.requestId === 'string' ? message.requestId.slice(0, 80) : null
-    const name = typeof message.name === 'string' ? message.name.trim().replace(/\s+/g, ' ').slice(0, 40) : ''
+    const name = cleanName(message.name)
     const refuse = (reason) => socket.send(JSON.stringify({ type: 'new-game-refused', requestId, reason }))
     if (!name) return refuse('name')
     if (otherGames.length + 1 >= MAX_GAMES) return refuse('full')
-    const id = gameIdFor(name, otherGames.map((g) => g.id))
+    const id = gameIdFor(name, [...otherGames, ...finished].map((g) => g.id))
     try {
       writeSave(gameFile(id), initialState)
-      const list = [...otherGames, { id, name, createdAt: Date.now() }]
-      writeSave(gameListFile, list)
-      otherGames = list
+      saveList([...otherGames, { id, name, createdAt: Date.now() }], finished)
     } catch (error) {
       console.error('Could not start a new game:', error.message)
       return refuse('save')
@@ -476,8 +557,8 @@ export function startServer({
         }
         return
       }
-      if (message?.type === 'new-game') {
-        startGame(socket, message)
+      if (['new-game', 'rename-game', 'finish-game', 'bring-back-game'].includes(message?.type)) {
+        changeGames(socket, message)
         return
       }
       if (message?.type !== 'action' || typeof message.action?.type !== 'string') return

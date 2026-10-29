@@ -6,6 +6,7 @@ import { AreaBackdrop, AreaName } from './components/AreaBackdrop.jsx'
 import HeroCard from './components/HeroCard.jsx'
 import DragonIntro, { useIntro } from './components/Intro.jsx'
 import FirstRoll from './components/FirstRoll.jsx'
+import GamePicker, { GameBar } from './components/GamePicker.jsx'
 import MomentOverlay from './components/MomentOverlay.jsx'
 import MonsterList, { VillainList } from './components/MonsterList.jsx'
 import ProjectorView from './components/ProjectorView.jsx'
@@ -30,7 +31,7 @@ import { PHASES } from './data/phases.js'
 import { encounterCardsOutdated } from './state/game.js'
 import { randomNumbers } from './state/random.js'
 import { useCards } from './state/useCards.js'
-import { useDeviceId, useSeat, useSharedGame } from './state/useSharedGame.js'
+import { FAMILY_GAME, useDeviceId, useGameChoice, useSeat, useSharedGame } from './state/useSharedGame.js'
 
 const TABLE_SEAT = 'table'
 const PROJECTOR_SEAT = 'projector'
@@ -276,8 +277,12 @@ function Connecting() {
 }
 
 export default function App() {
-  const [seat, setSeat] = useSeat()
-  const { state, connected, dispatch, undo, undoDepth, instance, screens } = useSharedGame(seat)
+  // Which game this screen is in (null until it picks one), and whether the "Which game?" list is open.
+  const [chosenGame, setGame] = useGameChoice()
+  const [picking, setPicking] = useState(false)
+  const gameId = chosenGame ?? FAMILY_GAME
+  const [seat, setSeat] = useSeat(gameId)
+  const { state, connected, dispatch, undo, undoDepth, instance, screens, game, gamesVersion, changeGames, startGame } = useSharedGame(seat, gameId, setGame)
   const deviceId = useDeviceId()
   const cards = useCards()
   const [artOpen, setArtOpen] = useState(false)
@@ -307,10 +312,35 @@ export default function App() {
   const [showIntro, finishIntro] = useIntro()
 
   if (showIntro) return <DragonIntro projector={seat === PROJECTOR_SEAT} say={narrator.say} onDone={finishIntro} />
+
+  const gameBar = <GameBar name={game?.name} onSwitch={() => setPicking(true)} />
+  if (!chosenGame || picking) {
+    return (
+      <main className="min-h-screen bg-zinc-950 text-zinc-100">
+        {instance && (
+          <p className="bg-fuchsia-700 px-4 py-1 text-center text-sm font-bold uppercase tracking-widest text-white">
+            {instance} · not your real game
+          </p>
+        )}
+        <GamePicker
+          current={chosenGame}
+          onPick={(id) => {
+            setGame(id)
+            setPicking(false)
+          }}
+          onClose={chosenGame ? () => setPicking(false) : null}
+          startGame={startGame}
+          changeGames={changeGames}
+          gamesVersion={gamesVersion}
+        />
+      </main>
+    )
+  }
   if (!state) return <Connecting />
 
   const banners = (
     <>
+      {gameBar}
       {instance && (
         <p className="bg-fuchsia-700 px-4 py-1 text-center text-sm font-bold uppercase tracking-widest text-white">
           {instance} · not your real game

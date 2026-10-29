@@ -1,6 +1,6 @@
 # Ashardalon Companion
 
-A tablet-friendly helper for playing **Dungeons & Dragons: Wrath of Ashardalon** at the table. Every player can open it on their own iPad: a small server on the Pi keeps the one shared game and sends each change to every device right away. The game is saved on the Pi, so a refresh, a sleeping iPad, or a restart picks up where you left off.
+A tablet-friendly helper for playing **Dungeons & Dragons: Wrath of Ashardalon** at the table. Every player can open it on their own iPad: a small server on the Pi keeps the shared games and sends each change to every device in that game right away. Several games can run at once (the family game plus, say, a solo game on each boy's iPad): the "Switch game" link along the top opens the list of games, where you can start, rename or finish one. Each iPad remembers which game it's in. The game is saved on the Pi, so a refresh, a sleeping iPad, or a restart picks up where you left off.
 
 ## What it does
 

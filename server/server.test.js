@@ -1,11 +1,11 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import { HERO_TEMPLATES } from '../src/data/heroes.js'
 import { createHero, initialState } from '../src/state/game.js'
-import { byteRange, gameIdFor, listSounds, loadCards, loadGameList, loadSavedGame, MAX_GAMES, startServer } from './server.js'
+import { byteRange, gameIdFor, listSounds, loadCards, loadGameList, loadSavedGame, FINISHED_DAYS, MAX_GAMES, startServer } from './server.js'
 
 // Opens a socket and collects every state the server sends.
 function connect(port, game) {
@@ -202,7 +202,10 @@ describe('several games at once', () => {
   const open = () => startServer({ port: 0, saveFile: join(dir, 'game.json'), staticDir: dir, warmNarrator: false })
   const newGame = async (screen, name) => {
     screen.socket.send(JSON.stringify({ type: 'new-game', name, requestId: name }))
-    return screen.nextOther('game-created', 'new-game-refused')
+    const answer = await screen.nextOther('game-created', 'new-game-refused')
+    // A started game also tells every screen the list changed.
+    if (answer.type === 'game-created') await screen.nextOther('games')
+    return answer
   }
   const games = async () => (await fetch(`http://localhost:${server.port}/games.json`)).json()
 
@@ -295,7 +298,7 @@ describe('several games at once', () => {
     const son = connect(server.port)
     await dad.nextState(1)
     await son.nextState(1)
-    await newGame(dad, 'Another')
+    dad.socket.send(JSON.stringify({ type: 'new-game', name: 'Another' }))
     expect(await son.nextOther('games')).toEqual({ type: 'games' })
     dad.socket.close()
     son.socket.close()
@@ -319,11 +322,89 @@ describe('several games at once', () => {
   })
 
   it('reads a missing or broken list of games as none', () => {
-    expect(loadGameList(join(dir, 'missing.json'))).toEqual([])
+    const none = { games: [], finished: [] }
+    expect(loadGameList(join(dir, 'missing.json'))).toEqual(none)
     writeFileSync(join(dir, 'list.json'), '{oops')
-    expect(loadGameList(join(dir, 'list.json'))).toEqual([])
-    writeFileSync(join(dir, 'list.json'), JSON.stringify([{ id: 'ok', name: 'OK' }, { id: '../bad', name: 'x' }, { id: 'family', name: 'x' }]))
-    expect(loadGameList(join(dir, 'list.json'))).toEqual([{ id: 'ok', name: 'OK' }])
+    expect(loadGameList(join(dir, 'list.json'))).toEqual(none)
+    writeFileSync(join(dir, 'list.json'), JSON.stringify({ games: [{ id: 'ok', name: 'OK' }, { id: '../bad', name: 'x' }, { id: 'family', name: 'x' }] }))
+    expect(loadGameList(join(dir, 'list.json'))).toEqual({ games: [{ id: 'ok', name: 'OK' }], finished: [] })
+  })
+
+  it('renames a game for everyone in it', async () => {
+    const dad = connect(server.port)
+    await dad.nextState(1)
+    await newGame(dad, 'Solo')
+    const colton = connect(server.port, 'solo')
+    await colton.nextState(1)
+    dad.socket.send(JSON.stringify({ type: 'rename-game', id: 'solo', name: '  Colton  vs the dragon ' }))
+    await colton.nextState(2)
+    expect(colton.messages[1].game).toEqual({ id: 'solo', name: 'Colton vs the dragon' })
+    // The family game keeps its name.
+    dad.socket.send(JSON.stringify({ type: 'rename-game', id: 'family', name: 'Nope' }))
+    await dad.nextOther('games')
+    expect((await games()).games.map((g) => g.name)).toEqual(['Family game', 'Colton vs the dragon'])
+    dad.socket.close()
+    colton.socket.close()
+  })
+
+  it('moves a finished game to the Finished list, sends its screens to the family game, and can bring it back', async () => {
+    const dad = connect(server.port)
+    await dad.nextState(1)
+    await newGame(dad, 'Solo')
+    const colton = connect(server.port, 'solo')
+    await colton.nextState(1)
+    colton.send({ type: 'START_GAME', heroes: [createHero(HERO_TEMPLATES[1])] })
+    await colton.nextState(2)
+
+    dad.socket.send(JSON.stringify({ type: 'finish-game', id: 'solo' }))
+    await colton.nextState(3)
+    expect(colton.messages[2].game.id).toBe('family')
+    let listed = await games()
+    expect(listed.games.map((g) => g.id)).toEqual(['family'])
+    expect(listed.finished).toMatchObject([{ id: 'solo', name: 'Solo' }])
+    expect(existsSync(join(dir, 'games', 'finished', 'solo.json'))).toBe(true)
+    expect(existsSync(join(dir, 'games', 'solo.json'))).toBe(false)
+    // The family game itself can't be finished.
+    dad.socket.send(JSON.stringify({ type: 'finish-game', id: 'family' }))
+    await dad.nextOther('games')
+
+    dad.socket.send(JSON.stringify({ type: 'bring-back-game', id: 'solo' }))
+    await dad.nextOther('games')
+    listed = await games()
+    expect(listed.games.map((g) => g.id)).toEqual(['family', 'solo'])
+    expect(listed.games[1].status).toBe('playing')
+    expect(listed.finished).toEqual([])
+    dad.socket.close()
+    colton.socket.close()
+  })
+
+  it('forgets finished games after a while', async () => {
+    await server.close()
+    mkdirSync(join(dir, 'games', 'finished'), { recursive: true })
+    writeFileSync(join(dir, 'games', 'finished', 'old.json'), JSON.stringify(initialState))
+    writeFileSync(join(dir, 'games', 'finished', 'new.json'), JSON.stringify(initialState))
+    const long = Date.now() - (FINISHED_DAYS + 1) * 24 * 60 * 60 * 1000
+    writeFileSync(
+      join(dir, 'games', 'games.json'),
+      JSON.stringify({ games: [], finished: [{ id: 'old', name: 'Old', finishedAt: long }, { id: 'new', name: 'New', finishedAt: Date.now() }] }),
+    )
+    server = await open()
+    expect((await games()).finished.map((g) => g.id)).toEqual(['new'])
+    expect(existsSync(join(dir, 'games', 'finished', 'old.json'))).toBe(false)
+    expect(existsSync(join(dir, 'games', 'finished', 'new.json'))).toBe(true)
+  })
+
+  it('counts only games still being played toward the limit', async () => {
+    const dad = connect(server.port)
+    await dad.nextState(1)
+    for (let i = 1; i < MAX_GAMES; i++) await newGame(dad, `Game ${i}`)
+    dad.socket.send(JSON.stringify({ type: 'finish-game', id: 'game-1' }))
+    await dad.nextOther('games')
+    expect((await newGame(dad, 'Fresh')).type).toBe('game-created')
+    // Now it's full again, so game 1 can't come back yet.
+    dad.socket.send(JSON.stringify({ type: 'bring-back-game', id: 'game-1' }))
+    expect(await dad.nextOther('new-game-refused')).toMatchObject({ reason: 'full' })
+    dad.socket.close()
   })
 })
 
