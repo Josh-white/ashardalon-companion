@@ -9,8 +9,6 @@ export const DEFAULT_RULES = {
   cutCorners: false,
 }
 
-const DIAGONALS = [['N', 'E'], ['E', 'S'], ['S', 'W'], ['W', 'N']]
-
 // Can a figure step from one square to the one next to it, corners included?
 export function canStep(grid, a, b, rules = DEFAULT_RULES) {
   const dx = b[0] - a[0]
