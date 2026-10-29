@@ -76,7 +76,7 @@ To update after pulling new changes: `git pull && docker compose up -d --build`.
 
 ## Back up the saved game
 
-`scripts/backup-game.sh` copies the saved game out of the app into `~/ashardalon-backups` and keeps the newest 14 copies. It skips a copy when nothing changed, so a quiet week doesn't push out older saves. It also backs up your card files, which live only on the Pi: a dated copy of `cards/cards.json` in `~/ashardalon-backups/cards` whenever it changes (newest 14 kept), plus one up-to-date copy of `cards/art` and `cards/sounds`. To run it every night at 3:15, add it to cron on the Pi:
+`scripts/backup-game.sh` copies the saved games out of the app into `~/ashardalon-backups` and keeps the newest 14 copies of each. The family game's copies go straight in that folder; every other game (a solo game, say) gets its own folder, `~/ashardalon-backups/games/<game>/`. It skips a copy when nothing changed, so a quiet week doesn't push out older saves. It also backs up your card files, which live only on the Pi: a dated copy of `cards/cards.json` in `~/ashardalon-backups/cards` whenever it changes (newest 14 kept), plus one up-to-date copy of `cards/art` and `cards/sounds`. To run it every night at 3:15, add it to cron on the Pi:
 
 ```sh
 mkdir -p ~/ashardalon-backups
@@ -90,7 +90,7 @@ scripts/restore-game.sh                                         # lists the back
 scripts/restore-game.sh ~/ashardalon-backups/game-2026-10-27-031500.json
 ```
 
-The restore saves the current game first (as a `-before-restore` copy), so it can be undone, then restarts the app with the backup. A backup from an older version of the app is upgraded when it loads; one from a newer version is refused until the app is updated. For the test copy, put `CONTAINER=ashardalon-test BACKUP_DIR=~/ashardalon-test-backups` in front of either command.
+For a game other than the family game, put `GAME=<game>` in front, using the name of its backup folder: `GAME=coltons-solo scripts/restore-game.sh`. The restore saves the current game first (as a `-before-restore` copy), so it can be undone, then restarts the app with the backup. A backup from an older version of the app is upgraded when it loads; one from a newer version is refused until the app is updated. For the test copy, put `CONTAINER=ashardalon-test BACKUP_DIR=~/ashardalon-test-backups` in front of either command.
 
 ## A test copy
 

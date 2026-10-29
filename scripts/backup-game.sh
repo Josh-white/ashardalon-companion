@@ -1,7 +1,7 @@
 #!/bin/sh
-# Copies the saved game out of the app's container into a backup folder on the
-# Pi, and keeps the newest few copies. Run it by hand or nightly from cron (see
-# the README). It only reads the game, so it is safe while people are playing.
+# Copies the saved games out of the app's container into a backup folder on the
+# Pi, and keeps the newest few copies of each. Run it by hand or nightly from cron
+# (see the README). It only reads the games, so it is safe while people are playing.
 #
 #   CONTAINER   which copy to back up (default: ashardalon-companion, the real game)
 #   BACKUP_DIR  where the copies go (default: ~/ashardalon-backups)
@@ -42,29 +42,50 @@ fi
 if docker cp "$CONTAINER:/data/narration" "$BACKUP_DIR/" 2>/dev/null; then
   echo "$(date '+%F %T') Narrator recordings: $(ls "$BACKUP_DIR/narration" | wc -l) files."
 fi
-temp="$BACKUP_DIR/.incoming.json"
-trap 'rm -f "$temp"' EXIT
+# Backs up one saved game: copies it from $1 into the folder $2 as game-<date>.json,
+# skipping a copy when nothing changed, and keeps the newest $KEEP there.
+backup_save() {
+  src=$1 dest=$2 label=$3
+  mkdir -p "$dest"
+  # Skip a copy when nothing changed since the last one, so a week without
+  # game night doesn't push the older saves out.
+  latest=$(ls -1 "$dest"/game-*.json 2>/dev/null | tail -n 1 || true)
+  if [ -n "$latest" ] && cmp -s "$src" "$latest"; then
+    echo "$(date '+%F %T') $label: no change since $(basename "$latest")."
+    return
+  fi
+  name="game-$(date '+%Y-%m-%d-%H%M%S').json"
+  cp "$src" "$dest/$name"
+  echo "$(date '+%F %T') $label: saved $name"
+  # Keep the newest $KEEP copies. The names sort by date.
+  ls -1 "$dest"/game-*.json | head -n "-$KEEP" | while read -r old; do
+    rm -f "$old"
+    echo "$(date '+%F %T') $label: removed $(basename "$old")"
+  done
+}
 
+incoming="$BACKUP_DIR/.incoming"
+trap 'rm -rf "$incoming"' EXIT
+rm -rf "$incoming"
+mkdir -p "$incoming"
+
+# The family game stays in game.json, with its backups straight in $BACKUP_DIR.
 # docker cp works whether the container is running or stopped.
-if ! docker cp "$CONTAINER:/data/game.json" "$temp" 2>/dev/null; then
-  echo "$(date '+%F %T') No saved game in $CONTAINER yet, nothing to back up."
-  exit 0
+if docker cp "$CONTAINER:/data/game.json" "$incoming/game.json" 2>/dev/null; then
+  backup_save "$incoming/game.json" "$BACKUP_DIR" "Family game"
+else
+  echo "$(date '+%F %T') No family game in $CONTAINER yet, nothing to back up."
 fi
 
-# Skip a copy when nothing changed since the last one, so a week without
-# game night doesn't push the older saves out.
-latest=$(ls -1 "$BACKUP_DIR"/game-*.json 2>/dev/null | tail -n 1 || true)
-if [ -n "$latest" ] && cmp -s "$temp" "$latest"; then
-  echo "$(date '+%F %T') No change since $(basename "$latest")."
-  exit 0
+# Every other game (solo games and the like) is in the games folder. Each gets its
+# own folder of backups, $BACKUP_DIR/games/<game>/, next to a copy of the list of games.
+if docker cp "$CONTAINER:/data/games" "$incoming/" 2>/dev/null; then
+  mkdir -p "$BACKUP_DIR/games"
+  [ -f "$incoming/games/games.json" ] && cp "$incoming/games/games.json" "$BACKUP_DIR/games/games.json"
+  for save in "$incoming"/games/*.json; do
+    [ -f "$save" ] || continue
+    game=$(basename "$save" .json)
+    case $game in games | *-unreadable-*) continue ;; esac
+    backup_save "$save" "$BACKUP_DIR/games/$game" "$game"
+  done
 fi
-
-name="game-$(date '+%Y-%m-%d-%H%M%S').json"
-mv "$temp" "$BACKUP_DIR/$name"
-echo "$(date '+%F %T') Saved $name"
-
-# Keep the newest $KEEP copies. The names sort by date.
-ls -1 "$BACKUP_DIR"/game-*.json | head -n "-$KEEP" | while read -r old; do
-  rm -f "$old"
-  echo "$(date '+%F %T') Removed $(basename "$old")"
-done

@@ -5,20 +5,27 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import { HERO_TEMPLATES } from '../src/data/heroes.js'
 import { createHero, initialState } from '../src/state/game.js'
-import { byteRange, listSounds, loadCards, loadSavedGame, startServer } from './server.js'
+import { byteRange, gameIdFor, listSounds, loadCards, loadGameList, loadSavedGame, MAX_GAMES, startServer } from './server.js'
 
 // Opens a socket and collects every state the server sends.
-function connect(port) {
-  const socket = new WebSocket(`ws://localhost:${port}/ws`)
+function connect(port, game) {
+  const socket = new WebSocket(`ws://localhost:${port}/ws${game ? `?game=${game}` : ''}`)
   const states = []
   const messages = []
   const waiters = []
   const screens = []
+  const other = []
   socket.on('message', (raw) => {
     const message = JSON.parse(raw)
     // Which screens are open comes on its own, whenever that changes.
     if (message.type === 'screens') {
       screens.push(message.seats)
+      return
+    }
+    // News about the list of games, and answers to starting one.
+    if (['games', 'game-created', 'new-game-refused'].includes(message.type)) {
+      other.push(message)
+      waiters.splice(0).forEach((resolve) => resolve())
       return
     }
     messages.push(message)
@@ -31,7 +38,18 @@ function connect(port) {
       check()
     })
   const send = (action) => socket.send(JSON.stringify({ type: 'action', action }))
-  return { socket, nextState, send, messages, screens }
+  const nextOther = (...types) =>
+    new Promise((resolve) => {
+      const check = () => {
+        const found = other.find((m) => types.includes(m.type))
+        if (found) {
+          other.splice(other.indexOf(found), 1)
+          resolve(found)
+        } else waiters.push(check)
+      }
+      check()
+    })
+  return { socket, nextState, send, messages, screens, nextOther }
 }
 
 const until = async (check) => {
@@ -175,6 +193,137 @@ describe('sync server', () => {
     client.send({ type: 'ADJUST_XP', amount: 2 })
     expect((await client.nextState(2)).xp).toBe(2)
     client.socket.close()
+  })
+})
+
+describe('several games at once', () => {
+  let dir
+  let server
+  const open = () => startServer({ port: 0, saveFile: join(dir, 'game.json'), staticDir: dir, warmNarrator: false })
+  const newGame = async (screen, name) => {
+    screen.socket.send(JSON.stringify({ type: 'new-game', name, requestId: name }))
+    return screen.nextOther('game-created', 'new-game-refused')
+  }
+  const games = async () => (await fetch(`http://localhost:${server.port}/games.json`)).json()
+
+  beforeEach(async () => {
+    dir = mkdtempSync(join(tmpdir(), 'ashardalon-'))
+    server = await open()
+  })
+
+  afterEach(async () => {
+    await server.close()
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('puts a screen with no game, or a game that is gone, in the family game', async () => {
+    const plain = connect(server.port)
+    const lost = connect(server.port, 'nobody-here')
+    await plain.nextState(1)
+    await lost.nextState(1)
+    expect(plain.messages[0].game).toEqual({ id: 'family', name: 'Family game' })
+    expect(lost.messages[0].game.id).toBe('family')
+    plain.socket.close()
+    lost.socket.close()
+  })
+
+  it('keeps each game, its Undo and its screens apart', async () => {
+    const dad = connect(server.port)
+    await dad.nextState(1)
+    const created = await newGame(dad, "Colton's solo")
+    expect(created).toMatchObject({ type: 'game-created', id: 'coltons-solo', name: "Colton's solo", requestId: "Colton's solo" })
+
+    const colton = connect(server.port, 'coltons-solo')
+    await colton.nextState(1)
+    expect(colton.messages[0].game).toEqual({ id: 'coltons-solo', name: "Colton's solo" })
+
+    colton.send({ type: 'START_GAME', heroes: [createHero(HERO_TEMPLATES[1])] })
+    const solo = await colton.nextState(2)
+    expect(solo.status).toBe('playing')
+    expect(colton.messages[1].undo).toBe('Starting the game')
+
+    // The family screen heard nothing about it, and its game and Undo are untouched.
+    await new Promise((r) => setTimeout(r, 100))
+    expect(dad.messages).toHaveLength(1)
+    expect(dad.messages[0].state.status).toBe('setup')
+
+    dad.send({ type: 'START_GAME', heroes: [createHero(HERO_TEMPLATES[0]), createHero(HERO_TEMPLATES[2])] })
+    expect((await dad.nextState(2)).heroes).toHaveLength(2)
+    expect(colton.messages).toHaveLength(2)
+
+    // Undo in the solo game only steps back the solo game.
+    colton.send({ type: 'UNDO', depth: 1 })
+    expect((await colton.nextState(3)).status).toBe('setup')
+    expect(dad.messages).toHaveLength(2)
+
+    // Each game has its own save file.
+    expect(JSON.parse(readFileSync(join(dir, 'game.json'), 'utf8')).heroes).toHaveLength(2)
+    expect(JSON.parse(readFileSync(join(dir, 'games', 'coltons-solo.json'), 'utf8')).status).toBe('setup')
+    dad.socket.close()
+    colton.socket.close()
+  })
+
+  it('lists the games, and keeps them after a restart', async () => {
+    const dad = connect(server.port)
+    await dad.nextState(1)
+    await newGame(dad, 'Solo run')
+    const colton = connect(server.port, 'solo-run')
+    await colton.nextState(1)
+    colton.send({ type: 'START_GAME', heroes: [createHero(HERO_TEMPLATES[3])] })
+    await colton.nextState(2)
+
+    const listed = await games()
+    expect(listed.max).toBe(MAX_GAMES)
+    expect(listed.games.map((g) => [g.id, g.name, g.status])).toEqual([
+      ['family', 'Family game', 'setup'],
+      ['solo-run', 'Solo run', 'playing'],
+    ])
+    expect(listed.games[1].heroes).toEqual([HERO_TEMPLATES[3].name])
+    expect(listed.games[1].screens).toBe(1)
+    dad.socket.close()
+    colton.socket.close()
+
+    await server.close()
+    server = await open()
+    const again = connect(server.port, 'solo-run')
+    expect((await again.nextState(1)).heroes[0].name).toBe(HERO_TEMPLATES[3].name)
+    again.socket.close()
+  })
+
+  it('tells every screen when a game is started', async () => {
+    const dad = connect(server.port)
+    const son = connect(server.port)
+    await dad.nextState(1)
+    await son.nextState(1)
+    await newGame(dad, 'Another')
+    expect(await son.nextOther('games')).toEqual({ type: 'games' })
+    dad.socket.close()
+    son.socket.close()
+  })
+
+  it('turns away a game with no name, and more than the limit', async () => {
+    const dad = connect(server.port)
+    await dad.nextState(1)
+    expect(await newGame(dad, '   ')).toMatchObject({ type: 'new-game-refused', reason: 'name' })
+    for (let i = 1; i < MAX_GAMES; i++) expect((await newGame(dad, `Game ${i}`)).type).toBe('game-created')
+    expect(await newGame(dad, 'One too many')).toMatchObject({ type: 'new-game-refused', reason: 'full' })
+    expect((await games()).games).toHaveLength(MAX_GAMES)
+    dad.socket.close()
+  })
+
+  it('makes a short, unique id from the name', () => {
+    expect(gameIdFor("Colton's Solo!", [])).toBe('coltons-solo')
+    expect(gameIdFor('Solo', ['solo'])).toBe('solo-2')
+    expect(gameIdFor('Family', [])).toBe('family-2')
+    expect(gameIdFor('🐉', [])).toBe('game')
+  })
+
+  it('reads a missing or broken list of games as none', () => {
+    expect(loadGameList(join(dir, 'missing.json'))).toEqual([])
+    writeFileSync(join(dir, 'list.json'), '{oops')
+    expect(loadGameList(join(dir, 'list.json'))).toEqual([])
+    writeFileSync(join(dir, 'list.json'), JSON.stringify([{ id: 'ok', name: 'OK' }, { id: '../bad', name: 'x' }, { id: 'family', name: 'x' }]))
+    expect(loadGameList(join(dir, 'list.json'))).toEqual([{ id: 'ok', name: 'OK' }])
   })
 })
 

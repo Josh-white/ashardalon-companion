@@ -1,5 +1,7 @@
-// Serves the built app and keeps the one shared game. Every iPad connects over
-// a WebSocket, sends actions, and receives the new state after each change.
+// Serves the built app and keeps the shared games. Every iPad connects over a
+// WebSocket to one game, sends actions, and receives that game's new state after
+// each change. The family game is saved in game.json as it always was; any other
+// game is saved in games/<id>.json, listed in games/games.json.
 import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { createServer } from 'node:http'
@@ -262,6 +264,44 @@ function serveStatic(staticDir, req, res) {
   createReadStream(file).pipe(res)
 }
 
+// The family game is always there. Other games are started from the "Which game?" screen.
+export const FAMILY_GAME = 'family'
+const FAMILY_NAME = 'Family game'
+// How many games can be kept at once, the family game included.
+export const MAX_GAMES = 10
+const GAME_ID = /^[a-z0-9-]{1,40}$/
+
+// The games other than the family game: [{ id, name, createdAt }]. A missing or
+// broken list means there are none yet; their save files are left alone.
+export function loadGameList(file) {
+  try {
+    const list = JSON.parse(readFileSync(file, 'utf8'))
+    return Array.isArray(list) ? list.filter((g) => GAME_ID.test(g?.id) && g.id !== FAMILY_GAME && typeof g.name === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+// "Colton's solo!" -> "coltons-solo", made unique against the ids already used.
+export function gameIdFor(name, taken) {
+  const base = name.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'game'
+  let id = base
+  for (let n = 2; id === FAMILY_GAME || taken.includes(id); n++) id = `${base}-${n}`
+  return id
+}
+
+// What the "Which game?" screen shows about a game.
+const gameSummary = (room, name, screens) => ({
+  id: room.id,
+  name,
+  status: room.state.status,
+  heroes: room.state.heroes.map((h) => h.name),
+  adventure: room.state.adventure?.card?.name ?? room.state.adventure?.name ?? null,
+  board: Boolean(room.state.board),
+  updatedAt: room.updatedAt,
+  screens,
+})
+
 const SEEN_LIMIT = 500
 const NOT_UNDOABLE = new Set(['ROLL_DIE', 'ATTACH_MONSTER_CARDS', 'UPDATE_ENCOUNTER_CARDS', 'CLAIM_HERO', 'RELEASE_HERO', 'SET_LOBBY_PLAYER', 'SET_LOBBY_PICK', 'SET_LOBBY_READY', 'PLAY_BOARD_SOUND', 'SET_SOUNDBOARD_OFF', 'SET_SOUNDBOARD_UNLIMITED', 'FIRST_ROLL_DONE'])
 
@@ -280,18 +320,36 @@ export function startServer({
   // ELEVENLABS_WARM_UP=off skips recording the villain lines on start (to try voices cheaply).
   warmNarrator = process.env.ELEVENLABS_WARM_UP !== 'off',
 } = {}) {
-  let state = loadSavedGame(saveFile)
+  const gamesDir = join(dirname(saveFile), 'games')
+  const gameListFile = join(gamesDir, 'games.json')
+  let otherGames = loadGameList(gameListFile)
+  // Each game in memory: its state, its own Undo steps, and the ids of its latest actions
+  // (so a resent one isn't applied twice). Loaded the first time a screen joins it.
+  const rooms = new Map()
+  const gameFile = (id) => (id === FAMILY_GAME ? saveFile : join(gamesDir, `${id}.json`))
+  const gameName = (id) => (id === FAMILY_GAME ? FAMILY_NAME : otherGames.find((g) => g.id === id)?.name)
+  const isGame = (id) => id === FAMILY_GAME || otherGames.some((g) => g.id === id)
+  function room(id) {
+    if (!rooms.has(id)) {
+      const file = gameFile(id)
+      let updatedAt = null
+      try {
+        updatedAt = statSync(file).mtimeMs
+      } catch {
+        // Not saved yet.
+      }
+      rooms.set(id, { id, file, state: loadSavedGame(file), history: [], seenActions: new Set(), updatedAt })
+    }
+    return rooms.get(id)
+  }
+  // The family game loads straight away, as it always has.
+  room(FAMILY_GAME)
   // The heroes players can pick, homebrew ones too. Read again whenever a screen loads the cards.
   setHeroTemplates(loadCards(cardsFile, exampleCardsFile).heroes)
   // Which build of the screens this server hands out. A screen that loaded an older
   // build reloads itself when it sees a new one, so an update reaches the iPads.
   const indexFile = join(staticDir, 'index.html')
   const build = existsSync(indexFile) ? createHash('sha1').update(readFileSync(indexFile)).digest('hex').slice(0, 12) : null
-  // Earlier versions of the game, newest last, each with what changed after it.
-  const history = []
-  // The ids of the latest actions, so a resent one isn't applied twice.
-  const seenActions = new Set()
-
   const server = createServer((req, res) => {
     if (req.url === '/health') {
       res.writeHead(200, { 'Content-Type': 'text/plain' }).end('ok')
@@ -327,34 +385,81 @@ export function startServer({
       handleArt(artDir, req, res, () => broadcastRaw(JSON.stringify({ type: 'art' })))
       return
     }
+    if (req.url === '/games.json') {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(gameList()))
+      return
+    }
     if (narrator.handle(req, res)) return
     serveStatic(staticDir, req, res)
   })
 
   const wss = new WebSocketServer({ server, path: '/ws' })
+  const screensIn = (r) => [...wss.clients].filter((c) => c.room === r)
 
-  const stateMessage = () =>
+  const stateMessage = (r) =>
     // `now` lets each screen tell how old a moment is by the Pi's clock, not its own.
-    JSON.stringify({ type: 'state', state, undo: history.at(-1)?.label ?? null, undoDepth: history.length, instance, build, now: Date.now() })
+    JSON.stringify({
+      type: 'state',
+      state: r.state,
+      game: { id: r.id, name: gameName(r.id) },
+      undo: r.history.at(-1)?.label ?? null,
+      undoDepth: r.history.length,
+      instance,
+      build,
+      now: Date.now(),
+    })
 
-  function broadcastRaw(message) {
-    for (const client of wss.clients) {
+  function broadcastRaw(message, clients = wss.clients) {
+    for (const client of clients) {
       if (client.readyState === client.OPEN) client.send(message)
     }
   }
-  const broadcast = () => broadcastRaw(stateMessage())
+  const broadcast = (r) => broadcastRaw(stateMessage(r), screensIn(r))
 
-  // Which seats have a screen open right now, so a table screen knows whether the
-  // projector is there to play the sound.
-  const screensMessage = () =>
-    JSON.stringify({ type: 'screens', seats: [...new Set([...wss.clients].map((c) => c.seat).filter(Boolean))].sort() })
-  const broadcastScreens = () => broadcastRaw(screensMessage())
+  // Which seats have a screen open in a game right now, so a table screen knows
+  // whether the projector is there to play the sound.
+  const screensMessage = (r) =>
+    JSON.stringify({ type: 'screens', seats: [...new Set(screensIn(r).map((c) => c.seat).filter(Boolean))].sort() })
+  const broadcastScreens = (r) => broadcastRaw(screensMessage(r), screensIn(r))
 
-  wss.on('connection', (socket) => {
-    socket.send(stateMessage())
-    socket.send(screensMessage())
+  function gameList() {
+    const games = [FAMILY_GAME, ...otherGames.map((g) => g.id)].map((id) => gameSummary(room(id), gameName(id), screensIn(room(id)).length))
+    return { games, max: MAX_GAMES }
+  }
+  // Tells every "Which game?" screen that the list changed.
+  const broadcastGames = () => broadcastRaw(JSON.stringify({ type: 'games' }))
+
+  function startGame(socket, message) {
+    const requestId = typeof message.requestId === 'string' ? message.requestId.slice(0, 80) : null
+    const name = typeof message.name === 'string' ? message.name.trim().replace(/\s+/g, ' ').slice(0, 40) : ''
+    const refuse = (reason) => socket.send(JSON.stringify({ type: 'new-game-refused', requestId, reason }))
+    if (!name) return refuse('name')
+    if (otherGames.length + 1 >= MAX_GAMES) return refuse('full')
+    const id = gameIdFor(name, otherGames.map((g) => g.id))
+    try {
+      writeSave(gameFile(id), initialState)
+      const list = [...otherGames, { id, name, createdAt: Date.now() }]
+      writeSave(gameListFile, list)
+      otherGames = list
+    } catch (error) {
+      console.error('Could not start a new game:', error.message)
+      return refuse('save')
+    }
+    rooms.delete(id)
+    room(id)
+    socket.send(JSON.stringify({ type: 'game-created', requestId, id, name }))
+    broadcastGames()
+  }
+
+  wss.on('connection', (socket, req) => {
+    // A screen asks for its game in the address (/ws?game=coltons-solo). No game, or
+    // one that isn't kept any more, means the family game.
+    const asked = new URL(req.url, 'http://localhost').searchParams.get('game')
+    socket.room = room(isGame(asked) ? asked : FAMILY_GAME)
+    socket.send(stateMessage(socket.room))
+    socket.send(screensMessage(socket.room))
     socket.on('close', () => {
-      if (socket.seat) broadcastScreens()
+      if (socket.seat) broadcastScreens(socket.room)
     })
     socket.on('message', (raw) => {
       let message
@@ -367,49 +472,55 @@ export function startServer({
         const seat = typeof message.seat === 'string' ? message.seat.slice(0, 40) : null
         if (seat !== (socket.seat ?? null)) {
           socket.seat = seat
-          broadcastScreens()
+          broadcastScreens(socket.room)
         }
+        return
+      }
+      if (message?.type === 'new-game') {
+        startGame(socket, message)
         return
       }
       if (message?.type !== 'action' || typeof message.action?.type !== 'string') return
       const action = message.action
+      const r = socket.room
       // A screen keeps an action until the server says it got it, and sends it again after
       // a reconnect. Each action has an id, so one that arrived twice only counts once.
       const id = typeof message.id === 'string' ? message.id : null
       if (id) socket.send(JSON.stringify({ type: 'ack', id }))
-      if (id && seenActions.has(id)) return
+      if (id && r.seenActions.has(id)) return
       if (id) {
-        seenActions.add(id)
-        if (seenActions.size > SEEN_LIMIT) seenActions.delete(seenActions.values().next().value)
+        r.seenActions.add(id)
+        if (r.seenActions.size > SEEN_LIMIT) r.seenActions.delete(r.seenActions.values().next().value)
       }
       // Turning off the sound board's limits is only for trying sounds on the test copy.
       if (action.type === 'SET_SOUNDBOARD_UNLIMITED' && !instance) return
       if (action.type === 'UNDO') {
         // Two people tapping Undo at once both saw the same history depth; only
         // the first tap counts, so one tap never undoes two changes.
-        if (action.depth !== history.length) return
-        const previous = history.pop()
+        if (action.depth !== r.history.length) return
+        const previous = r.history.pop()
         if (!previous) return
         // Clear the moment so screens don't replay an old celebration.
         // The sound board isn't part of Undo either, so Undo can't hand out more taps.
-        state = { ...previous.state, moment: null, soundboard: state.soundboard }
+        r.state = { ...previous.state, moment: null, soundboard: r.state.soundboard }
       } else {
-        const next = gameReducer(state, action)
-        if (next === state) return
+        const next = gameReducer(r.state, action)
+        if (next === r.state) return
         // Dice rolls can't be undone (no rerolling a bad roll), and neither can
         // picking heroes, since each iPad changes its own pick freely, or the sound board.
         if (!NOT_UNDOABLE.has(action.type)) {
-          history.push({ state, label: describeAction(state, action) })
-          if (history.length > UNDO_LIMIT) history.shift()
+          r.history.push({ state: r.state, label: describeAction(r.state, action) })
+          if (r.history.length > UNDO_LIMIT) r.history.shift()
         }
-        state = next
+        r.state = next
       }
       try {
-        writeSave(saveFile, state)
+        writeSave(r.file, r.state)
+        r.updatedAt = Date.now()
       } catch (error) {
         console.error('Could not save the game:', error.message)
       }
-      broadcast()
+      broadcast(r)
     })
   })
 
