@@ -1767,7 +1767,7 @@ function reduce(state, action) {
       const previous = lobby.find((c) => c.deviceId === action.deviceId)
       const slots = levelSlots(template, saved?.level)
       const picks = slots.map((_, i) => copyCard((saved ? saved.picks : action.picks)?.[i]))
-      const claim = { deviceId: action.deviceId, heroKey: template.key, player: saved?.player ?? previous?.player ?? '', picks, ready: false }
+      const claim = { deviceId: action.deviceId, heroKey: template.key, player: saved?.player ?? previous?.player ?? String(action.player ?? '').slice(0, 40), picks, ready: false }
       return { ...state, lobby: [...lobby.filter((c) => c.deviceId !== action.deviceId), claim] }
     }
 

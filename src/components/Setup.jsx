@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { heroArt } from '../data/art.js'
-import { cardStats } from '../data/cards.js'
 import { HERO_COLORS, HERO_TEMPLATES, heroTemplates, statsAtLevel, templateFor } from '../data/heroes.js'
 import { campaignHero } from '../state/campaign.js'
 import { levelSlots, powerSlotsFor } from '../state/game.js'
@@ -10,6 +9,7 @@ import { AdventurePicker, ChosenAdventure } from './Adventure.jsx'
 import Art from './Art.jsx'
 import { CampaignLobby, HeroCampaign } from './Campaign.jsx'
 import Chronicle from './Chronicle.jsx'
+import { HeroBanner, HeroPortrait, PowerSlots } from './HeroGallery.jsx'
 import { HeroHall, HoldToPick } from './HeroHall.jsx'
 import ScreenChoice from './ScreenChoice.jsx'
 import { Button } from './ui.jsx'
@@ -28,6 +28,23 @@ export function startingPicks(template, cards) {
 }
 
 const hasName = (claim) => Boolean(claim.player?.trim())
+
+// The name last typed on this iPad, so a player doesn't type it again every game.
+const NAME_KEY = 'ashardalon-companion/player-name'
+export function rememberedName() {
+  try {
+    return localStorage.getItem(NAME_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+function rememberName(name) {
+  try {
+    if (name.trim()) localStorage.setItem(NAME_KEY, name)
+  } catch {
+    // Storage blocked: the name just isn't remembered.
+  }
+}
 
 // The lobby's choice of real tiles on the table or the virtual board on the screens. Any
 // screen can switch it; on the virtual board the projector shows the dungeon and each
@@ -86,11 +103,11 @@ function Stats({ template, level = 1 }) {
     ['Surge', `${at.surgeValue} HP`],
   ]
   return (
-    <div className="mt-3 grid grid-cols-4 gap-2 text-center">
+    <div className="grid grid-cols-4 gap-2 text-center">
       {stats.map(([label, value]) => (
-        <div key={label} className="rounded-lg bg-zinc-950/60 py-2">
-          <div className="text-xs uppercase tracking-wide text-zinc-500">{label}</div>
-          <div className="text-xl font-bold text-zinc-100">{value}</div>
+        <div key={label} className="rounded-xl border border-amber-900/50 bg-black/50 py-2">
+          <div className="font-display text-2xl font-bold text-amber-50">{value}</div>
+          <div className="text-xs tracking-widest text-zinc-400 uppercase">{label}</div>
         </div>
       ))}
     </div>
@@ -106,121 +123,102 @@ function MyHero({ state, claim, cards, deviceId, dispatch, solo = false }) {
   const slots = claimSlots(claim)
   const level = campaignHero(state, template.key)?.level ?? 1
   const abilities = cards.abilities.filter((a) => a.hero === template.key && a.level <= level)
-  const pickedIds = claim.picks.map((card) => card?.id)
 
-  return (
-    <section className={`rounded-2xl border border-zinc-800 p-4 ring-2 ${color.ring} ${color.bg}`}>
-      <div className="flex items-start gap-3">
-        <Art name={heroArt(template.key)} className="w-20" />
-        <div className="mr-auto">
-          <h2 className={`font-display text-3xl font-bold ${color.text}`}>{template.name}</h2>
-          <p className="text-zinc-400">{template.className}</p>
+  const pick = (slot, card) => dispatch({ type: 'SET_LOBBY_PICK', deviceId, slot, card })
+  const powerSlots = <PowerSlots template={template} slots={slots} picks={claim.picks} powers={cards.powers} onPick={pick} />
+  const changeHero = (
+    <button type="button" className="text-sm text-zinc-400 underline" onClick={() => dispatch({ type: 'RELEASE_HERO', deviceId })}>
+      Pick a different hero
+    </button>
+  )
+
+  if (solo) {
+    return (
+      <section className={`rounded-2xl border border-zinc-800 p-4 ring-2 ${color.ring} ${color.bg}`}>
+        <div className="flex items-start gap-3">
+          <Art name={heroArt(template.key)} className="w-20" />
+          <div className="mr-auto">
+            <h2 className={`font-display text-3xl font-bold ${color.text}`}>{template.name}</h2>
+            <p className="text-zinc-400">{template.className}</p>
+          </div>
+          {changeHero}
         </div>
-        <Button variant="ghost" className="text-sm" onClick={() => dispatch({ type: 'RELEASE_HERO', deviceId })}>
-          Pick a different hero
-        </Button>
-      </div>
-
-      {!solo && (
-        <input
-          className="mt-3 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
-          placeholder="Your name (needed to get ready)"
-          value={claim.player}
-          onChange={(e) => dispatch({ type: 'SET_LOBBY_PLAYER', deviceId, player: e.target.value })}
-        />
-      )}
-
-      {!solo && <Stats template={template} level={level} />}
-      {state.campaign && <HeroCampaign state={state} heroKey={template.key} dispatch={dispatch} />}
-      {solo && (
+        {state.campaign && <HeroCampaign state={state} heroKey={template.key} dispatch={dispatch} />}
         <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-zinc-300">
-          <span className="mr-auto">
-            Powers: {claim.picks.map((card) => card?.name ?? '(not chosen)').join(', ')}
-          </span>
+          <span className="mr-auto">Powers: {claim.picks.map((card) => card?.name ?? '(not chosen)').join(', ')}</span>
           <Button variant="ghost" className="!py-1 text-sm" onClick={() => setShowPowers(!showPowers)}>
             {showPowers ? 'Done' : 'Change powers'}
           </Button>
         </div>
-      )}
-      {!solo && abilities.length > 0 && (
-        <ul className="mt-3 space-y-1 text-sm text-zinc-300">
-          {abilities.map((ability) => (
-            <li key={ability.name}>
-              <span className="font-semibold text-amber-300">{ability.name}:</span> {ability.text}
-            </li>
-          ))}
-        </ul>
-      )}
+        {showPowers && <div className="mt-3">{powerSlots}</div>}
+      </section>
+    )
+  }
 
-      {showPowers && (
-      <>
-      <h3 className="mt-5 font-display text-xl font-bold text-zinc-200">Choose your powers</h3>
-      <div className="mt-2 space-y-3">
-        {slots.map((type, i) => {
-          const picked = claim.picks[i]
-          const options = cards.powers.filter(
-            (c) => c.hero === template.key && c.type === type && (c.id === picked?.id || !pickedIds.includes(c.id)),
-          )
-          const fixed = options.find((c) => c.id === picked?.id)?.always
-          return (
-            <label key={i} className="block">
-              <span className="text-xs uppercase tracking-wide text-amber-500/80">
-                {type}
-                {fixed && ' · always yours'}
-              </span>
-              {options.length === 0 ? (
-                <p className="text-sm text-zinc-500">No {type} cards in the card file yet. You can name it during the game.</p>
-              ) : (
-                <select
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-2 text-zinc-100 disabled:opacity-70"
-                  value={picked?.id ?? ''}
-                  disabled={fixed}
-                  onChange={(e) =>
-                    dispatch({
-                      type: 'SET_LOBBY_PICK',
-                      deviceId,
-                      slot: i,
-                      card: options.find((c) => c.id === e.target.value) ?? null,
-                    })
-                  }
-                >
-                  <option value="">Pick {type === 'at-will' ? 'an' : 'a'} {type} power…</option>
-                  {options
-                    .filter((c) => !c.always || c.id === picked?.id)
-                    .map((card) => (
-                      <option key={card.id} value={card.id}>
-                        {card.name}
-                        {cardStats(card) && ` · ${cardStats(card)}`}
-                        {card.suggested ? ' · suggested' : ''}
-                      </option>
-                    ))}
-                </select>
-              )}
-              {cardStats(picked) && <p className="mt-1 text-sm font-semibold text-zinc-200">{cardStats(picked)}</p>}
-              {picked?.text && <p className="mt-1 text-sm text-zinc-400">{picked.text}</p>}
-            </label>
-          )
-        })}
+  // "Ready your hero": the hero's card art beside their name, stats and abilities, then
+  // their powers as cards and one big Ready button.
+  return (
+    <section className="space-y-5">
+      <div className="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <HeroPortrait
+          heroKey={template.key}
+          className={`mx-auto aspect-[406/560] w-48 rounded-t-[999px] rounded-b-2xl border-2 shadow-[0_0_40px_rgb(245_158_11/0.3)] ring-2 sm:w-full ${color.ring} border-transparent`}
+        />
+        <div className="min-w-0 space-y-3">
+          <div className="flex items-baseline gap-3">
+            <h2 className={`mr-auto font-display text-4xl font-bold ${color.text}`}>{template.name}</h2>
+            {changeHero}
+          </div>
+          <p className="-mt-2 text-lg text-zinc-300">{template.className}</p>
+          <label className="block">
+            <span className="text-xs tracking-widest text-zinc-400 uppercase">Your name</span>
+            <input
+              className="mt-1 w-full rounded-xl border border-amber-900/70 bg-black/60 px-3 py-2 text-xl text-zinc-100"
+              placeholder="Type your name to get ready"
+              value={claim.player}
+              onChange={(e) => {
+                rememberName(e.target.value)
+                dispatch({ type: 'SET_LOBBY_PLAYER', deviceId, player: e.target.value })
+              }}
+            />
+          </label>
+          <Stats template={template} level={level} />
+          {state.campaign && <HeroCampaign state={state} heroKey={template.key} dispatch={dispatch} />}
+          {abilities.length > 0 && (
+            <ul className="space-y-1 text-sm text-zinc-300">
+              {abilities.map((ability) => (
+                <li key={ability.name}>
+                  <span className="font-semibold text-amber-300">{ability.name}:</span> {ability.text}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
-      </>
-      )}
 
-      {!solo && (
-      <Button
-        variant={claim.ready ? 'default' : 'gold'}
-        className="mt-5 w-full py-3 text-lg"
+      <div>
+        <h3 className="mb-2 font-display text-2xl font-bold text-amber-400">Your powers</h3>
+        {powerSlots}
+      </div>
+
+      <button
+        type="button"
         disabled={!claimReady(claim, cards.powers)}
         onClick={() => dispatch({ type: 'SET_LOBBY_READY', deviceId, ready: !claim.ready })}
+        className={`w-full rounded-full px-6 py-4 font-display text-2xl font-black transition active:scale-[0.98] disabled:opacity-40 ${
+          claim.ready
+            ? 'border-2 border-emerald-500 bg-emerald-950/70 text-emerald-200'
+            : 'bg-gradient-to-b from-amber-400 to-orange-600 text-orange-950 shadow-[0_0_30px_rgb(245_158_11/0.5)]'
+        }`}
       >
         {claim.ready
           ? '✓ Ready! (tap to change something)'
           : !hasName(claim)
             ? 'Type your name to get ready'
             : powersChosen(claim, cards.powers)
-              ? "I'm ready"
-              : 'Choose every power to get ready'}
-      </Button>
-      )}
+              ? "🔥 I'm ready"
+              : 'Pick every power to get ready'}
+      </button>
     </section>
   )
 }
@@ -360,7 +358,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
     })
 
   const claim = (template) => {
-    dispatch({ type: 'CLAIM_HERO', deviceId, heroKey: template.key, picks: startingPicks(template, cards.powers) })
+    dispatch({ type: 'CLAIM_HERO', deviceId, heroKey: template.key, picks: startingPicks(template, cards.powers), player: rememberedName() })
     onClaim(template.key)
   }
 
@@ -391,47 +389,33 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
       {mine && !watchOnly && <MyHero state={state} claim={mine} cards={cards} deviceId={deviceId} dispatch={dispatch} />}
 
       {!watchOnly && (
-      <div className="grid gap-3 sm:grid-cols-2">
-        {heroChoices.map((template) => {
-          const owner = lobby.find((c) => c.heroKey === template.key)
-          if (owner && owner === mine) return null
-          const color = HERO_COLORS[template.color]
-          const taken = Boolean(owner)
-          const canPick = !taken && !mine
-          const body = (
-            <>
-              <span className="flex items-center gap-4">
-                <Art name={heroArt(template.key)} className="w-20" />
-                <span>
-                  <span className={`block font-display text-3xl font-bold ${color.text}`}>{template.name}</span>
-                  <span className="text-lg text-zinc-300">{template.className}</span>
-                </span>
+        <div className={`flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-4 ${mine ? 'pt-4' : ''}`}>
+          {heroChoices.map((template) => {
+            const owner = lobby.find((c) => c.heroKey === template.key)
+            if (owner && owner === mine) return null
+            const taken = Boolean(owner)
+            const status = taken ? (
+              <span className={owner.ready ? 'text-emerald-400' : 'text-amber-400'}>
+                {owner.player || 'Another iPad'} · {owner.ready ? 'ready' : 'choosing powers'}
               </span>
-              <span className="mt-2 block">
-                {taken ? (
-                  <span className={owner.ready ? 'text-emerald-400' : 'text-amber-400'}>
-                    {owner.player || 'Another iPad'} · {owner.ready ? 'ready' : 'choosing powers'}
-                  </span>
-                ) : (
-                  <span className="text-zinc-500">
-                    AC {template.ac} · HP {template.maxHp} · Speed {template.speed}
-                  </span>
-                )}
+            ) : (
+              <span className="text-zinc-400">
+                AC {template.ac} · HP {template.maxHp} · Speed {template.speed}
               </span>
-            </>
-          )
-          const look = `rounded-2xl border p-5 text-left transition ${taken ? `border-zinc-800 ${color.bg}` : 'border-amber-900/60 bg-zinc-950/70 backdrop-blur-sm'} ${!taken && mine ? 'opacity-50' : ''}`
-          return canPick ? (
-            <HoldToPick key={template.key} label={`Hold to pick ${template.name}`} onPick={() => claim(template)} className={`${look} active:scale-95`}>
-              {body}
-            </HoldToPick>
-          ) : (
-            <div key={template.key} className={look}>
-              {body}
-            </div>
-          )
-        })}
-      </div>
+            )
+            const banner = <HeroBanner template={template} status={status} taken={taken} faded={!taken && Boolean(mine)} small={Boolean(mine)} />
+            const size = mine ? 'sm:w-[18%]' : 'sm:w-[30%] lg:w-[18%]'
+            return !taken && !mine ? (
+              <HoldToPick key={template.key} label={`Hold to pick ${template.name}`} onPick={() => claim(template)} className={`block w-full text-center transition active:scale-95 ${size}`}>
+                {banner}
+              </HoldToPick>
+            ) : (
+              <div key={template.key} className={`w-full ${size}`}>
+                {banner}
+              </div>
+            )
+          })}
+        </div>
       )}
 
       <div className="flex flex-col items-center gap-2">
@@ -450,7 +434,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
               : state.campaign
                 ? `Waiting for ${heroChoices.map((t) => t.name).join(', ')} to be ready.`
                 : 'Waiting for every hero to be ready.'}
-          {!watchOnly && lobby.length > 0 && !onBoard && ' The projector starts the game.'}
+          {!watchOnly && lobby.length > 0 && !onBoard && ' The big screen starts the game.'}
         </p>
       </div>
 
