@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { HERO_COLORS, hasAbility } from '../data/heroes.js'
-import { DOOR_UNLOCK_ROLL, FEATURE_LABELS, MAX_SURGES, MIN_SURGES, escapeBlockers, goalParts, missingFeatures, playableChambers, revealsReady, usesDoors } from '../state/adventure.js'
+import { DOOR_KINDS, DOOR_UNLOCK_ROLL, FEATURE_LABELS, MAX_SURGES, MIN_SURGES, escapeBlockers, goalParts, missingFeatures, playableChambers, revealsReady, usesDoors } from '../state/adventure.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { tileSpots } from '../state/tiles.js'
@@ -15,7 +15,8 @@ const heading = (adventure) => (adventure.number ? `Adventure ${adventure.number
 
 // The projector's adventure choice in the lobby: a free game or one from the book,
 // plus how many healing surges (the book's easier and harder settings).
-export function AdventurePicker({ state, dispatch }) {
+// `board`: the solo screen, where the app lays the tiles, so there's no table to set up.
+export function AdventurePicker({ state, dispatch, board = false }) {
   const { adventures } = useCards()
   const chosen = state.lobbyAdventure
   const surges = state.lobbySurges ?? 2
@@ -54,7 +55,7 @@ export function AdventurePicker({ state, dispatch }) {
 
       <TileSetup state={state} dispatch={dispatch} />
 
-      {chosen && <AdventureSetup adventure={chosen} />}
+      {chosen && <AdventureSetup adventure={chosen} board={board} />}
     </section>
   )
 }
@@ -83,14 +84,15 @@ function tileStackStep(adventure) {
 }
 
 // What to put on the table before entering the dungeon.
-function AdventureSetup({ adventure }) {
+function AdventureSetup({ adventure, board }) {
   return (
     <div className="mt-4 rounded-xl bg-zinc-950/60 p-3">
       {adventure.blurb && <p className="italic text-zinc-300">{adventure.blurb}</p>}
       <p className="mt-2 text-zinc-200">
         <span className="font-semibold text-amber-400">Goal:</span> {adventure.goal}
       </p>
-      {adventure.setup.length > 0 && (
+      {board && <p className="mt-2 text-sm text-zinc-400">The app sets up the board, the tile stack and the cards for this adventure.</p>}
+      {!board && adventure.setup.length > 0 && (
         <>
           <h3 className="mt-3 font-semibold text-amber-400">Set up the table</h3>
           <ol className="mt-1 list-decimal space-y-1 pl-6 text-zinc-300">
@@ -105,7 +107,7 @@ function AdventureSetup({ adventure }) {
           </ol>
         </>
       )}
-      <ChamberDeck adventure={adventure} />
+      {!board && <ChamberDeck adventure={adventure} />}
     </div>
   )
 }
@@ -360,6 +362,22 @@ export function Doors({ state, hero, dispatch }) {
           </div>
         </div>
       ) : (
+        state.board ? (
+          // No door tokens on a virtual board: the app turns one over at random.
+          <div className="mt-2">
+            <p className="text-zinc-300">Standing next to a door spot (the pale slabs)? Open it to see what kind of door it is.</p>
+            <Button
+              className="mt-1"
+              onClick={() => {
+                const kind = DOOR_KINDS[Math.floor(randomNumbers(1)[0] * DOOR_KINDS.length)]
+                if (kind === 'trapped') setTrapped([hero.id])
+                else reveal(kind)
+              }}
+            >
+              🚪 Open the door
+            </Button>
+          </div>
+        ) : (
         <>
           <p className="mt-2 text-zinc-300">Turn the token over. What kind of door is it?</p>
           <div className="mt-1 grid grid-cols-3 gap-2">
@@ -368,6 +386,7 @@ export function Doors({ state, hero, dispatch }) {
             <Button onClick={() => reveal('locked')}>Locked</Button>
           </div>
         </>
+        )
       )}
       {special.length > 0 && <SpecialDoors special={special} dispatch={dispatch} />}
       {locked.length > 0 && (

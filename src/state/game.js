@@ -20,7 +20,7 @@ import { trackStats } from './stats.js'
 import { campaignHero, campaignOutcome, campaignSurges, isCampaign, newCampaign, shopCards, shopSize } from './campaign.js'
 import { playBoardSound, setBoardOff, setBoardUnlimited } from './soundboard.js'
 import { newFirstRoll, rollFirst } from './firstRoll.js'
-import { layChamber, layTile, moveHero, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
+import { layChamber, layExit, layTile, moveHero, placeNear, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
 import { boardMove, queueMoves, skipBoardMove } from '../board/powerMoves.js'
 import { heroTile } from '../board/encounters.js'
 
@@ -1178,8 +1178,12 @@ function answerCheck(state, action) {
     // Not the tile's monster, so the Exploration Phase's draw button stays as it was.
     const { monsterDrawn } = next.turn
     const withDeck = next.monsterDeck || !Array.isArray(action.cards) ? next : { ...next, monsterDeck: buildDeck(action.cards, action.random) }
+    const before = next.monsters.length
     next = drawMonster(withDeck, hero.id, action.random)
     next = { ...next, turn: { ...next.turn, monsterDrawn } }
+    // On the virtual board a monster out of the Vast Gate goes next to the gate.
+    const gate = next.board && next.monsters.find((m) => m.objective && next.board.tokens[m.id])
+    if (gate && next.monsters.length > before) next = placeNear(next, next.monsters.at(-1), next.board.tokens[gate.id])
   }
   return next
 }
@@ -1856,9 +1860,13 @@ function revealTile(state, action) {
       next = openChamber(next, step, action, hero)
     } else if (step.type === 'chamberMonsters') {
       // A chamber with no Chamber card (Sneaky Endeavor's treasure vault): just its monsters.
+      if (next.board && /chamber entrance/i.test(reveal.tile)) next = layChamber(next, /horrid/i.test(reveal.tile) ? 'horrid' : 'dire', action.random)
       next = fillChamber(next, { perPlayer: step.count, types: [], redrawXp: [] }, action)
     }
   }
+  // "Place the Tunnel Exit tile next to any unexplored Chamber edge": the board does it.
+  const exit = next.board && reveal.steps.join(' ').match(/Place the (Tunnel Exit|Secure Exit) tile next to/i)?.[1]
+  if (exit) next = layExit(next, exit)
   // A new chamber (Wrath of Ashardalon has two) adds its card's steps.
   const chamber = next.adventure.chamber !== state.adventure.chamber && next.adventure.chamber
   const steps = [...reveal.steps, ...(chamber ? chamberSteps(next, chamber, state) : monsterSteps(next, state))]
@@ -2055,6 +2063,8 @@ function reduce(state, action) {
       // On the virtual board the stack can't hold more regular tiles than there are layouts for.
       const regular = Array.isArray(action.boardTiles) ? action.boardTiles.filter((t) => t.kind === 'regular').length : 0
       const tiles = action.boardTiles && regular > 0 ? Math.min(lobbyTiles, regular) : lobbyTiles
+      const objective = card?.startObjective
+      const objectiveId = objective ? newId('monster') : null
       let started = {
         ...initialState,
         status: 'playing',
@@ -2065,14 +2075,13 @@ function reduce(state, action) {
         campaign: campaign && { ...campaign, heroes: campaignHeroes(campaign, heroes, state.lobby ?? []) },
         tokenStack: campaign ? shuffle(Array.isArray(action.tokens) ? action.tokens : [], action.random) : null,
         firstRoll: newFirstRoll(heroes),
-        // A solo game on the virtual board starts with the Start tile and the heroes on it.
-        board: action.boardTiles ? newBoard(action.boardTiles, heroes, action.boardRandom) : null,
+        // A solo game on the virtual board starts with the adventure's start tile and the heroes on it.
+        board: action.boardTiles ? newBoard(action.boardTiles, heroes, action.boardRandom, card, objectiveId) : null,
       }
       // The Vast Gate Opens: the gate is on the Start tile, and its Flares! card is in the top 3 encounters.
-      const objective = card?.startObjective
       if (objective) {
         const { name, hp, ac } = objective
-        started = { ...started, monsters: [{ id: newId('monster'), name, maxHp: hp, hp, ac, xp: 0, ownerId: null, conditions: [], objective: true, card: { hp, figures: 1, special: '', types: [], attacks: [], tactics: [] } }] }
+        started = { ...started, monsters: [{ id: objectiveId, name, maxHp: hp, hp, ac, xp: 0, ownerId: null, conditions: [], objective: true, card: { hp, figures: 1, special: '', types: [], attacks: [], tactics: [] } }] }
       }
       if (card?.startEncounters?.length > 0) started = { ...started, encounterAdds: [...card.startEncounters] }
       const names = heroes.map((h) => h.name).join(', ')

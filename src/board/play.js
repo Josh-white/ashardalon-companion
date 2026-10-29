@@ -42,20 +42,89 @@ function shuffle(list, random = []) {
   return out
 }
 
-// A new board: the Start tile with the heroes next to its stairs, and the regular tiles
-// shuffled into a pile. Null when the tile layouts have no start tile.
-export function newBoard(tiles, heroes, random) {
+// The tile an adventure starts on and what goes next to it, read from its setup steps:
+// most start on the Start tile, The Closed Doors on the Ancient Battlefield with the two
+// white-triangle door tiles beside it, The Vast Gate Opens in the Dire Chamber with the
+// chamber's tiles all around and the heroes next to the gate in its centre.
+export function boardStart(card) {
+  const setup = (card?.setup ?? []).join(' ')
+  const tile = /Ancient Battlefield Start tile/i.test(setup)
+    ? 'ancient-battlefield'
+    : /Dire Chamber Start tile/i.test(setup)
+      ? 'dire-chamber-start'
+      : /Horrid Chamber Start tile/i.test(setup)
+        ? 'horrid-chamber-start'
+        : 'start'
+  const around = setup.match(/place the (Dire|Horrid) Chamber tiles next to each unexplored edge of the \w+ Chamber Start tile/i)?.[1].toLowerCase() ?? null
+  return { tile, around, doorTiles: /Door Tiles with white triangles/i.test(setup), centre: Boolean(card?.startObjective) }
+}
+
+// The floor square nearest the middle of a tile (where the Vast Gate marker goes).
+function centreSquare(def) {
+  const floor = []
+  def.rows.forEach((row, y) => [...row].forEach((ch, x) => ch !== '#' && floor.push([x, y])))
+  const mid = [(def.rows[0].length - 1) / 2, (def.rows.length - 1) / 2]
+  const far = ([x, y]) => Math.abs(x - mid[0]) + Math.abs(y - mid[1])
+  return [...floor].sort((a, b) => far(a) - far(b))[0]
+}
+
+// The squares around one square, nearest first (the heroes next to the Vast Gate).
+function squaresAround(def, at) {
+  const floor = []
+  def.rows.forEach((row, y) => [...row].forEach((ch, x) => ch !== '#' && key([x, y]) !== key(at) && floor.push([x, y])))
+  const far = ([x, y]) => Math.max(Math.abs(x - at[0]), Math.abs(y - at[1]))
+  return floor.sort((a, b) => far(a) - far(b))
+}
+
+// Lays tiles on the open edges of one placed tile, in the order of `sides`, one tile per edge.
+function layAround(board, uid, ids, sides = ['W', 'E', 'N', 'S']) {
+  let next = board
+  const edges = unexploredEdges(boardGrid(board))
+    .filter((e) => e.tile === uid)
+    .sort((a, b) => sides.indexOf(a.side) - sides.indexOf(b.side))
+  for (const edge of edges) {
+    const def = next.defs[ids[0]]
+    if (!def) break
+    const laid = placeTile(next, boardGrid(next), edge, def, `t${next.tiles.length}`)
+    if (!laid) continue
+    ids = ids.slice(1)
+    next = laid
+  }
+  return next
+}
+
+// A new board: the adventure's start tile (the Start tile for most) with the heroes on it,
+// and the regular tiles shuffled into a pile. `objectiveId` is a marker that starts in the
+// tile's centre (the Vast Gate). Null when the tile layouts have no start tile.
+export function newBoard(tiles, heroes, random, card, objectiveId) {
   const list = Array.isArray(tiles) ? tiles : []
-  const start = list.find((t) => t.id === 'start') ?? list.find((t) => t.kind === 'start')
+  const how = boardStart(card)
+  const start = list.find((t) => t.id === how.tile) ?? list.find((t) => t.id === 'start') ?? list.find((t) => t.kind === 'start')
   if (!start) return null
-  const spots = startSquares(start)
-  return {
+  const centre = how.centre && objectiveId ? centreSquare(start) : null
+  const spots = centre ? squaresAround(start, centre) : startSquares(start)
+  // The Closed Doors: the two regular tiles with a door and a white triangle go next to the start.
+  const doorTiles = how.doorTiles ? list.filter((t) => t.kind === 'regular' && t.triangle === 'white' && t.features?.some((f) => f.type === 'door')).slice(0, 2).map((t) => t.id) : []
+  let board = {
     defs: Object.fromEntries(list.map((t) => [t.id, t])),
     tiles: [{ uid: 'start', tileId: start.id, at: [0, 0], turn: 0 }],
     tokens: Object.fromEntries(heroes.map((h, i) => [h.id, spots[i % spots.length]])),
-    pile: shuffle(list.filter((t) => t.kind === 'regular').map((t) => t.id), random),
+    pile: shuffle(list.filter((t) => t.kind === 'regular' && !doorTiles.includes(t.id)).map((t) => t.id), random),
   }
+  if (centre) board.tokens[objectiveId] = centre
+  if (doorTiles.length > 0) board = layAround(board, 'start', doorTiles)
+  if (how.around) {
+    const ids = shuffle(chamberIds(board, how.around), random?.slice?.(32))
+    board = layAround(board, 'start', ids)
+  }
+  return board
 }
+
+// The chamber tiles of one family (Horrid or Dire) not on the board yet, without the Entrance.
+const chamberIds = (board, family) =>
+  Object.values(board.defs)
+    .filter((d) => d.kind === 'chamber' && d.id.includes(family) && !/entrance/.test(d.id) && !board.tiles.some((t) => t.tileId === d.id))
+    .map((d) => d.id)
 
 const activeAt = (state) => state.board?.tokens[state.heroes[state.turn.heroIndex]?.id] ?? null
 
@@ -123,10 +192,7 @@ export function layChamber(state, family, random) {
   const board = state.board
   const entrance = (state.turn.boardTiles ?? []).at(-1)
   if (!board || !entrance) return state
-  const ids = shuffle(
-    Object.values(board.defs).filter((d) => d.kind === 'chamber' && d.id.includes(family) && !/entrance/.test(d.id)).map((d) => d.id),
-    random,
-  ).filter((id) => !board.tiles.some((t) => t.tileId === id))
+  const ids = shuffle(chamberIds(board, family), random)
   let next = state
   for (const edge of unexploredEdges(boardGrid(board)).filter((e) => e.tile === entrance.uid)) {
     const def = next.board.defs[ids.shift()]
@@ -137,6 +203,30 @@ export function layChamber(state, family, random) {
     next = { ...next, board: laid, turn: { ...next.turn, boardTiles: [...next.turn.boardTiles, { uid, side: edge.side, filled: false, chamber: true }] } }
   }
   return next
+}
+
+// The exit an adventure puts next to its chamber ("Place the Tunnel Exit tile next to any
+// unexplored Chamber edge"): on the open chamber edge farthest from the active hero, so
+// the heroes fight through the chamber to reach it. It takes no monster of its own.
+export function layExit(state, name) {
+  const board = state.board
+  const def = board && Object.values(board.defs).find((d) => d.name.toLowerCase() === name.toLowerCase())
+  if (!def || board.tiles.some((t) => t.tileId === def.id)) return state
+  const chamber = new Set(
+    board.tiles.filter((t) => board.defs[t.tileId]?.kind === 'chamber' && !/entrance/.test(t.tileId)).map((t) => t.uid),
+  )
+  const grid = boardGrid(board)
+  const at = activeAt(state)
+  const far = at ? distances(grid, at) : new Map()
+  const steps = (e) => Math.min(...e.squares.map((sq) => far.get(key(sq)) ?? 0))
+  const edges = unexploredEdges(grid)
+    .filter((e) => chamber.has(e.tile))
+    .sort((a, b) => steps(b) - steps(a))
+  for (const edge of edges) {
+    const laid = placeTile(board, grid, edge, def, `t${board.tiles.length}`)
+    if (laid) return { ...state, board: laid }
+  }
+  return state
 }
 
 // The free squares nearest a tile's scorch mark, closest first.
@@ -177,6 +267,16 @@ export function placeNewFigures(before, state) {
   const placed = new Set(open.map((t) => t.uid))
   const boardTiles = state.turn.boardTiles.map((t) => (placed.has(t.uid) ? { ...t, filled: true } : t))
   return { ...state, board: { ...board, tokens }, turn: { ...state.turn, boardTiles } }
+}
+
+// A new monster's figures on the free squares nearest a square (out of the Vast Gate).
+export function placeNear(state, monster, at) {
+  const grid = boardGrid(state.board)
+  const taken = new Set(Object.values(state.board.tokens).map(key))
+  const free = [...distances(grid, at)].sort((a, b) => a[1] - b[1]).map(([k]) => k).filter((k) => !taken.has(k))
+  const tokens = { ...state.board.tokens }
+  for (let i = 0; i < figuresLeft(monster) && free[i]; i++) tokens[figureToken(monster.id, i + 1)] = free[i].split(',').map(Number)
+  return { ...state, board: { ...state.board, tokens } }
 }
 
 // A monster card with several figures (the Legion Devil's 3) has a token for each figure
