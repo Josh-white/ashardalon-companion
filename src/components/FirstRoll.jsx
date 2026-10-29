@@ -42,7 +42,9 @@ function HeroRoll({ hero, roll, rolled, waiting, winner, big, onRoll }) {
         {rolled ? (
           <Die3D value={roll} />
         ) : (
-          <span className={`block h-[2.3em] w-[2.3em] ${waiting ? 'animate-pulse' : 'opacity-30'} flex items-center justify-center font-display text-[0.6em] text-zinc-500`}>
+          <span
+            className={`flex h-[1.6em] w-[1.6em] items-center justify-center rounded-[30%] border-[0.06em] border-amber-500/60 bg-gradient-to-b from-red-900/70 to-red-950/70 font-display font-black text-amber-200/80 ${waiting ? 'animate-pulse' : 'opacity-40'}`}
+          >
             ?
           </span>
         )}
@@ -118,7 +120,7 @@ export default function FirstRoll({ state, dispatch, heroId = null, big = false 
         </div>
       )}
 
-      <div className={`grid w-full max-w-6xl gap-[2vw] ${big ? 'grid-cols-5' : 'grid-cols-3 sm:grid-cols-5'} ${me && !winner ? 'opacity-80' : ''}`}>
+      <div className={`flex w-full max-w-6xl flex-wrap justify-center ${big ? 'gap-[4vw]' : 'gap-6'} ${me && !winner ? 'opacity-80' : ''}`}>
         {state.heroes.map((hero) => {
           const value = roll.rolls[hero.id] ?? (roll.tied?.heroIds.includes(hero.id) ? roll.tied.value : null)
           return (

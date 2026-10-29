@@ -4,6 +4,7 @@ import Art from './components/Art.jsx'
 import ArtScreen from './components/ArtScreen.jsx'
 import { AreaBackdrop, AreaName } from './components/AreaBackdrop.jsx'
 import HeroCard from './components/HeroCard.jsx'
+import LobbyBackdrop from './components/LobbyBackdrop.jsx'
 import DragonIntro, { useIntro } from './components/Intro.jsx'
 import FirstRoll from './components/FirstRoll.jsx'
 import GamePicker, { GameBar } from './components/GamePicker.jsx'
@@ -31,7 +32,7 @@ import { PHASES } from './data/phases.js'
 import { activeVillains, encounterCardsOutdated } from './state/game.js'
 import { shuffleNumbers } from './state/random.js'
 import { useCards } from './state/useCards.js'
-import { FAMILY_GAME, useDeviceId, useGameChoice, useSeat, useSharedGame } from './state/useSharedGame.js'
+import { FAMILY_GAME, useDeviceId, useGameChoice, useScreenRole, useSeat, useSharedGame } from './state/useSharedGame.js'
 
 const TABLE_SEAT = 'table'
 const PROJECTOR_SEAT = 'projector'
@@ -384,6 +385,7 @@ export default function App() {
   const [picking, setPicking] = useState(false)
   const gameId = chosenGame ?? FAMILY_GAME
   const [seat, setSeat] = useSeat(gameId)
+  const [screenRole, setScreenRole] = useScreenRole(gameId)
   const { state, connected, dispatch, undo, undoDepth, instance, screens, game, gamesVersion, changeGames, startGame } = useSharedGame(seat, gameId, setGame)
   const deviceId = useDeviceId()
   const cards = useCards()
@@ -467,7 +469,8 @@ export default function App() {
 
   if (state.status === 'setup') {
     return (
-      <main className="min-h-screen bg-zinc-950 text-zinc-100">
+      <main className="isolate min-h-screen bg-zinc-950 text-zinc-100">
+        <LobbyBackdrop />
         {banners}
         {undo === 'New game' && (
           <div className="pt-4 text-center">
@@ -487,6 +490,10 @@ export default function App() {
           onLeaveProjector={() => setSeat(null)}
           onArt={() => setArtOpen(true)}
           onSolo={() => setSeat(TABLE_SEAT)}
+          // An iPad that played a hero before is a hero screen; it isn't asked again.
+          role={screenRole ?? (seat && seat !== TABLE_SEAT && seat !== PROJECTOR_SEAT ? 'hero' : null)}
+          setRole={setScreenRole}
+          projectorOpen={projectorOpen}
         />
       </main>
     )
