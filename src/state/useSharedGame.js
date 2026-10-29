@@ -24,9 +24,12 @@ export function onGameState(listener) {
   return () => listeners.delete(listener)
 }
 
-function socketUrl() {
+// The family game is the one every screen used before there could be several.
+export const FAMILY_GAME = 'family'
+
+function socketUrl(game) {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}/ws`
+  return `${protocol}//${window.location.host}/ws?game=${encodeURIComponent(game)}`
 }
 
 // onGameState for a component: `listener` may be a new function each render.
@@ -36,10 +39,20 @@ export function useGameStates(listener) {
   useEffect(() => onGameState((before, after) => latest.current(before, after)), [])
 }
 
-// Keeps this device in step with the game on the Pi. Actions go to the server,
-// which applies them and sends the new state to every connected device.
-export function useSharedGame(seat) {
+// Keeps this device in step with one game on the Pi. Actions go to the server,
+// which applies them and sends the new state to every device in that game.
+// `onMoved(id)` hears when the Pi put this screen in another game, because the one it
+// asked for was finished.
+export function useSharedGame(seat, game = FAMILY_GAME, onMoved) {
+  const onMovedRef = useRef(onMoved)
+  onMovedRef.current = onMoved
   const [state, setState] = useState(null)
+  // The game this screen is in, as the Pi names it: { id, name }.
+  const [gameInfo, setGameInfo] = useState(null)
+  // Goes up whenever the list of games changes, so the "Which game?" screen looks again.
+  const [gamesVersion, setGamesVersion] = useState(0)
+  // Answers to "start a new game", waiting by request id.
+  const requestsRef = useRef(new Map())
   const [connected, setConnected] = useState(false)
   // The seats with a screen open right now ('projector', 'table', hero keys).
   const [screens, setScreens] = useState([])
@@ -56,6 +69,12 @@ export function useSharedGame(seat) {
   useEffect(() => {
     let stopped = false
     let retryTimer
+    // A different game: its first state isn't a change from the last game's, and taps
+    // made in the last game don't belong in this one.
+    lastState = null
+    pendingRef.current = []
+    setState(null)
+    setGameInfo(null)
 
     const sendPending = (socket) => {
       for (const p of pendingRef.current) {
@@ -69,7 +88,7 @@ export function useSharedGame(seat) {
     }
 
     const connect = () => {
-      const socket = new WebSocket(socketUrl())
+      const socket = new WebSocket(socketUrl(game))
       socketRef.current = socket
       socket.onopen = () => {
         setConnected(true)
@@ -79,8 +98,13 @@ export function useSharedGame(seat) {
         refreshArt()
       }
       socket.onmessage = (event) => {
+        if (socketRef.current !== socket) return // from the game this screen just left
         const message = JSON.parse(event.data)
         if (message.type === 'state') {
+          if (message.game) {
+            setGameInfo(message.game)
+            if (message.game.id !== game) onMovedRef.current?.(message.game.id)
+          }
           if (typeof message.now === 'number') clockOffset = message.now - Date.now()
           const before = lastState
           lastState = message.state
@@ -109,6 +133,14 @@ export function useSharedGame(seat) {
           reloadWhenIdle()
         } else if (message.type === 'screens') {
           setScreens(Array.isArray(message.seats) ? message.seats : [])
+        } else if (message.type === 'games') {
+          setGamesVersion((v) => v + 1)
+        } else if (message.type === 'game-created' || message.type === 'new-game-refused') {
+          const resolve = requestsRef.current.get(message.requestId)
+          requestsRef.current.delete(message.requestId)
+          resolve?.(message)
+          // Bringing back a finished game has no request: a refusal there means it's full.
+          if (!resolve && message.type === 'new-game-refused') setGamesVersion((v) => v + 1)
         } else if (message.type === 'art') {
           // Someone saved a card picture: show it here too.
           refreshArt()
@@ -152,9 +184,11 @@ export function useSharedGame(seat) {
       clearTimeout(retryTimer)
       document.removeEventListener('visibilitychange', onVisible)
       clearInterval(watchdog)
-      socketRef.current?.close()
+      const socket = socketRef.current
+      socketRef.current = null
+      socket?.close()
     }
-  }, [])
+  }, [game])
 
   // Tell the Pi when this screen changes seats.
   useEffect(() => {
@@ -173,7 +207,25 @@ export function useSharedGame(seat) {
     }
   }, [])
 
-  return { state, connected, dispatch, undo, undoDepth, instance, screens }
+  // Starts, renames, finishes or brings back a game: { type: 'rename-game', id, name } and so on.
+  const changeGames = useCallback((message) => {
+    const socket = socketRef.current
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message))
+  }, [])
+
+  // Starts a new game called `name`. Resolves to the Pi's answer: { type: 'game-created', id }
+  // or { type: 'new-game-refused', reason: 'name' | 'full' | 'save' | 'offline' }.
+  const startGame = useCallback((name) => {
+    const socket = socketRef.current
+    if (socket?.readyState !== WebSocket.OPEN) return Promise.resolve({ type: 'new-game-refused', reason: 'offline' })
+    const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+    return new Promise((resolve) => {
+      requestsRef.current.set(requestId, resolve)
+      socket.send(JSON.stringify({ type: 'new-game', name, requestId }))
+    })
+  }, [])
+
+  return { state, connected, dispatch, undo, undoDepth, instance, screens, game: gameInfo, gamesVersion, changeGames, startGame }
 }
 
 const DEVICE_KEY = 'ashardalon-companion/device'
@@ -199,26 +251,43 @@ export function useDeviceId() {
   return id
 }
 
-const SEAT_KEY = 'ashardalon-companion/seat'
-
-// Which hero this device belongs to ("table" for the shared screen). Stored per
-// device, so each iPad remembers its player.
-export function useSeat() {
-  const [seat, setSeatState] = useState(() => {
+// A value this device remembers, such as its seat. Storage can be blocked; the
+// choice then lasts until the page reloads.
+function useStored(key) {
+  const read = () => {
     try {
-      return localStorage.getItem(SEAT_KEY)
+      return localStorage.getItem(key)
     } catch {
       return null
     }
-  })
-  const setSeat = useCallback((value) => {
-    setSeatState(value)
-    try {
-      if (value) localStorage.setItem(SEAT_KEY, value)
-      else localStorage.removeItem(SEAT_KEY)
-    } catch {
-      // Storage can be blocked; the choice then lasts until the page reloads.
-    }
-  }, [])
-  return [seat, setSeat]
+  }
+  const [stored, setStored] = useState(() => ({ key, value: read() }))
+  // A new key (another game's seat) reads that key's value straight away.
+  const value = stored.key === key ? stored.value : read()
+  const setValue = useCallback(
+    (next) => {
+      setStored({ key, value: next })
+      try {
+        if (next) localStorage.setItem(key, next)
+        else localStorage.removeItem(key)
+      } catch {
+        // See above.
+      }
+    },
+    [key],
+  )
+  return [value, setValue]
+}
+
+const SEAT_KEY = 'ashardalon-companion/seat'
+
+// Which hero this device belongs to in a game ("table" for the shared screen). Stored
+// per device and per game, so each iPad remembers its player in every game.
+export function useSeat(game = FAMILY_GAME) {
+  return useStored(game === FAMILY_GAME ? SEAT_KEY : `${SEAT_KEY}/${game}`)
+}
+
+// The game this device is in, or null before it has picked one.
+export function useGameChoice() {
+  return useStored('ashardalon-companion/game')
 }

@@ -1,6 +1,6 @@
 # Ashardalon Companion
 
-A tablet-friendly helper for playing **Dungeons & Dragons: Wrath of Ashardalon** at the table. Every player can open it on their own iPad: a small server on the Pi keeps the one shared game and sends each change to every device right away. The game is saved on the Pi, so a refresh, a sleeping iPad, or a restart picks up where you left off.
+A tablet-friendly helper for playing **Dungeons & Dragons: Wrath of Ashardalon** at the table. Every player can open it on their own iPad: a small server on the Pi keeps the shared games and sends each change to every device in that game right away. Several games can run at once (the family game plus, say, a solo game on each boy's iPad): the "Switch game" link along the top opens the list of games, where you can start, rename or finish one. Each iPad remembers which game it's in. The game is saved on the Pi, so a refresh, a sleeping iPad, or a restart picks up where you left off.
 
 ## What it does
 
@@ -76,7 +76,7 @@ To update after pulling new changes: `git pull && docker compose up -d --build`.
 
 ## Back up the saved game
 
-`scripts/backup-game.sh` copies the saved game out of the app into `~/ashardalon-backups` and keeps the newest 14 copies. It skips a copy when nothing changed, so a quiet week doesn't push out older saves. It also backs up your card files, which live only on the Pi: a dated copy of `cards/cards.json` in `~/ashardalon-backups/cards` whenever it changes (newest 14 kept), plus one up-to-date copy of `cards/art` and `cards/sounds`. To run it every night at 3:15, add it to cron on the Pi:
+`scripts/backup-game.sh` copies the saved games out of the app into `~/ashardalon-backups` and keeps the newest 14 copies of each. The family game's copies go straight in that folder; every other game (a solo game, say) gets its own folder, `~/ashardalon-backups/games/<game>/`. It skips a copy when nothing changed, so a quiet week doesn't push out older saves. It also backs up your card files, which live only on the Pi: a dated copy of `cards/cards.json` in `~/ashardalon-backups/cards` whenever it changes (newest 14 kept), plus one up-to-date copy of `cards/art` and `cards/sounds`. To run it every night at 3:15, add it to cron on the Pi:
 
 ```sh
 mkdir -p ~/ashardalon-backups
@@ -90,7 +90,7 @@ scripts/restore-game.sh                                         # lists the back
 scripts/restore-game.sh ~/ashardalon-backups/game-2026-10-27-031500.json
 ```
 
-The restore saves the current game first (as a `-before-restore` copy), so it can be undone, then restarts the app with the backup. A backup from an older version of the app is upgraded when it loads; one from a newer version is refused until the app is updated. For the test copy, put `CONTAINER=ashardalon-test BACKUP_DIR=~/ashardalon-test-backups` in front of either command.
+For a game other than the family game, put `GAME=<game>` in front, using the name of its backup folder: `GAME=coltons-solo scripts/restore-game.sh`. The restore saves the current game first (as a `-before-restore` copy), so it can be undone, then restarts the app with the backup. A backup from an older version of the app is upgraded when it loads; one from a newer version is refused until the app is updated. For the test copy, put `CONTAINER=ashardalon-test BACKUP_DIR=~/ashardalon-test-backups` in front of either command.
 
 ## A test copy
 
