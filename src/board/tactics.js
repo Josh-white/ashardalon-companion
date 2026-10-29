@@ -8,7 +8,7 @@ import { adjacent, tilesBetween } from './paths.js'
 // Which heroes make a tactic's condition true for a monster on `at`. `heroes` is a list
 // of { id, at }. An empty list means the condition doesn't hold.
 export function heroesFor(when, grid, at, heroes) {
-  const tileOf = (sq) => grid.get(key(sq))?.tile
+  const tileOf = (sq) => grid.get(key(sq))?.area
   const within = (n) => heroes.filter((h) => tilesBetween(grid, at, h.at) <= n)
   switch (when) {
     case 'adjacent':
@@ -37,9 +37,9 @@ export function heroesFor(when, grid, at, heroes) {
 
 // The one tactic that is about the monster's own tile, not the heroes.
 export function aloneByUnexploredEdge(grid, at, heroes) {
-  const tile = grid.get(key(at))?.tile
-  if (heroes.some((h) => grid.get(key(h.at))?.tile === tile)) return false
-  return unexploredEdges(grid).some((edge) => edge.tile === tile)
+  const tile = grid.get(key(at))?.area
+  if (heroes.some((h) => grid.get(key(h.at))?.area === tile)) return false
+  return unexploredEdges(grid).some((edge) => edge.area === tile)
 }
 
 // Does the condition hold? (A tactic with no "when" always does.)

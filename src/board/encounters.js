@@ -8,8 +8,8 @@ import { boardGrid } from './play.js'
 
 const baseId = (tokenId) => tokenId.split('#')[0]
 
-// The tile a square is on.
-const tileAt = (grid, at) => (at ? grid.get(key(at))?.tile : undefined)
+// The tile a square is on (half of the Start tile counts as a tile).
+const tileAt = (grid, at) => (at ? grid.get(key(at))?.area : undefined)
 
 // Heroes on the board that an attack can find (not off in the Astral Refuge).
 const heroesOnBoard = (state) =>

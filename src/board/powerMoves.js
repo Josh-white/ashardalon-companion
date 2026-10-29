@@ -42,7 +42,7 @@ export function moveChoices(state) {
   const self = move && state.board?.tokens[move.heroId]
   if (!s || !self) return []
   const grid = boardGrid(state.board)
-  const tileOf = (at) => grid.get(key(at))?.tile
+  const tileOf = (at) => grid.get(key(at))?.area
   const near = (list, when) => heroesFor(when, grid, self, list).map((f) => f.id)
   const others = heroTokens(state).filter((h) => h.id !== move.heroId)
   switch (s.pick) {
@@ -100,8 +100,8 @@ export function moveTargets(state, id) {
       return all.filter((k) => tilesBetween(grid, ref, parse(k)) <= (s.n ?? 1))
     }
     case 'ownTile': {
-      const tile = grid.get(key(self))?.tile
-      return all.filter((k) => grid.get(k).tile === tile)
+      const tile = grid.get(key(self))?.area
+      return all.filter((k) => grid.get(k).area === tile)
     }
     case 'adjacentTile':
       return all.filter((k) => tilesBetween(grid, at, parse(k)) === 1)

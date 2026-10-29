@@ -54,7 +54,7 @@ export function nextToWall(grid, at) {
 export function boardAnswer(state, question) {
   if (!state?.board || typeof question !== 'string') return null
   const grid = boardGrid(state.board)
-  const tileOf = (at) => grid.get(key(at))?.tile
+  const tileOf = (at) => grid.get(key(at))?.area
   const ask = question.trim()
   let m
 
@@ -114,7 +114,7 @@ export function boardAnswer(state, question) {
   if ((m = ask.match(/^Is (.+?) on a tile with an unexplored edge\?/i))) {
     const who = figureNamed(state, m[1])
     if (!who) return null
-    const open = unexploredEdges(grid).some((edge) => edge.tile === tileOf(who.at))
+    const open = unexploredEdges(grid).some((edge) => edge.area === tileOf(who.at))
     return { answer: open, why: open ? `${who.name}'s tile has an unexplored edge.` : `${who.name}'s tile has no unexplored edge.` }
   }
 
@@ -128,6 +128,6 @@ export function guardsOnTile(state, hero, guards) {
   const grid = boardGrid(state.board)
   const at = hero.tokens?.refuge ? null : state.board.tokens[hero.id]
   if (!at) return null
-  const tile = grid.get(key(at))?.tile
-  return guards.filter((g) => !g.tokens?.refuge && state.board.tokens[g.id] && grid.get(key(state.board.tokens[g.id]))?.tile === tile)
+  const tile = grid.get(key(at))?.area
+  return guards.filter((g) => !g.tokens?.refuge && state.board.tokens[g.id] && grid.get(key(state.board.tokens[g.id]))?.area === tile)
 }
