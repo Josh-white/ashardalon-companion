@@ -2,14 +2,30 @@ import { HERO_COLORS } from '../data/heroes.js'
 import { recap } from '../state/stats.js'
 import { campaignOutcome } from '../state/campaign.js'
 import { CampaignRecap } from './Campaign.jsx'
-import { Button } from './ui.jsx'
+import { Button, useConfirm } from './ui.jsx'
 
 // The end-of-game recap, win or lose: what the party did, and an award for every
 // hero. The projector shows it big with no buttons; the iPads can go back or start over.
 // Sizes are in em, so the projector only has to set a bigger font.
 const BIG_COLUMNS = ['', 'mx-auto max-w-[30em]', 'grid-cols-2', 'grid-cols-3', 'grid-cols-4', 'grid-cols-5']
 
+// "New game" only resets the game this screen is in: other games on the Pi carry on, and
+// Undo brings this one back.
+export function newGameQuestion(state) {
+  return {
+    title: state.board ? 'Start a new solo game?' : 'Start a new game?',
+    body: [
+      state.board ? 'This solo game ends and you go back to the lobby.' : 'This game ends on every screen playing it, and everyone goes back to the lobby.',
+      'Other games on the Pi are not touched. Changed your mind? Tap Undo.',
+    ],
+    yes: 'New game',
+  }
+}
+
+export const LOST_QUESTION = { title: 'Did the party lose?', body: 'This shows the end-of-game recap.', yes: 'We lost', danger: true }
+
 export default function Recap({ state, dispatch, big }) {
+  const [ask, dialog] = useConfirm()
   const won = state.status === 'won'
   const { heroes, mvpIds, party } = recap(state)
   const title = state.adventure?.card.title
@@ -80,12 +96,13 @@ export default function Recap({ state, dispatch, big }) {
           {/* Mid-campaign, the way on is the campaign's own button above. */}
           {(!state.campaign || campaignOutcome(state)?.over) && <Button
             variant="gold"
-            onClick={() => window.confirm('Start a new game? This clears the recap for everyone.') && dispatch({ type: 'NEW_GAME' })}
+            onClick={() => ask(newGameQuestion(state), () => dispatch({ type: 'NEW_GAME' }))}
           >
             New game
           </Button>}
         </div>
       )}
+      {dialog}
     </div>
   )
 }
