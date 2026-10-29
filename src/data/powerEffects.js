@@ -16,6 +16,7 @@ import { itemAc } from './items.js'
 //   after       hit or miss: 'heal-tile' (1 HP to each hero on the tile), 'shield', 'pass-monster', 'at-will'.
 //   note        a reminder shown after the roll.
 //   hitNote, missNote  a reminder shown after the roll only when it hit, or only when it missed.
+//   boardMove   on the virtual board, hit or miss: { who: 'tile' (a hero on your tile) or 'self', squares } moves a hero.
 //   keepOnMiss  a daily that isn't used up when it misses.
 //   free        doesn't use up the hero's attack (a trap can still be disabled after it).
 // Other powers have a `use`, done from the power's tile:
@@ -28,7 +29,7 @@ const EFFECTS = {
   // Quinn, the cleric
   'Healing Hymn': { use: { healSelf: 2, heal: 2, pick: 'other', optional: true, prompt: 'Who else on your tile gets 2 HP?' } },
   "Cleric's Shield": { after: 'shield' },
-  'Righteous Advance': { note: 'Hit or miss: move one hero on your tile 2 squares.' },
+  'Righteous Advance': { note: 'Hit or miss: move one hero on your tile 2 squares.', boardMove: { who: 'tile', squares: 2 } },
   'Sacred Flame': { onHit: { heal: 1, pick: 'tile' } },
   'Blade Barrier': {
     use: { tokens: { bladeBarrier: 5 }, note: 'Put 5 Blade Barrier tokens on a tile within 2 tiles of you.' },

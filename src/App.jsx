@@ -190,7 +190,52 @@ function HeroView({ state, dispatch, hero }) {
   )
 }
 
+// A solo game on the virtual board: the turn and the board side by side, the active hero's
+// card under them, and everything else folded away until it's wanted.
+function SoloView({ state, dispatch }) {
+  const active = state.heroes[state.turn.heroIndex]
+  const others = state.heroes.filter((h) => h.id !== active?.id)
+  const heroCard = (hero) => (
+    <HeroCard
+      key={hero.id}
+      state={state}
+      hero={hero}
+      isActive={hero.id === active?.id}
+      xp={state.xp}
+      surges={state.surges}
+      dispatch={dispatch}
+      powersInTurnGuide={hero.id === active?.id && PHASES[state.turn.phase].key === 'hero'}
+      natural20={state.turn.natural20 === hero.id}
+    />
+  )
+  const fold = (title, body) => (
+    <details className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
+      <summary className="cursor-pointer font-display text-xl font-bold text-zinc-200">{title}</summary>
+      <div className="mt-3">{body}</div>
+    </details>
+  )
+  return (
+    <div className="mx-auto max-w-7xl space-y-4 p-3">
+      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+        <div className="lg:sticky lg:top-2 lg:order-2">
+          <Board state={state} dispatch={dispatch} />
+        </div>
+        <div className="space-y-4 lg:order-1">
+          <TurnGuide state={state} dispatch={dispatch} />
+          {active && heroCard(active)}
+        </div>
+      </div>
+      <TreasureStep state={state} dispatch={dispatch} />
+      {others.length > 0 && fold(`Other heroes (${others.map((h) => h.name).join(', ')})`, <div className="grid gap-4 md:grid-cols-2">{others.map(heroCard)}</div>)}
+      {state.adventure && fold('Adventure', <AdventurePanel state={state} dispatch={dispatch} />)}
+      {fold(`Monsters (${state.monsters.length})`, <><VillainList state={state} dispatch={dispatch} canPlace /><MonsterList state={state} dispatch={dispatch} /></>)}
+      {fold('Game log', <GameLog log={state.log} />)}
+    </div>
+  )
+}
+
 function TableView({ state, dispatch }) {
+  if (state.board) return <SoloView state={state} dispatch={dispatch} />
   return (
     <div className="mx-auto max-w-6xl space-y-8 p-4">
       <TurnGuide state={state} dispatch={dispatch} />

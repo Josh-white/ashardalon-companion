@@ -76,6 +76,14 @@ function edgeFor(state, grid, drawKey, edgeId) {
   }
   const last = (state.turn.boardTiles ?? []).at(-1)
   if (drawKey.startsWith('hallway-')) return last ? edges.find((e) => e.tile === last.uid && e.side === last.side) ?? null : null
+  // A monster that explores (the Duergar Guard) puts the tile next to its own tile.
+  const monsterAt = drawKey.startsWith('monster-') && state.board.tokens[drawKey.slice('monster-'.length)]
+  if (monsterAt) {
+    const tile = grid.get(key(monsterAt))?.tile
+    const far = distances(grid, monsterAt)
+    const steps = (e) => Math.min(...e.squares.map((sq) => far.get(key(sq)) ?? Infinity))
+    return edges.filter((e) => e.tile === tile).sort((a, b) => steps(a) - steps(b))[0] ?? null
+  }
   const at = activeAt(state)
   if (!at) return null
   const far = distances(grid, at)
@@ -118,7 +126,9 @@ export function placeNewFigures(before, state) {
   const open = (state.turn.boardTiles ?? []).filter((t) => !t.filled).at(-1)
   if (!open) return state
   const known = new Set([...before.monsters, ...(before.villains ?? [])].map((f) => f.id))
-  const fresh = [...state.monsters, ...(state.villains ?? []).filter((v) => !v.defeated)].filter((f) => !known.has(f.id) && !board.tokens[f.id] && !f.objective)
+  const fresh = [...state.monsters, ...(state.villains ?? []).filter((v) => !v.defeated)]
+    .filter((f) => !known.has(f.id) && !board.tokens[f.id] && !f.objective)
+    .flatMap((f) => Array.from({ length: figuresLeft(f) }, (_, i) => ({ id: figureToken(f.id, i + 1) })))
   if (fresh.length === 0) return state
   const grid = boardGrid(board)
   const mark = scorchSquare(grid, open.uid) ?? [...grid.values()].find((sq) => sq.tile === open.uid && sq.floor)
@@ -133,6 +143,12 @@ export function placeNewFigures(before, state) {
   const boardTiles = state.turn.boardTiles.map((t) => (t.uid === open.uid ? { ...t, filled: true } : t))
   return { ...state, board: { ...board, tokens }, turn: { ...state.turn, boardTiles } }
 }
+
+// A monster card with several figures (the Legion Devil's 3) has a token for each figure
+// still standing: the monster's id, then id#2, id#3.
+export const figureToken = (monsterId, n) => (n <= 1 ? monsterId : `${monsterId}#${n}`)
+const baseId = (tokenId) => tokenId.split('#')[0]
+export const figuresLeft = (monster) => (monster.card?.figures > 1 && !monster.villain ? Math.max(0, Math.ceil(monster.hp / monster.card.hp)) : 1)
 
 const has = (hero, condition) => (hero.conditions ?? []).includes(condition)
 
@@ -158,7 +174,7 @@ function occupied(state, exceptId) {
   for (const [id, at] of Object.entries(state.board.tokens)) {
     if (id === exceptId) continue
     taken.add(key(at))
-    if (foes.has(id)) stops.add(key(at))
+    if (foes.has(baseId(id))) stops.add(key(at))
   }
   return { taken, stops }
 }
@@ -186,20 +202,62 @@ export function moveHero(state, action) {
 export function moveToken(state, action) {
   if (!state.board || !Array.isArray(action.to)) return state
   const figures = [...state.heroes, ...state.monsters, ...(state.villains ?? []), ...(state.villagers ?? [])]
-  if (!figures.some((f) => f.id === action.id)) return state
+  if (typeof action.id !== 'string' || !figures.some((f) => f.id === baseId(action.id))) return state
+  if (action.id.includes('#')) {
+    const monster = state.monsters.find((m) => m.id === baseId(action.id))
+    if (!monster || Number(action.id.split('#')[1]) > figuresLeft(monster)) return state
+  }
   const square = boardGrid(state.board).get(key(action.to))
   if (!square?.floor || occupied(state, action.id).taken.has(key(action.to))) return state
   return placeToken(state, action.id, action.to)
 }
 
-// Figures that left play take their token with them.
+// Figures that left play take their token with them. When one figure of a monster card
+// falls, its token nearest the active hero (the one most likely just attacked) goes, and
+// the rest are numbered again.
 export function pruneTokens(state) {
   const board = state.board
   if (!board) return state
   const live = new Set(
     [...state.heroes, ...state.monsters, ...(state.villains ?? []).filter((v) => !v.defeated), ...(state.villagers ?? []).filter((v) => !v.removed)].map((f) => f.id),
   )
-  const ids = Object.keys(board.tokens)
-  if (ids.every((id) => live.has(id))) return state
-  return { ...state, board: { ...board, tokens: Object.fromEntries(Object.entries(board.tokens).filter(([id]) => live.has(id))) } }
+  let tokens = Object.fromEntries(Object.entries(board.tokens).filter(([id]) => live.has(baseId(id))))
+  const hero = tokens[state.heroes[state.turn.heroIndex]?.id]
+  for (const monster of state.monsters) {
+    const mine = Object.keys(tokens).filter((id) => baseId(id) === monster.id)
+    const left = figuresLeft(monster)
+    if (mine.length <= left) continue
+    const far = (id) => (hero ? Math.max(Math.abs(tokens[id][0] - hero[0]), Math.abs(tokens[id][1] - hero[1])) : 0)
+    const keep = [...mine].sort((a, b) => far(b) - far(a)).slice(0, left)
+    const rest = Object.fromEntries(Object.entries(tokens).filter(([id]) => baseId(id) !== monster.id))
+    keep.forEach((id, i) => (rest[figureToken(monster.id, i + 1)] = tokens[id]))
+    tokens = rest
+  }
+  const same = Object.keys(tokens).length === Object.keys(board.tokens).length && Object.entries(tokens).every(([id, at]) => board.tokens[id] === at)
+  return same ? state : { ...state, board: { ...board, tokens } }
+}
+
+// A power that moves a hero (Righteous Advance): who can be moved, and where to.
+export function boardMoveChoices(state) {
+  const move = state.turn.boardMove
+  const from = move && state.board?.tokens[move.heroId]
+  if (!from) return []
+  if (move.who === 'self') return [move.heroId]
+  const grid = boardGrid(state.board)
+  const tile = grid.get(key(from))?.tile
+  return state.heroes.filter((h) => h.hp > 0 && state.board.tokens[h.id] && grid.get(key(state.board.tokens[h.id]))?.tile === tile).map((h) => h.id)
+}
+
+export function boardMoveReach(state, heroId) {
+  const move = state.turn.boardMove
+  const at = state.board?.tokens[heroId]
+  if (!move || !at || !boardMoveChoices(state).includes(heroId)) return []
+  return reachable(boardGrid(state.board), at, move.squares, occupied(state, heroId))
+}
+
+export function boardMove(state, action) {
+  const to = Array.isArray(action.to) ? action.to : null
+  if (!to || !boardMoveReach(state, action.heroId).includes(key(to))) return state
+  const moved = placeToken(state, action.heroId, to)
+  return { ...moved, turn: { ...moved.turn, boardMove: null } }
 }

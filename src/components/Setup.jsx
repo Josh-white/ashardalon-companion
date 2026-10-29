@@ -197,31 +197,28 @@ function MyHero({ state, claim, cards, deviceId, dispatch, solo = false }) {
   )
 }
 
-// Solo on the virtual board: this screen picks one or two heroes and runs the whole game.
-// Each hero is a claim of its own (this screen's id plus ~solo-1 or ~solo-2), so getting
+// Solo on the virtual board: this screen picks one to five heroes and runs the whole game.
+// Each hero is a claim of its own (this screen's id plus ~solo-1 to ~solo-5), so getting
 // a hero ready works the same as on a player's iPad.
-const SOLO_SLOTS = ['~solo-1', '~solo-2']
+const SOLO_SLOTS = ['~solo-1', '~solo-2', '~solo-3', '~solo-4', '~solo-5']
 
 function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave }) {
   const lobby = state.lobby ?? []
   const mine = SOLO_SLOTS.map((slot) => lobby.find((c) => c.deviceId === deviceId + slot)).filter(Boolean)
   const others = lobby.filter((c) => !c.deviceId.startsWith(deviceId + '~solo'))
   const freeSlot = SOLO_SLOTS.find((slot) => !lobby.some((c) => c.deviceId === deviceId + slot))
-  const [name, setName] = useState(mine[0]?.player ?? '')
   const powersDone = mine.every((c) => powersChosen(c, cards.powers))
-  const ready = mine.length > 0 && name.trim() !== '' && powersDone && others.length === 0
-  // One player runs every hero, so the name goes on each of them.
-  const rename = (player) => {
-    setName(player)
-    for (const c of mine) dispatch({ type: 'SET_LOBBY_PLAYER', deviceId: c.deviceId, player })
-  }
+  const ready = mine.length > 0 && powersDone && others.length === 0
+  // One player runs every hero, so nobody is asked for a name: the screens call each turn by
+  // the hero's name instead.
   const pick = (template) => {
-    const id = deviceId + freeSlot
-    dispatch({ type: 'CLAIM_HERO', deviceId: id, heroKey: template.key, picks: startingPicks(template, cards.powers) })
-    if (name) dispatch({ type: 'SET_LOBBY_PLAYER', deviceId: id, player: name })
+    dispatch({ type: 'CLAIM_HERO', deviceId: deviceId + freeSlot, heroKey: template.key, picks: startingPicks(template, cards.powers) })
   }
   const enter = () => {
-    for (const c of mine) if (!c.ready) dispatch({ type: 'SET_LOBBY_READY', deviceId: c.deviceId, ready: true })
+    for (const c of mine) {
+      if (!c.player.trim()) dispatch({ type: 'SET_LOBBY_PLAYER', deviceId: c.deviceId, player: 'Solo' })
+      if (!c.ready) dispatch({ type: 'SET_LOBBY_READY', deviceId: c.deviceId, ready: true })
+    }
     onStart()
   }
 
@@ -229,15 +226,9 @@ function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave }) {
     <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
       <header className="text-center">
         <h1 className="font-display text-4xl font-bold text-amber-400 sm:text-5xl">Solo on the virtual board</h1>
-        <p className="mt-2 text-lg text-zinc-400">Pick one hero, or two to play as a party. No tiles on the table: the dungeon is on this screen.</p>
+        <p className="mt-2 text-lg text-zinc-400">Pick one hero, or up to five to play as a party. No tiles on the table: the dungeon is on this screen.</p>
       </header>
       <ChosenAdventure state={state} />
-      <input
-        className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-lg text-zinc-100"
-        placeholder="Your name"
-        value={name}
-        onChange={(e) => rename(e.target.value)}
-      />
       {mine.map((claim) => (
         <MyHero key={claim.deviceId} state={state} claim={claim} cards={cards} deviceId={claim.deviceId} dispatch={dispatch} solo />
       ))}
@@ -272,9 +263,7 @@ function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave }) {
             ? 'Another iPad has a hero in the lobby. A solo game needs it to pick "Pick a different hero" first.'
             : mine.length === 0
               ? 'Pick a hero to start.'
-              : !name.trim()
-                ? 'Type your name to start.'
-                : powersDone
+              : powersDone
                   ? 'Ready when you are.'
                   : 'Tap "Change powers" and choose every power.'}
         </p>
@@ -431,7 +420,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
           <button type="button" className="font-semibold text-amber-400 underline" onClick={() => setSolo(true)}>
             Play solo on a virtual board
           </button>{' '}
-          with one or two heroes, no tiles needed.
+          with one to five heroes, no tiles needed.
         </p>
       )}
 
