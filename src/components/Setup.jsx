@@ -5,7 +5,7 @@ import { campaignHero } from '../state/campaign.js'
 import { levelSlots, powerSlotsFor } from '../state/game.js'
 import { randomNumbers, shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
-import { AdventurePicker, ChosenAdventure } from './Adventure.jsx'
+import { AdventurePicker, ChosenAdventure, QuestLine } from './Adventure.jsx'
 import Art from './Art.jsx'
 import { CampaignLobby, HeroCampaign } from './Campaign.jsx'
 import Chronicle from './Chronicle.jsx'
@@ -376,15 +376,16 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
       {watchOnly && <Chronicle campaign={state.campaign} />}
       {watchOnly && <HeroHall heroes={heroChoices} lobby={lobby} />}
 
-      {watchOnly ? (
-        state.campaign ? <CampaignLobby state={state} dispatch={dispatch} /> : <AdventurePicker state={state} dispatch={dispatch} />
+      {/* Where the dungeon is: one choice for the whole table, so the big screen makes it.
+          Without one in the game, any iPad can. */}
+      {watchOnly && !state.campaign ? (
+        <QuestLine state={state} dispatch={dispatch} onBoard={onBoard} boardChoice={canBoard ? <BoardChoice state={state} dispatch={dispatch} big /> : null} />
       ) : (
-        <ChosenAdventure state={state} />
+        <>
+          {watchOnly ? <CampaignLobby state={state} dispatch={dispatch} /> : <ChosenAdventure state={state} />}
+          {canBoard && (watchOnly || !projectorOpen) && <BoardChoice state={state} dispatch={dispatch} big={watchOnly} />}
+        </>
       )}
-
-      {/* One choice for the whole table, so the big screen makes it. Without one in the
-          game, any iPad can. */}
-      {canBoard && (watchOnly || !projectorOpen) && <BoardChoice state={state} dispatch={dispatch} big={watchOnly} />}
 
       {mine && !watchOnly && <MyHero state={state} claim={mine} cards={cards} deviceId={deviceId} dispatch={dispatch} />}
 

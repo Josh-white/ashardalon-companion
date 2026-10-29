@@ -5,6 +5,7 @@ import { randomNumbers, rollD20, shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { tileSpots } from '../state/tiles.js'
 import { TileSetup } from './Tiles.jsx'
+import { STARTING_TILES } from '../state/tiles.js'
 import { Button, Chip } from './ui.jsx'
 import { CampaignBoons } from './Campaign.jsx'
 import { VillagerList } from './Villagers.jsx'
@@ -54,6 +55,51 @@ export function AdventurePicker({ state, dispatch, board = false }) {
       <TileSetup state={state} dispatch={dispatch} />
 
       {chosen && <AdventureSetup adventure={chosen} board={board} />}
+    </section>
+  )
+}
+
+// The big screen's lobby: the adventure, healing surges, tiles and where the dungeon is,
+// on one line under the torches, with Change to open the full choice. The table's setup
+// steps stay in view, since the players set up the table while the heroes get ready.
+export function QuestLine({ state, dispatch, boardChoice = null, onBoard = false }) {
+  const [open, setOpen] = useState(false)
+  const chosen = state.lobbyAdventure
+  const surges = state.lobbySurges ?? 2
+  const facts = [
+    `${'❤'.repeat(surges)} ${surges === 1 ? 'harder' : surges === 3 ? 'easier' : 'normal'}`,
+    onBoard ? '🗺️ virtual board' : `🧱 real tiles · ${state.lobbyTiles ?? STARTING_TILES} in the stack`,
+  ]
+  if (open) {
+    return (
+      <div className="space-y-4">
+        <AdventurePicker state={state} dispatch={dispatch} board={onBoard} />
+        {boardChoice}
+        <div className="text-center">
+          <Button variant="gold" className="px-10 py-3 text-xl" onClick={() => setOpen(false)}>
+            Done
+          </Button>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center gap-[1.2vw] rounded-2xl border-2 border-amber-900/70 bg-gradient-to-r from-amber-950/70 to-black/70 px-[1.6vw] py-[1vw] backdrop-blur-sm">
+        <span aria-hidden="true" className="text-[2.6vw]">
+          📜
+        </span>
+        <div className="min-w-0">
+          <p className="font-display text-[1.9vw] leading-tight font-bold text-amber-50">{chosen ? heading(chosen) : 'Free play'}</p>
+          <p className="text-[1.2vw] text-zinc-300">
+            {chosen ? chosen.goal : 'No adventure: just explore and fight.'} · {facts.join(' · ')}
+          </p>
+        </div>
+        <Button className="ml-auto shrink-0 !rounded-full border border-amber-700 px-[1.6vw] text-[1.2vw]" onClick={() => setOpen(true)}>
+          Change
+        </Button>
+      </div>
+      {chosen && !onBoard && <AdventureSetup adventure={chosen} board={false} />}
     </section>
   )
 }

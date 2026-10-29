@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { unlockAudio } from '../audio/soundSetting.js'
-import { heroArt } from '../data/art.js'
 import { HERO_COLORS } from '../data/heroes.js'
-import Art from './Art.jsx'
+import { HeroPortrait } from './HeroGallery.jsx'
 
 // How long a player holds their hero to light the torch.
 export const HOLD_MS = 800
@@ -37,11 +36,12 @@ export function HeroHall({ heroes, lobby }) {
           <div key={`${template.key}-${claim ? 'lit' : 'dark'}`} className={`flex flex-col items-center gap-2 ${claim ? 'torch-arrive' : ''}`}>
             <Torch lit={Boolean(claim)} />
             <div
-              className={`flex aspect-[3/4] w-full items-center justify-center rounded-t-full rounded-b-xl border-[3px] ${
-                claim ? `border-transparent ring-[3px] ${color.ring} bg-[radial-gradient(ellipse_at_50%_30%,rgb(245_158_11/0.4),rgb(28_21_16/0.9)_70%)] shadow-[0_0_3vw_rgb(245_158_11/0.35)]` : 'border-dashed border-stone-700 bg-stone-950'
+              className={`aspect-[3/4] w-full overflow-hidden rounded-t-full rounded-b-xl border-[3px] ${
+                claim ? `border-transparent ring-[3px] ${color.ring} shadow-[0_0_3vw_rgb(245_158_11/0.35)]` : 'border-dashed border-stone-700'
               }`}
             >
-              <Art name={heroArt(template.key)} className={`w-3/4 ${claim ? '' : 'brightness-[0.35] grayscale'}`} />
+              {/* The hero's card art, dark until their torch is lit (the round token without card art). */}
+              <HeroPortrait heroKey={template.key} dim={!claim} className="h-full w-full" />
             </div>
             <span className={`font-display text-[2vw] font-bold ${claim ? color.text : 'text-stone-500'}`}>{template.name}</span>
             <span className="text-center text-[1.2vw] text-zinc-400">

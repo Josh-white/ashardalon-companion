@@ -68,6 +68,12 @@ describe('narrator lines', () => {
       'The Tunnel Exit! Ahead, you see light streaming in from above.',
     ])
     expect(narrationFor(game({ adventure: adventure(exit) }), game({ adventure: adventure(exit) }), NOW)).toEqual([])
+    // A new game reads the story first, then calls the heroes into the dungeon.
+    const intro = { id: 's1', title: 'Into the Mountain', text: 'The mountain rumbles.' }
+    expect(narrationFor(game({ status: 'setup' }), game({ adventure: adventure(intro) }), NOW)).toEqual([
+      'The mountain rumbles.',
+      'The adventure begins: Into the Mountain! Heroes, enter the dungeon.',
+    ])
     const won = { id: 's3', title: 'Victory!', text: 'You escaped the dungeon!' }
     expect(narrationFor(game({ adventure: adventure(exit) }), game({ status: 'won', adventure: adventure(won) }), NOW)).toEqual(['You escaped the dungeon!'])
   })
