@@ -62,7 +62,8 @@ export function AdventurePicker({ state, dispatch, board = false }) {
 // The big screen's lobby: the adventure, healing surges, tiles and where the dungeon is,
 // on one line under the torches, with Change to open the full choice. The table's setup
 // steps stay in view, since the players set up the table while the heroes get ready.
-export function QuestLine({ state, dispatch, boardChoice = null, onBoard = false }) {
+// `big` sizes it for the projector; otherwise it fits a phone or an iPad (the solo setup).
+export function QuestLine({ state, dispatch, boardChoice = null, onBoard = false, big = true }) {
   const [open, setOpen] = useState(false)
   const chosen = state.lobbyAdventure
   const surges = state.lobbySurges ?? 2
@@ -85,17 +86,17 @@ export function QuestLine({ state, dispatch, boardChoice = null, onBoard = false
   }
   return (
     <section className="space-y-3">
-      <div className="flex items-center gap-[1.2vw] rounded-2xl border-2 border-amber-900/70 bg-gradient-to-r from-amber-950/70 to-black/70 px-[1.6vw] py-[1vw] backdrop-blur-sm">
-        <span aria-hidden="true" className="text-[2.6vw]">
+      <div className={`flex items-center rounded-2xl border-2 border-amber-900/70 bg-gradient-to-r from-amber-950/70 to-black/70 backdrop-blur-sm ${big ? 'gap-[1.2vw] px-[1.6vw] py-[1vw]' : 'gap-3 px-4 py-3'}`}>
+        <span aria-hidden="true" className={big ? 'text-[2.6vw]' : 'text-3xl'}>
           📜
         </span>
         <div className="min-w-0">
-          <p className="font-display text-[1.9vw] leading-tight font-bold text-amber-50">{chosen ? heading(chosen) : 'Free play'}</p>
-          <p className="text-[1.2vw] text-zinc-300">
+          <p className={`font-display leading-tight font-bold text-amber-50 ${big ? 'text-[1.9vw]' : 'text-xl sm:text-2xl'}`}>{chosen ? heading(chosen) : 'Free play'}</p>
+          <p className={`text-zinc-300 ${big ? 'text-[1.2vw]' : 'text-sm sm:text-base'}`}>
             {chosen ? chosen.goal : 'No adventure: just explore and fight.'} · {facts.join(' · ')}
           </p>
         </div>
-        <Button className="ml-auto shrink-0 !rounded-full border border-amber-700 px-[1.6vw] text-[1.2vw]" onClick={() => setOpen(true)}>
+        <Button className={`ml-auto shrink-0 !rounded-full border border-amber-700 ${big ? 'px-[1.6vw] text-[1.2vw]' : 'px-4'}`} onClick={() => setOpen(true)}>
           Change
         </Button>
       </div>
