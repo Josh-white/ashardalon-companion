@@ -66,13 +66,20 @@ function OpenEdges({ grid }) {
 }
 
 // A round figure: its token art when there is some, else a coloured disc with its initial.
-function Token({ id, at, label, color, art, selected, faded, onTap }) {
+// The hero whose turn it is gets a pulsing gold glow so it is easy to spot.
+function Token({ id, at, label, color, art, selected, active, faded, onTap }) {
   const cx = at[0] * SQUARE + SQUARE / 2
   const cy = at[1] * SQUARE + SQUARE / 2
   const r = SQUARE / 2 - 3
   const clip = `clip-${id.replace(/#/g, '-')}`
   return (
     <g data-token={id} onClick={onTap} className={onTap ? 'cursor-pointer' : undefined} opacity={faded ? 0.6 : 1}>
+      {active && (
+        <g pointerEvents="none" className="motion-safe:animate-pulse">
+          <circle cx={cx} cy={cy} r={r + 8} fill="#facc15" fillOpacity="0.4" stroke="#422006" strokeWidth="2" />
+          <circle cx={cx} cy={cy} r={r + 5} fill="none" stroke="#fde047" strokeWidth="4" />
+        </g>
+      )}
       <clipPath id={clip}>
         <circle cx={cx} cy={cy} r={r} />
       </clipPath>
@@ -278,8 +285,9 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
               />
             )
           })}
-          {onBoard.map((f) => (
-            <Token key={f.id} {...f} at={board.tokens[f.id]} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)} onTap={readOnly ? undefined : () => tapFigure(f.id)} />
+          {/* The active hero is drawn last so its glow sits on top of its neighbours. */}
+          {[...onBoard.filter((f) => f.id !== activeId), ...onBoard.filter((f) => f.id === activeId)].map((f) => (
+            <Token key={f.id} {...f} at={board.tokens[f.id]} active={f.id === activeId} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)} onTap={readOnly ? undefined : () => tapFigure(f.id)} />
           ))}
         </svg>
       </div>
