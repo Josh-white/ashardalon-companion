@@ -2,7 +2,7 @@
 // the adventure again and again, one Chamber card each time, keeping their level, treasure
 // and gold. Plain functions on the game state, used by the game reducer.
 import { playableChambers } from './adventure.js'
-import { shuffle } from './game.js'
+import { shuffle } from './gameHelpers.js'
 
 // Shop: how many treasure cards the traders turn over between adventures.
 export const SHOP_CARDS = 3
