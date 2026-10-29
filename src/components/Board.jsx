@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { heroArt, monsterArt } from '../data/art.js'
-import { boardGrid, figureToken, figuresLeft, heroReach, moveSpeed, movesLeft } from '../board/play.js'
+import { boardGrid, boardMoveChoices, boardMoveReach, figureToken, figuresLeft, heroReach, moveSpeed, movesLeft } from '../board/play.js'
 import { key } from '../board/grid.js'
 import { activeVillains } from '../state/game.js'
 import { artUrl, useArt } from '../state/useArt.js'
@@ -76,19 +76,23 @@ export default function Board({ state, dispatch, readOnly = false }) {
 
   // Squares to light up: where the active hero can move, or every free floor square by hand.
   const taken = new Set(Object.values(board.tokens).map(key))
+  // A power that moves a hero (Righteous Advance) takes over the taps until it's done.
+  const powerMove = !readOnly && !byHand && state.turn.boardMove
+  const movable = powerMove ? boardMoveChoices(state) : []
   let targets = []
   if (!readOnly && picked) {
-    if (byHand) targets = [...grid.values()].filter((sq) => sq.floor && !taken.has(key([sq.x, sq.y]))).map((sq) => key([sq.x, sq.y]))
+    if (powerMove) targets = boardMoveReach(state, picked)
+    else if (byHand) targets = [...grid.values()].filter((sq) => sq.floor && !taken.has(key([sq.x, sq.y]))).map((sq) => key([sq.x, sq.y]))
     else if (picked === active?.id) targets = heroReach(state, active)
   }
   const tapSquare = (sq) => {
     if (!picked || !targets.includes(key(sq))) return
-    dispatch(byHand ? { type: 'MOVE_TOKEN', id: picked, to: sq } : { type: 'MOVE_HERO', heroId: picked, to: sq })
+    dispatch(powerMove ? { type: 'BOARD_MOVE', heroId: picked, to: sq } : byHand ? { type: 'MOVE_TOKEN', id: picked, to: sq } : { type: 'MOVE_HERO', heroId: picked, to: sq })
     setPicked(null)
   }
   const tapFigure = (id) => {
     if (readOnly) return
-    if (!byHand && id !== active?.id) return
+    if (powerMove ? !movable.includes(id) : !byHand && id !== active?.id) return
     setPicked(picked === id ? null : id)
   }
 
@@ -128,6 +132,16 @@ export default function Board({ state, dispatch, readOnly = false }) {
             }}
           >
             ✋ Move by hand
+          </Button>
+        </div>
+      )}
+      {powerMove && (
+        <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl bg-amber-950/60 p-2 text-amber-200">
+          <p className="flex-1">
+            {powerMove.source}: {picked ? `tap a lit square (up to ${powerMove.squares}).` : powerMove.who === 'self' ? `tap ${active?.name}, then a square.` : `tap a hero on ${state.heroes.find((h) => h.id === powerMove.heroId)?.name}'s tile, then a square (up to ${powerMove.squares}).`}
+          </p>
+          <Button className="!py-1 text-sm" onClick={() => { setPicked(null); dispatch({ type: 'SKIP_BOARD_MOVE' }) }}>
+            Skip
           </Button>
         </div>
       )}

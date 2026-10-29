@@ -20,7 +20,7 @@ import { trackStats } from './stats.js'
 import { campaignHero, campaignOutcome, campaignSurges, isCampaign, newCampaign, shopCards, shopSize } from './campaign.js'
 import { playBoardSound, setBoardOff, setBoardUnlimited } from './soundboard.js'
 import { newFirstRoll, rollFirst } from './firstRoll.js'
-import { layTile, moveHero, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
+import { boardMove, layTile, moveHero, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
 
 export const SAVE_VERSION = 1
 
@@ -835,6 +835,9 @@ function heroAttack(state, action) {
       lastAttack: { heroId: hero.id, powerId: power?.id ?? null, itemId: item?.id ?? null, attack, rolls, followUpDone: false, bonus: Boolean(extraAttack), free: Boolean(effects.free) },
     },
   }
+
+  // On the virtual board a power that moves a hero waits for the player to pick the square.
+  if (effects.boardMove && next.board) next = { ...next, turn: { ...next.turn, boardMove: { heroId: hero.id, ...effects.boardMove, source: power.name } } }
 
   // Bloodlust ends when the hero defeats a monster.
   const ending = defeated.length > 0 ? (hero.curses ?? []).filter((c) => c.card?.removeOnDefeat) : []
@@ -2074,6 +2077,12 @@ function reduce(state, action) {
       }
       return dealStartingTreasure(begun, action.treasureCards, action.random)
     }
+
+    case 'BOARD_MOVE':
+      return boardMove(state, action)
+
+    case 'SKIP_BOARD_MOVE':
+      return state.turn.boardMove ? { ...state, turn: { ...state.turn, boardMove: null } } : state
 
     case 'MOVE_HERO':
       return moveHero(state, action)

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { foeDistance, foesInRange, powerRange } from '../board/monsters.js'
 import { asksIfStayed, attackItems, distanceChoices, heroItems, itemsWithUse } from '../data/items.js'
 import { effectsOf, maxRolls, reactionsFor } from '../data/powerEffects.js'
 import { rollD20 } from '../state/random.js'
@@ -166,6 +167,8 @@ function damageLabel(text) {
   return `${damage} damage${miss ? `, ${miss} on a miss` : ''}`
 }
 
+const RANGE_WORDS = { adjacent: 'next to', sameTile: 'on the same tile as', within1: 'within 1 tile of', within2: 'within 2 tiles of', within3: 'within 3 tiles of' }
+
 const DISTANCE_LABELS = { adjacent: 'Next to me', within1: 'Within 1 tile', far: 'Farther' }
 
 // Magic weapons only help against monsters close enough, so the app asks how far each one is.
@@ -223,10 +226,18 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   const limit = item ? 1 : power ? maxRolls(power) : 1
   // Hypnotism attacks the monster the moved one ends up next to, never the moved one.
   const moving = effects.ask === 'moved-monster'
-  const targets = foes(state).filter((m) => !moving || m.id !== answers.movedId)
+  // On the virtual board only the monsters the power can reach are offered.
+  const [showAll, setShowAll] = useState(false)
+  const range = state.board && !item ? powerRange(power?.card?.text) : null
+  const everyTarget = foes(state).filter((m) => !moving || m.id !== answers.movedId)
+  const reachable = foesInRange(state, hero.id, range, everyTarget)
+  const targets = showAll ? everyTarget : reachable
+  // The board says how far each monster is, for magic weapons that care.
+  const boardDistances = Object.fromEntries(chosen.map((id) => [id, foeDistance(state, hero.id, id)]).filter(([, d]) => d))
+  const allDistances = { ...distances, ...boardDistances }
   const unknownAc = targets.find((m) => chosen.includes(m.id) && !m.ac)
   const needsAnswer =
-    (effects.ask && Object.keys(answers).length === 0) || (distanceChoices(hero) && chosen.some((id) => !distances[id]))
+    (effects.ask && Object.keys(answers).length === 0) || (distanceChoices(hero) && chosen.some((id) => !allDistances[id]))
   const last = state.turn.lastAttack
   const showResults = rolled && last && !last.bonus && last.heroId === hero.id
 
@@ -239,6 +250,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
     setChosen([])
     setAnswers({})
     setDistances({})
+    setShowAll(false)
   }
   const tap = (id) =>
     setChosen((list) => {
@@ -261,7 +273,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   const roll = () => {
     const targets = chosen.map((monsterId) => ({ monsterId, roll: rollD20() }))
     const source = item ? { itemId: item.id } : { powerId: power.id }
-    dispatch({ type: 'HERO_ATTACK', heroId: hero.id, ...source, targets, bonusAttack: Boolean(extra), distances, stayed, ...answers })
+    dispatch({ type: 'HERO_ATTACK', heroId: hero.id, ...source, targets, bonusAttack: Boolean(extra), distances: allDistances, stayed, ...answers })
     setRolled(true)
   }
 
@@ -368,7 +380,19 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
                   </Button>
                 )}
               </div>
-              <MonsterChoice state={state} monsters={targets} chosen={chosen} onToggle={tap} />
+              {range && !moving && reachable.length < everyTarget.length && (
+                <p className="text-sm text-zinc-400">
+                  {showAll ? 'Showing every monster.' : `Only monsters ${RANGE_WORDS[range]} ${hero.name} on the board.`}{' '}
+                  <button type="button" className="underline" onClick={() => setShowAll(!showAll)}>
+                    {showAll ? 'Only the ones in reach' : 'Show all'}
+                  </button>
+                </p>
+              )}
+              {targets.length === 0 ? (
+                <p className="text-amber-300">No monster is {RANGE_WORDS[range]} {hero.name}. Move closer first, or pick another power.</p>
+              ) : (
+                <MonsterChoice state={state} monsters={targets} chosen={chosen} onToggle={tap} />
+              )}
               </>
               )}
               <BeforeQuestion hero={hero} effects={effects} answers={answers} setAnswers={setAnswers} />
@@ -377,7 +401,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
                   state={state}
                   hero={hero}
                   chosen={chosen}
-                  distances={distances}
+                  distances={allDistances}
                   setDistances={setDistances}
                   stayed={stayed}
                   setStayed={setStayed}

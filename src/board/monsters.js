@@ -121,3 +121,41 @@ export function closestTarget(state, monsterId) {
   if (!state.board || !at) return null
   return closestOf(boardGrid(state.board), at, boardTargets(state))
 }
+
+// How far a power reaches, read from its card text before "Hit:": "an adjacent monster",
+// "within 2 tiles", "on your tile". Null when the text doesn't say, so every monster is offered.
+export function powerRange(text) {
+  const words = String(text ?? '').split(/hit:/i)[0].toLowerCase()
+  const within = /within (\d+) tiles?/.exec(words)
+  if (within) return `within${Math.min(3, Number(within[1]))}`
+  if (/adjacent/.test(words)) return 'adjacent'
+  if (/(on|in) your tile|on the same tile/.test(words)) return 'sameTile'
+  return null
+}
+
+// The monsters and villains a hero can reach with a range: any of a monster's figures will
+// do. A monster with no token on the board is always offered.
+export function foesInRange(state, heroId, range, foes) {
+  const at = squareOf(state, heroId)
+  if (!state.board || !at || !range) return foes
+  const grid = boardGrid(state.board)
+  const tokens = Object.entries(state.board.tokens)
+  return foes.filter((foe) => {
+    const mine = tokens.filter(([id]) => id.split('#')[0] === foe.id).map(([id, sq]) => ({ id, at: sq }))
+    return mine.length === 0 || heroesFor(range, grid, at, mine).length > 0
+  })
+}
+
+// How far a monster is from a hero, in the words magic weapons use: adjacent, within1 or far.
+export function foeDistance(state, heroId, foeId) {
+  const at = squareOf(state, heroId)
+  if (!state.board || !at) return null
+  const grid = boardGrid(state.board)
+  const mine = Object.entries(state.board.tokens)
+    .filter(([id]) => id.split('#')[0] === foeId)
+    .map(([id, sq]) => ({ id, at: sq }))
+  if (mine.length === 0) return null
+  if (heroesFor('adjacent', grid, at, mine).length > 0) return 'adjacent'
+  if (heroesFor('within1', grid, at, mine).length > 0) return 'within1'
+  return 'far'
+}

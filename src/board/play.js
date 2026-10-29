@@ -236,3 +236,28 @@ export function pruneTokens(state) {
   const same = Object.keys(tokens).length === Object.keys(board.tokens).length && Object.entries(tokens).every(([id, at]) => board.tokens[id] === at)
   return same ? state : { ...state, board: { ...board, tokens } }
 }
+
+// A power that moves a hero (Righteous Advance): who can be moved, and where to.
+export function boardMoveChoices(state) {
+  const move = state.turn.boardMove
+  const from = move && state.board?.tokens[move.heroId]
+  if (!from) return []
+  if (move.who === 'self') return [move.heroId]
+  const grid = boardGrid(state.board)
+  const tile = grid.get(key(from))?.tile
+  return state.heroes.filter((h) => h.hp > 0 && state.board.tokens[h.id] && grid.get(key(state.board.tokens[h.id]))?.tile === tile).map((h) => h.id)
+}
+
+export function boardMoveReach(state, heroId) {
+  const move = state.turn.boardMove
+  const at = state.board?.tokens[heroId]
+  if (!move || !at || !boardMoveChoices(state).includes(heroId)) return []
+  return reachable(boardGrid(state.board), at, move.squares, occupied(state, heroId))
+}
+
+export function boardMove(state, action) {
+  const to = Array.isArray(action.to) ? action.to : null
+  if (!to || !boardMoveReach(state, action.heroId).includes(key(to))) return state
+  const moved = placeToken(state, action.heroId, to)
+  return { ...moved, turn: { ...moved.turn, boardMove: null } }
+}

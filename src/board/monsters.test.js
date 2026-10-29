@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
-import { boardStep, boardTargetIds, closestTarget, squareAway, squareNextTo, squareToward } from './monsters.js'
+import { boardStep, boardTargetIds, closestTarget, foeDistance, foesInRange, powerRange, squareAway, squareNextTo, squareToward } from './monsters.js'
 import { normalizeTiles } from './tileDefs.js'
 
 // A made-up start tile and an open room laid north of it, then a second room north of that.
@@ -91,5 +91,24 @@ describe('a monster card with several figures', () => {
     expect(state.board.tokens[`${devil.id}#2`]).toEqual([2, 7])
     expect(before).not.toEqual([2, 7])
     expect(gameReducer(state, { type: 'MOVE_TOKEN', id: `${devil.id}#3`, to: [2, 6] })).toBe(state)
+  })
+})
+
+describe('hero attacks on the board', () => {
+  it('reads a power\'s reach from its text', () => {
+    expect(powerRange('Attack one adjacent Monster. Hit: 2 damage.')).toBe('adjacent')
+    expect(powerRange('Choose a Monster within 1 tile of you. Hit: 1 damage. Miss: put it adjacent.')).toBe('within1')
+    expect(powerRange('Attack each Monster on your tile.')).toBe('sameTile')
+    expect(powerRange('Attack one Monster. Hit: 1 damage, then move adjacent.')).toBeNull()
+  })
+
+  it('offers only the monsters in reach, and says how far each is', () => {
+    const { state, monster, heroes } = game([0, 1])
+    const far = { ...monster, id: 'm2' }
+    const both = { ...state, monsters: [monster, far], board: { ...state.board, tokens: { ...state.board.tokens, m2: [1, -6] } } }
+    expect(foesInRange(both, heroes[0].id, 'adjacent', both.monsters).map((m) => m.id)).toEqual(['m1'])
+    expect(foesInRange(both, heroes[0].id, null, both.monsters)).toHaveLength(2)
+    expect(foeDistance(both, heroes[0].id, 'm1')).toBe('adjacent')
+    expect(foeDistance(both, heroes[0].id, 'm2')).toBe('far')
   })
 })
