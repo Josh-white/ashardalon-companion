@@ -1,0 +1,60 @@
+// Encounter cards and traps on the virtual board: which heroes a card's attack reaches,
+// worked out from where the figures stand instead of asked as a question. Null means the
+// board can't tell (no board, or a figure isn't on it), so the screen asks instead.
+
+import { key } from './grid.js'
+import { tilesBetween } from './paths.js'
+import { boardGrid } from './play.js'
+
+const baseId = (tokenId) => tokenId.split('#')[0]
+
+// The tile a square is on.
+const tileAt = (grid, at) => (at ? grid.get(key(at))?.tile : undefined)
+
+// Heroes on the board that an attack can find (not off in the Astral Refuge).
+const heroesOnBoard = (state) =>
+  state.heroes.filter((h) => !h.tokens?.refuge && state.board.tokens[h.id]).map((h) => ({ id: h.id, at: state.board.tokens[h.id] }))
+
+// Ids of the heroes an encounter or trap attack goes after, for the targets that depend
+// on the board ('activeTile', 'within1', 'trapTile', 'villainWithin1'). `hero` is the
+// active hero; `trap` is the marker for 'trapTile'.
+export function encounterTargetIds(state, targets, hero, { trap } = {}) {
+  if (!state.board) return null
+  const grid = boardGrid(state.board)
+  const heroes = heroesOnBoard(state)
+  const near = (from, n) => heroes.filter((h) => tilesBetween(grid, from, h.at) <= n).map((h) => h.id)
+  if (targets === 'activeTile' || targets === 'within1') {
+    const at = state.board.tokens[hero.id]
+    if (!at || hero.tokens?.refuge) return null
+    return near(at, targets === 'within1' ? 1 : 0)
+  }
+  if (targets === 'trapTile') {
+    // The marker's tile was saved when it went down (older markers don't have one). A
+    // trap that moves first (Whirling Blades) is asked instead.
+    if (trap?.tile === undefined || /move the .* marker/i.test(trap.card?.text ?? '')) return null
+    return heroes.filter((h) => tileAt(grid, h.at) === trap.tile).map((h) => h.id)
+  }
+  if (targets === 'villainWithin1') {
+    const villains = (state.villains ?? []).filter((v) => !v.defeated && state.board.tokens[v.id])
+    if (villains.length === 0) return null
+    return [...new Set(villains.flatMap((v) => near(state.board.tokens[v.id], 1)))]
+  }
+  return null
+}
+
+// Is a monster or villain on the hero's tile? Null when the board can't tell.
+export function foeOnHeroTile(state, hero) {
+  if (!state.board) return null
+  const at = state.board.tokens[hero.id]
+  if (!at) return null
+  const grid = boardGrid(state.board)
+  const tile = tileAt(grid, at)
+  const foes = new Set([...state.monsters, ...(state.villains ?? []).filter((v) => !v.defeated)].map((m) => m.id))
+  return Object.entries(state.board.tokens).some(([id, sq]) => foes.has(baseId(id)) && tileAt(grid, sq) === tile)
+}
+
+// The board tile under a hero, saved on a trap or hazard marker so later turns know where it is.
+export function heroTile(state, heroId) {
+  if (!state.board) return undefined
+  return tileAt(boardGrid(state.board), state.board.tokens[heroId])
+}
