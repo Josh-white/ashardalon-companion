@@ -161,122 +161,159 @@ function PartyStrip({ heroes, exceptId }) {
   )
 }
 
-// The row of tabs at the bottom of the screen: [id, emoji, label] for each.
+// The row of tabs at the bottom of the screen: [id, emoji, label, badge] for each; a badge is a red dot.
 function TabBar({ tabs, tab, setTab, className = '' }) {
   return (
     <nav className={`flex border-t border-zinc-800 bg-zinc-950/95 pb-[env(safe-area-inset-bottom)] ${className}`}>
-      {tabs.map(([id, emoji, label]) => (
+      {tabs.map(([id, emoji, label, badge]) => (
         <button
           key={id}
           type="button"
           onClick={() => setTab(id)}
-          className={`flex flex-1 flex-col items-center py-1.5 text-xs sm:text-sm ${tab === id ? 'bg-zinc-800 font-bold text-amber-400' : 'text-zinc-400'}`}
+          className={`relative flex min-w-0 flex-1 flex-col items-center py-1.5 text-xs whitespace-nowrap sm:text-sm ${tab === id ? 'bg-zinc-800 font-bold text-amber-400' : 'text-zinc-400'}`}
         >
           <span className="text-lg leading-none sm:text-2xl">{emoji}</span>
           {label}
+          {badge && <span aria-label="new" className="absolute top-1 right-[calc(50%-1.4rem)] h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-zinc-950" />}
         </button>
       ))}
     </nav>
   )
 }
 
-// A game on the real board: one tab at a time on the page, the tabs fixed at the bottom of
-// the screen. `tab` falls back to the first one when it isn't offered (no adventure, say).
-function TabbedPage({ tabs, tab, setTab, body, wide = false }) {
-  const shown = tabs.some(([id]) => id === tab) ? tab : tabs[0][0]
-  return (
-    <>
-      <div className={`mx-auto space-y-6 p-4 pb-28 ${wide ? 'max-w-6xl' : 'max-w-3xl'}`}>{body(shown)}</div>
-      <TabBar tabs={tabs} tab={shown} setTab={setTab} className="fixed inset-x-0 bottom-0 z-20 backdrop-blur" />
-    </>
-  )
-}
+const monsterTotal = (state) => state.monsters.length + activeVillains(state).length
 
-const monsterTabLabel = (state) => {
-  const count = state.monsters.length + activeVillains(state).length
-  return count ? `Monsters (${count})` : 'Monsters'
-}
+// Whether a big moment is about this hero: a monster's attack on them, their treasure, their
+// encounter. On the table screen (no hero) every moment counts.
+const momentFor = (moment, heroId) => Boolean(moment) && (!heroId || moment.heroId === heroId || (moment.rolls ?? []).some((r) => r.heroId === heroId))
 
-function HeroView({ state, dispatch, hero }) {
-  const heroIndex = state.heroes.indexOf(hero)
-  const myTurn = heroIndex === state.turn.heroIndex
-  // During your Hero Phase the attack box lists your attack powers, so the hero card doesn't repeat them.
-  const powersInTurnGuide = myTurn && PHASES[state.turn.phase].key === 'hero'
+// Which tab is open, and the red dots on the others. The Turn tab comes back by itself: on the
+// table screen whenever the hero or the phase changes, on a hero's iPad at each phase of their
+// own turn and when it ends, and whenever something happens to that hero (a monster's attack,
+// treasure, a free attack from Cause Fear) so it isn't missed on another tab. A new monster
+// puts a dot on Monsters until it's opened.
+function usePlayTabs(state, heroId, myTurn) {
   const [tab, setTab] = useState('turn')
-  // Your own turn, and each phase of it, brings the Turn tab back.
+  const resetKey = heroId ? (myTurn ? `${state.turn.round}-${state.turn.phase}` : 'waiting') : `${state.turn.heroIndex}-${state.turn.phase}`
+  useEffect(() => setTab('turn'), [resetKey])
+  const momentId = momentFor(state.moment, heroId) ? state.moment.id : null
   useEffect(() => {
-    if (myTurn) setTab('turn')
-  }, [myTurn, state.turn.phase, state.turn.round])
-  const heroCard = (
+    if (momentId) setTab('turn')
+  }, [momentId])
+  const extraAttacks = (state.turn.bonusAttacks ?? []).filter((b) => !heroId || b.heroId === heroId).length
+  useEffect(() => {
+    if (extraAttacks > 0) setTab('turn')
+  }, [extraAttacks])
+  const monsters = monsterTotal(state)
+  const [seenMonsters, setSeenMonsters] = useState(monsters)
+  useEffect(() => {
+    if (tab === 'monsters' || monsters < seenMonsters) setSeenMonsters(monsters)
+  }, [tab, monsters, seenMonsters])
+  const badges = { turn: Boolean(heroId) && myTurn && tab !== 'turn', monsters: monsters > seenMonsters && tab !== 'monsters' }
+  return [tab, setTab, badges]
+}
+
+// A game in play on any screen but the big one: the tabs at the bottom (Turn, Monsters, Party,
+// Quest, Log, the same everywhere) and, on the virtual board, the board always in view above
+// them (beside them on a wide or unfolded screen). `hero` is this iPad's hero; without one
+// it's the table screen, which plays every hero.
+function PlayView({ state, dispatch, hero = null, soundBoard = null }) {
+  const active = state.heroes[state.turn.heroIndex]
+  const myTurn = hero ? hero.id === active?.id : true
+  const [tab, setTab, badges] = usePlayTabs(state, hero?.id ?? null, myTurn)
+  const [bigBoard, setBigBoard] = useState(false)
+  const heroCard = (h, showCardArt = false) => (
     <HeroCard
+      key={h.id}
       state={state}
-      hero={hero}
-      isActive={myTurn}
+      hero={h}
+      isActive={h.id === active?.id}
       xp={state.xp}
       surges={state.surges}
       dispatch={dispatch}
-      powersInTurnGuide={powersInTurnGuide}
-      natural20={state.turn.natural20 === hero.id}
-      showCardArt
+      // During the Hero Phase the attack box lists the attack powers, so the hero card doesn't repeat them.
+      powersInTurnGuide={h.id === active?.id && PHASES[state.turn.phase].key === 'hero'}
+      natural20={state.turn.natural20 === h.id}
+      showCardArt={showCardArt}
     />
   )
-  if (!state.board) {
-    const tabs = [
-      ['turn', '⚔️', myTurn ? 'My turn' : 'Turn'],
-      ['monsters', '👹', monsterTabLabel(state)],
-      ...(state.heroes.length > 1 ? [['party', '🛡️', 'Party']] : []),
-      ...(state.adventure ? [['adventure', '📜', 'Quest']] : []),
-      ['log', '📖', 'Log'],
-    ]
-    const body = (shown) =>
-      ({
-        turn: (
-          <>
-            {myTurn ? <TurnGuide state={state} dispatch={dispatch} /> : <WaitingBanner state={state} />}
-            {/* Cause Fear gives other heroes an attack during someone else's turn. */}
-            {!myTurn && <ExtraAttacks state={state} dispatch={dispatch} onlyHeroId={hero.id} />}
-            {heroCard}
-          </>
-        ),
-        monsters: (
-          <>
-            <VillainList state={state} dispatch={dispatch} />
-            <MonsterList state={state} dispatch={dispatch} ownerId={hero.id} />
-          </>
-        ),
-        party: <PartyStrip heroes={state.heroes} exceptId={hero.id} />,
-        adventure: <AdventurePanel state={state} dispatch={dispatch} />,
-        log: state.log.length ? <GameLog log={state.log} /> : <p className="text-zinc-400">Nothing has happened yet.</p>,
-      })[shown]
-    return (
+  const monsters = monsterTotal(state)
+  const tabs = [
+    ['turn', '⚔️', hero && myTurn ? 'My turn' : 'Turn', badges.turn],
+    ['monsters', '👹', monsters ? `Monsters (${monsters})` : 'Monsters', badges.monsters],
+    ...(state.heroes.length > 1 ? [['party', '🛡️', 'Party']] : []),
+    ...(state.adventure ? [['adventure', '📜', 'Quest']] : []),
+    ['log', '📖', 'Log'],
+  ]
+  const shown = tabs.some(([id]) => id === tab) ? tab : 'turn'
+  const body = {
+    turn: hero ? (
       <>
-        <TabbedPage tabs={tabs} tab={tab} setTab={setTab} body={body} />
-        <TreasureStep state={state} dispatch={dispatch} heroId={hero.id} />
+        {myTurn ? <TurnGuide state={state} dispatch={dispatch} /> : <WaitingBanner state={state} />}
+        {/* Cause Fear gives other heroes an attack during someone else's turn. */}
+        {!myTurn && <ExtraAttacks state={state} dispatch={dispatch} onlyHeroId={hero.id} />}
+        {heroCard(hero, true)}
       </>
+    ) : (
+      <>
+        <TurnGuide state={state} dispatch={dispatch} />
+        {active && heroCard(active)}
+      </>
+    ),
+    monsters: (
+      <>
+        <VillainList state={state} dispatch={dispatch} canPlace={!hero} />
+        <MonsterList state={state} dispatch={dispatch} ownerId={hero?.id} />
+      </>
+    ),
+    party: hero ? <PartyStrip heroes={state.heroes} exceptId={hero.id} /> : <div className="grid gap-3 md:grid-cols-2">{state.heroes.map((h) => heroCard(h))}</div>,
+    adventure: <AdventurePanel state={state} dispatch={dispatch} />,
+    log: state.log.length ? <GameLog log={state.log} /> : <p className="text-zinc-400">Nothing has happened yet.</p>,
+  }[shown]
+  const tabBar = <TabBar tabs={tabs} tab={shown} setTab={setTab} className="shrink-0" />
+  const treasure = <TreasureStep state={state} dispatch={dispatch} heroId={hero?.id ?? null} />
+
+  if (!state.board) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className={`mx-auto space-y-6 p-4 pb-20 ${hero ? 'max-w-3xl' : 'max-w-6xl'}`}>{body}</div>
+        </div>
+        {tabBar}
+        {treasure}
+      </div>
     )
   }
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-4">
-      {myTurn ? <TurnGuide state={state} dispatch={dispatch} /> : <WaitingBanner state={state} />}
-      {/* On the virtual board only the active hero's iPad moves figures (or a power's move
-          that's waiting on someone), so nobody moves a hero by mistake while watching. */}
-      <Board state={state} dispatch={dispatch} readOnly={!myTurn && !state.turn.boardMove} />
-      <AdventurePanel state={state} dispatch={dispatch} />
-      {/* Cause Fear gives other heroes an attack during someone else's turn. */}
-      {!myTurn && <ExtraAttacks state={state} dispatch={dispatch} onlyHeroId={hero.id} />}
-      {heroCard}
-      <VillainList state={state} dispatch={dispatch} />
-      <MonsterList state={state} dispatch={dispatch} ownerId={hero.id} />
-      <PartyStrip heroes={state.heroes} exceptId={hero.id} />
-      <GameLog log={state.log} />
-      <TreasureStep state={state} dispatch={dispatch} heroId={hero.id} />
+    <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+      <div className={`relative shrink-0 p-1.5 md:h-auto md:min-w-0 md:flex-1 ${bigBoard ? 'h-[68%]' : 'h-[42%]'}`}>
+        {soundBoard}
+        {/* Only the active hero's iPad moves figures (or a power's move that's waiting on
+            someone), so nobody moves a hero by mistake while watching. */}
+        <Board
+          state={state}
+          dispatch={dispatch}
+          fill
+          readOnly={Boolean(hero) && !myTurn && !state.turn.boardMove}
+          extraButtons={
+            <Button className="!px-2 !py-1 text-sm md:hidden" onClick={() => setBigBoard(!bigBoard)} aria-label={bigBoard ? 'Smaller board' : 'Bigger board'}>
+              {bigBoard ? '⤒' : '⤓'}
+            </Button>
+          }
+        />
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col border-zinc-800 md:w-[26rem] md:flex-none md:border-l lg:w-[32rem]">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2 pb-16">{body}</div>
+        {tabBar}
+      </div>
+      {treasure}
     </div>
   )
 }
 
-// The solo game's top bar: one short line on a phone (undo, XP, surges, tiles) and a ☰ menu
+// The top bar on a hero's iPad and in a solo game: one short line on a phone (undo, XP, surges, tiles) and a ☰ menu
 // with everything else, so the board and the turn get the screen.
-function SoloBar({ state, dispatch, undo, undoDepth, onSwitchSeat, sound }) {
+function SoloBar({ state, dispatch, undo, undoDepth, onSwitchSeat, sound, seatLabel = 'Table', boardSwitch = true }) {
   const [open, setOpen] = useState(false)
   const [ask, dialog] = useConfirm()
   const newGame = () => ask(newGameQuestion(state), () => dispatch({ type: 'NEW_GAME' }))
@@ -315,7 +352,7 @@ function SoloBar({ state, dispatch, undo, undoDepth, onSwitchSeat, sound }) {
           <div className="flex flex-wrap gap-2">
             <SoundToggle on={sound.on} setOn={sound.setOn} elsewhere={sound.elsewhere} className="text-sm" />
             <MusicToggle on={sound.musicOn} setOn={sound.setMusicOn} soundOn={sound.on} className="text-sm" />
-            <BoardSwitch state={state} dispatch={dispatch} className="text-sm" />
+            {boardSwitch && <BoardSwitch state={state} dispatch={dispatch} className="text-sm" />}
           </div>
           <div className="flex flex-wrap gap-2">
             <Button className="text-sm" onClick={() => dispatch({ type: 'END_GAME', result: 'won' })}>We won!</Button>
@@ -326,167 +363,13 @@ function SoloBar({ state, dispatch, undo, undoDepth, onSwitchSeat, sound }) {
               We lost
             </Button>
             <Button className="text-sm" onClick={newGame}>New game</Button>
-            <Button variant="ghost" className="text-sm" onClick={onSwitchSeat}>Table · switch</Button>
+            <Button variant="ghost" className="text-sm" onClick={onSwitchSeat}>{seatLabel} · switch</Button>
           </div>
           <Button variant="gold" className="w-full" onClick={() => setOpen(false)}>Back to the game</Button>
         </div>
       )}
       {dialog}
     </header>
-  )
-}
-
-// A solo game on the virtual board, built for a phone: the board always on screen and the
-// rest in tabs under it (beside it on a wide or unfolded screen). The Turn tab comes back by
-// itself whenever the phase or the hero changes.
-function SoloView({ state, dispatch, soundBoard }) {
-  const active = state.heroes[state.turn.heroIndex]
-  const [tab, setTab] = useState('turn')
-  const [bigBoard, setBigBoard] = useState(false)
-  useEffect(() => setTab('turn'), [state.turn.heroIndex, state.turn.phase])
-  const heroCard = (hero) => (
-    <HeroCard
-      key={hero.id}
-      state={state}
-      hero={hero}
-      isActive={hero.id === active?.id}
-      xp={state.xp}
-      surges={state.surges}
-      dispatch={dispatch}
-      powersInTurnGuide={hero.id === active?.id && PHASES[state.turn.phase].key === 'hero'}
-      natural20={state.turn.natural20 === hero.id}
-    />
-  )
-  const monsterCount = state.monsters.length + activeVillains(state).length
-  const tabs = [
-    ['turn', '⚔️', 'Turn'],
-    ...(state.heroes.length > 1 ? [['party', '🛡️', 'Party']] : []),
-    ['monsters', '👹', monsterCount ? `Monsters (${monsterCount})` : 'Monsters'],
-    ...(state.adventure ? [['adventure', '📜', 'Quest']] : []),
-    ['log', '📖', 'Log'],
-  ]
-  const body = {
-    turn: (
-      <>
-        <TurnGuide state={state} dispatch={dispatch} />
-        {active && heroCard(active)}
-      </>
-    ),
-    party: <div className="grid gap-3">{state.heroes.map(heroCard)}</div>,
-    monsters: (
-      <>
-        <VillainList state={state} dispatch={dispatch} canPlace />
-        <MonsterList state={state} dispatch={dispatch} />
-        {monsterCount === 0 && <p className="text-zinc-400">No monsters on the board.</p>}
-      </>
-    ),
-    adventure: <AdventurePanel state={state} dispatch={dispatch} />,
-    log: state.log.length ? <GameLog log={state.log} /> : <p className="text-zinc-400">Nothing has happened yet.</p>,
-  }[tab] ?? null
-  return (
-    <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-      <div className={`relative shrink-0 p-1.5 md:h-auto md:min-w-0 md:flex-1 ${bigBoard ? 'h-[68%]' : 'h-[42%]'}`}>
-        {soundBoard}
-        <Board
-          state={state}
-          dispatch={dispatch}
-          fill
-          extraButtons={
-            <Button className="!px-2 !py-1 text-sm md:hidden" onClick={() => setBigBoard(!bigBoard)} aria-label={bigBoard ? 'Smaller board' : 'Bigger board'}>
-              {bigBoard ? '⤒' : '⤓'}
-            </Button>
-          }
-        />
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col border-zinc-800 md:w-[26rem] md:flex-none md:border-l lg:w-[32rem]">
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2">{body}</div>
-        <TabBar tabs={tabs} tab={tab} setTab={setTab} className="shrink-0" />
-      </div>
-    </div>
-  )
-}
-
-// The table screen plays every hero. On the real board it has the same tabs as the solo
-// game, without the board.
-function TableView({ state, dispatch }) {
-  const [tab, setTab] = useState('turn')
-  useEffect(() => setTab('turn'), [state.turn.heroIndex, state.turn.phase])
-  const active = state.heroes[state.turn.heroIndex]
-  const heroCard = (hero) => (
-    <HeroCard
-      key={hero.id}
-      state={state}
-      hero={hero}
-      isActive={hero.id === active?.id}
-      xp={state.xp}
-      surges={state.surges}
-      dispatch={dispatch}
-      powersInTurnGuide={hero.id === active?.id && PHASES[state.turn.phase].key === 'hero'}
-      natural20={state.turn.natural20 === hero.id}
-    />
-  )
-  if (!state.board) {
-    const tabs = [
-      ['turn', '⚔️', 'Turn'],
-      ...(state.heroes.length > 1 ? [['party', '🛡️', 'Party']] : []),
-      ['monsters', '👹', monsterTabLabel(state)],
-      ...(state.adventure ? [['adventure', '📜', 'Quest']] : []),
-      ['log', '📖', 'Log'],
-    ]
-    const body = (shown) =>
-      ({
-        turn: (
-          <>
-            <TurnGuide state={state} dispatch={dispatch} />
-            {active && heroCard(active)}
-          </>
-        ),
-        party: <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{state.heroes.map(heroCard)}</div>,
-        monsters: (
-          <>
-            <VillainList state={state} dispatch={dispatch} canPlace />
-            <MonsterList state={state} dispatch={dispatch} />
-          </>
-        ),
-        adventure: <AdventurePanel state={state} dispatch={dispatch} />,
-        log: state.log.length ? <GameLog log={state.log} /> : <p className="text-zinc-400">Nothing has happened yet.</p>,
-      })[shown]
-    return (
-      <>
-        <TabbedPage tabs={tabs} tab={tab} setTab={setTab} body={body} wide />
-        <TreasureStep state={state} dispatch={dispatch} />
-      </>
-    )
-  }
-  return (
-    <div className="mx-auto max-w-6xl space-y-8 p-4">
-      <TurnGuide state={state} dispatch={dispatch} />
-      {/* The table plays every hero, so it can always move figures. */}
-      <Board state={state} dispatch={dispatch} />
-      <AdventurePanel state={state} dispatch={dispatch} />
-      <section>
-        <h2 className="mb-3 font-display text-2xl font-bold text-zinc-100">Heroes</h2>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {state.heroes.map((hero, i) => (
-            <HeroCard
-              key={hero.id}
-              state={state}
-              hero={hero}
-              isActive={i === state.turn.heroIndex}
-              xp={state.xp}
-              surges={state.surges}
-              dispatch={dispatch}
-              powersInTurnGuide={i === state.turn.heroIndex && PHASES[state.turn.phase].key === 'hero'}
-              natural20={state.turn.natural20 === hero.id}
-            />
-          ))}
-        </div>
-      </section>
-      <VillainList state={state} dispatch={dispatch} canPlace />
-      <MonsterList state={state} dispatch={dispatch} />
-      <GameLog log={state.log} />
-      <TreasureStep state={state} dispatch={dispatch} />
-    </div>
   )
 }
 
@@ -654,47 +537,40 @@ export default function App() {
       <FirstRoll state={state} dispatch={dispatch} heroId={myHero?.id ?? null} />
       <MomentOverlay moment={state.moment} heroes={state.heroes} />
       <TapForSound locked={soundLocked} ipad={Boolean(myHero)} />
-      {/* On the real board it sits above the tabs. */}
-      {(myHero || !state.board) && (
-        <SoundBoard state={state} dispatch={dispatch} who={myHero ? myHero.id : 'table'} testCopy={Boolean(instance)} className={state.board ? undefined : 'fixed bottom-20 left-4'} />
-      )}
+      {/* On the real board it sits above the tabs; on the virtual board, in the board's corner. */}
+      {!state.board && <SoundBoard state={state} dispatch={dispatch} who={myHero ? myHero.id : 'table'} testCopy={Boolean(instance)} className="fixed bottom-20 left-4" />}
       {!myHero && <BoardToast state={state} />}
       {(state.status === 'won' || state.status === 'lost') && <Recap state={state} dispatch={dispatch} />}
     </>
   )
-  // Solo on the virtual board: the whole game fits the screen, nothing scrolls but the tabs.
-  if (!myHero && state.board) {
-    return (
-      <main className="isolate flex h-dvh flex-col overflow-hidden bg-zinc-950 text-zinc-100">
-        <AreaBackdrop state={state} />
-        {banners}
-        <SoloBar state={state} dispatch={dispatch} undo={undo} undoDepth={undoDepth} onSwitchSeat={() => setSeat(null)} sound={sound} />
-        <SoloView
-          state={state}
-          dispatch={dispatch}
-          soundBoard={<SoundBoard state={state} dispatch={dispatch} who="table" testCopy={Boolean(instance)} className="absolute bottom-3 left-3" />}
-        />
-        <TreasureStep state={state} dispatch={dispatch} />
-        {overlays}
-      </main>
-    )
-  }
-
+  // The whole game fits the screen and nothing scrolls but the tab that's open. A hero's iPad
+  // and a solo game get the one-line top bar; the table screen on the real board, often a
+  // laptop, keeps the full one.
+  const who = myHero ? myHero.id : 'table'
   return (
-    <main className="isolate min-h-screen bg-zinc-950 text-zinc-100">
+    <main className="isolate flex h-dvh flex-col overflow-hidden bg-zinc-950 text-zinc-100">
       <AreaBackdrop state={state} />
       {banners}
-      <PartyBar
-        undo={undo}
-        undoDepth={undoDepth}
+      {myHero || state.board ? (
+        <SoloBar
+          state={state}
+          dispatch={dispatch}
+          undo={undo}
+          undoDepth={undoDepth}
+          onSwitchSeat={() => setSeat(null)}
+          sound={sound}
+          seatLabel={myHero ? myHero.name : 'Table'}
+          boardSwitch={!myHero}
+        />
+      ) : (
+        <PartyBar undo={undo} undoDepth={undoDepth} state={state} dispatch={dispatch} seatLabel="Table" onSwitchSeat={() => setSeat(null)} sound={sound} boardSwitch />
+      )}
+      <PlayView
         state={state}
         dispatch={dispatch}
-        seatLabel={myHero ? myHero.name : 'Table'}
-        onSwitchSeat={() => setSeat(null)}
-        sound={sound}
-        boardSwitch={!myHero}
+        hero={myHero ?? null}
+        soundBoard={<SoundBoard state={state} dispatch={dispatch} who={who} testCopy={Boolean(instance)} className="absolute bottom-3 left-3" />}
       />
-      {myHero ? <HeroView state={state} dispatch={dispatch} hero={myHero} /> : <TableView state={state} dispatch={dispatch} />}
       {overlays}
     </main>
   )
