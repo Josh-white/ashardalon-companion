@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CONDITIONS, HERO_COLORS } from '../data/heroes.js'
 import { betterItem, heroItems, tileGuards } from '../data/items.js'
+import { guardsOnTile } from '../board/checks.js'
 import { foes } from '../state/game.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
@@ -368,6 +369,22 @@ export function TileGuardQuestion({ state, targets, guarded, onToggle }) {
     .map((hero) => ({ hero, guards: tileGuards(state.heroes, hero) }))
     .filter((r) => r.guards.length > 0)
   if (rows.length === 0) return null
+  // On the virtual board the attack reads who stands on a shield owner's tile itself.
+  const onBoard = rows.map((r) => ({ ...r, on: guardsOnTile(state, r.hero, r.guards.map((g) => g.hero)) }))
+  if (onBoard.every((r) => r.on)) {
+    const guarded = onBoard.filter((r) => r.on.length > 0)
+    if (guarded.length === 0) return null
+    return (
+      <div className="space-y-1 rounded-xl bg-sky-950/50 p-3 text-lg text-zinc-100">
+        {guarded.map(({ hero, guards, on }) => (
+          <p key={hero.id}>
+            📍 <span className={HERO_COLORS[hero.color].text}>{hero.name}</span> is on {on.map((g) => g.name).join(' and ')}'s tile.
+            <span className="text-sky-300"> Blessed Shield: +{Math.max(...guards.filter((g) => on.includes(g.hero)).map((g) => g.bonus))} AC</span>
+          </p>
+        ))}
+      </div>
+    )
+  }
   return (
     <div className="space-y-2 rounded-xl bg-sky-950/50 p-3">
       {rows.map(({ hero, guards }) => (
