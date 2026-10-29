@@ -74,6 +74,16 @@ Then open `http://piserver.local:8081` (or https://ashardalon.codebasehome.com) 
 
 To update after pulling new changes: `git pull && docker compose up -d --build`. The current game lives in the `game-data` Docker volume, so updates don't wipe it.
 
+### Update by itself after a merge
+
+`scripts/auto-update.sh` checks GitHub for a newer `main`. When there is one, it backs up the saved games and cards, pulls, rebuilds, and checks the app answers on its port. If the new version doesn't start, it goes back to the one that worked and skips the broken version until `main` changes again. It won't touch a folder with changes made by hand. To run it every 5 minutes:
+
+```sh
+(crontab -l 2>/dev/null; echo "*/5 * * * * $HOME/ashardalon-companion/scripts/auto-update.sh >> $HOME/ashardalon-backups/auto-update.log 2>&1") | crontab -
+```
+
+Card files (`cards/cards.json`, art and sounds) aren't in git, so changes to those still go on the Pi by hand.
+
 ## Back up the saved game
 
 `scripts/backup-game.sh` copies the saved games out of the app into `~/ashardalon-backups` and keeps the newest 14 copies of each. The family game's copies go straight in that folder; every other game (a solo game, say) gets its own folder, `~/ashardalon-backups/games/<game>/`. It skips a copy when nothing changed, so a quiet week doesn't push out older saves. It also backs up your card files, which live only on the Pi: a dated copy of `cards/cards.json` in `~/ashardalon-backups/cards` whenever it changes (newest 14 kept), plus one up-to-date copy of `cards/art` and `cards/sounds`. To run it every night at 3:15, add it to cron on the Pi:
