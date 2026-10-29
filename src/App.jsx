@@ -7,6 +7,7 @@ import HeroCard from './components/HeroCard.jsx'
 import LobbyBackdrop from './components/LobbyBackdrop.jsx'
 import DragonIntro, { useIntro } from './components/Intro.jsx'
 import FirstRoll from './components/FirstRoll.jsx'
+import OpeningStory from './components/OpeningStory.jsx'
 import GamePicker, { GameBar } from './components/GamePicker.jsx'
 import MomentOverlay from './components/MomentOverlay.jsx'
 import MonsterList, { VillainList } from './components/MonsterList.jsx'
@@ -411,11 +412,12 @@ export default function App() {
   const sound = { on: soundOn, setOn: setSoundOn, musicOn, setMusicOn, elsewhere: !soundOn && projectorOpen && seat !== PROJECTOR_SEAT }
   useSoundEffects(soundOn)
   useMusic(state, soundOn && musicOn)
-  const narrator = useNarrator(soundOn)
+  // The screen reading the opening story tells the others when it starts and ends.
+  const narrator = useNarrator(soundOn, { onOpening: (event) => dispatch({ type: event === 'start' ? 'OPENING_NARRATING' : 'OPENING_DONE' }) })
   const soundLocked = useAudioLocked(soundOn) || narrator.blocked
   const [showIntro, finishIntro] = useIntro()
 
-  if (showIntro) return <DragonIntro projector={seat === PROJECTOR_SEAT} say={narrator.say} onDone={finishIntro} />
+  if (showIntro) return <DragonIntro projector={seat === PROJECTOR_SEAT} say={narrator.say} quiet={narrator.quiet} onDone={finishIntro} />
 
   const gameBar = <GameBar name={game?.name} onSwitch={() => setPicking(true)} />
   if (!chosenGame || picking) {
@@ -507,6 +509,7 @@ export default function App() {
         {banners}
         <ProjectorView state={state} dispatch={dispatch} onSwitchSeat={() => setSeat(null)} sound={sound} />
         <BoardToast state={state} big />
+        <OpeningStory state={state} dispatch={dispatch} big />
         <FirstRoll state={state} dispatch={dispatch} big />
         <MomentOverlay moment={state.moment} heroes={state.heroes} big />
         <TapForSound locked={soundLocked} big />
@@ -525,6 +528,7 @@ export default function App() {
 
   const overlays = (
     <>
+      <OpeningStory state={state} dispatch={dispatch} />
       <FirstRoll state={state} dispatch={dispatch} heroId={myHero?.id ?? null} />
       <MomentOverlay moment={state.moment} heroes={state.heroes} />
       <TapForSound locked={soundLocked} ipad={Boolean(myHero)} />

@@ -18,6 +18,7 @@ import { trackStats } from './stats.js'
 import { campaignHero, campaignOutcome, campaignSurges, isCampaign, newCampaign, shopCards, shopSize } from './campaign.js'
 import { playBoardSound, setBoardOff, setBoardUnlimited } from './soundboard.js'
 import { newFirstRoll, rollFirst } from './firstRoll.js'
+import { finishOpening, openingNarrating, startOpening } from './opening.js'
 import { layChamber, layExit, layTile, moveHero, placeNear, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
 import { boardMove, queueMoves, skipBoardMove } from '../board/powerMoves.js'
 import { heroTile } from '../board/encounters.js'
@@ -87,6 +88,8 @@ export const initialState = {
   tokenStack: null,
   // The roll for first turn at the start of a game (state/firstRoll.js), or null.
   firstRoll: null,
+  // The adventure's story at the start of a game (state/opening.js), or null.
+  opening: null,
   // The virtual board for a solo game (board/play.js), or null when the real tiles are on the table.
   board: null,
 }
@@ -1355,7 +1358,14 @@ function placeVillain(state, action) {
 }
 
 // Every action, then a check for an adventure's victory, then the recap's counts.
-export const gameReducer = (state, action) => trackStats(state, pruneTokens(placeNewFigures(state, checkVictory(tagDrawn(reduce(state, action))))), action)
+export const gameReducer = (state, action) => trackStats(state, pruneTokens(placeNewFigures(state, checkVictory(tagDrawn(reduceWithOpening(state, action))))), action)
+
+// A game that just started begins with its story (state/opening.js).
+function reduceWithOpening(state, action) {
+  const next = reduce(state, action)
+  const started = (action.type === 'START_GAME' || action.type === 'START_DEMO') && next !== state && next.status === 'playing'
+  return started ? startOpening(next, Date.now()) : next
+}
 
 // A dungeon tile drawn from the stack, from the top when exploring or the bottom for a
 // card that says so. `key` says what it was for (explore, a monster, an encounter), so
@@ -1584,6 +1594,13 @@ function reduce(state, action) {
       const next = withLog({ ...state, firstRoll: null }, 'The heroes skipped the roll for first turn.')
       return state.firstRoll.after ? withMoment(next, state.firstRoll.after) : next
     }
+
+    // The screen playing the narration started the opening story, or it's over (or skipped).
+    case 'OPENING_NARRATING':
+      return openingNarrating(state)
+
+    case 'OPENING_DONE':
+      return finishOpening(state)
 
     // The "X goes first!" screen has finished: show what waited for it (the starting
     // treasure). Every screen sends this when its roll screen closes; only the first counts.

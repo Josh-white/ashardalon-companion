@@ -131,3 +131,13 @@ describe('the first turn and the chronicle', () => {
   })
 })
 
+
+describe('opening lines', () => {
+  it('marks the lines that open a game, so the roll for first turn waits for them', () => {
+    const before = { status: 'setup', heroes: [], lobby: [] }
+    const after = { status: 'playing', heroes: [], turn: { heroIndex: 0, round: 1, phase: 0 }, adventure: { card: { title: 'Lost' }, story: { id: 's1', title: 'Lost', text: 'Once upon a time.' } } }
+    const lines = linesFor(before, after, 0)
+    expect(lines.length).toBe(2)
+    expect(lines.every((l) => l.opening)).toBe(true)
+  })
+})

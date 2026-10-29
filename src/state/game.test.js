@@ -898,9 +898,10 @@ describe('treasure deck', () => {
     // The treasure moment waits for the roll for first turn.
     expect(state.moment).toBeNull()
     expect(state.firstRoll.after).toMatchObject({ kind: 'treasure', title: 'Starting treasure!' })
-    // A lone hero has no roll, so the treasure shows straight away.
+    // A lone hero has no roll, so the treasure shows once the opening story is over.
     const solo = gameReducer(initialState, { type: 'START_GAME', heroes: heroes.slice(0, 1), treasureCards: treasures, random: [] })
-    expect(solo.moment).toMatchObject({ kind: 'treasure', title: 'Starting treasure!' })
+    expect(solo.opening.after).toMatchObject({ kind: 'treasure', title: 'Starting treasure!' })
+    expect(gameReducer(solo, { type: 'OPENING_DONE' }).moment).toMatchObject({ kind: 'treasure', title: 'Starting treasure!' })
     // Without treasure cards, nobody gets one.
     expect(startGame().heroes[0].items).toBeUndefined()
   })
@@ -1031,5 +1032,36 @@ describe('treasure deck', () => {
     state = { ...state, traps: [{ id: 't1', cardId: 'darts', name: 'Darts', type: 'trap', ownerId: state.heroes[0].id, card: { trap: { disable: 10 } } }] }
     state = gameReducer(state, { type: 'DISABLE_TRAP', trapId: 't1', heroId: state.heroes[0].id, roll: 6 })
     expect(state.traps).toEqual([])
+  })
+})
+
+describe('opening story', () => {
+  const ready = (state) => {
+    let s = gameReducer(state, { type: 'CLAIM_HERO', deviceId: 'a', heroKey: 'paladin', player: 'Dad' })
+    return gameReducer(s, { type: 'SET_LOBBY_READY', deviceId: 'a', ready: true })
+  }
+  const treasure = [{ id: 't1', name: 'Potion' }]
+
+  it('holds one hero’s starting treasure until the story is over', () => {
+    const started = gameReducer(ready(initialState), { type: 'START_GAME', treasureCards: treasure, random: [0] })
+    expect(started.opening.done).toBe(false)
+    expect(started.opening.until).toBeGreaterThan(Date.now())
+    expect(started.moment).toBe(null)
+    expect(started.opening.after.kind).toBe('treasure')
+    const narrating = gameReducer(started, { type: 'OPENING_NARRATING' })
+    expect(narrating.opening.narrating).toBe(true)
+    const done = gameReducer(narrating, { type: 'OPENING_DONE' })
+    expect(done.opening.done).toBe(true)
+    expect(done.moment.kind).toBe('treasure')
+    expect(gameReducer(done, { type: 'OPENING_DONE' })).toBe(done)
+  })
+
+  it('leaves the treasure with the roll for first turn when there is one', () => {
+    let state = ready(initialState)
+    state = gameReducer(state, { type: 'CLAIM_HERO', deviceId: 'b', heroKey: 'rogue', player: 'Sam' })
+    state = gameReducer(state, { type: 'SET_LOBBY_READY', deviceId: 'b', ready: true })
+    const started = gameReducer(state, { type: 'START_GAME', treasureCards: treasure, random: [0] })
+    expect(started.opening.after).toBe(null)
+    expect(started.firstRoll.after.kind).toBe('treasure')
   })
 })

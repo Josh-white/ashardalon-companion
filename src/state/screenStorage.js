@@ -27,4 +27,13 @@ if (name) {
   proto.removeItem = function (key) {
     return removeItem.call(this, prefix + key)
   }
+  // Only the big screen pane plays sound unless one is switched on, so the panes don't
+  // all roar and narrate at once.
+  try {
+    if (name !== 'Big screen' && window.localStorage.getItem('ashardalon-companion/sound') === null) {
+      window.localStorage.setItem('ashardalon-companion/sound', 'off')
+    }
+  } catch {
+    // Storage blocked: the pane keeps the usual sound setting.
+  }
 }

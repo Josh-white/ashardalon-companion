@@ -139,6 +139,11 @@ export function narrationFor(before, after, now = Date.now()) {
     const title = story.title === after.adventure.card?.title || story.title === 'Victory!' ? '' : story.title
     lines.push(say('narrator', `${STORY} ${title} ${story.text}`.replace(/\s+/g, ' ').trim()))
   }
+  // The lines that open a game are the opening story (state/opening.js): the roll for
+  // first turn waits for them.
+  if (before.status === 'setup' && after.status === 'playing') {
+    for (let i = 0; i < lines.length; i++) if (lines[i]) lines[i] = { ...lines[i], opening: true }
+  }
   const moment = after.moment
   if (moment && moment.id !== before.moment?.id && now - moment.at < STALE_MS) {
     lines.push(...momentLines(moment, after))

@@ -36,7 +36,7 @@ function fetchLine(ctx, line) {
 }
 
 // What's being said right now on this page, if anything.
-let speaking = null // { source, stopped }
+let speaking = null // { source, stopped, line }
 function stopSpeaking(ctx) {
   if (!speaking) return
   speaking.stopped = true
@@ -53,11 +53,17 @@ function stopSpeaking(ctx) {
 // /narrate endpoint, on every screen whose sound is on. It hears every state the Pi
 // sends, so a line isn't skipped when two changes land together. Browsers only play
 // sound after a tap on the page, so `blocked` asks for one.
-export function useNarrator(on) {
+// `onOpening('start' | 'done')` hears when the game's opening story starts and ends here,
+// so the other screens can wait for it (state/opening.js).
+export function useNarrator(on, { onOpening } = {}) {
   const [available, setAvailable] = useState(false)
   const [blocked, setBlocked] = useState(false)
   const queue = useRef([])
   const timers = useRef(new Set())
+  const opening = useRef(onOpening)
+  useEffect(() => {
+    opening.current = onOpening
+  })
 
   useEffect(() => {
     fetch('/narrate')
@@ -81,11 +87,12 @@ export function useNarrator(on) {
     }
     setBlocked(false)
     const line = queue.current.shift()
-    const turn = { source: null, stopped: false }
+    const turn = { source: null, stopped: false, line }
     speaking = turn
     const done = () => {
       if (speaking !== turn) return
       speaking = null
+      if (line.opening && !queue.current.some((l) => l.opening)) opening.current?.('done')
       // The music waits a moment before coming back, in case another line follows.
       releaseQuiet(ctx, 'voice', VOICE_HOLD_S)
       playNext()
@@ -101,12 +108,21 @@ export function useNarrator(on) {
         // The music dips while the narrator talks, and comes back when it's done.
         holdQuiet(ctx, 'voice', VOICE_DUCK)
         source.start()
+        if (line.opening) opening.current?.('start')
       },
       done,
     )
   }, [])
 
   useGameStates((before, after) => {
+    // The opening story was skipped: stop reading it.
+    if (before?.opening && !before.opening.done && after?.opening?.done) {
+      queue.current = queue.current.filter((l) => !l.opening)
+      if (speaking?.line?.opening) {
+        stopSpeaking(audioContext())
+        playNext()
+      }
+    }
     if (!available || !on) return
     const lines = narrationFor(before, after, serverNow())
     if (lines.length === 0) return
@@ -167,5 +183,8 @@ export function useNarrator(on) {
     [available, on, playNext],
   )
 
-  return { available, blocked: available && on && blocked, say }
+  // Nothing being said or waiting to be said.
+  const quiet = useCallback(() => !speaking && queue.current.length === 0 && timers.current.size === 0, [])
+
+  return { available, blocked: available && on && blocked, say, quiet }
 }
