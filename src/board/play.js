@@ -148,10 +148,10 @@ function edgeFor(state, grid, drawKey, edgeId) {
   // A monster that explores (the Duergar Guard) puts the tile next to its own tile.
   const monsterAt = drawKey.startsWith('monster-') && state.board.tokens[drawKey.slice('monster-'.length)]
   if (monsterAt) {
-    const tile = grid.get(key(monsterAt))?.tile
+    const area = grid.get(key(monsterAt))?.area
     const far = distances(grid, monsterAt)
     const steps = (e) => Math.min(...e.squares.map((sq) => far.get(key(sq)) ?? Infinity))
-    return edges.filter((e) => e.tile === tile).sort((a, b) => steps(a) - steps(b))[0] ?? null
+    return edges.filter((e) => e.area === area).sort((a, b) => steps(a) - steps(b))[0] ?? null
   }
   const at = activeAt(state)
   if (!at) return null
@@ -231,7 +231,7 @@ export function layExit(state, name) {
 
 // The free squares nearest a tile's scorch mark, closest first.
 function spotsOn(grid, uid, taken) {
-  const mark = scorchSquare(grid, uid) ?? [...grid.values()].filter((sq) => sq.tile === uid && sq.floor).map((sq) => [sq.x, sq.y])[0]
+  const mark = scorchSquare(grid, uid) ?? [...grid.values()].filter((sq) => sq.area === uid && sq.floor).map((sq) => [sq.x, sq.y])[0]
   if (!mark) return []
   return [...distances(grid, mark)].sort((a, b) => a[1] - b[1]).map(([k]) => k).filter((k) => !taken.has(k))
 }
@@ -243,11 +243,11 @@ function spotsOn(grid, uid, taken) {
 function tileForDrawnMonster(state, grid) {
   const at = activeAt(state)
   if (!at) return null
-  const own = grid.get(key(at))?.tile
+  const own = grid.get(key(at))?.area
   if (/on the active hero's tile/i.test(state.encounter?.card?.text?.match(/place its figure[^.]*/i)?.[0] ?? '')) return own
   const far = distances(grid, at)
   const steps = (e) => Math.min(...e.squares.map((sq) => far.get(key(sq)) ?? Infinity))
-  return [...unexploredEdges(grid)].sort((a, b) => steps(a) - steps(b))[0]?.tile ?? own
+  return [...unexploredEdges(grid)].sort((a, b) => steps(a) - steps(b))[0]?.area ?? own
 }
 
 // Monsters and villains that just came into play go on the scorch mark of the tile laid

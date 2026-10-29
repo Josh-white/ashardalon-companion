@@ -17,13 +17,13 @@ const TILES = normalizeTiles(
   [],
 )
 
-// Three heroes: the first two on the Start tile, the third where we say.
+// Three heroes: the first two on the Start tile's north half, the third where we say.
 function game(thirdAt, extra = {}) {
   const heroes = HERO_TEMPLATES.slice(0, 3).map((t) => createHero(t))
   let state = gameReducer(initialState, { type: 'START_GAME', heroes, tileRandom: [], boardTiles: TILES })
   const tiles = [...state.board.tiles, { uid: 't1', tileId: 'room', at: [0, -4], turn: 0 }, { uid: 't2', tileId: 'room', at: [0, -8], turn: 0 }]
   const [a, b, c] = state.heroes
-  const tokens = { [a.id]: [0, 2], [b.id]: [1, 6], [c.id]: thirdAt, ...extra }
+  const tokens = { [a.id]: [0, 2], [b.id]: [1, 1], [c.id]: thirdAt, ...extra }
   state = { ...state, firstRoll: null, board: { ...state.board, tiles, tokens } }
   return { state, heroes: state.heroes }
 }
@@ -33,6 +33,13 @@ describe('board answers to end-of-phase questions', () => {
     const { state, heroes } = game([1, -2])
     expect(boardAnswer(state, `Is another hero on ${heroes[0].name}'s tile?`)).toMatchObject({ answer: true })
     expect(boardAnswer(state, `Is another hero on ${heroes[2].name}'s tile?`)).toMatchObject({ answer: false })
+  })
+
+  it('counts the Start tile as two tiles', () => {
+    const { state, heroes } = game([1, 6])
+    const apart = { ...state, board: { ...state.board, tokens: { ...state.board.tokens, [heroes[1].id]: [1, 5] } } }
+    expect(boardAnswer(apart, `Is another hero on ${heroes[2].name}'s tile?`)).toMatchObject({ answer: true })
+    expect(boardAnswer(apart, `Is another hero on ${heroes[0].name}'s tile?`)).toMatchObject({ answer: false })
   })
 
   it('doesn’t count a hero off in the Astral Refuge', () => {
@@ -62,7 +69,7 @@ describe('board answers to end-of-phase questions', () => {
   })
 
   it('answers villager questions', () => {
-    const { state } = game([1, -6], { alek: [2, -2], m1: [2, 5] })
+    const { state } = game([1, -6], { alek: [2, -2], m1: [2, 2] })
     const withAlek = { ...state, villagers: [{ id: 'alek', name: 'Alek' }], monsters: [{ id: 'm1', name: 'Cultist' }] }
     expect(boardAnswer(withAlek, 'Is Alek within 1 tile of a hero?')).toMatchObject({ answer: true })
     expect(boardAnswer(withAlek, 'Is Alek within 1 tile of a monster?')).toMatchObject({ answer: true })

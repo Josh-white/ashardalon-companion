@@ -17,13 +17,13 @@ const TILES = normalizeTiles(
   [],
 )
 
-// Three heroes: the first two on the Start tile, the third where we say.
+// Three heroes: the first two on the Start tile's north half, the third where we say.
 function game(thirdAt, extra = {}) {
   const heroes = HERO_TEMPLATES.slice(0, 3).map((t) => createHero(t))
   let state = gameReducer(initialState, { type: 'START_GAME', heroes, tileRandom: [], boardTiles: TILES })
   const tiles = [...state.board.tiles, { uid: 't1', tileId: 'room', at: [0, -4], turn: 0 }, { uid: 't2', tileId: 'room', at: [0, -8], turn: 0 }]
   const [a, b, c] = state.heroes
-  const tokens = { [a.id]: [0, 2], [b.id]: [1, 6], [c.id]: thirdAt, ...extra }
+  const tokens = { [a.id]: [0, 2], [b.id]: [1, 1], [c.id]: thirdAt, ...extra }
   state = { ...state, firstRoll: null, board: { ...state.board, tiles, tokens } }
   return { state, heroes: state.heroes }
 }

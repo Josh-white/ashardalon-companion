@@ -39,7 +39,9 @@ export function turnedCells(def, turn = 0) {
   }
 }
 
-// Every square on the board: "x,y" -> { x, y, tile (its uid), floor, scorch, blocked }.
+// Every square on the board: "x,y" -> { x, y, tile (its uid), area, floor, scorch, blocked }.
+// `area` is the tile as the rules count it: the tile's uid, except that the Start tile is
+// two tiles (JJ's table counts it that way), so its far half is "uid/2".
 export function buildGrid(board, defs) {
   const byId = new Map(defs.map((d) => [d.id, d]))
   const squares = new Map()
@@ -47,9 +49,11 @@ export function buildGrid(board, defs) {
     const def = byId.get(placed.tileId)
     if (!def) continue
     const { cells } = turnedCells(def, placed.turn)
+    const double = def.kind === 'start'
     for (const c of cells) {
       const at = [placed.at[0] + c.x, placed.at[1] + c.y]
-      squares.set(key(at), { x: at[0], y: at[1], tile: placed.uid, floor: c.floor, scorch: c.scorch, blocked: c.blocked })
+      const area = double && (c.x >= LATTICE || c.y >= LATTICE) ? `${placed.uid}/2` : placed.uid
+      squares.set(key(at), { x: at[0], y: at[1], tile: placed.uid, area, floor: c.floor, scorch: c.scorch, blocked: c.blocked })
     }
   }
   return squares
@@ -77,7 +81,7 @@ export function unexploredEdges(grid) {
       if (grid.has(key([nx, ny]))) continue
       const at = [Math.floor(nx / LATTICE) * LATTICE, Math.floor(ny / LATTICE) * LATTICE]
       const id = `${key(at)}:${side}`
-      if (!edges.has(id)) edges.set(id, { id, tile: sq.tile, side, at, squares: [] })
+      if (!edges.has(id)) edges.set(id, { id, tile: sq.tile, area: sq.area, side, at, squares: [] })
       edges.get(id).squares.push([sq.x, sq.y])
     }
   }

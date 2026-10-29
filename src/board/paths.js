@@ -71,17 +71,17 @@ export function stepsBetween(grid, a, b, options) {
   return distances(grid, a, options).get(key(b)) ?? Infinity
 }
 
-// The tiles that join each other through an opening.
+// The tiles (areas: the Start tile is two) that join each other through an opening.
 function tileLinks(grid) {
   const links = new Map()
   for (const sq of grid.values()) {
-    if (!links.has(sq.tile)) links.set(sq.tile, new Set())
+    if (!links.has(sq.area)) links.set(sq.area, new Set())
     for (const side of ['E', 'S']) {
       const other = grid.get(key([sq.x + STEP[side][0], sq.y + STEP[side][1]]))
-      if (!other || other.tile === sq.tile || !openSide(grid, [sq.x, sq.y], side)) continue
-      links.get(sq.tile).add(other.tile)
-      if (!links.has(other.tile)) links.set(other.tile, new Set())
-      links.get(other.tile).add(sq.tile)
+      if (!other || other.area === sq.area || !openSide(grid, [sq.x, sq.y], side)) continue
+      links.get(sq.area).add(other.area)
+      if (!links.has(other.area)) links.set(other.area, new Set())
+      links.get(other.area).add(sq.area)
     }
   }
   return links
@@ -89,8 +89,8 @@ function tileLinks(grid) {
 
 // How many tiles apart two squares are: 0 on the same tile, 1 on tiles joined by an opening.
 export function tilesBetween(grid, a, b) {
-  const from = grid.get(key(a))?.tile
-  const to = grid.get(key(b))?.tile
+  const from = grid.get(key(a))?.area
+  const to = grid.get(key(b))?.area
   if (from === undefined || to === undefined) return Infinity
   const links = tileLinks(grid)
   const seen = new Map([[from, 0]])
