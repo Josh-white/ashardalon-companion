@@ -7,3 +7,7 @@ export function randomNumbers(count) {
 }
 
 export const rollD20 = () => Math.floor(randomNumbers(1)[0] * 20) + 1
+
+// Random numbers for one shuffle, enough for the biggest deck (the encounter deck).
+export const SHUFFLE_NUMBERS = 128
+export const shuffleNumbers = () => randomNumbers(SHUFFLE_NUMBERS)

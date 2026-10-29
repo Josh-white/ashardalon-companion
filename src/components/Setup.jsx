@@ -4,7 +4,7 @@ import { cardStats } from '../data/cards.js'
 import { HERO_COLORS, HERO_TEMPLATES, heroTemplates, statsAtLevel, templateFor } from '../data/heroes.js'
 import { campaignHero } from '../state/campaign.js'
 import { levelSlots, powerSlotsFor } from '../state/game.js'
-import { randomNumbers } from '../state/random.js'
+import { randomNumbers, shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { AdventurePicker, ChosenAdventure } from './Adventure.jsx'
 import Art from './Art.jsx'
@@ -319,7 +319,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
       setSolo(false)
     }
     const start = () => {
-      dispatch({ type: 'START_GAME', treasureCards: cards.treasures, chambers: cards.chambers, tokens: cards.treasureTokens, random: randomNumbers(128), tileRandom: randomNumbers(8), boardTiles: cards.tiles, boardRandom: randomNumbers(64) })
+      dispatch({ type: 'START_GAME', treasureCards: cards.treasures, chambers: cards.chambers, tokens: cards.treasureTokens, random: shuffleNumbers(), tileRandom: randomNumbers(8), boardTiles: cards.tiles, boardRandom: randomNumbers(64) })
       onSolo()
     }
     return <SoloSetup state={state} dispatch={dispatch} deviceId={deviceId} cards={cards} onStart={start} onLeave={leave} />
@@ -336,7 +336,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
       treasureCards: cards.treasures,
       chambers: cards.chambers,
       tokens: cards.treasureTokens,
-      random: randomNumbers(128),
+      random: shuffleNumbers(),
       tileRandom: randomNumbers(8),
       ...(onBoard ? { boardTiles: cards.tiles, boardRandom: randomNumbers(64) } : {}),
     })

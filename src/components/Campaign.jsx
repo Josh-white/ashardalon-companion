@@ -1,11 +1,10 @@
 import { HERO_COLORS, templateFor } from '../data/heroes.js'
 import { campaignBoons, campaignHero, campaignOutcome, outcomeLines, shopSize } from '../state/campaign.js'
 import { turnKey } from '../state/game.js'
-import { randomNumbers } from '../state/random.js'
+import { shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { Button } from './ui.jsx'
 
-const SHUFFLE_NUMBERS = 128
 const gold = (n) => `${(n ?? 0).toLocaleString()} gold`
 const heroName = (key) => templateFor(key)?.name ?? key
 
@@ -39,7 +38,7 @@ export function CampaignBoons({ state, dispatch }) {
               variant="gold"
               className="w-full py-3 text-lg"
               onClick={() =>
-                dispatch({ type: 'USE_BOON', boon, monsterId: monster?.id, cards: monsterCards, villains, chambers, villagerCards: villagers, random: randomNumbers(SHUFFLE_NUMBERS) })
+                dispatch({ type: 'USE_BOON', boon, monsterId: monster?.id, cards: monsterCards, villains, chambers, villagerCards: villagers, random: shuffleNumbers() })
               }
             >
               🎁 {label}
@@ -70,7 +69,7 @@ export function CampaignRecap({ state, dispatch, big }) {
         <Button
           variant="gold"
           className="mt-3 px-6 py-3 text-lg"
-          onClick={() => dispatch({ type: 'CAMPAIGN_NEXT', treasureCards: treasures, boons, random: randomNumbers(SHUFFLE_NUMBERS) })}
+          onClick={() => dispatch({ type: 'CAMPAIGN_NEXT', treasureCards: treasures, boons, random: shuffleNumbers() })}
         >
           On to the next adventure →
         </Button>

@@ -29,7 +29,7 @@ import { useAudioLocked, useMusicSetting, useSoundSetting } from './audio/soundS
 import { HERO_COLORS } from './data/heroes.js'
 import { PHASES } from './data/phases.js'
 import { activeVillains, encounterCardsOutdated } from './state/game.js'
-import { randomNumbers } from './state/random.js'
+import { shuffleNumbers } from './state/random.js'
 import { useCards } from './state/useCards.js'
 import { FAMILY_GAME, useDeviceId, useGameChoice, useSeat, useSharedGame } from './state/useSharedGame.js'
 
@@ -481,7 +481,7 @@ export default function App() {
           deviceId={deviceId}
           onClaim={setSeat}
           onDemo={(picks, monsterCards, treasureCards) =>
-            dispatch({ type: 'START_DEMO', picks, monsterCards, treasureCards, random: randomNumbers(128) })
+            dispatch({ type: 'START_DEMO', picks, monsterCards, treasureCards, random: shuffleNumbers() })
           }
           watchOnly={seat === PROJECTOR_SEAT}
           onProjector={() => setSeat(PROJECTOR_SEAT)}
