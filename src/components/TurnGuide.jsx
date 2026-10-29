@@ -11,6 +11,7 @@ import { useCards } from '../state/useCards.js'
 import { treasurePending } from './Treasure.jsx'
 import { DrawnTile, HallwayDraws, useTileDraw } from './Tiles.jsx'
 import { Button } from './ui.jsx'
+import { heroEdges } from '../board/play.js'
 
 // Each phase asks only what the app can't see for itself. The checklist each phase
 // used to show is still on the projector, as a reminder for the whole table.
@@ -130,17 +131,42 @@ function HeroPhase({ state, hero, dispatch }) {
   )
 }
 
+const SIDE_NAMES = { N: 'north', E: 'east', S: 'south', W: 'west' }
+
+// The tiles this turn's exploring laid on the virtual board.
+function BoardDraws({ state }) {
+  const tiles = state.turn.tiles ?? {}
+  const drawn = [tiles.explore]
+  for (let n = 1; tiles[`hallway-${n}`] !== undefined; n++) drawn.push(tiles[`hallway-${n}`])
+  const laid = state.turn.boardTiles ?? []
+  if (drawn[0] === 'none') return <p className="text-amber-300">The dungeon tile stack is empty, so there's no tile to place.</p>
+  return (
+    <>
+      {drawn.map((tile, i) => (
+        <p key={i} className={tile ? 'text-xl font-bold text-amber-300' : 'text-emerald-300'}>
+          {tile ? `✨ It's the ${tile}!` : i > 0 ? '✓ A long hallway! Another tile went on at its far end.' : '✓ A new tile is on the board.'}
+        </p>
+      ))}
+      {laid.length < drawn.filter((t) => t !== 'none').length && (
+        <p className="mt-1 text-amber-300">A tile couldn't go on the board there. Move its monster by hand.</p>
+      )}
+    </>
+  )
+}
+
 function ExplorationPhase({ state, hero, dispatch }) {
   const { explored, monsterDrawn, noTiles } = state.turn
   const tileDraw = useTileDraw()
   const checks = <PhaseChecks state={state} hero={hero} phaseKey="exploration" dispatch={dispatch} />
+  // On the virtual board the board knows which edges the hero stands on.
+  const edges = state.board ? heroEdges(state) : null
   if (explored === false) {
     // No new tile, but a card still has something to do before the phase ends.
     return (
       <>
         <Note>
           <p>{noTiles ? 'The dungeon tile stack is empty, so no new tile this turn.' : `${hero.name} isn't on an unexplored edge, so no new tile this turn.`}</p>
-          {!noTiles && (
+          {!noTiles && (!edges || edges.length > 0) && (
             <Button variant="ghost" className="mt-2" onClick={() => dispatch({ type: 'SET_EXPLORED', explored: true, ...tileDraw })}>
               Oops, {hero.name} is on an edge
             </Button>
@@ -148,6 +174,29 @@ function ExplorationPhase({ state, hero, dispatch }) {
         </Note>
         {checks}
       </>
+    )
+  }
+  if (explored !== true && edges) {
+    const noTile = () => dispatch({ type: 'SET_EXPLORED', explored: false, rolls: [rollD20(), rollD20()] })
+    if (edges.length === 0) {
+      return (
+        <Note>
+          <p>{hero.name} isn't on an unexplored edge, so no new tile this turn.</p>
+          <Button className="mt-2 w-full" onClick={noTile}>
+            On to the Villain Phase
+          </Button>
+        </Note>
+      )
+    }
+    return (
+      <Note>
+        <p>{hero.name} is on an unexplored edge. Draw a tile to see what's there!</p>
+        {edges.map((edge) => (
+          <Button key={edge.id} variant="gold" className="mt-2 w-full" onClick={() => dispatch({ type: 'SET_EXPLORED', explored: true, edge: edge.id, ...tileDraw })}>
+            🗺️ Explore{edges.length > 1 ? ` ${SIDE_NAMES[edge.side]}` : ''}: draw a tile
+          </Button>
+        ))}
+      </Note>
     )
   }
   if (explored !== true) {
@@ -162,7 +211,11 @@ function ExplorationPhase({ state, hero, dispatch }) {
   const newest = monsterDrawn && [...state.monsters].reverse().find((m) => m.ownerId === hero.id)
   return (
     <>
-      {state.tileStack ? (
+      {state.board ? (
+        <Note>
+          <BoardDraws state={state} />
+        </Note>
+      ) : state.tileStack ? (
         <Note>
           <DrawnTile tile={state.turn.tiles?.explore} />
           <HallwayDraws state={state} dispatch={dispatch} />
@@ -173,7 +226,8 @@ function ExplorationPhase({ state, hero, dispatch }) {
       <RevealButtons state={state} dispatch={dispatch} />
       {monsterDrawn ? (
         <Note tone="good">
-          ✓ {newest ? `${/^[AEIOU]/.test(newest.name) ? 'An' : 'A'} ${newest.name} was drawn.` : 'Monster drawn.'} Put its figure on the new tile.
+          ✓ {newest ? `${/^[AEIOU]/.test(newest.name) ? 'An' : 'A'} ${newest.name} was drawn.` : 'Monster drawn.'}{' '}
+          {state.board ? "It's on the new tile's scorch mark." : 'Put its figure on the new tile.'}
         </Note>
       ) : (
         <DrawMonsterButton state={state} heroId={hero.id} dispatch={dispatch} className="mt-4 w-full" />

@@ -20,6 +20,7 @@ import { trackStats } from './stats.js'
 import { campaignHero, campaignOutcome, campaignSurges, isCampaign, newCampaign, shopCards, shopSize } from './campaign.js'
 import { playBoardSound, setBoardOff, setBoardUnlimited } from './soundboard.js'
 import { newFirstRoll, rollFirst } from './firstRoll.js'
+import { layTile, moveHero, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
 
 export const SAVE_VERSION = 1
 
@@ -74,6 +75,8 @@ export const initialState = {
   tokenStack: null,
   // The roll for first turn at the start of a game (state/firstRoll.js), or null.
   firstRoll: null,
+  // The virtual board for a solo game (board/play.js), or null when the real tiles are on the table.
+  board: null,
 }
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
@@ -1777,7 +1780,7 @@ function placeVillain(state, action) {
 }
 
 // Every action, then a check for an adventure's victory, then the recap's counts.
-export const gameReducer = (state, action) => trackStats(state, checkVictory(tagDrawn(reduce(state, action))), action)
+export const gameReducer = (state, action) => trackStats(state, pruneTokens(placeNewFigures(state, checkVictory(tagDrawn(reduce(state, action))))), action)
 
 // A dungeon tile drawn from the stack, from the top when exploring or the bottom for a
 // card that says so. `key` says what it was for (explore, a monster, an encounter), so
@@ -1790,7 +1793,22 @@ function drawDungeonTile(state, action) {
   if (tile === null) return next
   const left = next.tileStack.stack.length
   next = withLog(next, `Dungeon tile drawn${action.from === 'bottom' ? ' from the bottom' : ''}; ${left} left.`)
+  // On the virtual board the tile is laid right away, and its triangle answers the Villain Phase.
+  let laid = null
+  if (next.board) {
+    ;({ state: next, def: laid } = layTile(next, tile, key, action.edge))
+    if (laid && (key === 'explore' || key.startsWith('hallway-')) && laid.triangle) {
+      next = { ...next, turn: { ...next.turn, triangle: Boolean(next.turn.triangle) || laid.triangle !== 'white' } }
+    }
+    if (!laid) next = withLog(next, "The new tile couldn't go on the board here. Put its monster down by hand.")
+  }
   if (tile) next = revealTile(next, { ...action, tile, door: false })
+  // A long hallway: the next tile goes at its far end.
+  if (laid?.name === 'Long Hallway' && next.tileStack.stack.length > 0) {
+    let n = 1
+    while (next.turn.tiles?.[`hallway-${n}`] !== undefined) n++
+    next = drawDungeonTile(next, { ...action, key: `hallway-${n}`, from: 'top' })
+  }
   return next
 }
 
@@ -2021,7 +2039,10 @@ function reduce(state, action) {
       if (state.campaign && !sameHeroes(heroes, state.campaign.heroes)) return state
       const campaign = state.campaign ?? (isCampaign(card) ? newCampaign(card, action.chambers, action.random) : null)
       const surges = campaignSurges(campaign, clamp(Number(state.lobbySurges) || STARTING_SURGES, MIN_SURGES, MAX_SURGES))
-      const tiles = clamp(Number(state.lobbyTiles) || STARTING_TILES, MIN_TILES, MAX_TILES)
+      const lobbyTiles = clamp(Number(state.lobbyTiles) || STARTING_TILES, MIN_TILES, MAX_TILES)
+      // On the virtual board the stack can't hold more regular tiles than there are layouts for.
+      const regular = Array.isArray(action.boardTiles) ? action.boardTiles.filter((t) => t.kind === 'regular').length : 0
+      const tiles = action.boardTiles && regular > 0 ? Math.min(lobbyTiles, regular) : lobbyTiles
       let started = {
         ...initialState,
         status: 'playing',
@@ -2032,6 +2053,8 @@ function reduce(state, action) {
         campaign: campaign && { ...campaign, heroes: campaignHeroes(campaign, heroes, state.lobby ?? []) },
         tokenStack: campaign ? shuffle(Array.isArray(action.tokens) ? action.tokens : [], action.random) : null,
         firstRoll: newFirstRoll(heroes),
+        // A solo game on the virtual board starts with the Start tile and the heroes on it.
+        board: action.boardTiles ? newBoard(action.boardTiles, heroes, action.boardRandom) : null,
       }
       // The Vast Gate Opens: the gate is on the Start tile, and its Flares! card is in the top 3 encounters.
       const objective = card?.startObjective
@@ -2051,6 +2074,11 @@ function reduce(state, action) {
       }
       return dealStartingTreasure(begun, action.treasureCards, action.random)
     }
+
+    case 'MOVE_HERO':
+      return moveHero(state, action)
+    case 'MOVE_TOKEN':
+      return moveToken(state, action)
 
     case 'CHOOSE_ADVENTURE': {
       // Only before the game, and only an adventure the app can run.

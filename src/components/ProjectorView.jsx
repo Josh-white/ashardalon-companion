@@ -13,6 +13,7 @@ import { AreaName } from './AreaBackdrop.jsx'
 import { MusicToggle, SoundToggle } from './SoundToggle.jsx'
 import { BoardSwitch } from './SoundBoard.jsx'
 import { HpBar } from './ui.jsx'
+import Board from './Board.jsx'
 import { useLayoutEffect, useRef, useState } from 'react'
 
 // A read-only screen for the projector: big enough to read across the room,
@@ -76,6 +77,8 @@ function ProjectorScreen({ state, dispatch, onSwitchSeat, sound }) {
       </section>
 
       <ProjectorAdventure state={state} />
+
+      {state.board && <Board state={state} readOnly />}
 
       {(state.environment || state.encounter || state.treasure) && (
         <section className="space-y-[1vh]">
