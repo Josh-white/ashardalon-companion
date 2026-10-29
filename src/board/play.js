@@ -76,6 +76,14 @@ function edgeFor(state, grid, drawKey, edgeId) {
   }
   const last = (state.turn.boardTiles ?? []).at(-1)
   if (drawKey.startsWith('hallway-')) return last ? edges.find((e) => e.tile === last.uid && e.side === last.side) ?? null : null
+  // A monster that explores (the Duergar Guard) puts the tile next to its own tile.
+  const monsterAt = drawKey.startsWith('monster-') && state.board.tokens[drawKey.slice('monster-'.length)]
+  if (monsterAt) {
+    const tile = grid.get(key(monsterAt))?.tile
+    const far = distances(grid, monsterAt)
+    const steps = (e) => Math.min(...e.squares.map((sq) => far.get(key(sq)) ?? Infinity))
+    return edges.filter((e) => e.tile === tile).sort((a, b) => steps(a) - steps(b))[0] ?? null
+  }
   const at = activeAt(state)
   if (!at) return null
   const far = distances(grid, at)

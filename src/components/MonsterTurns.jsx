@@ -11,6 +11,7 @@ import Art from './Art.jsx'
 import { MonsterControl, TileGuardQuestion } from './Treasure.jsx'
 import { DrawTileButton } from './Tiles.jsx'
 import { Button } from './ui.jsx'
+import { boardStep, boardTargetIds, closestTarget, squareAway, squareNextTo, squareToward } from '../board/monsters.js'
 
 // Keyleth's Bravery: when a monster within 1 tile of her activates, she can step next to it and heal 1.
 function Bravery({ state, name, dispatch }) {
@@ -138,10 +139,18 @@ export function HeroPicker({ heroes, chosen, onToggle }) {
 export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDone }) {
   const { card, name } = monster
   const figures = monster.villain ? 1 : Math.max(1, Math.ceil(monster.hp / card.hp))
+  // On the virtual board the board answers the card's questions and picks the target. It is
+  // worked out once when the turn starts, so the monster's own move doesn't change the answer.
+  const [byBoard, setByBoard] = useState(() => boardStep(state, monster, card.tactics) !== null)
+  const fromBoard = () => {
+    const index = boardStep(state, monster, card.tactics) ?? 0
+    return { index, yes: Boolean(card.tactics[index]?.when), targets: boardTargetIds(state, monster, card.tactics[index]) }
+  }
+  const [start] = useState(() => (byBoard ? fromBoard() : { index: 0, yes: false, targets: [] }))
   const [figure, setFigure] = useState(1)
-  const [stepIndex, setStepIndex] = useState(0)
-  const [answered, setAnswered] = useState(false) // "Yes" to this step's question
-  const [chosen, setChosen] = useState([])
+  const [stepIndex, setStepIndex] = useState(start.index)
+  const [answered, setAnswered] = useState(start.yes) // "Yes" to this step's question
+  const [chosen, setChosen] = useState(start.targets)
   const [guarded, setGuarded] = useState([])
   const [results, setResults] = useState(null)
   const [tiePick, setTiePick] = useState(null) // the players' pick when heroes tie for the most HP
@@ -181,15 +190,30 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
   }
 
   const nextFigure = () => {
+    const again = byBoard ? fromBoard() : { index: 0, yes: false, targets: [] }
     setFigure((f) => f + 1)
+    setStepIndex(again.index)
+    setAnswered(again.yes)
+    setTrail([])
+    setChosen(again.targets)
+    setGuarded([])
+    setResults(null)
+  }
+  const finish = figure < figures ? nextFigure : onDone
+  // The board got something wrong: back to asking the questions.
+  const askInstead = () => {
+    setByBoard(false)
     setStepIndex(0)
     setAnswered(false)
     setTrail([])
     setChosen([])
     setGuarded([])
-    setResults(null)
+    setTiePick(null)
   }
-  const finish = figure < figures ? nextFigure : onDone
+  const moveTo = (to) => {
+    const at = state.board?.tokens[monster.id]
+    if (to && at && (to[0] !== at[0] || to[1] !== at[1])) dispatch({ type: 'MOVE_TOKEN', id: monster.id, to })
+  }
 
   // Villagers count as heroes for monster tactics (Free the Captives), listed first because
   // a monster goes for a villager when it can.
@@ -207,6 +231,11 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
   const targetIds = step?.target === 'mostHp' ? (strongest ? [strongest.id] : tieTarget ? [tieTarget.id] : []) : chosen
 
   const roll = (nobleShield) => {
+    // On the board it steps next to the hero first, when the card says so.
+    if (byBoard && step.move === 'adjacent') {
+      const goal = targetable.find((h) => h.id === (step.targets === 'all' ? boardTargetIds(state, monster, { when: step.when })[0] : targetIds[0]))
+      moveTo(squareNextTo(state, monster.id, state.board.tokens[goal?.id]))
+    }
     const targets = targetIds.map((heroId) => ({ heroId, roll: rollD20() }))
     const tableRoll = table.length > 0 ? rollD20() : undefined
     dispatch({ type: 'MONSTER_ATTACK', monsterId: monster.id, attackId: attack.id, tableRoll, targets, nobleShield, tileGuarded: guarded })
@@ -230,6 +259,18 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
   const living = state.heroes.filter((h) => h.hp > 0)
   const towardHero = step?.toward === 'mostHp' && living.length > 0 ? mostHp(living) : null
   const tiles = step?.tiles > 1 ? `${step.tiles} tiles` : '1 tile'
+  // Where it goes on the board when it moves toward a hero, and after an attack.
+  const towardFigure = byBoard && (!step || step.move === 'toward') && !nobody ? (step?.toward === 'mostHp' ? towardHero : closestTarget(state, monster.id)) : null
+  const towardName = towardFigure && targetable.find((h) => h.id === towardFigure.id)?.name
+  const moveToward = () => {
+    if (towardFigure) moveTo(squareToward(state, monster.id, state.board.tokens[towardFigure.id], step?.tiles ?? 1))
+    finish()
+  }
+  const finishAttack = () => {
+    if (byBoard && step.then === 'adjacent' && movedTo) moveTo(squareNextTo(state, monster.id, state.board.tokens[movedTo.id]))
+    if (byBoard && step.then === 'away') moveTo(squareAway(state, monster.id))
+    finish()
+  }
 
   return (
     <div className="space-y-4 rounded-2xl border-2 border-red-700 bg-zinc-950/80 p-4">
@@ -246,6 +287,9 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
           ✨ {away.map((h) => h.name).join(' and ')} {away.length > 1 ? 'are' : 'is'} in the Astral Refuge, off the board.{' '}
           {nobody ? `No hero is on the board for the ${name} to go after.` : `Leave ${away.length > 1 ? 'them' : away[0].name} out when you answer.`}
         </p>
+      )}
+      {byBoard && !results && step?.when && answered && (
+        <p className="rounded-lg bg-emerald-950/60 p-3 text-emerald-200">📍 The board says yes: {QUESTIONS[step.when](name)}</p>
       )}
       {!results && stepIndex === 0 && !answered && <Bravery state={state} name={name} dispatch={dispatch} />}
       {card.special && figure === 1 && stepIndex === 0 && !answered && (
@@ -300,7 +344,9 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
             It attacks with its <b>{attack.name}</b>. {targetPrompt(step)}
           </p>
           {step.move === 'adjacent' && step.targets === 'all' && (
-            <p className="rounded-lg bg-amber-950/60 p-3 text-lg text-amber-200">First, move the {name} next to the closest hero.</p>
+            <p className="rounded-lg bg-amber-950/60 p-3 text-lg text-amber-200">
+              {byBoard ? `The ${name} moves next to the closest hero, then attacks.` : `First, move the ${name} next to the closest hero.`}
+            </p>
           )}
           {villagers.length > 0 && <p className="text-emerald-200">Villagers count as heroes here, and the {name} picks a villager over a hero when it can.</p>}
           <HeroPicker heroes={targetable} chosen={chosen} onToggle={toggle} />
@@ -327,7 +373,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
           />
           {step.move === 'adjacent' && step.targets !== 'all' && movedTo && (
             <p className="rounded-lg bg-amber-950/60 p-3 text-lg text-amber-200">
-              First, move the {name} next to {movedTo.name}.
+              {byBoard ? `The ${name} moves next to ${movedTo.name}, then attacks.` : `First, move the ${name} next to ${movedTo.name}.`}
             </p>
           )}
           <Button variant="danger" className="w-full py-4 text-xl font-bold" disabled={targetIds.length === 0} onClick={() => roll()}>
@@ -390,9 +436,11 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
             })}
           </ul>
           {step.then && rows.length > 0 && (
-            <p className="rounded-lg bg-amber-950/60 p-3 text-lg text-amber-200">{THEN[step.then](name, movedTo?.name ?? 'that hero')}</p>
+            <p className="rounded-lg bg-amber-950/60 p-3 text-lg text-amber-200">
+              {byBoard && step.then !== 'within1' ? `The ${name} moves away when you tap Done.` : THEN[step.then](name, movedTo?.name ?? 'that hero')}
+            </p>
           )}
-          <Button variant="gold" className="w-full py-3 text-lg" onClick={finish}>
+          <Button variant="gold" className="w-full py-3 text-lg" onClick={finishAttack}>
             {figure < figures ? `Next ${name} →` : `Done with the ${name}`}
           </Button>
         </>
@@ -403,16 +451,24 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
           <p className="text-xl text-zinc-100">
             {nobody
               ? `The ${name} has nobody to go after, so it does nothing this turn.`
+              : towardName
+              ? `The ${name} moves ${tiles} toward ${towardName}.`
               : step?.move === 'toward' || !step
               ? step?.toward === 'mostHp'
                 ? `Move the ${name} ${tiles} toward ${towardHero ? `${towardHero.name}, the hero with the most HP` : 'the hero with the most HP (pick one if they’re tied)'}.`
                 : `Move the ${name} ${tiles} toward the closest hero${villagers.length > 0 ? ' or villager (a villager, if it has the choice)' : ''}.`
               : 'Do what the card says.'}
           </p>
-          <Button variant="gold" className="w-full py-3 text-lg" onClick={finish}>
-            {figure < figures ? `Next ${name} →` : `Done with the ${name}`}
+          <Button variant="gold" className="w-full py-3 text-lg" onClick={towardFigure ? moveToward : finish}>
+            {towardFigure ? `Move the ${name}` : figure < figures ? `Next ${name} →` : `Done with the ${name}`}
           </Button>
         </>
+      )}
+
+      {byBoard && !controlling && !results && (
+        <Button variant="ghost" className="w-full" onClick={askInstead}>
+          ↶ The board got it wrong: ask me instead
+        </Button>
       )}
 
       {!controlling && !results && trail.length > 0 && (

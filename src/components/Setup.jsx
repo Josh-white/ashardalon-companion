@@ -197,10 +197,10 @@ function MyHero({ state, claim, cards, deviceId, dispatch, solo = false }) {
   )
 }
 
-// Solo on the virtual board: this screen picks one or two heroes and runs the whole game.
-// Each hero is a claim of its own (this screen's id plus ~solo-1 or ~solo-2), so getting
+// Solo on the virtual board: this screen picks one to five heroes and runs the whole game.
+// Each hero is a claim of its own (this screen's id plus ~solo-1 to ~solo-5), so getting
 // a hero ready works the same as on a player's iPad.
-const SOLO_SLOTS = ['~solo-1', '~solo-2']
+const SOLO_SLOTS = ['~solo-1', '~solo-2', '~solo-3', '~solo-4', '~solo-5']
 
 function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave }) {
   const lobby = state.lobby ?? []
@@ -229,7 +229,7 @@ function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave }) {
     <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
       <header className="text-center">
         <h1 className="font-display text-4xl font-bold text-amber-400 sm:text-5xl">Solo on the virtual board</h1>
-        <p className="mt-2 text-lg text-zinc-400">Pick one hero, or two to play as a party. No tiles on the table: the dungeon is on this screen.</p>
+        <p className="mt-2 text-lg text-zinc-400">Pick one hero, or up to five to play as a party. No tiles on the table: the dungeon is on this screen.</p>
       </header>
       <ChosenAdventure state={state} />
       <input
@@ -431,7 +431,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
           <button type="button" className="font-semibold text-amber-400 underline" onClick={() => setSolo(true)}>
             Play solo on a virtual board
           </button>{' '}
-          with one or two heroes, no tiles needed.
+          with one to five heroes, no tiles needed.
         </p>
       )}
 
