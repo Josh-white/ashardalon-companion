@@ -68,12 +68,13 @@ export function HoldToPick({ onPick, disabled, className = '', children, label }
   const [holding, setHolding] = useState(false)
   const [hint, setHint] = useState(false)
   const timer = useRef(null)
+  const from = useRef(null)
 
   useEffect(() => () => clearTimeout(timer.current), [])
 
   const start = (e) => {
     if (disabled) return
-    e.preventDefault()
+    from.current = { x: e.clientX, y: e.clientY }
     unlockAudio()
     setHint(false)
     setHolding(true)
@@ -83,12 +84,17 @@ export function HoldToPick({ onPick, disabled, className = '', children, label }
       onPick()
     }, HOLD_MS)
   }
-  const stop = () => {
+  // Letting go too soon shows the "keep holding" hint; a swipe (the finger moves, or the
+  // browser takes the touch to scroll) just lets go quietly.
+  const stop = (hint = true) => {
     if (!timer.current) return
     clearTimeout(timer.current)
     timer.current = null
     setHolding(false)
-    setHint(true)
+    setHint(hint)
+  }
+  const move = (e) => {
+    if (timer.current && from.current && Math.hypot(e.clientX - from.current.x, e.clientY - from.current.y) > 10) stop(false)
   }
 
   return (
@@ -97,13 +103,15 @@ export function HoldToPick({ onPick, disabled, className = '', children, label }
       disabled={disabled}
       aria-label={label}
       onPointerDown={start}
-      onPointerUp={stop}
-      onPointerLeave={stop}
-      onPointerCancel={stop}
+      onPointerUp={() => stop()}
+      onPointerMove={move}
+      onPointerLeave={() => stop(false)}
+      onPointerCancel={() => stop(false)}
       onContextMenu={(e) => e.preventDefault()}
+      // The page still scrolls up and down when a swipe starts on a hero.
       // A keyboard has no hold; Enter picks straight away.
       onKeyDown={(e) => !disabled && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onPick())}
-      style={{ touchAction: 'none', WebkitTouchCallout: 'none', '--hold-ms': `${HOLD_MS}ms` }}
+      style={{ touchAction: 'pan-y', WebkitTouchCallout: 'none', '--hold-ms': `${HOLD_MS}ms` }}
       className={`relative select-none ${className}`}
     >
       {children}

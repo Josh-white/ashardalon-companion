@@ -187,6 +187,14 @@ describe('hero lobby', () => {
     expect(gameReducer(state, { type: 'SET_LOBBY_PICK', deviceId: 'a', slot: 1, card: card('one', 'at-will') })).toBe(state)
   })
 
+  it("fills in the name the iPad remembers, but keeps a name already in the lobby", () => {
+    let state = gameReducer(initialState, { type: 'CLAIM_HERO', deviceId: 'a', heroKey: 'paladin', player: 'Colton' })
+    expect(state.lobby[0].player).toBe('Colton')
+    state = gameReducer(state, { type: 'SET_LOBBY_PLAYER', deviceId: 'a', player: 'Easton' })
+    state = gameReducer(state, { type: 'CLAIM_HERO', deviceId: 'a', heroKey: 'rogue', player: 'Colton' })
+    expect(state.lobby[0].player).toBe('Easton')
+  })
+
   it('lets each iPad claim one hero that no other iPad can take', () => {
     let state = gameReducer(initialState, { type: 'CLAIM_HERO', deviceId: 'a', heroKey: 'paladin' })
     expect(gameReducer(state, { type: 'CLAIM_HERO', deviceId: 'b', heroKey: 'paladin' })).toBe(state)
