@@ -11,6 +11,7 @@ import Art from './Art.jsx'
 import { CampaignLobby, HeroCampaign } from './Campaign.jsx'
 import Chronicle from './Chronicle.jsx'
 import { HeroHall, HoldToPick } from './HeroHall.jsx'
+import ScreenChoice from './ScreenChoice.jsx'
 import { Button } from './ui.jsx'
 
 // Fills a new claim's slots with the cards the hero always has, then the
@@ -307,16 +308,19 @@ function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave }) {
   )
 }
 
-export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watchOnly, onProjector, onLeaveProjector, onArt, onSolo }) {
+// `role` is what this screen said it is on "Who stands here?" (null until it says), and
+// `projectorOpen` whether a big screen is in the game right now.
+export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watchOnly, onProjector, onLeaveProjector, onArt, onSolo, role, setRole, projectorOpen }) {
   const cards = useCards()
-  const [solo, setSolo] = useState(false)
   const lobby = state.lobby ?? []
   const canBoard = cards.tiles.some((t) => t.id === 'start')
   const canSolo = !watchOnly && canBoard
-  if (solo && canSolo) {
+  const mine = lobby.find((c) => c.deviceId === deviceId)
+  const demo = () => onDemo(demoPicks(cards.powers), cards.monsters, cards.treasures)
+  if (role === 'solo' && canSolo) {
     const leave = () => {
       for (const slot of SOLO_SLOTS) dispatch({ type: 'RELEASE_HERO', deviceId: deviceId + slot })
-      setSolo(false)
+      setRole(null)
     }
     const start = () => {
       dispatch({ type: 'START_GAME', treasureCards: cards.treasures, chambers: cards.chambers, tokens: cards.treasureTokens, random: shuffleNumbers(), tileRandom: randomNumbers(8), boardTiles: cards.tiles, boardRandom: randomNumbers(64) })
@@ -324,7 +328,21 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
     }
     return <SoloSetup state={state} dispatch={dispatch} deviceId={deviceId} cards={cards} onStart={start} onLeave={leave} />
   }
-  const mine = lobby.find((c) => c.deviceId === deviceId)
+  // A screen that hasn't said what it is yet (and isn't already holding a hero) asks first.
+  if (!watchOnly && !mine && (!role || role === 'big' || (role === 'solo' && !canSolo))) {
+    return (
+      <ScreenChoice
+        onHero={() => setRole('hero')}
+        onBigScreen={() => {
+          setRole('big')
+          onProjector()
+        }}
+        onSolo={canSolo ? () => setRole('solo') : null}
+        onDemo={demo}
+        onArt={onArt}
+      />
+    )
+  }
   // A campaign goes on with the same heroes, every one of them.
   const heroChoices = state.campaign ? heroTemplates().filter((t) => campaignHero(state, t.key)) : heroTemplates()
   const ready = lobby.length > 0 && lobby.every((c) => c.ready) && (!state.campaign || heroChoices.every((t) => lobby.some((c) => c.heroKey === t.key)))
@@ -349,9 +367,11 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
   return (
     <div className={`mx-auto space-y-6 p-4 sm:p-8 ${watchOnly ? 'max-w-6xl' : 'max-w-4xl'}`}>
       <header className="text-center">
-        <h1 className="font-display text-4xl font-bold text-amber-400 sm:text-5xl">{watchOnly ? 'The Heroes Assemble' : 'Wrath of Ashardalon'}</h1>
-        <p className="mt-2 text-lg text-zinc-400">
-          {watchOnly ? 'Pick your hero on your iPad to light their torch.' : mine ? 'Get your hero ready.' : 'Pick your hero on this iPad.'}
+        <h1 className="lobby-title font-display text-5xl font-black text-amber-400 sm:text-6xl">
+          {watchOnly ? 'The Heroes Assemble' : mine ? 'Ready your hero' : 'Choose your hero'}
+        </h1>
+        <p className="mt-3 font-display text-xl text-amber-100/90 italic">
+          {watchOnly ? 'Pick your hero on your iPad to light their torch.' : mine ? 'Check your powers, then tell the party you are ready.' : 'Hold a hero to light their torch.'}
         </p>
       </header>
 
@@ -364,7 +384,9 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
         <ChosenAdventure state={state} />
       )}
 
-      {canBoard && <BoardChoice state={state} dispatch={dispatch} big={watchOnly} />}
+      {/* One choice for the whole table, so the big screen makes it. Without one in the
+          game, any iPad can. */}
+      {canBoard && (watchOnly || !projectorOpen) && <BoardChoice state={state} dispatch={dispatch} big={watchOnly} />}
 
       {mine && !watchOnly && <MyHero state={state} claim={mine} cards={cards} deviceId={deviceId} dispatch={dispatch} />}
 
@@ -378,14 +400,14 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
           const canPick = !taken && !mine
           const body = (
             <>
-              <span className="flex items-center gap-3">
-                <Art name={heroArt(template.key)} className="w-14" />
+              <span className="flex items-center gap-4">
+                <Art name={heroArt(template.key)} className="w-20" />
                 <span>
-                  <span className={`block font-display text-2xl font-bold ${color.text}`}>{template.name}</span>
-                  <span className="text-zinc-400">{template.className}</span>
+                  <span className={`block font-display text-3xl font-bold ${color.text}`}>{template.name}</span>
+                  <span className="text-lg text-zinc-300">{template.className}</span>
                 </span>
               </span>
-              <span className="mt-1 block text-sm">
+              <span className="mt-2 block">
                 {taken ? (
                   <span className={owner.ready ? 'text-emerald-400' : 'text-amber-400'}>
                     {owner.player || 'Another iPad'} · {owner.ready ? 'ready' : 'choosing powers'}
@@ -398,7 +420,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
               </span>
             </>
           )
-          const look = `rounded-2xl border border-zinc-800 p-4 text-left transition ${taken ? color.bg : 'bg-zinc-900'} ${!taken && mine ? 'opacity-50' : ''}`
+          const look = `rounded-2xl border p-5 text-left transition ${taken ? `border-zinc-800 ${color.bg}` : 'border-amber-900/60 bg-zinc-950/70 backdrop-blur-sm'} ${!taken && mine ? 'opacity-50' : ''}`
           return canPick ? (
             <HoldToPick key={template.key} label={`Hold to pick ${template.name}`} onPick={() => claim(template)} className={`${look} active:scale-95`}>
               {body}
@@ -432,47 +454,33 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
         </p>
       </div>
 
-      {watchOnly ? (
+      <p className="text-center text-sm">
+        {watchOnly ? (
+          <button
+            type="button"
+            className="text-zinc-500 underline"
+            onClick={() => {
+              setRole(null)
+              onLeaveProjector()
+            }}
+          >
+            Use this screen for something else
+          </button>
+        ) : (
+          !mine && (
+            <button type="button" className="text-zinc-500 underline" onClick={() => setRole(null)}>
+              Not a hero screen? Choose again
+            </button>
+          )
+        )}
+      </p>
+      {watchOnly && (
         <p className="text-center text-sm">
-          <button type="button" className="text-zinc-600 underline" onClick={onLeaveProjector}>
-            Use this screen for a hero instead
+          <button type="button" className="text-zinc-600 underline" onClick={onArt}>
+            📷 Add photos of your cards
           </button>
         </p>
-      ) : (
-        !mine && (
-          <p className="text-center text-sm">
-            <button type="button" className="font-semibold text-amber-400 underline" onClick={onProjector}>
-              Use this screen as the projector
-            </button>
-          </p>
-        )
       )}
-
-      {!watchOnly && (
-        <p className="text-center text-sm text-zinc-500">
-          Just trying things out?{' '}
-          <button type="button" className="font-semibold text-amber-400 underline" onClick={() => onDemo(demoPicks(cards.powers), cards.monsters, cards.treasures)}>
-            Start a demo game
-          </button>{' '}
-          with all five heroes and a few monsters.
-        </p>
-      )}
-
-      {canSolo && !mine && (
-        <p className="text-center text-sm text-zinc-500">
-          Playing alone?{' '}
-          <button type="button" className="font-semibold text-amber-400 underline" onClick={() => setSolo(true)}>
-            Play solo on a virtual board
-          </button>{' '}
-          with one to five heroes, no tiles needed.
-        </p>
-      )}
-
-      <p className="text-center text-sm">
-        <button type="button" className="text-zinc-500 underline" onClick={onArt}>
-          📷 Add photos of your cards
-        </button>
-      </p>
     </div>
   )
 }

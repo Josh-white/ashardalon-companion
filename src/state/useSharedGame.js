@@ -287,6 +287,13 @@ export function useSeat(game = FAMILY_GAME) {
   return useStored(game === FAMILY_GAME ? SEAT_KEY : `${SEAT_KEY}/${game}`)
 }
 
+// What this screen said it is on "Who stands here?" ('hero', 'big' or 'solo'), or null
+// before it has said. Each game asks once.
+const SCREEN_KEY = 'ashardalon-companion/screen'
+export function useScreenRole(game = FAMILY_GAME) {
+  return useStored(game === FAMILY_GAME ? SCREEN_KEY : `${SCREEN_KEY}/${game}`)
+}
+
 // The game this device is in, or null before it has picked one.
 export function useGameChoice() {
   return useStored('ashardalon-companion/game')

@@ -134,7 +134,7 @@ export function ChosenAdventure({ state }) {
           Adventure: <span className="font-semibold text-amber-400">{heading(chosen)}</span> · {chosen.goal}
         </>
       ) : (
-        'Free play (the projector can pick an adventure).'
+        'Free play (the big screen picks the adventure).'
       )}
     </p>
   )

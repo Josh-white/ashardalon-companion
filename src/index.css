@@ -168,3 +168,31 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .torch-flame, .torch-arrive { animation: none; }
 }
+
+/* The lobby keeps the intro's mood: a warm glow from below, the dragon faint behind, embers. */
+.lobby-backdrop {
+  background: radial-gradient(ellipse at 50% 115%, rgb(124 29 11 / 0.75) 0%, rgb(42 10 6 / 0.6) 40%, transparent 75%), #09090b;
+}
+.lobby-dragon {
+  top: 38%; left: 50%;
+  width: min(80vw, 80vh); height: min(80vw, 80vh);
+  transform: translate(-50%, -50%);
+  object-fit: contain; opacity: 0.12;
+  border-radius: 9999px;
+  filter: sepia(1) saturate(4) hue-rotate(-25deg) brightness(0.55) blur(1px);
+  -webkit-mask-image: radial-gradient(circle, #000 40%, transparent 68%);
+  mask-image: radial-gradient(circle, #000 40%, transparent 68%);
+}
+/* A door on "Who stands here?": arched at the top like the hero alcoves. */
+.screen-door {
+  border-radius: 999px 999px 1rem 1rem / 4.5rem 4.5rem 1rem 1rem;
+  background: linear-gradient(180deg, rgb(120 53 15 / 0.45), rgb(28 18 12 / 0.9));
+}
+/* Lobby headings burn in like the intro's title, a little quicker. */
+.lobby-title {
+  text-shadow: 0 0 18px rgb(245 158 11 / 0.6), 0 0 50px rgb(220 38 38 / 0.45), 0 3px 0 #7c2d12;
+  animation: intro-burn 1.4s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lobby-title { animation: none; }
+}
