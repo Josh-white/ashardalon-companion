@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
-import { heroReach, movesLeft } from './play.js'
+import { PHASES } from '../data/phases.js'
+import { normalizeCardFile } from '../data/cards.js'
+import { heroEdges, heroReach, movesLeft } from './play.js'
 import { normalizeTiles } from './tileDefs.js'
 
 // A made-up Start tile: 3 floor columns and a wall column, stairs in the middle.
@@ -12,9 +14,15 @@ const TILES = normalizeTiles(
       exits: { N: 'ooox', S: 'ooox', W: 'oooooooo', E: 'xxxxxxxx' },
       features: [{ type: 'stairs', at: [[1, 3], [2, 3], [1, 4], [2, 4]] }],
     },
+    { id: 'hall', name: 'Long Hallway', kind: 'regular', triangle: 'white', rows: ['#..#', '#..#', '#..#', '#..#'], exits: { N: 'xoox', S: 'xoox', W: 'xxxx', E: 'xxxx' } },
+    { id: 'room', name: 'Room', kind: 'regular', triangle: 'black', rows: ['....', '.S..', '....', '....'], exits: { N: 'oooo', S: 'oooo', W: 'oooo', E: 'oooo' } },
   ],
   [],
 )
+const { monsters } = normalizeCardFile({
+  powers: [],
+  monsters: [{ id: 'rat', name: 'Rat', copies: 3, ac: 12, hp: 1, xp: 1, figures: 2, attacks: [{ id: 'bite', name: 'Bite', bonus: 5, damage: 1 }], tactics: [{ move: 'toward' }] }],
+})
 
 const start = (count = 2) => {
   const heroes = HERO_TEMPLATES.slice(0, count).map((t) => createHero(t))
@@ -85,5 +93,39 @@ describe('solo game on the virtual board', () => {
     expect(heroReach(state, hero(state))).not.toContain('1,0')
     state = gameReducer(state, { type: 'REMOVE_MONSTER', monsterId: monster.id })
     expect(state.board.tokens[monster.id]).toBeUndefined()
+  })
+
+  it('lays the drawn tile on the edge the hero explores, and its monster on the scorch mark', () => {
+    let state = start()
+    const h = hero(state)
+    state = gameReducer(state, { type: 'MOVE_TOKEN', id: h.id, to: [0, 0] })
+    state = { ...state, turn: { ...state.turn, phase: PHASES.findIndex((p) => p.key === 'exploration') } }
+    // A corner square touches two unexplored edges.
+    expect(heroEdges(state).map((e) => e.side).sort()).toEqual(['N', 'W'])
+    const north = heroEdges(state).find((e) => e.side === 'N')
+    state = gameReducer(state, { type: 'SET_EXPLORED', explored: true, edge: north.id, cards: monsters, random: [] })
+    // The pile's first tile is a long hallway, so the next one goes at its far end.
+    expect(state.board.tiles.slice(1)).toEqual([
+      { uid: 't1', tileId: 'hall', at: [0, -4], turn: 0 },
+      { uid: 't2', tileId: 'room', at: [0, -8], turn: 0 },
+    ])
+    expect(state.turn.tiles).toMatchObject({ explore: '', 'hallway-1': '' })
+    expect(state.board.pile).toEqual([])
+    expect(state.turn.triangle).toBe(true)
+    state = gameReducer(state, { type: 'DRAW_MONSTER', heroId: h.id, cards: monsters, random: [] })
+    const rat = state.monsters[0]
+    expect(at(state, rat.id)).toEqual([1, -7])
+    // Monsters that turn up later this turn stay off the board for the player to place.
+    state = gameReducer(state, { type: 'DRAW_MONSTER', heroId: hero(state, 1).id, cards: monsters, random: [] })
+    expect(state.board.tokens[state.monsters[1].id]).toBeUndefined()
+  })
+
+  it('turns a tile laid on a west edge so its triangle faces the hero', () => {
+    let state = start()
+    state = { ...state, board: { ...state.board, pile: ['room'] }, turn: { ...state.turn, phase: PHASES.findIndex((p) => p.key === 'exploration') } }
+    const west = heroEdges(state)
+    expect(west.map((e) => e.side)).toEqual(['W'])
+    state = gameReducer(state, { type: 'SET_EXPLORED', explored: true, cards: monsters, random: [] })
+    expect(state.board.tiles[1]).toEqual({ uid: 't1', tileId: 'room', at: [-4, 0], turn: 270 })
   })
 })

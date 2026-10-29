@@ -254,7 +254,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
       setSolo(false)
     }
     const start = () => {
-      dispatch({ type: 'START_GAME', treasureCards: cards.treasures, chambers: cards.chambers, tokens: cards.treasureTokens, random: randomNumbers(128), tileRandom: randomNumbers(8), boardTiles: cards.tiles })
+      dispatch({ type: 'START_GAME', treasureCards: cards.treasures, chambers: cards.chambers, tokens: cards.treasureTokens, random: randomNumbers(128), tileRandom: randomNumbers(8), boardTiles: cards.tiles, boardRandom: randomNumbers(64) })
       onSolo()
     }
     return <SoloSetup state={state} dispatch={dispatch} deviceId={deviceId} cards={cards} onStart={start} onLeave={leave} />
