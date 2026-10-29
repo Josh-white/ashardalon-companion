@@ -11,6 +11,7 @@ import Art from './Art.jsx'
 import { MonsterControl, TileGuardQuestion } from './Treasure.jsx'
 import { DrawTileButton } from './Tiles.jsx'
 import { Button } from './ui.jsx'
+import { figureToken } from '../board/play.js'
 import { boardStep, boardTargetIds, closestTarget, squareAway, squareNextTo, squareToward } from '../board/monsters.js'
 
 // Keyleth's Bravery: when a monster within 1 tile of her activates, she can step next to it and heal 1.
@@ -142,9 +143,11 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
   // On the virtual board the board answers the card's questions and picks the target. It is
   // worked out once when the turn starts, so the monster's own move doesn't change the answer.
   const [byBoard, setByBoard] = useState(() => boardStep(state, monster, card.tactics) !== null)
-  const fromBoard = () => {
-    const index = boardStep(state, monster, card.tactics) ?? 0
-    return { index, yes: Boolean(card.tactics[index]?.when), targets: boardTargetIds(state, monster, card.tactics[index]) }
+  // Each figure of a several-figure card (the Legion Devil) has its own token and turn.
+  const fromBoard = (n = 1) => {
+    const token = figureToken(monster.id, n)
+    const index = boardStep(state, monster, card.tactics, token) ?? 0
+    return { index, yes: Boolean(card.tactics[index]?.when), targets: boardTargetIds(state, monster, card.tactics[index], token) }
   }
   const [start] = useState(() => (byBoard ? fromBoard() : { index: 0, yes: false, targets: [] }))
   const [figure, setFigure] = useState(1)
@@ -190,7 +193,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
   }
 
   const nextFigure = () => {
-    const again = byBoard ? fromBoard() : { index: 0, yes: false, targets: [] }
+    const again = byBoard ? fromBoard(figure + 1) : { index: 0, yes: false, targets: [] }
     setFigure((f) => f + 1)
     setStepIndex(again.index)
     setAnswered(again.yes)
@@ -200,6 +203,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
     setResults(null)
   }
   const finish = figure < figures ? nextFigure : onDone
+  const token = figureToken(monster.id, figure)
   // The board got something wrong: back to asking the questions.
   const askInstead = () => {
     setByBoard(false)
@@ -211,8 +215,8 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
     setTiePick(null)
   }
   const moveTo = (to) => {
-    const at = state.board?.tokens[monster.id]
-    if (to && at && (to[0] !== at[0] || to[1] !== at[1])) dispatch({ type: 'MOVE_TOKEN', id: monster.id, to })
+    const at = state.board?.tokens[token]
+    if (to && at && (to[0] !== at[0] || to[1] !== at[1])) dispatch({ type: 'MOVE_TOKEN', id: token, to })
   }
 
   // Villagers count as heroes for monster tactics (Free the Captives), listed first because
@@ -233,8 +237,8 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
   const roll = (nobleShield) => {
     // On the board it steps next to the hero first, when the card says so.
     if (byBoard && step.move === 'adjacent') {
-      const goal = targetable.find((h) => h.id === (step.targets === 'all' ? boardTargetIds(state, monster, { when: step.when })[0] : targetIds[0]))
-      moveTo(squareNextTo(state, monster.id, state.board.tokens[goal?.id]))
+      const goal = targetable.find((h) => h.id === (step.targets === 'all' ? boardTargetIds(state, monster, { when: step.when }, token)[0] : targetIds[0]))
+      moveTo(squareNextTo(state, token, state.board.tokens[goal?.id]))
     }
     const targets = targetIds.map((heroId) => ({ heroId, roll: rollD20() }))
     const tableRoll = table.length > 0 ? rollD20() : undefined
@@ -260,15 +264,15 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
   const towardHero = step?.toward === 'mostHp' && living.length > 0 ? mostHp(living) : null
   const tiles = step?.tiles > 1 ? `${step.tiles} tiles` : '1 tile'
   // Where it goes on the board when it moves toward a hero, and after an attack.
-  const towardFigure = byBoard && (!step || step.move === 'toward') && !nobody ? (step?.toward === 'mostHp' ? towardHero : closestTarget(state, monster.id)) : null
+  const towardFigure = byBoard && (!step || step.move === 'toward') && !nobody ? (step?.toward === 'mostHp' ? towardHero : closestTarget(state, token)) : null
   const towardName = towardFigure && targetable.find((h) => h.id === towardFigure.id)?.name
   const moveToward = () => {
-    if (towardFigure) moveTo(squareToward(state, monster.id, state.board.tokens[towardFigure.id], step?.tiles ?? 1))
+    if (towardFigure) moveTo(squareToward(state, token, state.board.tokens[towardFigure.id], step?.tiles ?? 1))
     finish()
   }
   const finishAttack = () => {
-    if (byBoard && step.then === 'adjacent' && movedTo) moveTo(squareNextTo(state, monster.id, state.board.tokens[movedTo.id]))
-    if (byBoard && step.then === 'away') moveTo(squareAway(state, monster.id))
+    if (byBoard && step.then === 'adjacent' && movedTo) moveTo(squareNextTo(state, token, state.board.tokens[movedTo.id]))
+    if (byBoard && step.then === 'away') moveTo(squareAway(state, token))
     finish()
   }
 

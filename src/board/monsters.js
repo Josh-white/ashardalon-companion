@@ -27,8 +27,8 @@ function takenSquares(state, exceptId) {
 
 // The first step of the card's tactics whose question the board says yes to (a step with no
 // question always does). Null when the monster isn't on the board, so the screen asks instead.
-export function boardStep(state, monster, tactics = monster.card?.tactics ?? []) {
-  const at = squareOf(state, monster.id)
+export function boardStep(state, monster, tactics = monster.card?.tactics ?? [], tokenId = monster.id) {
+  const at = squareOf(state, tokenId)
   if (!state.board || !at) return null
   const grid = boardGrid(state.board)
   const targets = boardTargets(state)
@@ -45,8 +45,8 @@ function closestOf(grid, at, figures) {
 }
 
 // Who the step attacks: ids of the figures the board picks. The players can still change it.
-export function boardTargetIds(state, monster, step) {
-  const at = squareOf(state, monster.id)
+export function boardTargetIds(state, monster, step, tokenId = monster.id) {
+  const at = squareOf(state, tokenId)
   if (!state.board || !at || !step) return []
   const grid = boardGrid(state.board)
   const all = boardTargets(state)

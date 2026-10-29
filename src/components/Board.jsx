@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { heroArt, monsterArt } from '../data/art.js'
-import { boardGrid, heroReach, moveSpeed, movesLeft } from '../board/play.js'
+import { boardGrid, figureToken, figuresLeft, heroReach, moveSpeed, movesLeft } from '../board/play.js'
 import { key } from '../board/grid.js'
 import { activeVillains } from '../state/game.js'
 import { artUrl, useArt } from '../state/useArt.js'
@@ -35,14 +35,15 @@ function Token({ id, at, label, color, art, selected, faded, onTap }) {
   const cx = at[0] * SQUARE + SQUARE / 2
   const cy = at[1] * SQUARE + SQUARE / 2
   const r = SQUARE / 2 - 3
+  const clip = `clip-${id.replace(/#/g, '-')}`
   return (
     <g onClick={onTap} className={onTap ? 'cursor-pointer' : undefined} opacity={faded ? 0.6 : 1}>
-      <clipPath id={`clip-${id}`}>
+      <clipPath id={clip}>
         <circle cx={cx} cy={cy} r={r} />
       </clipPath>
       <circle cx={cx} cy={cy} r={r} fill={color} />
       {art ? (
-        <image href={art} x={cx - r} y={cy - r} width={r * 2} height={r * 2} clipPath={`url(#clip-${id})`} preserveAspectRatio="xMidYMid slice" />
+        <image href={art} x={cx - r} y={cy - r} width={r * 2} height={r * 2} clipPath={`url(#${clip})`} preserveAspectRatio="xMidYMid slice" />
       ) : (
         <text x={cx} y={cy + 6} textAnchor="middle" fontSize="17" fontWeight="700" fill="#fafafa">
           {label.slice(0, 1)}
@@ -65,7 +66,9 @@ export default function Board({ state, dispatch, readOnly = false }) {
   const active = state.heroes[state.turn.heroIndex]
   const figures = [
     ...state.heroes.map((h) => ({ id: h.id, label: h.name, color: TOKEN_COLORS[h.color] ?? '#71717a', art: artUrl(art, heroArt(h.key)), faded: h.hp <= 0 })),
-    ...state.monsters.map((m) => ({ id: m.id, label: m.name, color: '#7f1d1d', art: artUrl(art, monsterArt(m)) })),
+    ...state.monsters.flatMap((m) =>
+      Array.from({ length: figuresLeft(m) }, (_, i) => ({ id: figureToken(m.id, i + 1), label: figuresLeft(m) > 1 ? `${m.name} ${i + 1}` : m.name, color: '#7f1d1d', art: artUrl(art, monsterArt(m)) })),
+    ),
     ...activeVillains(state).map((v) => ({ id: v.id, label: v.name, color: '#581c87', art: artUrl(art, monsterArt(v)) })),
   ]
   const onBoard = figures.filter((f) => board.tokens[f.id])

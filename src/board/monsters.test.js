@@ -73,3 +73,23 @@ describe('monster turns on the virtual board', () => {
     expect(boardStep(off, monster)).toBeNull()
   })
 })
+
+describe('a monster card with several figures', () => {
+  it('puts a token down for each figure, and takes one away when a figure falls', () => {
+    const heroes = HERO_TEMPLATES.slice(0, 1).map((t) => createHero(t))
+    let state = gameReducer(initialState, { type: 'START_GAME', heroes, tileRandom: [], boardTiles: TILES })
+    state = { ...state, firstRoll: null, turn: { ...state.turn, boardTiles: [{ uid: 'start', side: 'N', filled: false }] } }
+    const cards = [{ id: 'devils', name: 'Legion Devil', copies: 1, ac: 14, hp: 1, xp: 3, figures: 3, attacks: [{ id: 'claw', name: 'Claw', bonus: 6, damage: 1 }], tactics: [{ move: 'toward' }] }]
+    state = gameReducer(state, { type: 'DRAW_MONSTER', heroId: heroes[0].id, cards, random: [] })
+    const devil = state.monsters[0]
+    expect(Object.keys(state.board.tokens).filter((id) => id.startsWith(devil.id)).sort()).toEqual([devil.id, `${devil.id}#2`, `${devil.id}#3`])
+    state = gameReducer(state, { type: 'ADJUST_MONSTER_HP', monsterId: devil.id, amount: -1 })
+    expect(Object.keys(state.board.tokens).filter((id) => id.startsWith(devil.id)).sort()).toEqual([devil.id, `${devil.id}#2`])
+    // Each figure moves on its own.
+    const before = state.board.tokens[`${devil.id}#2`]
+    state = gameReducer(state, { type: 'MOVE_TOKEN', id: `${devil.id}#2`, to: [2, 7] })
+    expect(state.board.tokens[`${devil.id}#2`]).toEqual([2, 7])
+    expect(before).not.toEqual([2, 7])
+    expect(gameReducer(state, { type: 'MOVE_TOKEN', id: `${devil.id}#3`, to: [2, 6] })).toBe(state)
+  })
+})
