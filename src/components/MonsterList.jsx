@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { monsterArt } from '../data/art.js'
-import { CONDITIONS } from '../data/heroes.js'
+import { CONDITIONS, HERO_COLORS } from '../data/heroes.js'
 import { activeVillains } from '../state/game.js'
 import { useCards } from '../state/useCards.js'
 import Art from './Art.jsx'
@@ -182,31 +182,63 @@ function MonsterRow({ monster, owner, isActiveOwner, dispatch }) {
   )
 }
 
-// With ownerId, shows only that hero's monster cards (a player's own iPad).
+// Another hero's monster on your iPad: just what it is, whose it is and how hurt it is.
+function OtherMonster({ monster, owner }) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3">
+      <Art name={monsterArt(monster)} className="w-12" />
+      <div className="min-w-0 flex-1">
+        <p className="font-display text-lg font-bold text-red-300">{monster.name}</p>
+        <p className="text-sm text-zinc-400">
+          {owner ? <span className={HERO_COLORS[owner.color].text}>{owner.name}'s card</span> : monster.objective ? 'In the chamber' : 'No owner'}
+          {monster.conditions.length > 0 && ` · ${monster.conditions.join(', ')}`}
+        </p>
+        <HpBar hp={monster.hp} maxHp={monster.maxHp} />
+      </div>
+      <span className="shrink-0 text-zinc-300">
+        {monster.hp} / {monster.maxHp} HP
+      </span>
+    </div>
+  )
+}
+
+// With ownerId (a player's own iPad), that hero's monster cards first, then everyone else's
+// below, to look at.
 export default function MonsterList({ state, dispatch, ownerId }) {
   const activeHero = state.heroes[state.turn.heroIndex]
   const monsters = ownerId ? state.monsters.filter((m) => m.ownerId === ownerId) : state.monsters
+  const others = ownerId ? state.monsters.filter((m) => m.ownerId !== ownerId) : []
 
   return (
-    <section>
-      <div className="mb-3">
-        <h2 className="font-display text-2xl font-bold text-zinc-100">{ownerId ? 'Your monsters' : 'Monsters'}</h2>
+    <section className="space-y-6">
+      <div>
+        <h2 className="mb-3 font-display text-2xl font-bold text-zinc-100">{ownerId ? 'Your monsters' : 'Monsters'}</h2>
+        {monsters.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-zinc-800 p-6 text-center text-zinc-500">
+            {others.length > 0 ? 'None of the monsters are yours.' : 'The dungeon is quiet... for now.'}
+          </p>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {monsters.map((monster) => (
+              <MonsterRow
+                key={monster.id}
+                monster={monster}
+                owner={state.heroes.find((h) => h.id === monster.ownerId)}
+                isActiveOwner={monster.ownerId === activeHero.id}
+                dispatch={dispatch}
+              />
+            ))}
+          </div>
+        )}
       </div>
-      {monsters.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-zinc-800 p-6 text-center text-zinc-500">
-          The dungeon is quiet... for now.
-        </p>
-      ) : (
-        <div className="grid gap-3 md:grid-cols-2">
-          {monsters.map((monster) => (
-            <MonsterRow
-              key={monster.id}
-              monster={monster}
-              owner={state.heroes.find((h) => h.id === monster.ownerId)}
-              isActiveOwner={monster.ownerId === activeHero.id}
-              dispatch={dispatch}
-            />
-          ))}
+      {others.length > 0 && (
+        <div>
+          <h2 className="mb-3 font-display text-xl font-bold text-zinc-300">Other heroes' monsters</h2>
+          <div className="grid gap-2 md:grid-cols-2">
+            {others.map((monster) => (
+              <OtherMonster key={monster.id} monster={monster} owner={state.heroes.find((h) => h.id === monster.ownerId)} />
+            ))}
+          </div>
         </div>
       )}
     </section>

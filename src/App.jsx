@@ -191,7 +191,7 @@ const momentFor = (moment, heroId) => Boolean(moment) && (!heroId || moment.hero
 // table screen whenever the hero or the phase changes, on a hero's iPad at each phase of their
 // own turn and when it ends, and whenever something happens to that hero (a monster's attack,
 // treasure, a free attack from Cause Fear) so it isn't missed on another tab. A new monster
-// puts a dot on Monsters until it's opened.
+// (on a hero's iPad, one of theirs) puts a dot on Monsters until it's opened.
 function usePlayTabs(state, heroId, myTurn) {
   const [tab, setTab] = useState('turn')
   const resetKey = heroId ? (myTurn ? `${state.turn.round}-${state.turn.phase}` : 'waiting') : `${state.turn.heroIndex}-${state.turn.phase}`
@@ -204,7 +204,8 @@ function usePlayTabs(state, heroId, myTurn) {
   useEffect(() => {
     if (extraAttacks > 0) setTab('turn')
   }, [extraAttacks])
-  const monsters = monsterTotal(state)
+  // A hero's iPad gets the dot for its own new monsters; the table, for any.
+  const monsters = heroId ? state.monsters.filter((m) => m.ownerId === heroId).length : monsterTotal(state)
   const [seenMonsters, setSeenMonsters] = useState(monsters)
   useEffect(() => {
     if (tab === 'monsters' || monsters < seenMonsters) setSeenMonsters(monsters)
@@ -267,7 +268,7 @@ function PlayView({ state, dispatch, hero = null, soundBoard = null }) {
       </>
     ),
     party: hero ? <PartyStrip heroes={state.heroes} exceptId={hero.id} /> : <div className="grid gap-3 md:grid-cols-2">{state.heroes.map((h) => heroCard(h))}</div>,
-    adventure: <AdventurePanel state={state} dispatch={dispatch} />,
+    adventure: <AdventurePanel state={state} dispatch={dispatch} full />,
     log: state.log.length ? <GameLog log={state.log} /> : <p className="text-zinc-400">Nothing has happened yet.</p>,
   }[shown]
   const tabBar = <TabBar tabs={tabs} tab={shown} setTab={setTab} className="shrink-0" />
