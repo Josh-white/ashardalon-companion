@@ -69,6 +69,8 @@ export const initialState = {
   // The dungeon tile stack (state/tiles.js): { stack: ['' | special tile name], drawn }, top first.
   tileStack: null,
   lobbyTiles: STARTING_TILES,
+  // Chosen in the lobby: the party plays on the virtual board instead of real tiles.
+  lobbyBoard: false,
   soundboard: null, // the players' sound board (state/soundboard.js): { off, last, turn, used }
   stats: {}, // each hero's bragging rights for the end-of-game recap (state/stats.js), by hero id
   // A campaign (state/campaign.js) lasts across games: New game keeps it until it's over.
@@ -1630,7 +1632,7 @@ function nextCampaignAdventure(state, action) {
   }
   const held = campaign.heroes.flatMap((h) => h.items.map((i) => i.cardId))
   const shop = shopCards(action.treasureCards, held, shopSize({ campaign }, action.boons), action.random)
-  return campaignLobby({ ...initialState, campaign: { ...campaign, shop }, lobbySurges: state.lobbySurges, lobbyTiles: state.lobbyTiles })
+  return campaignLobby({ ...initialState, campaign: { ...campaign, shop }, lobbySurges: state.lobbySurges, lobbyTiles: state.lobbyTiles, lobbyBoard: state.lobbyBoard })
 }
 
 // Between adventures a hero buys a shop card with their own gold.
@@ -1990,7 +1992,7 @@ function reduce(state, action) {
       // A campaign goes on until it's over (or someone ends it), so its heroes come back to the lobby.
       const outcome = campaignOutcome(state)
       if (!state.campaign || outcome?.over) return initialState
-      return campaignLobby({ ...initialState, campaign: state.campaign, lobbySurges: state.lobbySurges, lobbyTiles: state.lobbyTiles })
+      return campaignLobby({ ...initialState, campaign: state.campaign, lobbySurges: state.lobbySurges, lobbyTiles: state.lobbyTiles, lobbyBoard: state.lobbyBoard })
     }
 
     case 'CAMPAIGN_NEXT':
@@ -2065,7 +2067,7 @@ function reduce(state, action) {
         campaign: campaign && { ...campaign, heroes: campaignHeroes(campaign, heroes, state.lobby ?? []) },
         tokenStack: campaign ? shuffle(Array.isArray(action.tokens) ? action.tokens : [], action.random) : null,
         firstRoll: newFirstRoll(heroes),
-        // A solo game on the virtual board starts with the Start tile and the heroes on it.
+        // A game on the virtual board (solo or the party's) starts with the Start tile and the heroes on it.
         board: action.boardTiles ? newBoard(action.boardTiles, heroes, action.boardRandom) : null,
       }
       // The Vast Gate Opens: the gate is on the Start tile, and its Flares! card is in the top 3 encounters.
@@ -2120,6 +2122,10 @@ function reduce(state, action) {
     case 'SET_LOBBY_TILES':
       if (state.status !== 'setup') return state
       return { ...state, lobbyTiles: clamp(Number(action.tiles) || STARTING_TILES, MIN_TILES, MAX_TILES) }
+
+    case 'SET_LOBBY_BOARD':
+      if (state.status !== 'setup') return state
+      return { ...state, lobbyBoard: Boolean(action.on) }
 
     case 'ADVENTURE_REVEAL':
       return revealTile(state, action)

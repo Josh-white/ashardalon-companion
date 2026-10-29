@@ -168,3 +168,24 @@ describe('solo game on the virtual board', () => {
   })
 })
 
+
+describe('the party on the virtual board', () => {
+  it('starts from the lobby with every ready hero on the Start tile', () => {
+    let state = gameReducer(initialState, { type: 'SET_LOBBY_BOARD', on: true })
+    expect(state.lobbyBoard).toBe(true)
+    for (const [deviceId, heroKey, player] of [['a', 'fighter', 'Dad'], ['b', 'rogue', 'Colton']]) {
+      state = gameReducer(state, { type: 'CLAIM_HERO', deviceId, heroKey, picks: [] })
+      state = gameReducer(state, { type: 'SET_LOBBY_PLAYER', deviceId, player })
+      state = gameReducer(state, { type: 'SET_LOBBY_READY', deviceId, ready: true })
+    }
+    state = gameReducer(state, { type: 'START_GAME', tileRandom: [], boardTiles: TILES })
+    expect(state.status).toBe('playing')
+    expect(state.heroes).toHaveLength(2)
+    for (const h of state.heroes) expect(at(state, h.id)).toBeTruthy()
+  })
+
+  it('only changes the board choice in the lobby', () => {
+    const playing = start()
+    expect(gameReducer(playing, { type: 'SET_LOBBY_BOARD', on: false })).toBe(playing)
+  })
+})
