@@ -28,6 +28,33 @@ export function startingPicks(template, cards) {
 
 const hasName = (claim) => Boolean(claim.player?.trim())
 
+// The lobby's choice of real tiles on the table or the virtual board on the screens. Any
+// screen can switch it; on the virtual board the projector shows the dungeon and each
+// player moves their hero on their own iPad.
+function BoardChoice({ state, dispatch, big = false }) {
+  const on = Boolean(state.lobbyBoard)
+  const pick = (value) => dispatch({ type: 'SET_LOBBY_BOARD', on: value })
+  return (
+    <section className={`rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4 ${big ? 'text-xl' : ''}`}>
+      <p className="mb-2 font-semibold text-zinc-300">Where's the dungeon?</p>
+      <div className="flex flex-wrap gap-2">
+        <Button variant={on ? 'default' : 'gold'} onClick={() => pick(false)} aria-pressed={!on}>
+          🧱 Real tiles on the table
+        </Button>
+        <Button variant={on ? 'gold' : 'default'} onClick={() => pick(true)} aria-pressed={on}>
+          🗺️ Virtual board on the screens
+        </Button>
+      </div>
+      {on && (
+        <p className="mt-2 text-sm text-zinc-400">
+          No tiles needed. The projector or TV shows the whole dungeon, and each player moves their hero on their own iPad. No projector? Any ready
+          player can enter the dungeon.
+        </p>
+      )}
+    </section>
+  )
+}
+
 // The claim's power slots: a campaign hero who levelled up has the cards each level added.
 const claimSlots = (claim) => {
   const template = templateFor(claim.heroKey)
@@ -284,7 +311,8 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
   const cards = useCards()
   const [solo, setSolo] = useState(false)
   const lobby = state.lobby ?? []
-  const canSolo = !watchOnly && cards.tiles.some((t) => t.id === 'start')
+  const canBoard = cards.tiles.some((t) => t.id === 'start')
+  const canSolo = !watchOnly && canBoard
   if (solo && canSolo) {
     const leave = () => {
       for (const slot of SOLO_SLOTS) dispatch({ type: 'RELEASE_HERO', deviceId: deviceId + slot })
@@ -300,6 +328,18 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
   // A campaign goes on with the same heroes, every one of them.
   const heroChoices = state.campaign ? heroTemplates().filter((t) => campaignHero(state, t.key)) : heroTemplates()
   const ready = lobby.length > 0 && lobby.every((c) => c.ready) && (!state.campaign || heroChoices.every((t) => lobby.some((c) => c.heroKey === t.key)))
+
+  const onBoard = canBoard && Boolean(state.lobbyBoard)
+  const enter = () =>
+    dispatch({
+      type: 'START_GAME',
+      treasureCards: cards.treasures,
+      chambers: cards.chambers,
+      tokens: cards.treasureTokens,
+      random: randomNumbers(128),
+      tileRandom: randomNumbers(8),
+      ...(onBoard ? { boardTiles: cards.tiles, boardRandom: randomNumbers(64) } : {}),
+    })
 
   const claim = (template) => {
     dispatch({ type: 'CLAIM_HERO', deviceId, heroKey: template.key, picks: startingPicks(template, cards.powers) })
@@ -323,6 +363,8 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
       ) : (
         <ChosenAdventure state={state} />
       )}
+
+      {canBoard && <BoardChoice state={state} dispatch={dispatch} big={watchOnly} />}
 
       {mine && !watchOnly && <MyHero state={state} claim={mine} cards={cards} deviceId={deviceId} dispatch={dispatch} />}
 
@@ -371,13 +413,10 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
       )}
 
       <div className="flex flex-col items-center gap-2">
-        {/* Only the projector starts the game, once every hero is ready. */}
-        {watchOnly && (
-          <Button variant="gold" className="px-10 py-4 text-xl" disabled={!ready}
-            onClick={() =>
-              dispatch({ type: 'START_GAME', treasureCards: cards.treasures, chambers: cards.chambers, tokens: cards.treasureTokens, random: randomNumbers(128), tileRandom: randomNumbers(8) })
-            }
-          >
+        {/* The projector starts the game once every hero is ready. On the virtual board a
+            projector is optional, so a ready player's iPad can start it too. */}
+        {(watchOnly || (onBoard && mine)) && (
+          <Button variant="gold" className="px-10 py-4 text-xl" disabled={!ready} onClick={enter}>
             Enter the dungeon
           </Button>
         )}
@@ -389,7 +428,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
               : state.campaign
                 ? `Waiting for ${heroChoices.map((t) => t.name).join(', ')} to be ready.`
                 : 'Waiting for every hero to be ready.'}
-          {!watchOnly && lobby.length > 0 && ' The projector starts the game.'}
+          {!watchOnly && lobby.length > 0 && !onBoard && ' The projector starts the game.'}
         </p>
       </div>
 

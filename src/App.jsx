@@ -167,7 +167,9 @@ function HeroView({ state, dispatch, hero }) {
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4">
       {myTurn ? <TurnGuide state={state} dispatch={dispatch} /> : <WaitingBanner state={state} />}
-      <Board state={state} dispatch={dispatch} />
+      {/* On the virtual board only the active hero's iPad moves figures (or a power's move
+          that's waiting on someone), so nobody moves a hero by mistake while watching. */}
+      <Board state={state} dispatch={dispatch} readOnly={!myTurn && !state.turn.boardMove} />
       <AdventurePanel state={state} dispatch={dispatch} />
       {/* Cause Fear gives other heroes an attack during someone else's turn. */}
       {!myTurn && <ExtraAttacks state={state} dispatch={dispatch} onlyHeroId={hero.id} />}
@@ -339,7 +341,9 @@ function TableView({ state, dispatch }) {
   return (
     <div className="mx-auto max-w-6xl space-y-8 p-4">
       <TurnGuide state={state} dispatch={dispatch} />
-      <Board state={state} dispatch={dispatch} />
+      {/* On the virtual board only the active hero's iPad moves figures (or a power's move
+          that's waiting on someone), so nobody moves a hero by mistake while watching. */}
+      <Board state={state} dispatch={dispatch} readOnly={!myTurn && !state.turn.boardMove} />
       <AdventurePanel state={state} dispatch={dispatch} />
       <section>
         <h2 className="mb-3 font-display text-2xl font-bold text-zinc-100">Heroes</h2>

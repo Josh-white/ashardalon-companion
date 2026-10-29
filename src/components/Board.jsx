@@ -8,7 +8,7 @@ import { artUrl, useArt } from '../state/useArt.js'
 import { SQUARE, TileShapes } from './TileDrawing.jsx'
 import { Button } from './ui.jsx'
 
-// The virtual board of a solo game: the tiles laid so far and every figure on its square.
+// The virtual board (a solo game's, or the party's on the projector and iPads): the tiles laid so far and every figure on its square.
 // Tap your hero to see where it can go, then tap a square to move there. "Move by hand"
 // lets you put any figure on any free square, for anything the app doesn't move itself.
 
@@ -68,7 +68,7 @@ function useBoxSize() {
   return [ref, size]
 }
 
-// `fill`: the board takes the whole box it's in (the solo screen) and starts zoomed to fit,
+// `fill`: the board takes the whole box it's in (the solo screen, the projector) and starts zoomed to fit,
 // with + to zoom in on the active hero. Without it the board keeps its fixed zoom steps.
 export default function Board({ state, dispatch, readOnly = false, fill = false, extraButtons = null }) {
   const art = useArt()
@@ -144,6 +144,8 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   const fit = fill && steps[step] === 'fit'
   const scale = fit ? fitScale : ZOOMS[steps[step]]
   const left = active ? movesLeft(state, active) : 0
+  // Read only and not filling a box: a small board to glance at.
+  const small = readOnly && !fill
 
   return (
     <section className={`rounded-2xl border border-zinc-800 bg-zinc-950/80 ${fill ? 'flex h-full flex-col p-2' : 'p-3'}`}>
@@ -206,12 +208,12 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
           ))}
         </div>
       )}
-      <div ref={boxRef} className={readOnly ? '' : fill ? 'min-h-0 flex-1 overflow-auto' : 'max-h-[70vh] overflow-auto'}>
+      <div ref={boxRef} className={fill ? `min-h-0 flex-1 ${readOnly ? 'overflow-hidden' : 'overflow-auto'}` : readOnly ? '' : 'max-h-[70vh] overflow-auto'}>
         <svg
           viewBox={`${minX * SQUARE} ${minY * SQUARE} ${cols * SQUARE} ${rows * SQUARE}`}
-          width={readOnly ? '100%' : fit ? '100%' : cols * SQUARE * scale}
-          height={readOnly ? undefined : fit ? '100%' : rows * SQUARE * scale}
-          className={readOnly ? 'mx-auto max-h-[45vh]' : fit ? 'block' : 'mx-auto'}
+          width={small || fit ? '100%' : cols * SQUARE * scale}
+          height={small ? undefined : fit ? '100%' : rows * SQUARE * scale}
+          className={small ? 'mx-auto max-h-[45vh]' : fit ? 'block' : 'mx-auto'}
           role="img"
           aria-label="The dungeon board"
         >
@@ -235,7 +237,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
             )
           })}
           {onBoard.map((f) => (
-            <Token key={f.id} {...f} at={board.tokens[f.id]} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id))} onTap={readOnly ? undefined : () => tapFigure(f.id)} />
+            <Token key={f.id} {...f} at={board.tokens[f.id]} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)} onTap={readOnly ? undefined : () => tapFigure(f.id)} />
           ))}
         </svg>
       </div>
