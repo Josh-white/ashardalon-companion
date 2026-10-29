@@ -28,7 +28,7 @@ import { useMusic } from './audio/music.js'
 import { useAudioLocked, useMusicSetting, useSoundSetting } from './audio/soundSetting.js'
 import { HERO_COLORS } from './data/heroes.js'
 import { PHASES } from './data/phases.js'
-import { encounterCardsOutdated } from './state/game.js'
+import { activeVillains, encounterCardsOutdated } from './state/game.js'
 import { randomNumbers } from './state/random.js'
 import { useCards } from './state/useCards.js'
 import { FAMILY_GAME, useDeviceId, useGameChoice, useSeat, useSharedGame } from './state/useSharedGame.js'
@@ -191,11 +191,76 @@ function HeroView({ state, dispatch, hero }) {
   )
 }
 
-// A solo game on the virtual board: the turn and the board side by side, the active hero's
-// card under them, and everything else folded away until it's wanted.
-function SoloView({ state, dispatch }) {
+// The solo game's top bar: one short line on a phone (undo, XP, surges, tiles) and a ☰ menu
+// with everything else, so the board and the turn get the screen.
+function SoloBar({ state, dispatch, undo, undoDepth, onSwitchSeat, sound }) {
+  const [open, setOpen] = useState(false)
+  const newGame = () => {
+    if (window.confirm('Start a new game? This clears the current one for everyone.')) dispatch({ type: 'NEW_GAME' })
+  }
+  const stepper = (label, type, value) => (
+    <div className="flex items-center gap-2">
+      <span className="w-28 text-zinc-400">{label}</span>
+      <Button className="!px-3 !py-1" onClick={() => dispatch({ type, amount: -1 })}>−</Button>
+      <span className="w-14 text-center text-lg font-bold text-amber-400">{value}</span>
+      <Button className="!px-3 !py-1" onClick={() => dispatch({ type, amount: 1 })}>+</Button>
+    </div>
+  )
+  return (
+    <header className="relative z-50 shrink-0 border-b border-zinc-800 bg-zinc-950/95">
+      <div className="flex items-center gap-2 px-2 py-1.5">
+        <UndoButton undo={undo} depth={undoDepth} dispatch={dispatch} className="min-w-0 flex-1 truncate !px-2 text-left" />
+        <span className="whitespace-nowrap text-sm text-zinc-300">
+          <b className="text-amber-400">{state.xp}</b> XP
+        </span>
+        <span className={`whitespace-nowrap text-sm ${state.surges === 0 ? 'text-red-400' : 'text-emerald-400'}`} title="Healing surges">
+          {state.surges === 0 ? '0 ❤' : '❤'.repeat(state.surges)}
+        </span>
+        {state.tileStack && <TilesLeft state={state} className="whitespace-nowrap text-sm" />}
+        <Button variant={open ? 'gold' : 'default'} className="!px-3 !py-1" onClick={() => setOpen(!open)} aria-label="Menu" aria-expanded={open}>
+          ☰
+        </Button>
+      </div>
+      {state.surges === 0 && (
+        <p className="bg-red-950 px-3 py-0.5 text-center text-xs font-semibold text-red-300">No healing surges left! A hero starting a turn at 0 HP loses the game.</p>
+      )}
+      {open && (
+        <div className="absolute inset-x-0 top-full max-h-[80dvh] space-y-3 overflow-y-auto border-b border-zinc-800 bg-zinc-950 p-4 shadow-2xl">
+          <AreaName state={state} className="font-semibold" />
+          {stepper('XP', 'ADJUST_XP', state.xp)}
+          {stepper('Healing surges', 'ADJUST_SURGES', state.surges)}
+          {state.tileStack && stepper('Tiles left', 'ADJUST_TILES', state.tileStack.stack.length)}
+          <div className="flex flex-wrap gap-2">
+            <SoundToggle on={sound.on} setOn={sound.setOn} elsewhere={sound.elsewhere} className="text-sm" />
+            <MusicToggle on={sound.musicOn} setOn={sound.setMusicOn} soundOn={sound.on} className="text-sm" />
+            <BoardSwitch state={state} dispatch={dispatch} className="text-sm" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button className="text-sm" onClick={() => dispatch({ type: 'END_GAME', result: 'won' })}>We won!</Button>
+            <Button
+              className="text-sm"
+              onClick={() => window.confirm('Did the party lose? This shows the end-of-game recap.') && dispatch({ type: 'END_GAME', result: 'lost' })}
+            >
+              We lost
+            </Button>
+            <Button className="text-sm" onClick={newGame}>New game</Button>
+            <Button variant="ghost" className="text-sm" onClick={onSwitchSeat}>Table · switch</Button>
+          </div>
+          <Button variant="gold" className="w-full" onClick={() => setOpen(false)}>Back to the game</Button>
+        </div>
+      )}
+    </header>
+  )
+}
+
+// A solo game on the virtual board, built for a phone: the board always on screen and the
+// rest in tabs under it (beside it on a wide or unfolded screen). The Turn tab comes back by
+// itself whenever the phase or the hero changes.
+function SoloView({ state, dispatch, soundBoard }) {
   const active = state.heroes[state.turn.heroIndex]
-  const others = state.heroes.filter((h) => h.id !== active?.id)
+  const [tab, setTab] = useState('turn')
+  const [bigBoard, setBigBoard] = useState(false)
+  useEffect(() => setTab('turn'), [state.turn.heroIndex, state.turn.phase])
   const heroCard = (hero) => (
     <HeroCard
       key={hero.id}
@@ -209,34 +274,68 @@ function SoloView({ state, dispatch }) {
       natural20={state.turn.natural20 === hero.id}
     />
   )
-  const fold = (title, body) => (
-    <details className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-3">
-      <summary className="cursor-pointer font-display text-xl font-bold text-zinc-200">{title}</summary>
-      <div className="mt-3">{body}</div>
-    </details>
-  )
+  const monsterCount = state.monsters.length + activeVillains(state).length
+  const tabs = [
+    ['turn', '⚔️', 'Turn'],
+    ...(state.heroes.length > 1 ? [['party', '🛡️', 'Party']] : []),
+    ['monsters', '👹', monsterCount ? `Monsters (${monsterCount})` : 'Monsters'],
+    ...(state.adventure ? [['adventure', '📜', 'Quest']] : []),
+    ['log', '📖', 'Log'],
+  ]
+  const body = {
+    turn: (
+      <>
+        <TurnGuide state={state} dispatch={dispatch} />
+        {active && heroCard(active)}
+      </>
+    ),
+    party: <div className="grid gap-3">{state.heroes.map(heroCard)}</div>,
+    monsters: (
+      <>
+        <VillainList state={state} dispatch={dispatch} canPlace />
+        <MonsterList state={state} dispatch={dispatch} />
+        {monsterCount === 0 && <p className="text-zinc-400">No monsters on the board.</p>}
+      </>
+    ),
+    adventure: <AdventurePanel state={state} dispatch={dispatch} />,
+    log: state.log.length ? <GameLog log={state.log} /> : <p className="text-zinc-400">Nothing has happened yet.</p>,
+  }[tab] ?? null
   return (
-    <div className="mx-auto max-w-7xl space-y-4 p-3">
-      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
-        <div className="lg:sticky lg:top-2 lg:order-2">
-          <Board state={state} dispatch={dispatch} />
-        </div>
-        <div className="space-y-4 lg:order-1">
-          <TurnGuide state={state} dispatch={dispatch} />
-          {active && heroCard(active)}
-        </div>
+    <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+      <div className={`relative shrink-0 p-1.5 md:h-auto md:min-w-0 md:flex-1 ${bigBoard ? 'h-[68%]' : 'h-[42%]'}`}>
+        {soundBoard}
+        <Board
+          state={state}
+          dispatch={dispatch}
+          fill
+          extraButtons={
+            <Button className="!px-2 !py-1 text-sm md:hidden" onClick={() => setBigBoard(!bigBoard)} aria-label={bigBoard ? 'Smaller board' : 'Bigger board'}>
+              {bigBoard ? '⤒' : '⤓'}
+            </Button>
+          }
+        />
       </div>
-      <TreasureStep state={state} dispatch={dispatch} />
-      {others.length > 0 && fold(`Other heroes (${others.map((h) => h.name).join(', ')})`, <div className="grid gap-4 md:grid-cols-2">{others.map(heroCard)}</div>)}
-      {state.adventure && fold('Adventure', <AdventurePanel state={state} dispatch={dispatch} />)}
-      {fold(`Monsters (${state.monsters.length})`, <><VillainList state={state} dispatch={dispatch} canPlace /><MonsterList state={state} dispatch={dispatch} /></>)}
-      {fold('Game log', <GameLog log={state.log} />)}
+      <div className="flex min-h-0 flex-1 flex-col border-zinc-800 md:w-[26rem] md:flex-none md:border-l lg:w-[32rem]">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2">{body}</div>
+        <nav className="flex shrink-0 border-t border-zinc-800 bg-zinc-950/95 pb-[env(safe-area-inset-bottom)]">
+          {tabs.map(([id, emoji, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              className={`flex flex-1 flex-col items-center py-1.5 text-xs ${tab === id ? 'bg-zinc-800 font-bold text-amber-400' : 'text-zinc-400'}`}
+            >
+              <span className="text-lg leading-none">{emoji}</span>
+              {label}
+            </button>
+          ))}
+        </nav>
+      </div>
     </div>
   )
 }
 
 function TableView({ state, dispatch }) {
-  if (state.board) return <SoloView state={state} dispatch={dispatch} />
   return (
     <div className="mx-auto max-w-6xl space-y-8 p-4">
       <TurnGuide state={state} dispatch={dispatch} />
@@ -414,6 +513,34 @@ export default function App() {
     )
   }
 
+  const overlays = (
+    <>
+      <FirstRoll state={state} dispatch={dispatch} heroId={myHero?.id ?? null} />
+      <MomentOverlay moment={state.moment} heroes={state.heroes} />
+      <TapForSound locked={soundLocked} ipad={Boolean(myHero)} />
+      {(myHero || !state.board) && <SoundBoard state={state} dispatch={dispatch} who={myHero ? myHero.id : 'table'} testCopy={Boolean(instance)} />}
+      {!myHero && <BoardToast state={state} />}
+      {(state.status === 'won' || state.status === 'lost') && <Recap state={state} dispatch={dispatch} />}
+    </>
+  )
+  // Solo on the virtual board: the whole game fits the screen, nothing scrolls but the tabs.
+  if (!myHero && state.board) {
+    return (
+      <main className="isolate flex h-dvh flex-col overflow-hidden bg-zinc-950 text-zinc-100">
+        <AreaBackdrop state={state} />
+        {banners}
+        <SoloBar state={state} dispatch={dispatch} undo={undo} undoDepth={undoDepth} onSwitchSeat={() => setSeat(null)} sound={sound} />
+        <SoloView
+          state={state}
+          dispatch={dispatch}
+          soundBoard={<SoundBoard state={state} dispatch={dispatch} who="table" testCopy={Boolean(instance)} className="absolute bottom-3 left-3" />}
+        />
+        <TreasureStep state={state} dispatch={dispatch} />
+        {overlays}
+      </main>
+    )
+  }
+
   return (
     <main className="isolate min-h-screen bg-zinc-950 text-zinc-100">
       <AreaBackdrop state={state} />
@@ -429,12 +556,7 @@ export default function App() {
         boardSwitch={!myHero}
       />
       {myHero ? <HeroView state={state} dispatch={dispatch} hero={myHero} /> : <TableView state={state} dispatch={dispatch} />}
-      <FirstRoll state={state} dispatch={dispatch} heroId={myHero?.id ?? null} />
-      <MomentOverlay moment={state.moment} heroes={state.heroes} />
-      <TapForSound locked={soundLocked} ipad={Boolean(myHero)} />
-      <SoundBoard state={state} dispatch={dispatch} who={myHero ? myHero.id : 'table'} testCopy={Boolean(instance)} />
-      {!myHero && <BoardToast state={state} />}
-      {(state.status === 'won' || state.status === 'lost') && <Recap state={state} dispatch={dispatch} />}
+      {overlays}
     </main>
   )
 }

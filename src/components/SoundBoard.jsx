@@ -19,7 +19,7 @@ const whoName = (state, who) => {
 
 // A 🔊 button in the corner that opens the sound board. `who` is this iPad's hero id
 // (or 'table'). The sounds play on the projector; the limits are in state/soundboard.js.
-export function SoundBoard({ state, dispatch, who, testCopy = false }) {
+export function SoundBoard({ state, dispatch, who, testCopy = false, className = 'fixed bottom-4 left-4' }) {
   const [open, setOpen] = useState(false)
   // A tap waits for the Pi's answer before the next one, so a double tap doesn't count twice.
   const [sentAt, setSentAt] = useState(0)
@@ -39,7 +39,7 @@ export function SoundBoard({ state, dispatch, who, testCopy = false }) {
   }
 
   return (
-    <div className="fixed bottom-4 left-4 z-40">
+    <div className={`z-40 ${className}`}>
       {open && (
         <div className="mb-2 w-72 rounded-2xl border border-zinc-700 bg-zinc-900/95 p-3 shadow-xl backdrop-blur">
           <div className="mb-2 flex items-center justify-between">

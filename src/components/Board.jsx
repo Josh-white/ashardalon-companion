@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { heroArt, monsterArt } from '../data/art.js'
 import { boardGrid, figureToken, figuresLeft, heroReach, moveSpeed, movesLeft } from '../board/play.js'
 import { moveChoices, movePrompt, moveTargets } from '../board/powerMoves.js'
@@ -38,7 +38,7 @@ function Token({ id, at, label, color, art, selected, faded, onTap }) {
   const r = SQUARE / 2 - 3
   const clip = `clip-${id.replace(/#/g, '-')}`
   return (
-    <g onClick={onTap} className={onTap ? 'cursor-pointer' : undefined} opacity={faded ? 0.6 : 1}>
+    <g data-token={id} onClick={onTap} className={onTap ? 'cursor-pointer' : undefined} opacity={faded ? 0.6 : 1}>
       <clipPath id={clip}>
         <circle cx={cx} cy={cy} r={r} />
       </clipPath>
@@ -55,12 +55,40 @@ function Token({ id, at, label, color, art, selected, faded, onTap }) {
   )
 }
 
-export default function Board({ state, dispatch, readOnly = false }) {
+// The size of an element, kept up to date as the screen turns or unfolds.
+function useBoxSize() {
+  const ref = useRef(null)
+  const [size, setSize] = useState(null)
+  useEffect(() => {
+    if (!ref.current || typeof ResizeObserver === 'undefined') return
+    const watch = new ResizeObserver(([entry]) => setSize({ w: entry.contentRect.width, h: entry.contentRect.height }))
+    watch.observe(ref.current)
+    return () => watch.disconnect()
+  }, [])
+  return [ref, size]
+}
+
+// `fill`: the board takes the whole box it's in (the solo screen) and starts zoomed to fit,
+// with + to zoom in on the active hero. Without it the board keeps its fixed zoom steps.
+export default function Board({ state, dispatch, readOnly = false, fill = false, extraButtons = null }) {
   const art = useArt()
   const [picked, setPicked] = useState(null) // id of the figure being moved
   const [byHand, setByHand] = useState(false)
-  const [zoom, setZoom] = useState(4)
+  const [zoom, setZoom] = useState(fill ? 'fit' : 4)
+  const [boxRef, box] = useBoxSize()
   const board = state.board
+  const activeId = state.heroes[state.turn.heroIndex]?.id
+  const activeAt = board?.tokens[activeId]?.join(',')
+  // Zoomed in, keep the active hero in the middle of the view as it moves or the turn passes.
+  useEffect(() => {
+    const el = boxRef.current
+    if (!fill || zoom === 'fit' || !el || !activeAt) return
+    const svg = el.querySelector('svg')
+    const token = el.querySelector(`[data-token="${activeId}"]`)
+    if (!svg || !token) return
+    const [s, t] = [svg.getBoundingClientRect(), token.getBoundingClientRect()]
+    el.scrollTo({ left: t.left - s.left + t.width / 2 - el.clientWidth / 2, top: t.top - s.top + t.height / 2 - el.clientHeight / 2, behavior: 'smooth' })
+  }, [fill, zoom, activeId, activeAt]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!board) return null
 
   const grid = boardGrid(board)
@@ -108,14 +136,20 @@ export default function Board({ state, dispatch, readOnly = false }) {
   const ys = squares.map((s) => s.y)
   const [minX, minY] = [Math.min(...xs) - 1, Math.min(...ys) - 1]
   const [cols, rows] = [Math.max(...xs) - minX + 2, Math.max(...ys) - minY + 2]
-  const scale = ZOOMS[zoom]
+  // Zoom to fit: the biggest size that shows the whole dungeon in the box. Zooming in from
+  // there goes through the fixed steps bigger than it.
+  const fitScale = box ? Math.min(box.w / (cols * SQUARE), box.h / (rows * SQUARE)) : 1
+  const steps = fill ? ['fit', ...ZOOMS.map((_, i) => i).filter((i) => ZOOMS[i] > fitScale * 1.15)] : ZOOMS.map((_, i) => i)
+  const step = Math.max(0, steps.indexOf(zoom))
+  const fit = fill && steps[step] === 'fit'
+  const scale = fit ? fitScale : ZOOMS[steps[step]]
   const left = active ? movesLeft(state, active) : 0
 
   return (
-    <section className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-3">
+    <section className={`rounded-2xl border border-zinc-800 bg-zinc-950/80 ${fill ? 'flex h-full flex-col p-2' : 'p-3'}`}>
       {!readOnly && (
-        <div className="mb-2 flex flex-wrap items-center gap-2">
-          <p className="flex-1 text-sm text-zinc-300">
+        <div className={`mb-2 flex items-center gap-2 ${fill ? '' : 'flex-wrap'}`}>
+          <p className={`flex-1 text-zinc-300 ${fill ? 'text-xs leading-snug sm:text-sm' : 'text-sm'}`}>
             {byHand
               ? picked
                 ? 'Tap a free square to put it there.'
@@ -128,18 +162,20 @@ export default function Board({ state, dispatch, readOnly = false }) {
                     ? `${active?.name ?? 'The hero'} has no moves left this turn.`
                     : 'Heroes move in their Hero Phase.'}
           </p>
-          <Button className="!px-3 !py-1" disabled={zoom === 0} onClick={() => setZoom(zoom - 1)} aria-label="Zoom out">−</Button>
-          <Button className="!px-3 !py-1" disabled={zoom === ZOOMS.length - 1} onClick={() => setZoom(zoom + 1)} aria-label="Zoom in">+</Button>
+          <Button className="!px-3 !py-1" disabled={step === 0} onClick={() => setZoom(steps[step - 1])} aria-label="Zoom out">−</Button>
+          <Button className="!px-3 !py-1" disabled={step === steps.length - 1} onClick={() => setZoom(steps[step + 1])} aria-label="Zoom in">+</Button>
           <Button
             variant={byHand ? 'gold' : 'default'}
-            className="!py-1 text-sm"
+            className={`!py-1 text-sm ${fill ? '!px-2' : ''}`}
+            title="Move by hand"
             onClick={() => {
               setByHand(!byHand)
               setPicked(null)
             }}
           >
-            ✋ Move by hand
+            {fill ? '✋' : '✋ Move by hand'}
           </Button>
+          {extraButtons}
         </div>
       )}
       {powerMove && (
@@ -170,12 +206,12 @@ export default function Board({ state, dispatch, readOnly = false }) {
           ))}
         </div>
       )}
-      <div className={readOnly ? '' : 'max-h-[70vh] overflow-auto'}>
+      <div ref={boxRef} className={readOnly ? '' : fill ? 'min-h-0 flex-1 overflow-auto' : 'max-h-[70vh] overflow-auto'}>
         <svg
           viewBox={`${minX * SQUARE} ${minY * SQUARE} ${cols * SQUARE} ${rows * SQUARE}`}
-          width={readOnly ? '100%' : cols * SQUARE * scale}
-          height={readOnly ? undefined : rows * SQUARE * scale}
-          className={readOnly ? 'mx-auto max-h-[45vh]' : 'mx-auto'}
+          width={readOnly ? '100%' : fit ? '100%' : cols * SQUARE * scale}
+          height={readOnly ? undefined : fit ? '100%' : rows * SQUARE * scale}
+          className={readOnly ? 'mx-auto max-h-[45vh]' : fit ? 'block' : 'mx-auto'}
           role="img"
           aria-label="The dungeon board"
         >
