@@ -123,9 +123,12 @@ export function closestTarget(state, monsterId) {
 }
 
 // How far a power reaches, read from its card text before "Hit:": "an adjacent monster",
-// "within 2 tiles", "on your tile". Null when the text doesn't say, so every monster is offered.
+// "within 2 tiles", "on your tile". Null when the text doesn't say, or when the hero moves,
+// swaps or is placed before choosing the monster (Charge), so every monster is offered.
 export function powerRange(text) {
   const words = String(text ?? '').split(/hit:/i)[0].toLowerCase()
+  const beforeMonster = words.split('monster')[0]
+  if (/\bmove|\bswap|place your hero/.test(beforeMonster)) return null
   const within = /within (\d+) tiles?/.exec(words)
   if (within) return `within${Math.min(3, Number(within[1]))}`
   if (/adjacent/.test(words)) return 'adjacent'

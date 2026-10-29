@@ -100,6 +100,11 @@ describe('hero attacks on the board', () => {
     expect(powerRange('Choose a Monster within 1 tile of you. Hit: 1 damage. Miss: put it adjacent.')).toBe('within1')
     expect(powerRange('Attack each Monster on your tile.')).toBe('sameTile')
     expect(powerRange('Attack one Monster. Hit: 1 damage, then move adjacent.')).toBeNull()
+    // The hero moves or swaps first, so anything could end up in reach.
+    expect(powerRange('Move up to your speed, then attack one adjacent Monster.')).toBeNull()
+    expect(powerRange('Swap places with a Hero within 1 tile. Attack a Monster within 2 tiles.')).toBeNull()
+    // The range can come after the first mention of the monsters.
+    expect(powerRange('Attack up to two Monsters. Each can be on your tile or within 1 tile of you.')).toBe('within1')
   })
 
   it('offers only the monsters in reach, and says how far each is', () => {
