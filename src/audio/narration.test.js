@@ -138,6 +138,20 @@ describe('opening lines', () => {
     const after = { status: 'playing', heroes: [], turn: { heroIndex: 0, round: 1, phase: 0 }, adventure: { card: { title: 'Lost' }, story: { id: 's1', title: 'Lost', text: 'Once upon a time.' } } }
     const lines = linesFor(before, after, 0)
     expect(lines.length).toBe(2)
-    expect(lines.every((l) => l.opening)).toBe(true)
+    expect(lines.every((l) => l.hold === 'opening')).toBe(true)
+  })
+})
+
+describe('roll for first turn lines', () => {
+  const heroes = [{ id: 'h1', name: 'Quinn' }, { id: 'h2', name: 'Tarak' }]
+  const turn = (heroIndex) => ({ heroIndex, round: 1, phase: 0 })
+  it('cheers a natural 20 before the winner, and waits with "your turn" until the treasure is out', () => {
+    const before = { status: 'playing', heroes, turn: turn(0), firstRoll: { count: 1, winner: null, after: { kind: 'treasure' } } }
+    const after = { status: 'playing', heroes, turn: turn(1), firstRoll: { count: 2, last: { heroId: 'h2', value: 20 }, winner: 'h2', after: { kind: 'treasure' } } }
+    const lines = linesFor(before, after, 0)
+    expect(lines.map((l) => l.text)).toEqual([expect.stringContaining('natural twenty for Tarak'), expect.stringContaining('Tarak wins the roll')])
+    expect(lines.every((l) => l.hold === 'firstRoll')).toBe(true)
+    const released = { ...after, firstRoll: { ...after.firstRoll, after: null } }
+    expect(linesFor(after, released, 0).map((l) => l.text)).toEqual([expect.stringContaining("Tarak, it's your turn")])
   })
 })

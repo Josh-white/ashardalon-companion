@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { firstRollShowing, newFirstRoll, rollFirst, waitingToRoll } from './firstRoll.js'
+import { FIRST_ROLL_MAX_MS, FIRST_ROLL_SHOW_MS, firstRollShowing, newFirstRoll, rollFirst, waitingToRoll } from './firstRoll.js'
 import { createHero, gameReducer, initialState } from './game.js'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 
@@ -48,7 +48,9 @@ describe('roll for first turn', () => {
     state = gameReducer(state, { type: 'ROLL_FIRST', heroId: party[0].id, value: 6 })
     state = gameReducer(state, { type: 'ROLL_FIRST', heroId: party[1].id, value: 20 })
     expect(state.turn.heroIndex).toBe(1)
-    expect(state.moment.kind).toBe('crit')
+    // A natural 20 is cheered on the roll screen, not as a big moment of its own.
+    expect(state.moment).toBe(null)
+    expect(state.firstRoll.last).toEqual({ heroId: party[1].id, value: 20 })
     expect(state.log[0].text).toBe(`${party[1].name} goes first!`)
   })
 
@@ -62,6 +64,10 @@ describe('roll for first turn', () => {
     state = gameReducer(state, { type: 'ROLL_FIRST', heroId: party[0].id, value: 6 })
     state = gameReducer(state, { type: 'ROLL_FIRST', heroId: party[1].id, value: 9 })
     expect(state.moment).toBeNull()
+    // Not while the narrator is still cheering the winner.
+    const cheering = gameReducer(state, { type: 'FIRST_ROLL_NARRATING' })
+    expect(gameReducer(cheering, { type: 'FIRST_ROLL_DONE' }).moment).toBeNull()
+    state = gameReducer(cheering, { type: 'FIRST_ROLL_QUIET' })
     state = gameReducer(state, { type: 'FIRST_ROLL_DONE' })
     expect(state.moment).toMatchObject({ kind: 'treasure', title: 'Starting treasure!' })
     // Every screen sends it; only the first one counts.
@@ -76,5 +82,15 @@ describe('roll for first turn', () => {
     const state = gameReducer(gameReducer(initialState, { type: 'START_GAME', heroes: party }), { type: 'SKIP_FIRST_ROLL' })
     expect(state.firstRoll).toBeNull()
     expect(state.turn.heroIndex).toBe(0)
+  })
+})
+
+describe('first roll and the narrator', () => {
+  it('keeps the winner up while the narrator cheers, but not forever', () => {
+    const state = (firstRoll) => ({ status: 'playing', firstRoll })
+    const decided = { winner: 'h1', decidedAt: 0 }
+    expect(firstRollShowing(state(decided), FIRST_ROLL_SHOW_MS + 1)).toBe(false)
+    expect(firstRollShowing(state({ ...decided, narrating: true }), FIRST_ROLL_SHOW_MS + 1)).toBe(true)
+    expect(firstRollShowing(state({ ...decided, narrating: true }), FIRST_ROLL_MAX_MS + 1)).toBe(false)
   })
 })

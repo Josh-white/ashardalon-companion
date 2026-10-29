@@ -398,8 +398,11 @@ export function changeSounds(before, after) {
   const sounds = []
   const moment = isNew(after?.moment, before?.moment)
   if (moment) sounds.push(...momentSounds(after.moment))
-  // A roll for first turn (a natural 20 brings its own moment and sounds).
-  else if ((after?.firstRoll?.count ?? 0) > (before?.firstRoll?.count ?? 0)) sounds.push(['dice', 0], ['land', DIE_LANDS_MS])
+  // A roll for first turn, with a fanfare for a natural 20.
+  else if ((after?.firstRoll?.count ?? 0) > (before?.firstRoll?.count ?? 0)) {
+    sounds.push(['dice', 0], ['land', DIE_LANDS_MS])
+    if (after.firstRoll.last?.value === 20) sounds.push(['fanfare', DIE_LANDS_MS + 200])
+  }
   const board = after?.soundboard?.last
   if (isNew(board, before?.soundboard?.last) && SOUNDS[board.sound]) sounds.push([board.sound, 0])
   if (tileRevealed(before, after)) sounds.push(['slide', 0], ['tile', SLIDE_LEAD_MS])

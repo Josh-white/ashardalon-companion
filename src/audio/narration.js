@@ -106,6 +106,8 @@ export const newArrivals = (before, after) => {
   return (after.lobby ?? []).map((c) => c.heroKey).filter((key) => !had.has(key))
 }
 
+const turnLine = (hero) => say('narrator', `[commanding, steady] ${hero.name}, it's your turn. What will you do?`)
+
 // The herald names who won the roll for first turn.
 export const firstTurnLine = (hero) => say('herald', `${CHEER} ${heroName(hero)} wins the roll and goes first!`)
 
@@ -121,15 +123,24 @@ export function narrationFor(before, after, now = Date.now()) {
   if (!before || !after) return []
   const lines = newArrivals(before, after).map(arrivalLine)
   if (before.status !== 'setup' && after.status === 'setup' && after.campaign?.last) lines.push(previouslyLine(after.campaign.last))
+  // The roll for first turn: a natural 20's cheer, then who goes first.
+  const rolled = (after.firstRoll?.count ?? 0) > (before.firstRoll?.count ?? 0) ? after.firstRoll.last : null
+  const rollLines = []
+  if (rolled?.value === 20) rollLines.push(say('herald', `${CHEER} A natural twenty for ${heroName(after.heroes.find((h) => h.id === rolled.heroId))}!`))
   const winner = after.firstRoll?.winner
-  if (winner && !before.firstRoll?.winner) lines.push(firstTurnLine(after.heroes.find((h) => h.id === winner)))
+  if (winner && !before.firstRoll?.winner) rollLines.push(firstTurnLine(after.heroes.find((h) => h.id === winner)))
+  // The winner stays on screen, and the starting treasure waits, while these are said.
+  lines.push(...rollLines.filter(Boolean).map((line) => ({ ...line, hold: 'firstRoll' })))
+  // The first hero is told it's their turn once the roll and the starting treasure are over.
+  const rollOver = (before.firstRoll?.after && !after.firstRoll?.after) || (before.firstRoll && !after.firstRoll)
+  const waitingOnRoll = Boolean(after.firstRoll?.after)
   if (before.status === 'setup' && after.status === 'playing') {
     lines.push(say('narrator', `${STORY} The adventure begins${after.adventure?.card?.title ? `: ${after.adventure.card.title}` : ''}! Heroes, enter the dungeon.`))
   }
   if (after.status === 'playing' && before.status === 'playing') {
     const turnChanged = before.turn.heroIndex !== after.turn.heroIndex || before.turn.round !== after.turn.round
     const hero = after.heroes[after.turn.heroIndex]
-    if (turnChanged && after.turn.phase === 0 && hero) lines.push(say('narrator', `[commanding, steady] ${hero.name}, it's your turn. What will you do?`))
+    if (turnChanged && after.turn.phase === 0 && hero && !waitingOnRoll) lines.push(turnLine(hero))
     if (!before.turn.explored && after.turn.explored) lines.push(say('narrator', `${OMINOUS} ${pick(NEW_TILE, `${after.turn.round}-${after.turn.heroIndex}`)}`))
   }
   // An adventure's red "Read aloud" box: the whole story, not just its title.
@@ -140,14 +151,15 @@ export function narrationFor(before, after, now = Date.now()) {
     lines.push(say('narrator', `${STORY} ${title} ${story.text}`.replace(/\s+/g, ' ').trim()))
   }
   // The lines that open a game are the opening story (state/opening.js): the roll for
-  // first turn waits for them.
+  // first turn waits for them. `hold` names what waits for a line.
   if (before.status === 'setup' && after.status === 'playing') {
-    for (let i = 0; i < lines.length; i++) if (lines[i]) lines[i] = { ...lines[i], opening: true }
+    for (let i = 0; i < lines.length; i++) if (lines[i]) lines[i] = { ...lines[i], hold: 'opening' }
   }
   const moment = after.moment
   if (moment && moment.id !== before.moment?.id && now - moment.at < STALE_MS) {
     lines.push(...momentLines(moment, after))
   }
+  if (rollOver && after.status === 'playing' && after.turn.phase === 0 && after.heroes[after.turn.heroIndex]) lines.push(turnLine(after.heroes[after.turn.heroIndex]))
   if (before.status !== after.status && after.status === 'won' && !newStory) lines.push(say('herald', `${CHEER} Victory! The heroes have triumphed. Songs will be sung of this day!`))
   if (before.status !== after.status && after.status === 'lost') lines.push(say('narrator', '[somber, tragic] Alas… the heroes have fallen. The dungeon claims another party.'))
   return lines.filter(Boolean)
