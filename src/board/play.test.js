@@ -116,9 +116,9 @@ describe('solo game on the virtual board', () => {
     state = gameReducer(state, { type: 'DRAW_MONSTER', heroId: h.id, cards: monsters, random: [] })
     const rat = state.monsters[0]
     expect(at(state, rat.id)).toEqual([1, -7])
-    // Monsters that turn up later this turn stay off the board for the player to place.
+    // A monster that turns up later this turn, with no new tile for it, still goes on the board.
     state = gameReducer(state, { type: 'DRAW_MONSTER', heroId: hero(state, 1).id, cards: monsters, random: [] })
-    expect(state.board.tokens[state.monsters[1].id]).toBeUndefined()
+    expect(state.board.tokens[state.monsters[1].id]).toBeTruthy()
   })
 
   it('turns a tile laid on a west edge so its triangle faces the hero', () => {

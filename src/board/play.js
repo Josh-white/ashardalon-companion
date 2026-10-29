@@ -236,17 +236,32 @@ function spotsOn(grid, uid, taken) {
   return [...distances(grid, mark)].sort((a, b) => a[1] - b[1]).map(([k]) => k).filter((k) => !taken.has(k))
 }
 
+// Where a monster drawn without a new tile goes (an encounter card's, a curse's): the active
+// hero's tile when the card says so (Lurker's Strike), otherwise the tile with an unexplored
+// edge closest to the active hero (Wandering Monster, Frenzied Leap, Trip Wire), or the
+// hero's own tile when the board has no unexplored edge left.
+function tileForDrawnMonster(state, grid) {
+  const at = activeAt(state)
+  if (!at) return null
+  const own = grid.get(key(at))?.tile
+  if (/on the active hero's tile/i.test(state.encounter?.card?.text?.match(/place its figure[^.]*/i)?.[0] ?? '')) return own
+  const far = distances(grid, at)
+  const steps = (e) => Math.min(...e.squares.map((sq) => far.get(key(sq)) ?? Infinity))
+  return [...unexploredEdges(grid)].sort((a, b) => steps(a) - steps(b))[0]?.tile ?? own
+}
+
 // Monsters and villains that just came into play go on the scorch mark of the tile laid
 // this turn that hasn't had its monster yet (the nearest free squares when there are several).
 // A chamber's monsters, villain, villagers and objective spread over its tiles, one tile
-// each before doubling up. Anything else stays off the board for the player to put down by hand.
+// each before doubling up. A monster drawn with no new tile waiting goes where
+// tileForDrawnMonster says; "Move by hand" fixes it when that's wrong.
 export function placeNewFigures(before, state) {
   const board = state.board
   if (!board) return state
   const unfilled = (state.turn.boardTiles ?? []).filter((t) => !t.filled)
   const chamber = unfilled.filter((t) => t.chamber)
   const open = chamber.length > 0 ? chamber : unfilled.slice(-1)
-  if (open.length === 0) return state
+  if (open.length === 0) return placeDrawnMonsters(state)
   const known = new Set([...before.monsters, ...(before.villains ?? []), ...(before.villagers ?? [])].map((f) => f.id))
   const candidates = [
     ...state.monsters.filter((m) => chamber.length > 0 || !m.objective),
@@ -267,6 +282,25 @@ export function placeNewFigures(before, state) {
   const placed = new Set(open.map((t) => t.uid))
   const boardTiles = state.turn.boardTiles.map((t) => (placed.has(t.uid) ? { ...t, filled: true } : t))
   return { ...state, board: { ...board, tokens }, turn: { ...state.turn, boardTiles } }
+}
+
+// Monsters with no figure on the board and no tile waiting for them (also one drawn before
+// this fix, in an older save), put on the tile tileForDrawnMonster picks.
+function placeDrawnMonsters(state) {
+  const board = state.board
+  const fresh = state.monsters
+    .filter((m) => !m.objective && !board.tokens[m.id])
+    .flatMap((m) => Array.from({ length: figuresLeft(m) }, (_, i) => figureToken(m.id, i + 1)))
+  if (fresh.length === 0) return state
+  const grid = boardGrid(board)
+  const tile = tileForDrawnMonster(state, grid)
+  if (tile === null || tile === undefined) return state
+  const tokens = { ...board.tokens }
+  for (const id of fresh) {
+    const spot = spotsOn(grid, tile, new Set(Object.values(tokens).map(key)))[0]
+    if (spot) tokens[id] = spot.split(',').map(Number)
+  }
+  return { ...state, board: { ...board, tokens } }
 }
 
 // A new monster's figures on the free squares nearest a square (out of the Vast Gate).
