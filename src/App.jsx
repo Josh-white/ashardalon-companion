@@ -10,7 +10,7 @@ import GamePicker, { GameBar } from './components/GamePicker.jsx'
 import MomentOverlay from './components/MomentOverlay.jsx'
 import MonsterList, { VillainList } from './components/MonsterList.jsx'
 import ProjectorView from './components/ProjectorView.jsx'
-import Recap from './components/Recap.jsx'
+import Recap, { LOST_QUESTION, newGameQuestion } from './components/Recap.jsx'
 import Board from './components/Board.jsx'
 import SeatPicker from './components/SeatPicker.jsx'
 import Setup from './components/Setup.jsx'
@@ -20,7 +20,7 @@ import TurnGuide, { ExtraAttacks } from './components/TurnGuide.jsx'
 import UndoButton from './components/UndoButton.jsx'
 import { MusicToggle, SoundToggle, TapForSound } from './components/SoundToggle.jsx'
 import { BoardSwitch, BoardToast, SoundBoard } from './components/SoundBoard.jsx'
-import { Button, HpBar } from './components/ui.jsx'
+import { Button, HpBar, useConfirm } from './components/ui.jsx'
 import { heroArt } from './data/art.js'
 import { useSoundEffects } from './audio/sfx.js'
 import { useNarrator } from './audio/useNarrator.js'
@@ -37,9 +37,8 @@ const TABLE_SEAT = 'table'
 const PROJECTOR_SEAT = 'projector'
 
 function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitchSeat, sound, boardSwitch }) {
-  const newGame = () => {
-    if (window.confirm('Start a new game? This clears the current one for everyone.')) dispatch({ type: 'NEW_GAME' })
-  }
+  const [ask, dialog] = useConfirm()
+  const newGame = () => ask(newGameQuestion(state), () => dispatch({ type: 'NEW_GAME' }))
   return (
     <header className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
@@ -80,7 +79,7 @@ function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitchSeat, s
           <Button
             variant="ghost"
             className="text-sm"
-            onClick={() => window.confirm('Did the party lose? This shows the end-of-game recap.') && dispatch({ type: 'END_GAME', result: 'lost' })}
+            onClick={() => ask(LOST_QUESTION, () => dispatch({ type: 'END_GAME', result: 'lost' }))}
           >
             We lost
           </Button>
@@ -94,6 +93,7 @@ function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitchSeat, s
           No healing surges left! If a hero starts a turn at 0 HP, the party loses.
         </p>
       )}
+      {dialog}
     </header>
   )
 }
@@ -195,9 +195,8 @@ function HeroView({ state, dispatch, hero }) {
 // with everything else, so the board and the turn get the screen.
 function SoloBar({ state, dispatch, undo, undoDepth, onSwitchSeat, sound }) {
   const [open, setOpen] = useState(false)
-  const newGame = () => {
-    if (window.confirm('Start a new game? This clears the current one for everyone.')) dispatch({ type: 'NEW_GAME' })
-  }
+  const [ask, dialog] = useConfirm()
+  const newGame = () => ask(newGameQuestion(state), () => dispatch({ type: 'NEW_GAME' }))
   const stepper = (label, type, value) => (
     <div className="flex items-center gap-2">
       <span className="w-28 text-zinc-400">{label}</span>
@@ -239,7 +238,7 @@ function SoloBar({ state, dispatch, undo, undoDepth, onSwitchSeat, sound }) {
             <Button className="text-sm" onClick={() => dispatch({ type: 'END_GAME', result: 'won' })}>We won!</Button>
             <Button
               className="text-sm"
-              onClick={() => window.confirm('Did the party lose? This shows the end-of-game recap.') && dispatch({ type: 'END_GAME', result: 'lost' })}
+              onClick={() => ask(LOST_QUESTION, () => dispatch({ type: 'END_GAME', result: 'lost' }))}
             >
               We lost
             </Button>
@@ -249,6 +248,7 @@ function SoloBar({ state, dispatch, undo, undoDepth, onSwitchSeat, sound }) {
           <Button variant="gold" className="w-full" onClick={() => setOpen(false)}>Back to the game</Button>
         </div>
       )}
+      {dialog}
     </header>
   )
 }
