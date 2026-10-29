@@ -3,6 +3,7 @@ import { HERO_TEMPLATES } from '../data/heroes.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
 import { PHASES } from '../data/phases.js'
 import { normalizeCardFile } from '../data/cards.js'
+import * as play from './play.js'
 import { heroEdges, heroReach, movesLeft } from './play.js'
 import { normalizeTiles } from './tileDefs.js'
 
@@ -137,6 +138,33 @@ describe('solo game on the virtual board', () => {
     state = gameReducer(state, { type: 'BOARD_MOVE', id: other.id, to: [1, 0] })
     expect(at(state, other.id)).toEqual([1, 0])
     expect(state.turn.boardMove).toBeNull()
+  })
+
+  it('lays a chamber on the Entrance\'s open edges and spreads its monsters over them', () => {
+    const chamberTiles = normalizeTiles(
+      [
+        { id: 'dire-chamber-entrance', name: 'Dire Chamber Entrance', kind: 'chamber', triangle: 'red', rows: ['....', '....', '..S.', '#..#'], exits: { N: 'oooo', S: 'xoox', W: 'ooox', E: 'ooox' } },
+        ...[1, 2, 3, 4].map((n) => ({ id: `dire-chamber-${n}`, name: 'Dire Chamber', kind: 'chamber', triangle: 'white', rows: ['####', '..S.', '....', '....'], exits: { N: 'xxxx', S: 'oooo', W: 'xooo', E: 'xooo' } })),
+      ],
+      [],
+    )
+    let state = start()
+    state = { ...state, board: { ...state.board, defs: { ...state.board.defs, ...Object.fromEntries(chamberTiles.map((t) => [t.id, t])) } } }
+    state = { ...state, turn: { ...state.turn, phase: PHASES.findIndex((p) => p.key === 'exploration') } }
+    // The Entrance goes north of the Start tile, as a hero explores there.
+    state = gameReducer(state, { type: 'MOVE_TOKEN', id: hero(state).id, to: [0, 0] })
+    const { layTile, layChamber, placeNewFigures } = play
+    const north = heroEdges(state).find((e) => e.side === 'N')
+    state = layTile(state, 'Dire Chamber Entrance', 'explore', north.id).state
+    const laid = layChamber(state, 'dire', [])
+    // The Entrance has three open edges, so three chamber tiles.
+    expect(laid.board.tiles).toHaveLength(5)
+    const monsters = [1, 2, 3].map((n) => ({ id: `c${n}`, name: 'Rat', hp: 1, maxHp: 1, ac: 12, xp: 1, ownerId: null, conditions: [], chamber: true, card: { hp: 1, figures: 1, attacks: [], tactics: [] } }))
+    const filled = placeNewFigures(laid, { ...laid, monsters })
+    const grid = play.boardGrid(filled.board)
+    const tilesOf = monsters.map((m) => grid.get(filled.board.tokens[m.id].join(',')).tile)
+    expect(new Set(tilesOf).size).toBe(3)
+    expect(tilesOf).not.toContain(laid.turn.boardTiles[0].uid)
   })
 })
 

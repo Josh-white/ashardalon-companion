@@ -117,30 +117,65 @@ export function layTile(state, drawn, drawKey = 'explore', edgeId) {
   return { state: { ...withPile, board: laid, turn: { ...state.turn, boardTiles: [...(state.turn.boardTiles ?? []), entry] } }, def }
 }
 
+// A Chamber Entrance turned up: the chamber's tiles (Horrid or Dire, shuffled) go on each
+// of the Entrance's open edges, turned to face it. They wait for the chamber's monsters.
+export function layChamber(state, family, random) {
+  const board = state.board
+  const entrance = (state.turn.boardTiles ?? []).at(-1)
+  if (!board || !entrance) return state
+  const ids = shuffle(
+    Object.values(board.defs).filter((d) => d.kind === 'chamber' && d.id.includes(family) && !/entrance/.test(d.id)).map((d) => d.id),
+    random,
+  ).filter((id) => !board.tiles.some((t) => t.tileId === id))
+  let next = state
+  for (const edge of unexploredEdges(boardGrid(board)).filter((e) => e.tile === entrance.uid)) {
+    const def = next.board.defs[ids.shift()]
+    if (!def) break
+    const uid = `t${next.board.tiles.length}`
+    const laid = placeTile(next.board, boardGrid(next.board), edge, def, uid)
+    if (!laid) continue
+    next = { ...next, board: laid, turn: { ...next.turn, boardTiles: [...next.turn.boardTiles, { uid, side: edge.side, filled: false, chamber: true }] } }
+  }
+  return next
+}
+
+// The free squares nearest a tile's scorch mark, closest first.
+function spotsOn(grid, uid, taken) {
+  const mark = scorchSquare(grid, uid) ?? [...grid.values()].filter((sq) => sq.tile === uid && sq.floor).map((sq) => [sq.x, sq.y])[0]
+  if (!mark) return []
+  return [...distances(grid, mark)].sort((a, b) => a[1] - b[1]).map(([k]) => k).filter((k) => !taken.has(k))
+}
+
 // Monsters and villains that just came into play go on the scorch mark of the tile laid
 // this turn that hasn't had its monster yet (the nearest free squares when there are several).
-// Anything else stays off the board for the player to put down by hand.
+// A chamber's monsters, villain, villagers and objective spread over its tiles, one tile
+// each before doubling up. Anything else stays off the board for the player to put down by hand.
 export function placeNewFigures(before, state) {
   const board = state.board
   if (!board) return state
-  const open = (state.turn.boardTiles ?? []).filter((t) => !t.filled).at(-1)
-  if (!open) return state
-  const known = new Set([...before.monsters, ...(before.villains ?? [])].map((f) => f.id))
-  const fresh = [...state.monsters, ...(state.villains ?? []).filter((v) => !v.defeated)]
-    .filter((f) => !known.has(f.id) && !board.tokens[f.id] && !f.objective)
+  const unfilled = (state.turn.boardTiles ?? []).filter((t) => !t.filled)
+  const chamber = unfilled.filter((t) => t.chamber)
+  const open = chamber.length > 0 ? chamber : unfilled.slice(-1)
+  if (open.length === 0) return state
+  const known = new Set([...before.monsters, ...(before.villains ?? []), ...(before.villagers ?? [])].map((f) => f.id))
+  const candidates = [
+    ...state.monsters.filter((m) => chamber.length > 0 || !m.objective),
+    ...(state.villains ?? []).filter((v) => !v.defeated),
+    ...(chamber.length > 0 ? (state.villagers ?? []).filter((v) => !v.removed) : []),
+  ]
+  const fresh = candidates
+    .filter((f) => !known.has(f.id) && !board.tokens[f.id])
     .flatMap((f) => Array.from({ length: figuresLeft(f) }, (_, i) => ({ id: figureToken(f.id, i + 1) })))
   if (fresh.length === 0) return state
   const grid = boardGrid(board)
-  const mark = scorchSquare(grid, open.uid) ?? [...grid.values()].find((sq) => sq.tile === open.uid && sq.floor)
-  if (!mark) return state
-  const from = Array.isArray(mark) ? mark : [mark.x, mark.y]
-  const taken = new Set(Object.values(board.tokens).map(key))
-  const near = [...distances(grid, from)].sort((a, b) => a[1] - b[1]).map(([k]) => k).filter((k) => !taken.has(k))
   const tokens = { ...board.tokens }
   fresh.forEach((f, i) => {
-    if (near[i]) tokens[f.id] = near[i].split(',').map(Number)
+    const tile = open[i % open.length]
+    const spot = spotsOn(grid, tile.uid, new Set(Object.values(tokens).map(key)))[0]
+    if (spot) tokens[f.id] = spot.split(',').map(Number)
   })
-  const boardTiles = state.turn.boardTiles.map((t) => (t.uid === open.uid ? { ...t, filled: true } : t))
+  const placed = new Set(open.map((t) => t.uid))
+  const boardTiles = state.turn.boardTiles.map((t) => (placed.has(t.uid) ? { ...t, filled: true } : t))
   return { ...state, board: { ...board, tokens }, turn: { ...state.turn, boardTiles } }
 }
 

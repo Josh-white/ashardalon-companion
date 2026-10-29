@@ -71,6 +71,7 @@ export default function Board({ state, dispatch, readOnly = false }) {
       Array.from({ length: figuresLeft(m) }, (_, i) => ({ id: figureToken(m.id, i + 1), label: figuresLeft(m) > 1 ? `${m.name} ${i + 1}` : m.name, color: '#7f1d1d', art: artUrl(art, monsterArt(m)) })),
     ),
     ...activeVillains(state).map((v) => ({ id: v.id, label: v.name, color: '#581c87', art: artUrl(art, monsterArt(v)) })),
+    ...(state.villagers ?? []).filter((v) => !v.removed).map((v) => ({ id: v.id, label: v.name, color: '#065f46' })),
   ]
   const onBoard = figures.filter((f) => board.tokens[f.id])
   const offBoard = figures.filter((f) => !board.tokens[f.id])

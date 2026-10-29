@@ -20,7 +20,7 @@ import { trackStats } from './stats.js'
 import { campaignHero, campaignOutcome, campaignSurges, isCampaign, newCampaign, shopCards, shopSize } from './campaign.js'
 import { playBoardSound, setBoardOff, setBoardUnlimited } from './soundboard.js'
 import { newFirstRoll, rollFirst } from './firstRoll.js'
-import { layTile, moveHero, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
+import { layChamber, layTile, moveHero, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
 import { boardMove, queueMoves, skipBoardMove } from '../board/powerMoves.js'
 
 export const SAVE_VERSION = 1
@@ -1847,6 +1847,8 @@ function revealTile(state, action) {
       // The villain rules take it from here, with the villain cards the device sent along.
       next = reduce(next, { type: 'PLACE_VILLAIN', name: step.name, cards: action.villains ?? [] })
     } else if (step.type === 'chamber') {
+      // On the virtual board the chamber's tiles go on the Entrance's open edges first.
+      if (next.board && /chamber entrance/i.test(reveal.tile)) next = layChamber(next, /horrid/i.test(reveal.tile) ? 'horrid' : 'dire', action.random)
       next = openChamber(next, step, action, hero)
     } else if (step.type === 'chamberMonsters') {
       // A chamber with no Chamber card (Sneaky Endeavor's treasure vault): just its monsters.
