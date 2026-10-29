@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { heroArt, monsterArt } from '../data/art.js'
 import { boardGrid, figureToken, figuresLeft, heroReach, moveSpeed, movesLeft } from '../board/play.js'
 import { moveChoices, movePrompt, moveTargets } from '../board/powerMoves.js'
-import { key } from '../board/grid.js'
+import { key, STEP, unexploredEdges } from '../board/grid.js'
 import { activeVillains } from '../state/game.js'
 import { artUrl, useArt } from '../state/useArt.js'
 import { SQUARE, TileShapes } from './TileDrawing.jsx'
@@ -27,6 +27,40 @@ function PlacedTile({ placed, def }) {
   return (
     <g transform={`translate(${x + shift[0]} ${y + shift[1]}) rotate(${placed.turn})`}>
       <TileShapes tile={def} turn={placed.turn} />
+    </g>
+  )
+}
+
+// The open sides of the dungeon a hero can still explore: a glowing dashed line along the
+// edge and an arrow pointing out into the dark, so they don't look like walls.
+const OPEN_EDGE = '#22d3ee'
+function OpenEdges({ grid }) {
+  return (
+    <g pointerEvents="none" className="motion-safe:animate-pulse">
+      {unexploredEdges(grid).map((edge) => {
+        const [dx, dy] = STEP[edge.side]
+        const lines = edge.squares.map(([x, y]) => {
+          // The side of square (x, y) facing the unexplored spot.
+          const [x1, y1] = [(x + (dx > 0 ? 1 : 0)) * SQUARE, (y + (dy > 0 ? 1 : 0)) * SQUARE]
+          const [x2, y2] = dx ? [x1, y1 + SQUARE] : [x1 + SQUARE, y1]
+          return { x1, y1, x2, y2 }
+        })
+        // The arrow sits half a square outside the middle of the opening.
+        const mx = (Math.min(...lines.map((l) => l.x1)) + Math.max(...lines.map((l) => l.x2))) / 2 + (dx * SQUARE) / 2
+        const my = (Math.min(...lines.map((l) => l.y1)) + Math.max(...lines.map((l) => l.y2))) / 2 + (dy * SQUARE) / 2
+        const angle = { N: 0, E: 90, S: 180, W: 270 }[edge.side]
+        return (
+          <g key={edge.id} data-open-edge={edge.id}>
+            {lines.map((l, i) => (
+              <line key={i} {...l} stroke={OPEN_EDGE} strokeWidth="9" strokeOpacity="0.25" strokeLinecap="round" />
+            ))}
+            {lines.map((l, i) => (
+              <line key={`d${i}`} {...l} stroke={OPEN_EDGE} strokeWidth="4" strokeDasharray="8 6" strokeLinecap="round" />
+            ))}
+            <path d="M-11 6L0 -8L11 6" transform={`translate(${mx} ${my}) rotate(${angle})`} fill="none" stroke={OPEN_EDGE} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+          </g>
+        )
+      })}
     </g>
   )
 }
@@ -215,7 +249,15 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
           role="img"
           aria-label="The dungeon board"
         >
+          <defs>
+            <pattern id="board-dots" width={SQUARE} height={SQUARE} patternUnits="userSpaceOnUse">
+              <circle cx={SQUARE / 2} cy={SQUARE / 2} r="1.5" fill="#334155" />
+            </pattern>
+          </defs>
+          <rect x={minX * SQUARE} y={minY * SQUARE} width={cols * SQUARE} height={rows * SQUARE} fill="#0b1220" />
+          <rect x={minX * SQUARE} y={minY * SQUARE} width={cols * SQUARE} height={rows * SQUARE} fill="url(#board-dots)" />
           {board.tiles.map((placed) => board.defs[placed.tileId] && <PlacedTile key={placed.uid} placed={placed} def={board.defs[placed.tileId]} />)}
+          <OpenEdges grid={grid} />
           {targets.map((k) => {
             const [x, y] = k.split(',').map(Number)
             return (

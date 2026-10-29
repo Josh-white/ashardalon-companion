@@ -28,8 +28,8 @@ export function TileShapes({ tile, turn = 0 }) {
           y={y * SQUARE}
           width={SQUARE}
           height={SQUARE}
-          fill={wall ? '#18181b' : '#a1a1aa'}
-          stroke={wall ? '#18181b' : '#52525b'}
+          fill={wall ? '#57534e' : '#a1a1aa'}
+          stroke={wall ? '#44403c' : '#52525b'}
           strokeWidth="1"
         />
       ))}
