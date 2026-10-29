@@ -5,6 +5,7 @@ import { heroAc, reactionsFor } from '../data/powerEffects.js'
 import { ENCOUNTER_LABELS, canSpendAttack, encounterCount, phaseChecks, villainInPlay } from '../state/game.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
+import { encounterTargetIds, foeOnHeroTile } from '../board/encounters.js'
 import { DrawMonsterButton, HeroPicker } from './MonsterTurns.jsx'
 import { TileGuardQuestion } from './Treasure.jsx'
 import { DrawTileButton } from './Tiles.jsx'
@@ -62,14 +63,46 @@ function targetQuestion(targets, hero) {
   return null
 }
 
+// What the board worked out, said in plain words.
+function boardFound(targets, hero) {
+  if (targets === 'activeTile') return `on ${hero.name}'s tile`
+  if (targets === 'within1') return `within 1 tile of ${hero.name}`
+  if (targets === 'trapTile') return 'on the trap’s tile'
+  if (targets === 'villainWithin1') return 'within 1 tile of the villain'
+  return ''
+}
+
+const names = (heroes) => {
+  const list = heroes.map((h) => h.name)
+  return list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list.at(-1)}` : list[0] ?? ''
+}
+
+// The heroes a card hits, highlighted in their own colours.
+export function AffectedHeroes({ heroes, label }) {
+  if (heroes.length === 0) return null
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-sm font-bold uppercase tracking-widest text-zinc-400">{label}</span>
+      {heroes.map((h) => (
+        <span key={h.id} className={`rounded-full border-2 border-amber-400 px-3 py-1 text-lg font-bold ${HERO_COLORS[h.color].bg} ${HERO_COLORS[h.color].text}`}>
+          {h.name}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 const describe = (attack) =>
   [attack.damage > 0 && `${attack.damage} damage`, ...attack.conditions].filter(Boolean).join(' and ') || 'no damage'
 
 // Rolls an attack from an encounter card or a trap. `dispatchAttack` sends the targets.
-function AttackStep({ state, hero, name, attack, onAttack, dispatch }) {
+// On the virtual board the heroes it reaches are picked (and highlighted) from where they
+// stand; the players can still change the picks. `trap` is the marker for a trap's attack.
+function AttackStep({ state, hero, name, attack, onAttack, onNobody, dispatch, trap }) {
   const question = targetQuestion(attack.targets, hero)
   const fixed = attack.targets === 'active' ? [hero.id] : attack.targets === 'all' ? state.heroes.map((h) => h.id) : null
-  const [chosen, setChosen] = useState(attack.targets === 'trapTile' || attack.targets === 'villainWithin1' ? [] : [hero.id])
+  const [fromBoard] = useState(() => (question ? encounterTargetIds(state, attack.targets, hero, { trap }) : null))
+  const [chosen, setChosen] = useState(fromBoard ?? (attack.targets === 'trapTile' || attack.targets === 'villainWithin1' ? [] : [hero.id]))
   const [guarded, setGuarded] = useState([])
   const [results, setResults] = useState(null)
   const targets = fixed ?? chosen
@@ -131,22 +164,40 @@ function AttackStep({ state, hero, name, attack, onAttack, dispatch }) {
         It attacks with +{attack.bonus}: a hit is {describe(attack)}
         {attack.miss > 0 && `, a miss is still ${attack.miss} damage`}.
       </p>
-      {question && (
+      {question && fromBoard && (
+        <>
+          <p className="rounded-lg bg-emerald-950/60 p-3 text-lg text-emerald-200">
+            📍 The board says{' '}
+            {fromBoard.length > 0
+              ? `${names(state.heroes.filter((h) => fromBoard.includes(h.id)))} ${fromBoard.length > 1 ? 'are' : 'is'} ${boardFound(attack.targets, hero)}.`
+              : `nobody is ${boardFound(attack.targets, hero)}.`}{' '}
+            Tap a hero to change it.
+          </p>
+          <HeroPicker heroes={state.heroes} chosen={chosen} onToggle={toggle} />
+        </>
+      )}
+      {question && !fromBoard && (
         <>
           <p className="text-xl font-semibold text-zinc-100">{question}</p>
           <HeroPicker heroes={state.heroes} chosen={chosen} onToggle={toggle} />
         </>
       )}
-      {attack.targets === 'all' && <p className="text-zinc-300">It attacks every hero.</p>}
+      {fixed && <AffectedHeroes heroes={state.heroes.filter((h) => fixed.includes(h.id))} label="It attacks" />}
       <TileGuardQuestion
         state={state}
         targets={targets}
         guarded={guarded}
         onToggle={(id) => setGuarded((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]))}
       />
-      <Button variant="danger" className="w-full py-4 text-xl font-bold" disabled={targets.length === 0} onClick={roll}>
-        🎲 Roll the attack
-      </Button>
+      {targets.length === 0 && onNobody ? (
+        <Button className="w-full py-4 text-xl font-bold" onClick={onNobody}>
+          Nobody is there
+        </Button>
+      ) : (
+        <Button variant="danger" className="w-full py-4 text-xl font-bold" disabled={targets.length === 0} onClick={roll}>
+          🎲 Roll the attack
+        </Button>
+      )}
     </div>
   )
 }
@@ -271,7 +322,9 @@ function EncounterCard({ state, hero, dispatch }) {
   const { card, attacked } = state.encounter
   const [markerChecked, setMarkerChecked] = useState(false)
   // Frenzied Leap: null until the table says whether a monster is on the active hero's tile.
-  const [monsterOnTile, setMonsterOnTile] = useState(null)
+  // On the virtual board the board answers it.
+  const [monsterOnTile, setMonsterOnTile] = useState(() => (card.damageIfMonsterOnTile > 0 ? foeOnHeroTile(state, hero) : null))
+  const [tileFromBoard, setTileFromBoard] = useState(() => card.damageIfMonsterOnTile > 0 && foeOnHeroTile(state, hero) !== null)
   const asksTile = card.damageIfMonsterOnTile > 0 && monsterOnTile === null
   const resolve = (extra = {}) =>
     dispatch({ type: 'RESOLVE_ENCOUNTER', monsterCards, villains, random: randomNumbers(SHUFFLE_NUMBERS), monsterOnTile: monsterOnTile === true, ...extra })
@@ -358,10 +411,32 @@ function EncounterCard({ state, hero, dispatch }) {
           )}
           {!needsAttack && !asksTile && (
             <>
-              {monsterOnTile === false && (
+              {tileFromBoard && monsterOnTile !== null && (
+                <>
+                  <p className="rounded-lg bg-emerald-950/60 p-3 text-lg text-emerald-200">
+                    📍 The board says {monsterOnTile ? `a monster is on ${hero.name}'s tile: ${hero.name} takes ${card.damageIfMonsterOnTile} damage when you tap the button.` : `no monster is on ${hero.name}'s tile.`}
+                  </p>
+                  {monsterOnTile && <AffectedHeroes heroes={[hero]} label="Takes damage" />}
+                  <Button
+                    variant="ghost"
+                    className="w-full"
+                    onClick={() => {
+                      setTileFromBoard(false)
+                      setMonsterOnTile(null)
+                    }}
+                  >
+                    ↶ The board got it wrong: ask me instead
+                  </Button>
+                </>
+              )}
+              {!tileFromBoard && monsterOnTile === false && (
                 <Button variant="ghost" className="w-full" onClick={() => setMonsterOnTile(null)}>
                   ↶ Oops, a monster is on {hero.name}'s tile
                 </Button>
+              )}
+              {card.damageEach > 0 && villainHere && <AffectedHeroes heroes={state.heroes} label="Takes damage" />}
+              {card.damagePoisoned > 0 && villainHere && (
+                <AffectedHeroes heroes={state.heroes.filter((h) => h.conditions.includes('Poisoned'))} label="Poisoned now" />
               )}
               {card.id === 'thief-in-the-dark' && <ThiefStep hero={hero} dispatch={dispatch} />}
               {BOTTOM_TILE_CARDS.has(card.id) && (
@@ -475,10 +550,12 @@ function TrapActivation({ state, hero, trap, dispatch, onDone }) {
           hero={hero}
           name={`The ${trap.name}`}
           attack={attack}
+          trap={trap}
           onAttack={(targets, tileGuarded) => {
             dispatch({ type: 'TRAP_ATTACK', trapId: trap.id, targets, tileGuarded })
             setHit(true)
           }}
+          onNobody={() => setHit(true)}
           dispatch={dispatch}
         />
       )}

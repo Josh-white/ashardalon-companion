@@ -22,6 +22,7 @@ import { playBoardSound, setBoardOff, setBoardUnlimited } from './soundboard.js'
 import { newFirstRoll, rollFirst } from './firstRoll.js'
 import { layChamber, layTile, moveHero, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
 import { boardMove, queueMoves, skipBoardMove } from '../board/powerMoves.js'
+import { heroTile } from '../board/encounters.js'
 
 export const SAVE_VERSION = 1
 
@@ -593,6 +594,9 @@ function resolveEncounter(state, action) {
     next = withLog({ ...next, environment: { cardId: card.id, name: card.name, card } }, `${card.name} is the new environment.`)
   } else if (card.type === 'trap' || card.type === 'hazard') {
     const marker = { id: newId('trap'), cardId: card.id, name: card.name, type: card.type, ownerId: encounter.heroId, card }
+    // On the virtual board the marker remembers its tile, so the trap knows who it reaches.
+    const tile = heroTile(state, encounter.heroId)
+    if (tile !== undefined) marker.tile = tile
     next = withLog({ ...next, traps: [...(next.traps ?? []), marker] }, `A ${card.name} marker goes on ${hero?.name ?? 'the hero'}'s tile.`)
   } else if (card.returnToTop) {
     next = withLog({ ...next, encounterDeck: intoTopThree(next.encounterDeck, card.id, card, action.random?.slice(-1)) }, `${card.name} was shuffled back into the top of the encounter deck.`)
