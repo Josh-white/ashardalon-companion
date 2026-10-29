@@ -5,7 +5,7 @@ import { campaignHero } from '../state/campaign.js'
 import { levelSlots, powerSlotsFor } from '../state/game.js'
 import { randomNumbers, shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
-import { AdventurePicker, ChosenAdventure, QuestLine } from './Adventure.jsx'
+import { ChosenAdventure, QuestLine } from './Adventure.jsx'
 import Art from './Art.jsx'
 import { CampaignLobby, HeroCampaign } from './Campaign.jsx'
 import Chronicle from './Chronicle.jsx'
@@ -257,7 +257,7 @@ function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave }) {
         <h1 className="font-display text-4xl font-bold text-amber-400 sm:text-5xl">Solo on the virtual board</h1>
         <p className="mt-2 text-lg text-zinc-400">Pick an adventure and one hero, or up to five to play as a party. No tiles on the table: the dungeon is on this screen.</p>
       </header>
-      {state.campaign ? <CampaignLobby state={state} dispatch={dispatch} /> : <AdventurePicker state={state} dispatch={dispatch} board />}
+      {state.campaign ? <CampaignLobby state={state} dispatch={dispatch} /> : <QuestLine state={state} dispatch={dispatch} onBoard big={false} />}
       {mine.map((claim) => (
         <MyHero key={claim.deviceId} state={state} claim={claim} cards={cards} deviceId={claim.deviceId} dispatch={dispatch} solo />
       ))}
