@@ -36,7 +36,7 @@ function fetchLine(ctx, line) {
 }
 
 // What's being said right now on this page, if anything.
-let speaking = null // { source, stopped }
+let speaking = null // { source, stopped, line }
 function stopSpeaking(ctx) {
   if (!speaking) return
   speaking.stopped = true
@@ -53,11 +53,18 @@ function stopSpeaking(ctx) {
 // /narrate endpoint, on every screen whose sound is on. It hears every state the Pi
 // sends, so a line isn't skipped when two changes land together. Browsers only play
 // sound after a tap on the page, so `blocked` asks for one.
-export function useNarrator(on) {
+// `onHold(hold, 'start' | 'done')` hears when lines that something waits for (a line's
+// `hold`: the opening story, the roll for first turn) start and end here, so the other
+// screens can wait for them.
+export function useNarrator(on, { onHold } = {}) {
   const [available, setAvailable] = useState(false)
   const [blocked, setBlocked] = useState(false)
   const queue = useRef([])
   const timers = useRef(new Set())
+  const hold = useRef(onHold)
+  useEffect(() => {
+    hold.current = onHold
+  })
 
   useEffect(() => {
     fetch('/narrate')
@@ -81,11 +88,12 @@ export function useNarrator(on) {
     }
     setBlocked(false)
     const line = queue.current.shift()
-    const turn = { source: null, stopped: false }
+    const turn = { source: null, stopped: false, line }
     speaking = turn
     const done = () => {
       if (speaking !== turn) return
       speaking = null
+      if (line.hold && !queue.current.some((l) => l.hold === line.hold)) hold.current?.(line.hold, 'done')
       // The music waits a moment before coming back, in case another line follows.
       releaseQuiet(ctx, 'voice', VOICE_HOLD_S)
       playNext()
@@ -107,6 +115,14 @@ export function useNarrator(on) {
   }, [])
 
   useGameStates((before, after) => {
+    // The opening story was skipped: stop reading it.
+    if (before?.opening && !before.opening.done && after?.opening?.done) {
+      queue.current = queue.current.filter((l) => l.hold !== 'opening')
+      if (speaking?.line?.hold === 'opening') {
+        stopSpeaking(audioContext())
+        playNext()
+      }
+    }
     if (!available || !on) return
     const lines = narrationFor(before, after, serverNow())
     if (lines.length === 0) return
@@ -116,6 +132,8 @@ export function useNarrator(on) {
     const timer = setTimeout(() => {
       timers.current.delete(timer)
       queue.current = [...queue.current, ...lines].slice(-MAX_QUEUE)
+      // Whatever waits for these lines starts waiting now, before they're even said.
+      for (const name of new Set(lines.map((l) => l.hold).filter(Boolean))) hold.current?.(name, 'start')
       // Ask for every waiting line now, so the Pi records the next one (a villain's
       // reply, say) while the current one is still playing.
       const ctx = audioContext()
@@ -167,5 +185,8 @@ export function useNarrator(on) {
     [available, on, playNext],
   )
 
-  return { available, blocked: available && on && blocked, say }
+  // Nothing being said or waiting to be said.
+  const quiet = useCallback(() => !speaking && queue.current.length === 0 && timers.current.size === 0, [])
+
+  return { available, blocked: available && on && blocked, say, quiet }
 }

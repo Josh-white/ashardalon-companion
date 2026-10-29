@@ -118,9 +118,10 @@ body {
 .intro {
   background: radial-gradient(ellipse at 50% 110%, #7c1d0b 0%, #2a0a06 45%, #09090b 80%);
   color: #f4e9d8;
-  transition: opacity 0.8s ease-in 2.4s;
+  transition: opacity 0.8s ease-in;
 }
-.intro-waking { opacity: 0; }
+/* The intro fades out once the narrator's line is over. */
+.intro-leaving { opacity: 0; }
 .intro-dragon {
   top: 50%; left: 50%;
   width: min(90vw, 90vh); height: min(90vw, 90vh);

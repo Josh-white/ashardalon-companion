@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { heroArt } from '../data/art.js'
 import { HERO_COLORS } from '../data/heroes.js'
-import { FIRST_ROLL_SHOW_MS, firstRollShowing, waitingToRoll } from '../state/firstRoll.js'
+import { FIRST_ROLL_MAX_MS, FIRST_ROLL_SHOW_MS, firstRollShowing, waitingToRoll } from '../state/firstRoll.js'
+import { openingPlaying } from '../state/opening.js'
 import { rollD20 } from '../state/random.js'
 import { serverNow } from '../state/useSharedGame.js'
 import Art from './Art.jsx'
@@ -22,13 +23,16 @@ function useShowing(state) {
   const [, tick] = useState(0)
   const showing = firstRollShowing(state, serverNow())
   const decidedAt = state.firstRoll?.decidedAt
+  const narrating = Boolean(state.firstRoll?.narrating)
   useEffect(() => {
     if (!decidedAt) return
-    const left = decidedAt + FIRST_ROLL_SHOW_MS - serverNow()
+    // Look again when the few seconds are up, and at the latest the narrator may hold it.
+    const left = decidedAt + (narrating ? FIRST_ROLL_MAX_MS : FIRST_ROLL_SHOW_MS) - serverNow()
     if (left <= 0) return
-    const timer = setTimeout(() => tick((n) => n + 1), left + 50)
-    return () => clearTimeout(timer)
-  }, [decidedAt])
+    const timers = [setTimeout(() => tick((n) => n + 1), left + 50)]
+    if (narrating) timers.push(setTimeout(() => tick((n) => n + 1), decidedAt + FIRST_ROLL_SHOW_MS - serverNow() + 50))
+    return () => timers.forEach(clearTimeout)
+  }, [decidedAt, narrating])
   return showing
 }
 
@@ -68,7 +72,8 @@ export default function FirstRoll({ state, dispatch, heroId = null, big = false 
   useEffect(() => {
     if (held && !showing) dispatch({ type: 'FIRST_ROLL_DONE' })
   }, [held, showing, dispatch])
-  if (!showing) return null
+  // The adventure's story is read first (OpeningStory).
+  if (!showing || openingPlaying(state, serverNow())) return null
   const roll = state.firstRoll
   const waiting = waitingToRoll(roll)
   const winner = state.heroes.find((h) => h.id === roll.winner)

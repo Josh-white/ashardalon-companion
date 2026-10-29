@@ -17,7 +17,8 @@ import { DOOR_KINDS, DOOR_UNLOCK_ROLL, MAX_SURGES, MIN_SURGES, aliveVillagers, c
 import { trackStats } from './stats.js'
 import { campaignHero, campaignOutcome, campaignSurges, isCampaign, newCampaign, shopCards, shopSize } from './campaign.js'
 import { playBoardSound, setBoardOff, setBoardUnlimited } from './soundboard.js'
-import { newFirstRoll, rollFirst } from './firstRoll.js'
+import { FIRST_ROLL_MAX_MS, newFirstRoll, rollFirst } from './firstRoll.js'
+import { finishOpening, openingNarrating, startOpening } from './opening.js'
 import { layChamber, layExit, layTile, moveHero, placeNear, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
 import { boardMove, queueMoves, skipBoardMove } from '../board/powerMoves.js'
 import { heroTile } from '../board/encounters.js'
@@ -87,6 +88,8 @@ export const initialState = {
   tokenStack: null,
   // The roll for first turn at the start of a game (state/firstRoll.js), or null.
   firstRoll: null,
+  // The adventure's story at the start of a game (state/opening.js), or null.
+  opening: null,
   // The virtual board for a solo game (board/play.js), or null when the real tiles are on the table.
   board: null,
 }
@@ -1355,7 +1358,14 @@ function placeVillain(state, action) {
 }
 
 // Every action, then a check for an adventure's victory, then the recap's counts.
-export const gameReducer = (state, action) => trackStats(state, pruneTokens(placeNewFigures(state, checkVictory(tagDrawn(reduce(state, action))))), action)
+export const gameReducer = (state, action) => trackStats(state, pruneTokens(placeNewFigures(state, checkVictory(tagDrawn(reduceWithOpening(state, action))))), action)
+
+// A game that just started begins with its story (state/opening.js).
+function reduceWithOpening(state, action) {
+  const next = reduce(state, action)
+  const started = (action.type === 'START_GAME' || action.type === 'START_DEMO') && next !== state && next.status === 'playing'
+  return started ? startOpening(next, Date.now()) : next
+}
 
 // A dungeon tile drawn from the stack, from the top when exploring or the bottom for a
 // card that says so. `key` says what it was for (explore, a monster, an encounter), so
@@ -1567,7 +1577,8 @@ function reduce(state, action) {
       const hero = state.heroes.find((h) => h.id === action.heroId)
       const value = Math.min(20, Math.max(1, Math.round(Number(action.value)) || 1))
       let next = withLog({ ...state, firstRoll: out.firstRoll }, `${heroLabel(hero)} rolled ${value} for first turn.`)
-      if (value === 20) next = withMoment(next, { kind: 'crit', heroId: hero.id, value: 20, title: 'NATURAL 20!' })
+      // A natural 20 is cheered on the roll screen itself (firstRoll.last), not with a big
+      // moment of its own that would land on top of the winner and the starting treasure.
       if (out.result?.winner) {
         const index = state.heroes.findIndex((h) => h.id === out.result.winner)
         next = withLog({ ...next, turn: { ...next.turn, heroIndex: index } }, `${state.heroes[index].name} goes first!`)
@@ -1585,10 +1596,25 @@ function reduce(state, action) {
       return state.firstRoll.after ? withMoment(next, state.firstRoll.after) : next
     }
 
+    // The screen playing the narration started the opening story, or it's over (or skipped).
+    case 'OPENING_NARRATING':
+      return openingNarrating(state)
+
+    case 'OPENING_DONE':
+      return finishOpening(state)
+
+    // The screen playing the narration is cheering the roll for first turn, or has finished.
+    case 'FIRST_ROLL_NARRATING':
+    case 'FIRST_ROLL_QUIET':
+      if (!state.firstRoll) return state
+      return { ...state, firstRoll: { ...state.firstRoll, narrating: action.type === 'FIRST_ROLL_NARRATING' } }
+
     // The "X goes first!" screen has finished: show what waited for it (the starting
     // treasure). Every screen sends this when its roll screen closes; only the first counts.
     case 'FIRST_ROLL_DONE':
       if (!state.firstRoll?.winner || !state.firstRoll.after) return state
+      // Not while the narrator is still cheering the roll (up to a limit).
+      if (state.firstRoll.narrating && Date.now() - state.firstRoll.decidedAt < FIRST_ROLL_MAX_MS) return state
       return withMoment({ ...state, firstRoll: { ...state.firstRoll, after: null } }, state.firstRoll.after)
 
     case 'CAMPAIGN_BUY':

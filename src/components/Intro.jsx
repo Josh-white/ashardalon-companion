@@ -5,10 +5,14 @@ import { soundSwitchedOff, unlockAudio } from '../audio/soundSetting.js'
 import { artUrl, useArt } from '../state/useArt.js'
 
 const SEEN_KEY = 'ashardalon-companion/intro-seen'
-// How long the dragon takes to wake after the tap, before the app shows.
-const WAKE_MS = 3200
+// How long the dragon takes to wake after the tap, before the intro starts to fade.
+const WAKE_MS = 2400
 // The projector may have nobody near it to tap, so it moves on by itself (quietly).
 const PROJECTOR_WAIT_MS = 20000
+// After the dragon wakes, the lobby waits for the narrator to finish his line, but no longer than this.
+const MAX_LINE_WAIT_MS = 12000
+// The fade out at the end (.intro in index.css).
+const FADE_MS = 800
 
 // The intro plays once each time the app is opened in a tab, not after every reload
 // (screens reload themselves when the app is updated). Add ?intro to the address to
@@ -42,10 +46,11 @@ const EMBERS = Array.from({ length: 14 }, (_, i) => ({
 // "The Dragon Wakes": the first thing every screen shows. Ashardalon's eyes open in
 // the dark while embers drift up; a tap wakes him (roar and the narrator, unless this
 // screen's sound is switched off) and lets the browser play sound from then on.
-export default function DragonIntro({ projector = false, say, onDone }) {
+export default function DragonIntro({ projector = false, say, quiet, onDone }) {
   const art = useArt()
   const dragon = artUrl(art, 'villain-ashardalon')
   const [waking, setWaking] = useState(false)
+  const [leaving, setLeaving] = useState(false)
   const timer = useRef(null)
 
   useEffect(() => () => clearTimeout(timer.current), [])
@@ -68,7 +73,15 @@ export default function DragonIntro({ projector = false, say, onDone }) {
       say?.([INTRO_LINE], { force: true })
     }
     setWaking(true)
-    timer.current = setTimeout(onDone, WAKE_MS)
+    // The lobby's own sounds (torches, the herald) wait until the narrator's line is over.
+    const started = Date.now()
+    const whenQuiet = () => {
+      if (!quiet || quiet() || Date.now() - started > MAX_LINE_WAIT_MS) {
+        setLeaving(true)
+        timer.current = setTimeout(onDone, FADE_MS)
+      } else timer.current = setTimeout(whenQuiet, 250)
+    }
+    timer.current = setTimeout(whenQuiet, WAKE_MS)
   }
 
   return (
@@ -76,7 +89,7 @@ export default function DragonIntro({ projector = false, say, onDone }) {
       type="button"
       onClick={tap}
       aria-label={waking ? 'Skip the intro' : 'Wake the dragon'}
-      className={`intro fixed inset-0 z-[60] flex h-full w-full cursor-pointer flex-col items-center justify-center overflow-hidden text-center select-none ${waking ? 'intro-waking' : ''}`}
+      className={`intro fixed inset-0 z-[60] flex h-full w-full cursor-pointer flex-col items-center justify-center overflow-hidden text-center select-none ${waking ? 'intro-waking' : ''} ${leaving ? 'intro-leaving' : ''}`}
     >
       {dragon && <img src={dragon} alt="" draggable={false} className="intro-dragon pointer-events-none absolute" />}
       <span aria-hidden="true" className="pointer-events-none absolute inset-0">

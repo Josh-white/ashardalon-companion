@@ -12,11 +12,18 @@ export const newFirstRoll = (heroes) =>
 // The heroes who still have to roll this round.
 export const waitingToRoll = (firstRoll) => (firstRoll && !firstRoll.winner ? firstRoll.contenders.filter((id) => firstRoll.rolls[id] == null) : [])
 
-// Whether the roll-off still covers the screen: until it's decided, then a few seconds more.
+// While the narrator cheers the roll ("A natural twenty…", "X goes first!"), the winner
+// stays on screen and the starting treasure waits, but never longer than this.
+export const FIRST_ROLL_MAX_MS = 15000
+
+// Whether the roll-off still covers the screen: until it's decided, then a few seconds
+// more, or until the narrator has finished with it.
 export const firstRollShowing = (state, now) => {
   const roll = state?.status === 'playing' ? state.firstRoll : null
   if (!roll) return false
-  return !roll.winner || now - roll.decidedAt < FIRST_ROLL_SHOW_MS
+  if (!roll.winner) return true
+  const since = now - roll.decidedAt
+  return since < FIRST_ROLL_SHOW_MS || (Boolean(roll.narrating) && since < FIRST_ROLL_MAX_MS)
 }
 
 // One hero's roll. Once everyone this round has rolled, the highest goes first, or the
@@ -26,8 +33,9 @@ export function rollFirst(firstRoll, heroId, value, now) {
   if (!firstRoll || firstRoll.winner || !waitingToRoll(firstRoll).includes(heroId)) return null
   const v = Math.min(20, Math.max(1, Math.round(Number(value)) || 1))
   const rolls = { ...firstRoll.rolls, [heroId]: v }
-  // count goes up with every roll, so each screen knows to play the dice.
-  const next = { ...firstRoll, rolls, count: (firstRoll.count ?? 0) + 1 }
+  // count goes up with every roll, so each screen knows to play the dice; last is that
+  // roll, so a natural 20 gets its cheer in turn.
+  const next = { ...firstRoll, rolls, count: (firstRoll.count ?? 0) + 1, last: { heroId, value: v } }
   if (firstRoll.contenders.some((id) => rolls[id] == null)) return { firstRoll: next, result: null }
   const best = Math.max(...firstRoll.contenders.map((id) => rolls[id]))
   const top = firstRoll.contenders.filter((id) => rolls[id] === best)
