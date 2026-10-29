@@ -1,11 +1,9 @@
 import {
   HERO_TEMPLATES,
-  LEVEL_STATS,
   MAX_LEVEL,
   STARTING_SURGES,
   addedSlot,
   hasAbility,
-  statsAtLevel,
   templateFor,
   XP_TO_CANCEL_ENCOUNTER,
   XP_TO_LEVEL_UP,
@@ -15,7 +13,7 @@ import { PHASES } from '../data/phases.js'
 import { heroItems, itemAttackBonus, itemTrapBonus, tileAcBonus, tileGuards } from '../data/items.js'
 import { effectsOf, heroAc, heroAttackPenalty, maxRolls } from '../data/powerEffects.js'
 import { STARTING_TILES, MAX_TILES, MIN_TILES, adjustTiles, bottomToTop, buildTileStack, takeTile } from './tiles.js'
-import { DOOR_KINDS, DOOR_UNLOCK_ROLL, MAX_SURGES, MIN_SURGES, aliveVillagers, checkVictory, countDefeat, escapeBlockers, isPlayable, newAdventure, objectiveInPlay, onceOnlyDraw, playableChambers, revealsReady, showStory, takeToken, villagerForRoll } from './adventure.js'
+import { DOOR_KINDS, DOOR_UNLOCK_ROLL, MAX_SURGES, MIN_SURGES, aliveVillagers, checkVictory, countDefeat, escapeBlockers, isPlayable, newAdventure, objectiveInPlay, playableChambers, revealsReady, showStory, takeToken, villagerForRoll } from './adventure.js'
 import { trackStats } from './stats.js'
 import { campaignHero, campaignOutcome, campaignSurges, isCampaign, newCampaign, shopCards, shopSize } from './campaign.js'
 import { playBoardSound, setBoardOff, setBoardUnlimited } from './soundboard.js'
@@ -24,11 +22,20 @@ import { layChamber, layExit, layTile, moveHero, placeNear, moveToken, newBoard,
 import { boardMove, queueMoves, skipBoardMove } from '../board/powerMoves.js'
 import { heroTile } from '../board/encounters.js'
 import { guardsOnTile } from '../board/checks.js'
+import { activeVillains, buildDeck, clamp, findFoe, foes, heroLabel, markUsed, newId, pick, sameName, shuffle, toggle, updateHero, updateMonster, validRoll, withCast, withLog, withMoment } from './gameHelpers.js'
+import { discardMonsterCard, drawMonster, drawMonsterOfType, filterMonsterDeck, monsterFromCard, villainInPlay } from './monsterDeck.js'
+import { discardEncounterCard, drawEncounter, intoTopThree, oweEncounter } from './encounterDeck.js'
+import { dealStartingTreasure, drawTreasure, keepTreasure, oweTreasure, spendItem, treasureWords } from './treasureDeck.js'
+import { copyCard, createHero, heroesFromLobby, levelSlots, newPower, nextLevel, pickedElsewhere, POWER_LABELS, updateClaim, withPicks } from './heroSetup.js'
+
+// Parts of the rules live in their own files now; these are still exported from here
+// so the screens' imports didn't have to change.
+export { activeVillains, foes, shuffle } from './gameHelpers.js'
+export { villainInPlay } from './monsterDeck.js'
+export { ENCOUNTER_LABELS } from './encounterDeck.js'
+export { createHero, levelSlots, powerSlotsFor, STARTING_POWER_SLOTS } from './heroSetup.js'
 
 export const SAVE_VERSION = 1
-
-let idCounter = 0
-const newId = (prefix) => `${prefix}-${Date.now().toString(36)}-${(idCounter++).toString(36)}`
 
 export const initialState = {
   version: SAVE_VERSION,
@@ -83,152 +90,6 @@ export const initialState = {
   // The virtual board for a solo game (board/play.js), or null when the real tiles are on the table.
   board: null,
 }
-
-const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
-
-const withLog = (state, text) => ({
-  ...state,
-  log: [{ id: newId('log'), round: state.turn.round, text }, ...state.log].slice(0, 50),
-})
-
-const withMoment = (state, moment) => ({
-  ...state,
-  moment: { id: newId('moment'), at: Date.now(), ...moment },
-})
-
-// A power used outside an attack (healing, a token, a dodge), so screens can play its sound.
-const withCast = (state, power) => ({ ...state, cast: { id: newId('cast'), at: Date.now(), power: power.name } })
-
-const heroLabel = (hero) => hero.player || hero.name
-
-const updateHero = (state, heroId, change) => ({
-  ...state,
-  heroes: state.heroes.map((hero) => (hero.id === heroId ? { ...hero, ...change(hero) } : hero)),
-})
-
-const updateMonster = (state, monsterId, change) => {
-  const update = (list) => list.map((monster) => (monster.id === monsterId ? { ...monster, ...change(monster) } : monster))
-  return state.villains?.some((v) => v.id === monsterId)
-    ? { ...state, villains: update(state.villains) }
-    : { ...state, monsters: update(state.monsters) }
-}
-
-// Villains still on the board. Heroes attack them like monsters, and they take turns like monsters.
-export const activeVillains = (state) => (state.villains ?? []).filter((v) => !v.defeated)
-// Everything a hero can attack: the monsters, then the villains.
-export const foes = (state) => [...state.monsters, ...activeVillains(state)]
-const findFoe = (state, id) => foes(state).find((m) => m.id === id)
-
-const toggle = (list, item) => (list.includes(item) ? list.filter((x) => x !== item) : [...list, item])
-
-// Shuffles with random numbers the device sent along (0 ≤ n < 1), so every
-// device and the server agree on the result and Undo puts the deck back.
-export function shuffle(list, random = []) {
-  const out = [...list]
-  for (let i = out.length - 1; i > 0; i--) {
-    const r = Number(random[i])
-    const j = Number.isFinite(r) && r >= 0 && r < 1 ? Math.floor(r * (i + 1)) : i
-    ;[out[i], out[j]] = [out[j], out[i]]
-  }
-  return out
-}
-
-function buildDeck(cards = [], random) {
-  const byId = Object.fromEntries(cards.map((card) => [card.id, card]))
-  // Adventure cards wait outside the deck until something adds them.
-  const ids = cards.filter((card) => !card.adventure).flatMap((card) => Array.from({ length: card.copies ?? 1 }, () => card.id))
-  return { cards: byId, draw: shuffle(ids, random), discard: [] }
-}
-
-// A monster in play, with the card copied in so its tactics and attacks travel with it.
-function monsterFromCard(card, ownerId) {
-  const figures = card.figures ?? 1
-  return {
-    id: newId('monster'),
-    cardId: card.id,
-    name: card.name,
-    maxHp: card.hp * figures,
-    hp: card.hp * figures,
-    ac: card.ac,
-    xp: card.xp,
-    ownerId,
-    conditions: [],
-    card: { hp: card.hp, figures, special: card.special ?? '', types: card.types ?? [], attacks: card.attacks, tactics: card.tactics },
-  }
-}
-
-const article = (name) => (/^[AEIOU]/.test(name) ? 'an' : 'a')
-
-// Draws a monster card for a hero. A hero never has two cards of the same monster, so
-// cards they already have are discarded until a new one turns up. The discards are
-// shuffled into a new deck when the deck runs out.
-function drawMonster(state, heroId, random) {
-  const hero = state.heroes.find((h) => h.id === heroId)
-  const deck = state.monsterDeck
-  if (!hero || !deck) return state
-  const owned = new Set(state.monsters.filter((m) => m.ownerId === hero.id).map((m) => m.cardId))
-  let { draw, discard } = deck
-  let next = state
-  let reshuffled = false
-  const skipped = []
-  let cardId = null
-  while (cardId === null) {
-    if (draw.length === 0) {
-      if (discard.length === 0 || reshuffled) {
-        return withLog(state, `There's no monster card left that ${hero.name} doesn't already have.`)
-      }
-      draw = shuffle(discard, random)
-      discard = []
-      reshuffled = true
-      next = withLog(next, 'The monster discards were shuffled into a new deck.')
-    }
-    const [top, ...rest] = draw
-    draw = rest
-    if (owned.has(top)) skipped.push(top)
-    else cardId = top
-  }
-  discard = [...discard, ...skipped]
-  for (const id of skipped) {
-    const name = deck.cards[id]?.name ?? 'monster'
-    next = withLog(next, `Discarded ${article(name)} ${name}: ${hero.name} already has one.`)
-  }
-  const card = deck.cards[cardId]
-  if (!card) return state
-  // Some adventures allow a monster card only once; a later copy is discarded with no replacement.
-  const once = onceOnlyDraw(next, card)
-  next = once.state
-  if (once.discard) {
-    const exploring = PHASES[next.turn.phase]?.key === 'exploration' && next.heroes[next.turn.heroIndex]?.id === hero.id
-    next = { ...next, monsterDeck: { ...deck, draw, discard }, turn: exploring ? { ...next.turn, monsterDrawn: true } : next.turn }
-    return withLog(next, `Drew another ${card.name} card. This adventure has just one, so it's discarded and no monster comes this time.`)
-  }
-  const monster = monsterFromCard(card, hero.id)
-  const figures = monster.card.figures
-  // One monster per new tile: the Exploration Phase's draw button locks after this.
-  const exploring = PHASES[next.turn.phase]?.key === 'exploration' && next.heroes[next.turn.heroIndex]?.id === hero.id
-  next = {
-    ...next,
-    monsterDeck: { ...deck, draw, discard },
-    monsters: [...next.monsters, monster],
-    turn: exploring ? { ...next.turn, monsterDrawn: true } : next.turn,
-    // An encounter card's monster: one per card, so its draw button locks too.
-    encounter: next.encounter ? { ...next.encounter, monsterDrawn: true } : next.encounter,
-  }
-  return withMoment(withLog(next, `${heroLabel(hero)} drew ${article(card.name)} ${card.name}!`), {
-    kind: 'spawn',
-    heroId: hero.id,
-    art: monsterArt(monster),
-    title: figures > 1 ? `${figures} ${card.name}s appear!` : `${article(card.name) === 'an' ? 'An' : 'A'} ${card.name} appears!`,
-    detail: figures > 1 ? `Place ${figures} ${card.name} figures on the new tile.` : 'Place its figure on the new tile.',
-  })
-}
-
-// A defeated monster's card goes to the party's XP pile (the xp count), never back into
-// the deck. Only a monster removed by mistake goes to the discards.
-const discardMonsterCard = (state, monster) =>
-  monster.cardId && state.monsterDeck
-    ? { ...state, monsterDeck: { ...state.monsterDeck, discard: [...state.monsterDeck.discard, monster.cardId] } }
-    : state
 
 // A hero's AC against an attack. Heroes standing on a Blessed Shield owner's tile get its
 // bonus too: read from the virtual board, or asked on the iPad (tileGuarded) without one.
@@ -442,128 +303,6 @@ function damageHeroes(state, heroIds, damage, why) {
   return { next, downed }
 }
 
-// Draws the top card of a deck, shuffling the discards into a new deck when it runs out.
-function drawTop(deck, random) {
-  let { draw, discard } = deck
-  let reshuffled = false
-  if (draw.length === 0) {
-    if (discard.length === 0) return null
-    draw = shuffle(discard, random)
-    discard = []
-    reshuffled = true
-  }
-  const [cardId, ...rest] = draw
-  return { cardId, deck: { ...deck, draw: rest, discard }, reshuffled }
-}
-
-const discardEncounterCard = (state, cardId) =>
-  state.encounterDeck && cardId
-    ? { ...state, encounterDeck: { ...state.encounterDeck, discard: [...state.encounterDeck.discard, cardId] } }
-    : state
-
-export const ENCOUNTER_LABELS = { event: 'Event', curse: 'Curse', environment: 'Environment', hazard: 'Hazard', trap: 'Trap' }
-
-// Shuffles a card in among the top 3 cards of the encounter deck ("shuffle this card with
-// the top 3 Encounter Cards and return the 4 cards to the top of the deck").
-function intoTopThree(deck, cardId, card, random = []) {
-  const r = Number(random[0])
-  const slot = Math.floor((Number.isFinite(r) && r >= 0 && r < 1 ? r : 0) * (Math.min(3, deck.draw.length) + 1))
-  const draw = deck.draw.filter((id) => id !== cardId)
-  return { ...deck, cards: { ...deck.cards, [cardId]: deck.cards[cardId] ?? card }, draw: [...draw.slice(0, slot), cardId, ...draw.slice(slot)], discard: deck.discard.filter((id) => id !== cardId) }
-}
-
-// Puts a card on top of the encounter deck.
-function ontoTop(deck, cardId, card) {
-  return { ...deck, cards: { ...deck.cards, [cardId]: deck.cards[cardId] ?? card }, draw: [cardId, ...deck.draw.filter((id) => id !== cardId)], discard: deck.discard.filter((id) => id !== cardId) }
-}
-
-function drawEncounter(state, action) {
-  const hero = state.heroes.find((h) => h.id === action.heroId)
-  if (!hero || state.encounter) return state
-  let withDeck = state.encounterDeck ? state : { ...state, encounterDeck: buildDeck(action.cards, action.random) }
-  // Cards waiting to go in, such as Ashardalon Breathes! once Ashardalon is on the board.
-  const findCard = (cardId) => withDeck.encounterDeck.cards[cardId] ?? (action.cards ?? []).find((c) => c.id === cardId)
-  for (const add of withDeck.encounterAdds ?? []) {
-    const cardId = typeof add === 'string' ? add : add.id
-    const card = findCard(cardId)
-    if (!card) continue
-    const deck = add.top ? ontoTop(withDeck.encounterDeck, cardId, card) : intoTopThree(withDeck.encounterDeck, cardId, card, action.random?.slice(-1))
-    withDeck = { ...withDeck, encounterDeck: deck }
-  }
-  withDeck = { ...withDeck, encounterAdds: [] }
-  const drawn = drawTop(withDeck.encounterDeck, action.random)
-  if (!drawn) return withLog(state, 'There are no encounter cards left to draw.')
-  const card = drawn.deck.cards[drawn.cardId]
-  if (!card) return state
-  // Ceremony Progresses! goes back on top once the extra card it asked for is drawn.
-  let deckAfter = drawn.deck
-  for (const cardId of withDeck.encounterAfter ?? []) deckAfter = ontoTop(deckAfter, cardId, findCard(cardId))
-  let next = {
-    ...withDeck,
-    encounterAfter: [],
-    encounterDeck: deckAfter,
-    encounter: { id: newId('encounter'), cardId: card.id, heroId: hero.id, card, attacked: false },
-    turn: { ...withDeck.turn, encountersDrawn: (withDeck.turn.encountersDrawn ?? 0) + 1 },
-  }
-  if (drawn.reshuffled) next = withLog(next, 'The encounter discards were shuffled into a new deck.')
-  return withMoment(withLog(next, `${heroLabel(hero)} drew the encounter ${card.name}.`), {
-    kind: 'encounter',
-    heroId: hero.id,
-    title: card.name,
-    detail: `${ENCOUNTER_LABELS[card.type] ?? 'Encounter'}! ${card.flavor ?? ''}`.trim(),
-  })
-}
-
-// "Draw 5 Monster Cards. Discard any Monster that is not an Orc. Shuffle the remaining
-// cards and put them on top of the Monster Card deck."
-function filterMonsterDeck(state, type, random, cards = []) {
-  const deck = state.monsterDeck ?? (cards.length > 0 ? buildDeck(cards, random) : null)
-  if (!deck) return state
-  const typesOf = (id) => deck.cards[id]?.types ?? cards.find((c) => c.id === id)?.types ?? []
-  const top = deck.draw.slice(0, 5)
-  const keep = top.filter((id) => typesOf(id).includes(type))
-  const toss = top.filter((id) => !typesOf(id).includes(type))
-  return withLog(
-    { ...state, monsterDeck: { ...deck, draw: [...shuffle(keep, random), ...deck.draw.slice(5)], discard: [...deck.discard, ...toss] } },
-    `Looked at the top ${top.length} monster cards: ${keep.length} ${type}${keep.length === 1 ? '' : 's'} went back on top.`,
-  )
-}
-
-// A card about a villain (Ashardalon Breathes!) or an objective (the Vast Gate) only does
-// anything while it is in play; otherwise the card is just discarded.
-export const villainInPlay = (state, card) =>
-  (!card.villain || activeVillains(state).some((v) => v.cardId === card.villain)) && (!card.objective || objectiveInPlay(state, card.objective))
-
-// Draws monster cards until one of a type turns up (The Vast Gate Flares!: an Aberrant) and
-// gives it to the hero. The others are discarded, and so is one the hero already has.
-function drawMonsterOfType(state, heroId, type, random, cards = []) {
-  const hero = state.heroes.find((h) => h.id === heroId)
-  let deck = state.monsterDeck ?? (cards.length > 0 ? buildDeck(cards, random) : null)
-  if (!hero || !deck) return state
-  const owned = new Set(state.monsters.filter((m) => m.ownerId === hero.id).map((m) => m.cardId))
-  const tossed = []
-  for (let tries = deck.draw.length + deck.discard.length; tries > 0; tries--) {
-    const drawn = drawTop(deck, random)
-    if (!drawn) break
-    deck = drawn.deck
-    const card = deck.cards[drawn.cardId]
-    if ((card?.types ?? []).some((t) => sameName(t, type)) && !owned.has(card.id)) {
-      const monster = monsterFromCard(card, hero.id)
-      const next = withLog({ ...state, monsterDeck: deck, monsters: [...state.monsters, monster] }, `${tossed.length} monster card${tossed.length === 1 ? '' : 's'} discarded before ${article(card.name)} ${card.name} turned up for ${hero.name}.`)
-      return withMoment(next, { kind: 'spawn', heroId: hero.id, title: `${article(card.name) === 'an' ? 'An' : 'A'} ${card.name} appears!`, detail: `It's ${hero.name}'s monster. Place its figure where the card says.` })
-    }
-    tossed.push(drawn.cardId)
-    deck = { ...deck, discard: [...deck.discard, drawn.cardId] }
-  }
-  return withLog({ ...state, monsterDeck: deck }, `There's no ${type} monster card left to draw.`)
-}
-
-// One more encounter card this Villain Phase, with the reason shown on the button.
-const oweEncounter = (state, why) => ({
-  ...state,
-  turn: { ...state.turn, encountersOwed: (state.turn.encountersOwed ?? 0) + 1, owedBecause: [...(state.turn.owedBecause ?? []), why] },
-})
-
 // After the encounter card is read out (and any attack rolled), the app does what it
 // can and puts the card where it goes: on the hero (curse), in play (environment), on
 // the board (trap, hazard), or in the discards (event).
@@ -703,15 +442,6 @@ function defeatDetails(state, defeated, heroId) {
   }
 }
 
-// The first monster defeated in a turn earns a treasure card, or in a campaign a Treasure
-// token (gold, or now and then a treasure card).
-const oweTreasure = (state, heroId) =>
-  state.campaign ? { ...state.turn, treasureDrawn: true, tokenOwed: heroId } : { ...state.turn, treasureDrawn: true, treasureOwed: heroId }
-const treasureWords = (state) => (state.campaign ? 'Draw a Treasure token!' : 'Draw a treasure card!')
-
-const markUsed = (state, heroId, powerId) =>
-  updateHero(state, heroId, (h) => ({ powers: h.powers.map((p) => (p.id === powerId ? { ...p, used: true } : p)) }))
-
 // Heals a hero (never past max HP) and logs it.
 function healHero(state, heroId, amount, source) {
   const hero = state.heroes.find((h) => h.id === heroId)
@@ -752,8 +482,6 @@ function offerBrutalRecovery(state) {
 
 // Vistra's Cast-Iron Stomach: +5 to rolls to end Poisoned.
 export const poisonBonus = (hero) => (hasAbility(hero, 'cast-iron-stomach') ? 5 : 0)
-
-const validRoll = (roll) => Number.isInteger(roll) && roll >= 1 && roll <= 20
 
 // One attack roll's sums. The parts that don't depend on the die are worked out once per attack.
 function rollAgainst(monster, roll, attack) {
@@ -1333,18 +1061,6 @@ function endHeroPhase(state, hero, roll) {
   })
 }
 
-// The next level's side of the hero card (level 2 in the box), with an empty slot for the
-// power card it adds. HP goes up as much as max HP does. A hero whose template is gone
-// from cards.json levels up the box way.
-const nextLevel = (h) => {
-  const template = templateFor(h.key) ?? h
-  const level = h.level + 1
-  const before = statsAtLevel(template, h.level)
-  const after = statsAtLevel(template, level)
-  const change = Object.fromEntries(LEVEL_STATS.map((stat) => [stat, h[stat] + after[stat] - before[stat]]))
-  return { level, ...change, hp: h.hp + after.maxHp - before.maxHp, powers: [...h.powers, newPower(addedSlot(template, level))] }
-}
-
 function levelUp(state, hero) {
   const leveled = updateHero(state, hero.id, nextLevel)
   const level = hero.level + 1
@@ -1355,80 +1071,6 @@ function levelUp(state, hero) {
     title: `${hero.name} reached level ${level}!`,
     detail: `Flip your hero card and choose another ${slot} power!`,
   })
-}
-
-const discardTreasureCard = (state, cardId) =>
-  state.treasureDeck && cardId
-    ? { ...state, treasureDeck: { ...state.treasureDeck, discard: [...state.treasureDeck.discard, cardId] } }
-    : state
-
-// An item that's been used flips over (like a used daily) or goes to the treasure discards.
-function spendItem(state, heroId, itemId, how) {
-  const hero = state.heroes.find((h) => h.id === heroId)
-  const item = heroItems(hero).find((i) => i.id === itemId)
-  const after = how ?? item?.card?.after
-  if (!item || !after) return state
-  if (after === 'flip') return updateHero(state, hero.id, (h) => ({ items: h.items.map((i) => (i.id === item.id ? { ...i, used: true } : i)) }))
-  const next = updateHero(state, hero.id, (h) => ({ items: h.items.filter((i) => i.id !== item.id) }))
-  return discardTreasureCard(next, item.cardId)
-}
-
-// Defeating a monster earns a treasure card; the device sends the cards and shuffle numbers.
-function drawTreasure(state, action) {
-  const heroId = state.turn.treasureOwed
-  const hero = state.heroes.find((h) => h.id === heroId)
-  if (!hero || state.treasure) return state
-  const withDeck = state.treasureDeck ? state : { ...state, treasureDeck: buildDeck(action.cards, action.random) }
-  const drawn = drawTop(withDeck.treasureDeck, action.random)
-  if (!drawn) return withLog(state, 'There are no treasure cards left to draw.')
-  const card = drawn.deck.cards[drawn.cardId]
-  if (!card) return state
-  let next = {
-    ...withDeck,
-    treasureDeck: drawn.deck,
-    treasure: { id: newId('treasure'), cardId: card.id, heroId: hero.id, card },
-    turn: { ...withDeck.turn, treasureOwed: null },
-  }
-  if (drawn.reshuffled) next = withLog(next, 'The treasure discards were shuffled into a new deck.')
-  return withMoment(withLog(next, `${heroLabel(hero)} found ${article(card.name)} ${card.name}!`), {
-    kind: 'treasure',
-    heroId: hero.id,
-    title: card.name,
-    detail: card.flavor || 'Treasure!',
-  })
-}
-
-// Before the adventure, each hero draws one treasure card to start with (Rulebook p. 13).
-// A campaign's later adventures pass a deck without the cards the heroes already hold.
-function dealStartingTreasure(state, cards, random, deck = null) {
-  if (!deck && (!Array.isArray(cards) || cards.length === 0)) return state
-  let next = { ...state, treasureDeck: deck ?? buildDeck(cards, random) }
-  const found = []
-  for (const hero of next.heroes) {
-    const drawn = drawTop(next.treasureDeck, random)
-    const card = drawn && drawn.deck.cards[drawn.cardId]
-    if (!card) break
-    const item = { id: newId('item'), cardId: card.id, name: card.name, used: false, card }
-    next = updateHero({ ...next, treasureDeck: drawn.deck }, hero.id, (h) => ({ items: [...(h.items ?? []), item] }))
-    next = withLog(next, `${heroLabel(hero)} starts with ${/^\S+s'?(\s|$)/.test(card.name) ? '' : `${article(card.name)} `}${card.name}.`)
-    found.push(`${hero.name}: ${card.name}`)
-  }
-  const moment = { kind: 'treasure', title: 'Starting treasure!', detail: found.join(' · ') }
-  // With a roll for first turn coming, the treasure waits until it's decided, so the
-  // two don't land on top of each other.
-  if (next.firstRoll) return { ...next, firstRoll: { ...next.firstRoll, after: moment } }
-  return withMoment(next, moment)
-}
-
-// The treasure card goes in front of a hero: the one who found it, or one they hand it to.
-function keepTreasure(state, action) {
-  const treasure = state.treasure
-  const hero = state.heroes.find((h) => h.id === (action.heroId ?? treasure?.heroId))
-  if (!treasure || !hero) return state
-  const { card } = treasure
-  const item = { id: newId('item'), cardId: card.id, name: card.name, used: false, card }
-  const next = updateHero({ ...state, treasure: null }, hero.id, (h) => ({ items: [...(h.items ?? []), item] }))
-  return withLog(next, card.inPlay ? `${hero.name} put the ${card.name} into play.` : `${hero.name} took the ${card.name}.`)
 }
 
 // Using an item from its card: healing, ending a condition, flipping a power back up, and
@@ -1517,65 +1159,6 @@ function monsterControl(state, action) {
     rolls: [{ monsterId: target.id, label: target.name, value: action.roll, total: result.total, ac: target.ac, hit: result.hit, outcome: result.outcome }],
   })
 }
-
-// Each hero card names one power the hero always has (Keyleth's Lay on Hands, Tarak's
-// Furious Assault), plus 1 utility, 2 at-wills, and 1 daily to choose. Most fixed powers
-// are utilities. A template sets its own `powerSlots` when its fixed power is another
-// type (Heskan's Hurled Breath and Vistra's Dwarven Resilience are dailies).
-export const STARTING_POWER_SLOTS = ['at-will', 'at-will', 'utility', 'utility', 'daily']
-
-export const powerSlotsFor = (template) => template.powerSlots ?? STARTING_POWER_SLOTS
-// Each level after the first adds a power card: one more daily in the box.
-export const levelSlots = (template, level = 1) => [
-  ...powerSlotsFor(template),
-  ...Array.from({ length: Math.max(0, level - 1) }, (_, i) => addedSlot(template, i + 2)),
-]
-
-// The card is copied into the game, so later edits to the card file don't change a game in progress.
-const copyCard = (card) =>
-  card
-    ? {
-        id: String(card.id),
-        name: String(card.name),
-        text: String(card.text ?? ''),
-        attack: card.attack ? String(card.attack) : '',
-        damage: card.damage ? String(card.damage) : '',
-        // A homebrew power's own effect (powerEffects.js), kept with the card.
-        ...(card.effect && typeof card.effect === 'object' ? { effect: card.effect } : {}),
-      }
-    : null
-
-const updateClaim = (state, deviceId, change) => ({
-  ...state,
-  lobby: (state.lobby ?? []).map((claim) => (claim.deviceId === deviceId ? { ...claim, ...change(claim) } : claim)),
-})
-
-// Turns the lobby into heroes, in the order they were claimed.
-// Fills a new hero's power slots with picked cards, in slot order.
-const withPicks = (hero, picks = []) => ({
-  ...hero,
-  powers: hero.powers.map((power, i) => {
-    const card = copyCard(picks[i])
-    return card ? { ...power, name: card.name, card } : power
-  }),
-})
-
-// True when another slot already holds this card, so no hero gets the same power twice.
-const pickedElsewhere = (cards, slot, card) => Boolean(card) && cards.some((c, i) => i !== slot && c?.id === card.id)
-
-function heroesFromLobby(lobby, campaign = null) {
-  return lobby.flatMap((claim) => {
-    const template = templateFor(claim.heroKey)
-    if (!template) return []
-    // A campaign hero who levelled up starts at that level, with the power cards it added.
-    const saved = (campaign?.heroes ?? []).find((h) => h.key === template.key)
-    let hero = createHero(template)
-    while (hero.level < Math.min(saved?.level ?? 1, MAX_LEVEL)) hero = { ...hero, ...nextLevel(hero) }
-    return [{ ...withPicks(hero, claim.picks), player: claim.player }]
-  })
-}
-
-// ---- Campaigns (state/campaign.js) ----
 
 const sameHeroes = (heroes, saved) => heroes.length === saved.length && saved.every((s) => heroes.some((h) => h.key === s.key))
 
@@ -1719,34 +1302,6 @@ function tagDrawn(state) {
   if (!state.monsters?.some((m) => !m.drawnAt)) return state
   const key = turnKey(state)
   return { ...state, monsters: state.monsters.map((m) => (m.drawnAt ? m : { ...m, drawnAt: key })) }
-}
-
-const POWER_LABELS = { 'at-will': 'At-will power', utility: 'Utility power', daily: 'Daily power' }
-
-const newPower = (type, name = POWER_LABELS[type] ?? 'Power') => ({ id: newId('power'), type, name, used: false, card: null })
-
-export function createHero(template, overrides = {}) {
-  const hero = { ...template, ...overrides }
-  return {
-    id: newId('hero'),
-    key: hero.key,
-    name: hero.name,
-    className: hero.className,
-    color: hero.color,
-    maxHp: hero.maxHp,
-    hp: hero.maxHp,
-    ac: hero.ac,
-    surgeValue: hero.surgeValue,
-    speed: hero.speed,
-    level: 1,
-    // Saved with the hero, so a game in progress keeps them if cards.json changes.
-    abilityEffects: hero.abilityEffects ?? [],
-    conditions: [],
-    // Power tokens (Mirror Image, Blade Barrier, Flaming Sphere) and markers (invisible, refuge).
-    tokens: {},
-    shieldedBy: null, // the cleric whose Cleric's Shield gives this hero +2 AC
-    powers: powerSlotsFor(hero).map((type) => newPower(type)),
-  }
 }
 
 // Puts a villain on the board, found by its card's id or name ("Kobold Dragonlord").
@@ -1901,11 +1456,6 @@ function revealDoor(state, action) {
     detail: `Put the token back face up. A hero next to it can try to unlock it instead of attacking: ${DOOR_UNLOCK_ROLL} or more.`,
   })
 }
-
-// One of the list, picked with a random number the device sent along.
-const pick = (list, r) => list[Math.min(list.length - 1, Math.floor((Number.isFinite(Number(r)) ? Number(r) : 0) * list.length))]
-
-const sameName = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase()
 
 // A chamber's entrance turned up. The chamber card (named by the adventure, or drawn
 // from the Chamber deck) puts its villain or objective in the chamber, then each
@@ -2714,7 +2264,6 @@ function reduce(state, action) {
     case 'SET_TRIANGLE':
       // The Villain Phase's question: does the new tile have a black triangle?
       return { ...state, turn: { ...state.turn, triangle: Boolean(action.triangle) } }
-
 
     case 'ADJUST_SURGES':
       return { ...state, surges: Math.max(0, state.surges + action.amount) }
