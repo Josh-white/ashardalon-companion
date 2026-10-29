@@ -4,7 +4,7 @@ import { HERO_COLORS } from '../data/heroes.js'
 import { itemsWithUse } from '../data/items.js'
 import { heroAc, reactionsFor } from '../data/powerEffects.js'
 import { activeVillains } from '../state/game.js'
-import { aliveVillagers } from '../state/adventure.js'
+import { attackEffect, chooseTargets, currentStepIndex, figureCount, inRefuge, monsterTargets, nobodyToAttack, stepAttack, tapsMany, toggleTarget, towardHero as towardHeroFor } from '../state/monsterTurn.js'
 import { useCards } from '../state/useCards.js'
 import { rollD20, shuffleNumbers } from '../state/random.js'
 import Art from './Art.jsx'
@@ -87,13 +87,6 @@ const THEN = {
   away: (name) => `Now move the ${name} to the closest square that isn't next to a hero.`,
 }
 
-// The hero with the most HP, or null when two or more are tied for it.
-function mostHp(heroes) {
-  const top = Math.max(...heroes.map((h) => h.hp))
-  const tied = heroes.filter((h) => h.hp === top)
-  return tied.length === 1 ? tied[0] : null
-}
-
 export function HeroPicker({ heroes, chosen, onToggle }) {
   return (
     <div className="grid grid-cols-2 gap-2">
@@ -133,10 +126,11 @@ export function HeroPicker({ heroes, chosen, onToggle }) {
 }
 
 // Walks one monster through its card's tactics: asks about the board one question at a
-// time, then rolls its attack against the hero's AC and applies the result.
+// time, then rolls its attack against the hero's AC and applies the result. The rules
+// behind each step are in state/monsterTurn.js.
 export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDone }) {
   const { card, name } = monster
-  const figures = monster.villain ? 1 : Math.max(1, Math.ceil(monster.hp / card.hp))
+  const figures = figureCount(monster)
   // On the virtual board the board answers the card's questions and picks the target. It is
   // worked out once when the turn starts, so the monster's own move doesn't change the answer.
   const [byBoard, setByBoard] = useState(() => boardStep(state, monster, card.tactics) !== null)
@@ -158,20 +152,15 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
   // The answers given so far, so a wrong tap can be taken back. They stay on this
   // iPad until the dice roll, so the Undo button can't reach them.
   const [trail, setTrail] = useState([])
-  // Heroes in the Astral Refuge are off the board, so monsters can't find or attack them.
   // With nobody left on the board, only the steps that don't need a hero are asked.
-  const away = state.heroes.filter((h) => h.tokens?.refuge)
-  const nobody = away.length === state.heroes.length && aliveVillagers(state).length === 0
-  const needsNobody = (s) => s.when === 'aloneByUnexploredEdge' || (!s.when && s.explore)
-  let index = stepIndex
-  while (nobody && card.tactics[index] && !needsNobody(card.tactics[index])) index++
+  const away = inRefuge(state)
+  const nobody = nobodyToAttack(state)
+  const index = currentStepIndex(card.tactics, stepIndex, nobody)
   const step = card.tactics[index]
   // Scroll of Monster Control, read on the active hero's own turn.
   const activeHero = state.heroes.find((h) => h.id === activeHeroId)
   const [scroll] = itemsWithUse(activeHero ? [activeHero] : [], 'monsterControl')
-  // A table of attacks (the Gauth's eye ray) rolls to pick one; `table` is its rows.
-  const table = card.attacks.filter((a) => a.group && a.group === step?.attack)
-  const attack = card.attacks.find((a) => a.id === step?.attack) ?? (table.length > 0 ? { ...table[0], id: step.attack, name: step.attack.replace(/-/g, ' ') } : null)
+  const { attack, table } = stepAttack(card, step)
   const asking = step?.when && !answered
 
   const answer = (yes) => {
@@ -216,20 +205,10 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
     if (to && at && (to[0] !== at[0] || to[1] !== at[1])) dispatch({ type: 'MOVE_TOKEN', id: token, to })
   }
 
-  // Villagers count as heroes for monster tactics (Free the Captives), listed first because
-  // a monster goes for a villager when it can.
-  const villagers = aliveVillagers(state).map((v) => ({ ...v, villager: true }))
-  const targetable = [...villagers, ...state.heroes.filter((h) => !h.tokens?.refuge)]
-  const many = step?.targets === 'all' || step?.target === 'mostHp'
-  const toggle = (heroId) =>
-    setChosen((list) => (many ? (list.includes(heroId) ? list.filter((id) => id !== heroId) : [...list, heroId]) : [heroId]))
-  // "The hero with the most HP": the app picks from the heroes tapped, unless there's a tie.
-  const tapped = targetable.filter((h) => chosen.includes(h.id))
-  const strongest = step?.target === 'mostHp' && tapped.length > 0 ? mostHp(tapped) : null
-  const top = Math.max(...tapped.map((h) => h.hp))
-  const tied = step?.target === 'mostHp' && !strongest ? tapped.filter((h) => h.hp === top) : []
-  const tieTarget = tied.find((h) => h.id === tiePick)
-  const targetIds = step?.target === 'mostHp' ? (strongest ? [strongest.id] : tieTarget ? [tieTarget.id] : []) : chosen
+  const targetable = monsterTargets(state)
+  const villagers = targetable.filter((h) => h.villager)
+  const toggle = (heroId) => setChosen((list) => toggleTarget(list, heroId, tapsMany(step)))
+  const { tapped, strongest, tied, top, targetIds } = chooseTargets(step, targetable, chosen, tiePick)
 
   const roll = (nobleShield) => {
     // On the board it steps next to the hero first, when the card says so.
@@ -251,14 +230,9 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
   const movedTo = targetable.find((h) => h.id === targetIds[0])
   // The attack that was rolled: for a table, the row the die picked.
   const used = (rows.length > 0 && card.attacks.find((a) => a.id === last.attackId)) || attack
-  const effect = (hit) => {
-    const damage = hit ? used.damage : used.miss
-    const parts = [damage > 0 && `${damage} damage`, ...(hit ? used.conditions : [])].filter(Boolean)
-    return parts.length > 0 ? parts.join(' and ') : 'no damage'
-  }
+  const effect = (hit) => attackEffect(used, hit)
   // The hero it moves toward when nobody is in reach.
-  const living = state.heroes.filter((h) => h.hp > 0)
-  const towardHero = step?.toward === 'mostHp' && living.length > 0 ? mostHp(living) : null
+  const towardHero = towardHeroFor(state, step)
   const tiles = step?.tiles > 1 ? `${step.tiles} tiles` : '1 tile'
   // Where it goes on the board when it moves toward a hero, and after an attack.
   const towardFigure = byBoard && (!step || step.move === 'toward') && !nobody ? (step?.toward === 'mostHp' ? towardHero : closestTarget(state, token)) : null
