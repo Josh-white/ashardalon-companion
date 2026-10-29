@@ -310,9 +310,9 @@ export default function TurnGuide({ state, dispatch }) {
     <section className={`rounded-3xl border border-zinc-800 p-5 sm:p-6 ${color.bg}`}>
       <p className="text-sm uppercase tracking-widest text-zinc-400">Round {round}</p>
       <h2 className={`font-display text-4xl font-bold sm:text-5xl ${color.text}`}>
-        Your turn, {hero.player || hero.name}!
+        {state.board ? `${hero.name}'s turn!` : `Your turn, ${hero.player || hero.name}!`}
       </h2>
-      {hero.player && <p className="text-zinc-400">playing {hero.name}</p>}
+      {hero.player && !state.board && <p className="text-zinc-400">playing {hero.name}</p>}
 
       <div className="mt-5 grid grid-cols-3 gap-2">
         {PHASES.map((p, i) => (
@@ -355,7 +355,7 @@ export default function TurnGuide({ state, dispatch }) {
           disabled={waiting}
           onClick={next}
         >
-          {isLastPhase ? `Pass to ${nextHero.player || nextHero.name} →` : `On to ${PHASES[phase + 1].title} →`}
+          {isLastPhase ? (state.board ? `On to ${nextHero.name}'s turn →` : `Pass to ${nextHero.player || nextHero.name} →`) : `On to ${PHASES[phase + 1].title} →`}
         </Button>
       </div>
     </section>
