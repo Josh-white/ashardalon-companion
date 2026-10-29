@@ -341,9 +341,8 @@ function TableView({ state, dispatch }) {
   return (
     <div className="mx-auto max-w-6xl space-y-8 p-4">
       <TurnGuide state={state} dispatch={dispatch} />
-      {/* On the virtual board only the active hero's iPad moves figures (or a power's move
-          that's waiting on someone), so nobody moves a hero by mistake while watching. */}
-      <Board state={state} dispatch={dispatch} readOnly={!myTurn && !state.turn.boardMove} />
+      {/* The table plays every hero, so it can always move figures. */}
+      <Board state={state} dispatch={dispatch} />
       <AdventurePanel state={state} dispatch={dispatch} />
       <section>
         <h2 className="mb-3 font-display text-2xl font-bold text-zinc-100">Heroes</h2>
