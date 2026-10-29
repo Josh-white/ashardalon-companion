@@ -21,6 +21,8 @@ Starting hero stats are prefilled on the setup screen and can be adjusted there,
 
 Each hero has two at-will, one utility, and one daily power slot. Tap **Choose powers** to pick each one from a dropdown, tap a used daily or utility power to flip it, and tap **Read** to see the card text. The cards come from `cards/cards.json`, a file that stays on your server and is ignored by git. See [cards/README.md](cards/README.md) for the format.
 
+Open the app at `/#cards` to check `cards.json`: it lists cards the app couldn't read, and power and encounter cards the app looks for by name or id but can't find (a spelling difference quietly turns off that card's automation). The Pi also prints these to its log when it starts.
+
 ## Card art
 
 Tap **📷 Add photos of your cards** (on the setup screen, or the "Who's playing" screen during a game). For each hero, monster and villain, take a photo of your card, then drag and pinch until its picture fills the square. The pictures show on the hero cards, monster cards, the projector, and the big screens when a monster appears or falls.

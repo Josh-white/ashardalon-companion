@@ -12,6 +12,7 @@ import { ART_NAME, MAX_ART_BYTES } from '../src/data/art.js'
 import { createNarrator } from './narrator.js'
 import { auditionList, pickTake, takesDir } from './soundTakes.js'
 import { normalizeCardFile } from '../src/data/cards.js'
+import { missingCards } from '../src/data/cardCheck.js'
 import { setHeroTemplates } from '../src/data/heroes.js'
 import { describeAction } from '../src/state/describeAction.js'
 import { gameReducer, initialState } from '../src/state/game.js'
@@ -359,7 +360,10 @@ export function startServer({
     console.error('Could not clear old finished games:', error.message)
   }
   // The heroes players can pick, homebrew ones too. Read again whenever a screen loads the cards.
-  setHeroTemplates(loadCards(cardsFile, exampleCardsFile).heroes)
+  const startCards = loadCards(cardsFile, exampleCardsFile)
+  setHeroTemplates(startCards.heroes)
+  // In the Pi's log too, so a card the app can't find shows up after an update.
+  for (const line of [...startCards.problems, ...missingCards(startCards)]) console.warn(`Card check: ${line}`)
   // Which build of the screens this server hands out. A screen that loaded an older
   // build reloads itself when it sees a new one, so an update reaches the iPads.
   const indexFile = join(staticDir, 'index.html')
