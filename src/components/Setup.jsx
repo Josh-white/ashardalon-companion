@@ -208,7 +208,10 @@ function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave }) {
   const others = lobby.filter((c) => !c.deviceId.startsWith(deviceId + '~solo'))
   const freeSlot = SOLO_SLOTS.find((slot) => !lobby.some((c) => c.deviceId === deviceId + slot))
   const powersDone = mine.every((c) => powersChosen(c, cards.powers))
-  const ready = mine.length > 0 && powersDone && others.length === 0
+  // A campaign goes on with the same heroes, every one of them.
+  const heroChoices = state.campaign ? heroTemplates().filter((t) => campaignHero(state, t.key)) : heroTemplates()
+  const campaignShort = state.campaign && !heroChoices.every((t) => mine.some((c) => c.heroKey === t.key))
+  const ready = mine.length > 0 && powersDone && others.length === 0 && !campaignShort
   // One player runs every hero, so nobody is asked for a name: the screens call each turn by
   // the hero's name instead.
   const pick = (template) => {
@@ -226,15 +229,15 @@ function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave }) {
     <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
       <header className="text-center">
         <h1 className="font-display text-4xl font-bold text-amber-400 sm:text-5xl">Solo on the virtual board</h1>
-        <p className="mt-2 text-lg text-zinc-400">Pick one hero, or up to five to play as a party. No tiles on the table: the dungeon is on this screen.</p>
+        <p className="mt-2 text-lg text-zinc-400">Pick an adventure and one hero, or up to five to play as a party. No tiles on the table: the dungeon is on this screen.</p>
       </header>
-      <ChosenAdventure state={state} />
+      {state.campaign ? <CampaignLobby state={state} dispatch={dispatch} /> : <AdventurePicker state={state} dispatch={dispatch} board />}
       {mine.map((claim) => (
         <MyHero key={claim.deviceId} state={state} claim={claim} cards={cards} deviceId={claim.deviceId} dispatch={dispatch} solo />
       ))}
       {freeSlot && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {heroTemplates()
+          {heroChoices
             .filter((t) => !lobby.some((c) => c.heroKey === t.key))
             .map((template) => (
               <button
@@ -263,6 +266,8 @@ function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave }) {
             ? 'Another iPad has a hero in the lobby. A solo game needs it to pick "Pick a different hero" first.'
             : mine.length === 0
               ? 'Pick a hero to start.'
+              : campaignShort
+                ? 'The campaign goes on with all of its heroes: pick each one.'
               : powersDone
                   ? 'Ready when you are.'
                   : 'Tap "Change powers" and choose every power.'}
