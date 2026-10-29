@@ -5,6 +5,7 @@ import { heroAc, reactionsFor } from '../data/powerEffects.js'
 import { ENCOUNTER_LABELS, canSpendAttack, encounterCount, phaseChecks, villainInPlay } from '../state/game.js'
 import { randomNumbers, rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
+import { boardAnswer } from '../board/checks.js'
 import { encounterTargetIds, foeOnHeroTile } from '../board/encounters.js'
 import { DrawMonsterButton, HeroPicker } from './MonsterTurns.jsx'
 import { TileGuardQuestion } from './Treasure.jsx'
@@ -735,29 +736,55 @@ const effectWords = (effect) =>
     ? 'nothing happens'
     : [effect.damage && `${effect.damage} damage`, effect.condition, effect.remove && 'the curse ends', effect.drawMonster && 'draw a monster'].filter(Boolean).join(' and ')
 
+// What the board's answer does, told before the player taps OK.
+const boardEffect = (effect, name) =>
+  !effect
+    ? 'Nothing happens.'
+    : `${[effect.damage && `${name} takes ${effect.damage} damage`, effect.condition && `${name} is ${effect.condition}`, effect.remove && 'the curse ends', effect.drawMonster && `${name} draws a monster`]
+        .filter(Boolean)
+        .join(' and ')
+        .replace(/^./, (c) => c.toUpperCase())} when you tap OK.`
+
 // The questions a phase ends with, one at a time, from curses, the environment and
 // hazards ("Did you end next to a wall?"). The turn can't move on until they're answered.
 export function PhaseChecks({ state, hero, phaseKey, dispatch }) {
   const { monsters: cards } = useCards()
+  // The check the player chose to answer by hand instead of taking the board's answer.
+  const [manualKey, setManualKey] = useState(null)
   const [check] = phaseChecks(state, phaseKey)
   if (!check) return null
   const fill = (text) => text.replaceAll('{hero}', hero.name)
+  const answer = (yes) => dispatch({ type: 'ANSWER_CHECK', key: check.key, answer: yes, cards, random: randomNumbers(SHUFFLE_NUMBERS) })
+  const board = check.ask && manualKey !== check.key ? boardAnswer(state, fill(check.ask)) : null
   return (
     <div className="mt-4 rounded-2xl border-2 border-purple-700 bg-purple-950/60 p-4">
       <p className="text-sm font-bold uppercase tracking-widest text-purple-300">
         {phaseKey === 'hero' ? 'When you’re done with your Hero Phase' : 'When you’re done exploring'} · {check.source}
       </p>
-      {check.ask ? (
+      {board ? (
+        <>
+          <p className="mt-1 text-2xl font-semibold text-zinc-100">{fill(check.ask)}</p>
+          <p className="mt-2 rounded-lg bg-emerald-950/60 p-3 text-lg text-emerald-200">
+            📍 The board says {board.answer ? 'yes' : 'no'}: {board.why} {boardEffect(board.answer ? check.yes : check.no, hero.name)}
+          </p>
+          <Button variant="gold" className="mt-3 w-full py-3 text-lg" onClick={() => answer(board.answer)}>
+            OK
+          </Button>
+          <Button variant="ghost" className="mt-2 w-full" onClick={() => setManualKey(check.key)}>
+            The board's wrong, let me answer
+          </Button>
+        </>
+      ) : check.ask ? (
         <>
           <p className="mt-1 text-2xl font-semibold text-zinc-100">{fill(check.ask)}</p>
           <p className="mt-1 text-purple-200">
             Yes: {effectWords(check.yes)}. No: {effectWords(check.no)}.
           </p>
           <div className="mt-3 grid grid-cols-2 gap-3">
-            <Button variant="gold" className="py-4 text-2xl" onClick={() => dispatch({ type: 'ANSWER_CHECK', key: check.key, answer: true, cards, random: randomNumbers(SHUFFLE_NUMBERS) })}>
+            <Button variant="gold" className="py-4 text-2xl" onClick={() => answer(true)}>
               Yes
             </Button>
-            <Button className="py-4 text-2xl" onClick={() => dispatch({ type: 'ANSWER_CHECK', key: check.key, answer: false, cards, random: randomNumbers(SHUFFLE_NUMBERS) })}>
+            <Button className="py-4 text-2xl" onClick={() => answer(false)}>
               No
             </Button>
           </div>

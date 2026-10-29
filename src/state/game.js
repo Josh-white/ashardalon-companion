@@ -12,7 +12,7 @@ import {
 } from '../data/heroes.js'
 import { monsterArt } from '../data/art.js'
 import { PHASES } from '../data/phases.js'
-import { heroItems, itemAttackBonus, itemTrapBonus, tileAcBonus } from '../data/items.js'
+import { heroItems, itemAttackBonus, itemTrapBonus, tileAcBonus, tileGuards } from '../data/items.js'
 import { effectsOf, heroAc, heroAttackPenalty, maxRolls } from '../data/powerEffects.js'
 import { STARTING_TILES, MAX_TILES, MIN_TILES, adjustTiles, bottomToTop, buildTileStack, takeTile } from './tiles.js'
 import { DOOR_KINDS, DOOR_UNLOCK_ROLL, MAX_SURGES, MIN_SURGES, aliveVillagers, checkVictory, countDefeat, escapeBlockers, isPlayable, newAdventure, objectiveInPlay, onceOnlyDraw, playableChambers, revealsReady, showStory, takeToken, villagerForRoll } from './adventure.js'
@@ -23,6 +23,7 @@ import { newFirstRoll, rollFirst } from './firstRoll.js'
 import { layChamber, layExit, layTile, moveHero, placeNear, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
 import { boardMove, queueMoves, skipBoardMove } from '../board/powerMoves.js'
 import { heroTile } from '../board/encounters.js'
+import { guardsOnTile } from '../board/checks.js'
 
 export const SAVE_VERSION = 1
 
@@ -229,10 +230,13 @@ const discardMonsterCard = (state, monster) =>
     ? { ...state, monsterDeck: { ...state.monsterDeck, discard: [...state.monsterDeck.discard, monster.cardId] } }
     : state
 
-// A hero's AC against an attack. Heroes standing on a Blessed Shield owner's tile
-// (tileGuarded, asked on the iPad) get its bonus too.
-const targetAc = (state, hero, tileGuarded) =>
-  heroAc(hero) + (Array.isArray(tileGuarded) && tileGuarded.includes(hero.id) ? tileAcBonus(state.heroes, hero) : 0)
+// A hero's AC against an attack. Heroes standing on a Blessed Shield owner's tile get its
+// bonus too: read from the virtual board, or asked on the iPad (tileGuarded) without one.
+function targetAc(state, hero, tileGuarded) {
+  const onBoard = guardsOnTile(state, hero, tileGuards(state.heroes, hero).map((g) => g.hero))
+  if (onBoard) return heroAc(hero) + tileAcBonus(onBoard, hero)
+  return heroAc(hero) + (Array.isArray(tileGuarded) && tileGuarded.includes(hero.id) ? tileAcBonus(state.heroes, hero) : 0)
+}
 
 // One monster attack against one or more heroes. Each target comes with the d20 the
 // device rolled for it. A hit deals the damage and conditions; a miss deals the miss damage.

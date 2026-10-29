@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { boardAnswer } from '../board/checks.js'
 import { aliveVillagers } from '../state/adventure.js'
 import { foes } from '../state/game.js'
 import { rollD20 } from '../state/random.js'
@@ -44,6 +45,7 @@ function VillagerSteps({ state, villager, hero, dispatch }) {
   const [stepIndex, setStepIndex] = useState(0)
   const [answered, setAnswered] = useState(false)
   const [done, setDone] = useState(false)
+  const [manual, setManual] = useState(null)
   const { card } = villager
   const step = card.tactics[stepIndex]
   const turnRoll = state.turn.villagerRoll
@@ -59,6 +61,8 @@ function VillagerSteps({ state, villager, hero, dispatch }) {
     )
   }
   const asking = step.ask && !answered
+  // On the virtual board the board answers, unless the player chose to answer this step by hand.
+  const board = asking && manual !== stepIndex ? boardAnswer(state, step.ask) : null
   return (
     <div className="mt-1 space-y-3">
       <h4 className="font-display text-2xl font-bold text-emerald-200">
@@ -67,7 +71,20 @@ function VillagerSteps({ state, villager, hero, dispatch }) {
           AC {villager.ac} · {villager.hp} HP
         </span>
       </h4>
-      {asking ? (
+      {asking && board ? (
+        <>
+          <p className="text-2xl font-semibold text-zinc-100">{step.ask}</p>
+          <p className="rounded-lg bg-emerald-950/60 p-3 text-lg text-emerald-200">
+            📍 The board says {board.answer ? 'yes' : 'no'}: {board.why}
+          </p>
+          <Button variant="gold" className="w-full py-3 text-lg" onClick={() => (board.answer ? setAnswered(true) : setStepIndex((i) => i + 1))}>
+            OK
+          </Button>
+          <Button variant="ghost" className="w-full" onClick={() => setManual(stepIndex)}>
+            The board's wrong, let me answer
+          </Button>
+        </>
+      ) : asking ? (
         <>
           <p className="text-2xl font-semibold text-zinc-100">{step.ask}</p>
           <div className="grid grid-cols-2 gap-3">
