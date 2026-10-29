@@ -56,6 +56,10 @@ describe('powers that move figures on the board', () => {
     expect(queueMoves(state, heroes[0], power, steps, { attacked: ['m1'], hit: false }).turn.boardMove.steps).toHaveLength(1)
     const hit = queueMoves(state, heroes[0], power, steps, { attacked: ['m1'], hit: true })
     expect(moveChoices(hit)).toEqual(['m1'])
+    // A defeated monster can't be moved, so it goes straight to the hero's own move.
+    const gone = queueMoves({ ...state, monsters: [] }, heroes[0], power, steps, { attacked: ['m1'], hit: true })
+    expect(gone.turn.boardMove.steps).toHaveLength(1)
+    expect(moveChoices(gone)).toEqual([heroes[0].id])
   })
 
   it('puts a monster onto a tile next to its own (Distant Diversion)', () => {

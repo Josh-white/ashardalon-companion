@@ -21,7 +21,7 @@ export function queueMoves(state, hero, power, steps, { attacked = [], hit = fal
   if (!state.board || !hero || !Array.isArray(steps)) return state
   const todo = steps.filter((s) => !s.hit || hit)
   if (todo.length === 0) return state
-  return { ...state, turn: { ...state.turn, boardMove: { heroId: hero.id, source: power?.name ?? '', attacked, steps: todo } } }
+  return settle({ ...state, turn: { ...state.turn, boardMove: { heroId: hero.id, source: power?.name ?? '', attacked, steps: todo } } })
 }
 
 const step = (state) => state.turn.boardMove?.steps?.[0] ?? null
@@ -113,7 +113,18 @@ export function moveTargets(state, id) {
 const nextStep = (state) => {
   const move = state.turn.boardMove
   const steps = (move?.steps ?? []).slice(1)
-  return { ...state, turn: { ...state.turn, boardMove: steps.length > 0 ? { ...move, steps } : null } }
+  return settle({ ...state, turn: { ...state.turn, boardMove: steps.length > 0 ? { ...move, steps } : null } })
+}
+
+// Steps with nothing to move (the monster Distracting Jab hit was defeated) are passed over.
+function settle(state) {
+  let next = state
+  while (next.turn.boardMove && moveChoices(next).length === 0) {
+    const move = next.turn.boardMove
+    const steps = move.steps.slice(1)
+    next = { ...next, turn: { ...next.turn, boardMove: steps.length > 0 ? { ...move, steps } : null } }
+  }
+  return next
 }
 
 // The player tapped where the figure goes (or, for a swap, the hero to swap with).
