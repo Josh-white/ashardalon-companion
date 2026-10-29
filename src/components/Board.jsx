@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { heroArt, monsterArt } from '../data/art.js'
-import { boardGrid, boardMoveChoices, boardMoveReach, figureToken, figuresLeft, heroReach, moveSpeed, movesLeft } from '../board/play.js'
+import { boardGrid, figureToken, figuresLeft, heroReach, moveSpeed, movesLeft } from '../board/play.js'
+import { moveChoices, movePrompt, moveTargets } from '../board/powerMoves.js'
 import { key } from '../board/grid.js'
 import { activeVillains } from '../state/game.js'
 import { artUrl, useArt } from '../state/useArt.js'
@@ -70,6 +71,7 @@ export default function Board({ state, dispatch, readOnly = false }) {
       Array.from({ length: figuresLeft(m) }, (_, i) => ({ id: figureToken(m.id, i + 1), label: figuresLeft(m) > 1 ? `${m.name} ${i + 1}` : m.name, color: '#7f1d1d', art: artUrl(art, monsterArt(m)) })),
     ),
     ...activeVillains(state).map((v) => ({ id: v.id, label: v.name, color: '#581c87', art: artUrl(art, monsterArt(v)) })),
+    ...(state.villagers ?? []).filter((v) => !v.removed).map((v) => ({ id: v.id, label: v.name, color: '#065f46' })),
   ]
   const onBoard = figures.filter((f) => board.tokens[f.id])
   const offBoard = figures.filter((f) => !board.tokens[f.id])
@@ -78,21 +80,26 @@ export default function Board({ state, dispatch, readOnly = false }) {
   const taken = new Set(Object.values(board.tokens).map(key))
   // A power that moves a hero (Righteous Advance) takes over the taps until it's done.
   const powerMove = !readOnly && !byHand && state.turn.boardMove
-  const movable = powerMove ? boardMoveChoices(state) : []
+  const movable = powerMove ? moveChoices(state) : []
+  const swap = powerMove?.steps?.[0]?.to === 'swap'
   let targets = []
   if (!readOnly && picked) {
-    if (powerMove) targets = boardMoveReach(state, picked)
+    if (powerMove) targets = moveTargets(state, picked)
     else if (byHand) targets = [...grid.values()].filter((sq) => sq.floor && !taken.has(key([sq.x, sq.y]))).map((sq) => key([sq.x, sq.y]))
     else if (picked === active?.id) targets = heroReach(state, active)
   }
   const tapSquare = (sq) => {
     if (!picked || !targets.includes(key(sq))) return
-    dispatch(powerMove ? { type: 'BOARD_MOVE', heroId: picked, to: sq } : byHand ? { type: 'MOVE_TOKEN', id: picked, to: sq } : { type: 'MOVE_HERO', heroId: picked, to: sq })
+    dispatch(powerMove ? { type: 'BOARD_MOVE', id: picked, to: sq } : byHand ? { type: 'MOVE_TOKEN', id: picked, to: sq } : { type: 'MOVE_HERO', heroId: picked, to: sq })
     setPicked(null)
   }
   const tapFigure = (id) => {
     if (readOnly) return
     if (powerMove ? !movable.includes(id) : !byHand && id !== active?.id) return
+    if (swap) {
+      dispatch({ type: 'BOARD_MOVE', id })
+      return
+    }
     setPicked(picked === id ? null : id)
   }
 
@@ -138,7 +145,7 @@ export default function Board({ state, dispatch, readOnly = false }) {
       {powerMove && (
         <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl bg-amber-950/60 p-2 text-amber-200">
           <p className="flex-1">
-            {powerMove.source}: {picked ? `tap a lit square (up to ${powerMove.squares}).` : powerMove.who === 'self' ? `tap ${active?.name}, then a square.` : `tap a hero on ${state.heroes.find((h) => h.id === powerMove.heroId)?.name}'s tile, then a square (up to ${powerMove.squares}).`}
+            <b>{powerMove.source}:</b> {picked ? 'tap a lit square.' : movable.length === 0 ? 'nothing on the board can do this. Skip it.' : movePrompt(state)}
           </p>
           <Button className="!py-1 text-sm" onClick={() => { setPicked(null); dispatch({ type: 'SKIP_BOARD_MOVE' }) }}>
             Skip
@@ -192,7 +199,7 @@ export default function Board({ state, dispatch, readOnly = false }) {
             )
           })}
           {onBoard.map((f) => (
-            <Token key={f.id} {...f} at={board.tokens[f.id]} selected={picked === f.id} onTap={readOnly ? undefined : () => tapFigure(f.id)} />
+            <Token key={f.id} {...f} at={board.tokens[f.id]} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id))} onTap={readOnly ? undefined : () => tapFigure(f.id)} />
           ))}
         </svg>
       </div>

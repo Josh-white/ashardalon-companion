@@ -351,7 +351,21 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
                   <b className="text-amber-300">{power.name}:</b> {power.card.text}
                 </p>
               )}
-              {effects.before && <p className="rounded-lg bg-amber-950/60 p-3 text-amber-200">{effects.before}</p>}
+              {effects.before && (
+                <div className="rounded-lg bg-amber-950/60 p-3 text-amber-200">
+                  <p>{effects.before}</p>
+                  {/* On the virtual board the move is done there, before the roll. */}
+                  {state.board && effects.board?.before && !item && (
+                    state.turn.boardMove?.source === power.name ? (
+                      <p className="mt-2 font-semibold">📍 Do it on the board, then pick the monster.</p>
+                    ) : (
+                      <Button className="mt-2 w-full" onClick={() => dispatch({ type: 'START_BOARD_MOVE', heroId: hero.id, powerId: power.id })}>
+                        📍 Move on the board
+                      </Button>
+                    )
+                  )}
+                </div>
+              )}
               {moving && (
                 <>
                   <p className="text-zinc-200">
