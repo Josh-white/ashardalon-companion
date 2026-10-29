@@ -6,7 +6,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-RUN npm run build
+# The tests run here too, so the Pi refuses to deploy a version that fails
+# them (scripts/auto-update.sh then keeps the version that worked).
+RUN npm test && npm run build
 
 FROM node:22-alpine
 WORKDIR /app

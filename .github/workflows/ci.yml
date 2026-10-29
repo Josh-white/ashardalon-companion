@@ -1,0 +1,53 @@
+# Checks every pull request (and every push to main) before it can reach the
+# real game. Merging to main goes live on the Pi within 5 minutes
+# (scripts/auto-update.sh), so a red X here means: don't merge yet.
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer push to the same PR replaces the run that's still going.
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  docker:
+    name: Docker image starts on arm64 (like the Pi)
+    # The same kind of processor as the Raspberry Pi 5, so this builds the
+    # image the way the Pi does, with the repo's example cards.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build -t ashardalon-check .
+      - name: Start it and check it answers
+        run: |
+          docker run -d --name ashardalon-check -p 3000:3000 ashardalon-check
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3000/health; then echo; echo "healthy"; exit 0; fi
+            sleep 2
+          done
+          echo "The app didn't answer /health. Its log:"
+          docker logs ashardalon-check
+          exit 1
