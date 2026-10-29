@@ -487,7 +487,7 @@ export function startServer({
     }
     const kept = join(finishedDir, `${id}.json`)
     if (existsSync(kept)) renameSync(kept, gameFile(id))
-    const { finishedAt, ...back } = game // eslint-disable-line no-unused-vars
+    const { finishedAt, ...back } = game
     saveList([...otherGames, back], finished.filter((g) => g !== game))
   }
 

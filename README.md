@@ -129,11 +129,12 @@ npm install
 npm run dev:server   # the shared game, on port 3000
 npm run dev          # the app, http://localhost:5173
 npm test
+npm run lint         # ESLint: unused names, typos, hooks used the wrong way
 ```
 
 ### Checks on GitHub
 
-Every pull request runs `.github/workflows/ci.yml`: the tests and the build, then the Docker image is built on an arm64 machine like the Pi and checked to answer `/health`. Merging to `main` puts it on the real game within 5 minutes, so wait for the green check before merging.
+Every pull request runs `.github/workflows/ci.yml`: ESLint, the tests and the build, then the Docker image is built on an arm64 machine like the Pi and checked to answer `/health`. Merging to `main` puts it on the real game within 5 minutes, so wait for the green check before merging.
 
 ## Not built yet
 

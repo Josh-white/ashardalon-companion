@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   test:
-    name: Tests and build
+    name: Lint, tests and build
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -28,6 +28,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run lint
       - run: npm test
       - run: npm run build
 
