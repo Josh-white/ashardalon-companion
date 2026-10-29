@@ -134,9 +134,6 @@ export function narrationFor(before, after, now = Date.now()) {
   // The first hero is told it's their turn once the roll and the starting treasure are over.
   const rollOver = (before.firstRoll?.after && !after.firstRoll?.after) || (before.firstRoll && !after.firstRoll)
   const waitingOnRoll = Boolean(after.firstRoll?.after)
-  if (before.status === 'setup' && after.status === 'playing') {
-    lines.push(say('narrator', `${STORY} The adventure begins${after.adventure?.card?.title ? `: ${after.adventure.card.title}` : ''}! Heroes, enter the dungeon.`))
-  }
   if (after.status === 'playing' && before.status === 'playing') {
     const turnChanged = before.turn.heroIndex !== after.turn.heroIndex || before.turn.round !== after.turn.round
     const hero = after.heroes[after.turn.heroIndex]
@@ -149,6 +146,10 @@ export function narrationFor(before, after, now = Date.now()) {
   if (newStory) {
     const title = story.title === after.adventure.card?.title || story.title === 'Victory!' ? '' : story.title
     lines.push(say('narrator', `${STORY} ${title} ${story.text}`.replace(/\s+/g, ' ').trim()))
+  }
+  // A new game: the story first, then the call into the dungeon.
+  if (before.status === 'setup' && after.status === 'playing') {
+    lines.push(say('narrator', `${STORY} The adventure begins${after.adventure?.card?.title ? `: ${after.adventure.card.title}` : ''}! Heroes, enter the dungeon.`))
   }
   // The lines that open a game are the opening story (state/opening.js): the roll for
   // first turn waits for them. `hold` names what waits for a line.
