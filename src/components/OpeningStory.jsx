@@ -30,11 +30,10 @@ export default function OpeningStory({ state, dispatch, big = false }) {
       <h2 className={`lobby-title font-display font-black text-amber-400 ${big ? 'text-[4.5vw]' : 'text-4xl sm:text-5xl'}`}>
         {adventure?.card?.title ?? 'Into the dungeon'}
       </h2>
-      {story?.text ? (
+      {story?.text && (
         <p className={`max-w-4xl font-display text-amber-50/90 italic ${big ? 'text-[1.9vw] leading-relaxed' : 'text-lg sm:text-xl'}`}>{story.text}</p>
-      ) : (
-        <p className={`font-display text-amber-100/90 italic ${big ? 'text-[2vw]' : 'text-xl'}`}>Heroes, enter the dungeon.</p>
       )}
+      <p className={`font-display font-bold text-amber-300 ${big ? 'text-[2.4vw]' : 'text-2xl'}`}>Heroes, enter the dungeon!</p>
       <button type="button" className={`text-amber-200/70 underline ${big ? 'text-[1.1vw]' : 'text-sm'}`} onClick={() => dispatch({ type: 'OPENING_DONE' })}>
         Skip the story
       </button>

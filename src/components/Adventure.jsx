@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { HERO_COLORS, hasAbility } from '../data/heroes.js'
-import { DOOR_KINDS, DOOR_UNLOCK_ROLL, FEATURE_LABELS, MAX_SURGES, MIN_SURGES, escapeBlockers, goalParts, missingFeatures, playableChambers, revealsReady, usesDoors } from '../state/adventure.js'
+import { DOOR_KINDS, DOOR_UNLOCK_ROLL, FEATURE_LABELS, MAX_SURGES, MIN_SURGES, escapeBlockers, goalParts, missingFeatures, playableChambers, revealsReady, tilesToCome, usesDoors } from '../state/adventure.js'
 import { randomNumbers, rollD20, shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { tileSpots } from '../state/tiles.js'
-import { TileSetup } from './Tiles.jsx'
+import { TileSetup, TilesLeft } from './Tiles.jsx'
+import { AreaName } from './AreaBackdrop.jsx'
 import { STARTING_TILES } from '../state/tiles.js'
 import { Button, Chip } from './ui.jsx'
 import { CampaignBoons } from './Campaign.jsx'
@@ -250,10 +251,27 @@ function Goal({ state, big = false }) {
   )
 }
 
+// "Where we are": healing surges, tiles left in the stack, the special tiles still to come
+// and the dungeon area.
+function WhereWeAre({ state }) {
+  const toCome = tilesToCome(state.adventure)
+  return (
+    <div className="space-y-1 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3">
+      <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <span className={state.surges === 0 ? 'text-red-400' : 'text-emerald-400'}>{state.surges === 0 ? 'No healing surges left' : `${'❤'.repeat(state.surges)} healing surges`}</span>
+        <TilesLeft state={state} />
+        <AreaName state={state} className="text-zinc-300" />
+      </p>
+      {toCome.length > 0 && <p className="text-sm text-zinc-400">Still to turn up: {toCome.map((r) => r.label || r.tile).join(', ')}</p>}
+    </div>
+  )
+}
+
 // The adventure's box on the iPads and the table: a one-line bar that opens to show the
 // goal, progress, tokens to pick up, escaping and the rules. Read-aloud text always shows,
-// and the bar opens by itself when a token is waiting to be picked up.
-export function AdventurePanel({ state, dispatch }) {
+// and the bar opens by itself when a token is waiting to be picked up. `full` is the Quest
+// tab: always open, with a progress bar, where the party stands, and each rule on its own line.
+export function AdventurePanel({ state, dispatch, full = false }) {
   const [open, setOpen] = useState(false)
   const adventure = state.adventure
   if (!adventure) return null
@@ -262,25 +280,42 @@ export function AdventurePanel({ state, dispatch }) {
   const parts = goalParts(state)
   const done = parts.filter((p) => p.done).length
   const blockers = escapeBlockers(state)
-  const shown = open || loose.length > 0
+  const shown = full || open || loose.length > 0
   return (
     <section className="space-y-3">
       {adventure.story && <Story story={adventure.story} dispatch={dispatch} />}
       <CampaignBoons state={state} dispatch={dispatch} />
+      {full && <WhereWeAre state={state} />}
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900">
-        <button type="button" className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left" onClick={() => setOpen(!shown)}>
-          <span className="min-w-0">
-            <span className="block truncate font-display text-lg font-bold text-amber-400">📜 {heading(card)}</span>
+        {full ? (
+          <div className="px-4 pt-3">
+            <p className="font-display text-2xl font-bold text-amber-400">📜 {heading(card)}</p>
             {parts.length > 0 && (
-              <span className="text-sm text-zinc-400">
-                {done} of {parts.length} goals done{loose.length > 0 ? ' · a token is waiting' : ''}
-              </span>
+              <div className="mt-2 flex items-center gap-3">
+                <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-zinc-800">
+                  <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${(done / parts.length) * 100}%` }} />
+                </div>
+                <span className="shrink-0 text-sm text-zinc-400">
+                  {done} of {parts.length} goals done
+                </span>
+              </div>
             )}
-          </span>
-          <span className="shrink-0 text-zinc-400">{shown ? 'Hide ▲' : 'Show ▼'}</span>
-        </button>
+          </div>
+        ) : (
+          <button type="button" className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left" onClick={() => setOpen(!shown)}>
+            <span className="min-w-0">
+              <span className="block truncate font-display text-lg font-bold text-amber-400">📜 {heading(card)}</span>
+              {parts.length > 0 && (
+                <span className="text-sm text-zinc-400">
+                  {done} of {parts.length} goals done{loose.length > 0 ? ' · a token is waiting' : ''}
+                </span>
+              )}
+            </span>
+            <span className="shrink-0 text-zinc-400">{shown ? 'Hide ▲' : 'Show ▼'}</span>
+          </button>
+        )}
         {shown && (
-          <div className="border-t border-zinc-800 px-4 pb-4 pt-2">
+          <div className={full ? 'px-4 pb-4 pt-2' : 'border-t border-zinc-800 px-4 pb-4 pt-2'}>
             <p className="text-zinc-300">{card.goal}</p>
             <Goal state={state} />
             <VillagerList state={state} dispatch={dispatch} />
@@ -296,6 +331,17 @@ export function AdventurePanel({ state, dispatch }) {
                 </div>
               </div>
             ))}
+            {full &&
+              adventure.tokens
+                .filter((t) => t.heldBy)
+                .map((token) => {
+                  const holder = state.heroes.find((h) => h.id === token.heldBy)
+                  return (
+                    <p key={token.name} className="mt-2 text-zinc-300">
+                      🎒 <span className={holder ? HERO_COLORS[holder.color].text : ''}>{holder?.name ?? 'A hero'}</span> carries the {token.name}.
+                    </p>
+                  )
+                })}
             {chamber && (
               <details className="mt-3 text-sm text-zinc-400">
                 <summary className="cursor-pointer text-zinc-300">Chamber card: {chamber.card.name}</summary>
@@ -326,7 +372,18 @@ export function AdventurePanel({ state, dispatch }) {
                 )}
               </div>
             )}
-            {card.rules.length > 0 && (
+            {full && card.rules.length > 0 && (
+              <div className="mt-4 space-y-1">
+                <p className="text-sm font-semibold tracking-wide text-zinc-400 uppercase">Adventure rules</p>
+                {card.rules.map((rule) => (
+                  <details key={rule.name + rule.text} className="rounded-xl bg-zinc-950/60 px-3 py-2 text-zinc-300">
+                    <summary className="cursor-pointer font-semibold text-amber-300">{rule.name || rule.text.slice(0, 40) + '…'}</summary>
+                    <p className="mt-1 text-sm">{rule.text}</p>
+                  </details>
+                ))}
+              </div>
+            )}
+            {!full && card.rules.length > 0 && (
               <details className="mt-3 text-sm text-zinc-400">
                 <summary className="cursor-pointer text-zinc-300">Adventure rules</summary>
                 <ul className="mt-2 space-y-2">

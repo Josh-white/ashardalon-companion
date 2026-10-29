@@ -140,6 +140,8 @@ export function narrationFor(before, after, now = Date.now()) {
     if (turnChanged && after.turn.phase === 0 && hero && !waitingOnRoll) lines.push(turnLine(hero))
     if (!before.turn.explored && after.turn.explored) lines.push(say('narrator', `${OMINOUS} ${pick(NEW_TILE, `${after.turn.round}-${after.turn.heroIndex}`)}`))
   }
+  const starting = before.status === 'setup' && after.status === 'playing'
+  const storyAt = lines.length
   // An adventure's red "Read aloud" box: the whole story, not just its title.
   const story = after.adventure?.story
   const newStory = story?.text && story.id !== before.adventure?.story?.id
@@ -147,9 +149,11 @@ export function narrationFor(before, after, now = Date.now()) {
     const title = story.title === after.adventure.card?.title || story.title === 'Victory!' ? '' : story.title
     lines.push(say('narrator', `${STORY} ${title} ${story.text}`.replace(/\s+/g, ' ').trim()))
   }
-  // A new game: the story first, then the call into the dungeon.
-  if (before.status === 'setup' && after.status === 'playing') {
-    lines.push(say('narrator', `${STORY} The adventure begins${after.adventure?.card?.title ? `: ${after.adventure.card.title}` : ''}! Heroes, enter the dungeon.`))
+  // A new game reads like its opening screen, top to bottom: the adventure's name, its story,
+  // then the call into the dungeon.
+  if (starting) {
+    lines.splice(storyAt, 0, say('narrator', `${STORY} The adventure begins${after.adventure?.card?.title ? `: ${after.adventure.card.title}` : ''}!`))
+    lines.push(say('narrator', `${STORY} Heroes, enter the dungeon!`))
   }
   // The lines that open a game are the opening story (state/opening.js): the roll for
   // first turn waits for them. `hold` names what waits for a line.
