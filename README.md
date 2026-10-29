@@ -84,6 +84,8 @@ To update after pulling new changes: `git pull && docker compose up -d --build`.
 
 Card files (`cards/cards.json`, art and sounds) aren't in git, so changes to those still go on the Pi by hand.
 
+The tests run inside the Docker build, so a version that fails them never starts: the build stops and the Pi stays on the version that worked.
+
 ## Back up the saved game
 
 `scripts/backup-game.sh` copies the saved games out of the app into `~/ashardalon-backups` and keeps the newest 14 copies of each. The family game's copies go straight in that folder; every other game (a solo game, say) gets its own folder, `~/ashardalon-backups/games/<game>/`. It skips a copy when nothing changed, so a quiet week doesn't push out older saves. It also backs up your card files, which live only on the Pi: a dated copy of `cards/cards.json` in `~/ashardalon-backups/cards` whenever it changes (newest 14 kept), plus one up-to-date copy of `cards/art` and `cards/sounds`. To run it every night at 3:15, add it to cron on the Pi:
@@ -126,6 +128,10 @@ npm run dev:server   # the shared game, on port 3000
 npm run dev          # the app, http://localhost:5173
 npm test
 ```
+
+### Checks on GitHub
+
+Every pull request runs `.github/workflows/ci.yml`: the tests and the build, then the Docker image is built on an arm64 machine like the Pi and checked to answer `/health`. Merging to `main` puts it on the real game within 5 minutes, so wait for the green check before merging.
 
 ## Not built yet
 
