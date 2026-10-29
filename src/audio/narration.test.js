@@ -56,9 +56,10 @@ describe('narrator lines', () => {
     expect(narrationFor(game({ turn: { heroIndex: 0, phase: 2, round: 1 } }), game({ turn: { heroIndex: 1, phase: 0, round: 1 } }), NOW)).toEqual([
       "Tarak, it's your turn. What will you do?",
     ])
-    expect(narrationFor(game({ status: 'setup' }), game({ adventure: { card: { title: 'Into the Mountain' } } }), NOW)[0]).toBe(
-      'The adventure begins: Into the Mountain! Heroes, enter the dungeon.',
-    )
+    expect(narrationFor(game({ status: 'setup' }), game({ adventure: { card: { title: 'Into the Mountain' } } }), NOW)).toEqual([
+      'The adventure begins: Into the Mountain!',
+      'Heroes, enter the dungeon!',
+    ])
   })
 
   it('reads the whole story in a Read aloud box', () => {
@@ -68,11 +69,12 @@ describe('narrator lines', () => {
       'The Tunnel Exit! Ahead, you see light streaming in from above.',
     ])
     expect(narrationFor(game({ adventure: adventure(exit) }), game({ adventure: adventure(exit) }), NOW)).toEqual([])
-    // A new game reads the story first, then calls the heroes into the dungeon.
+    // A new game reads like its opening screen: the name, the story, then the call into the dungeon.
     const intro = { id: 's1', title: 'Into the Mountain', text: 'The mountain rumbles.' }
     expect(narrationFor(game({ status: 'setup' }), game({ adventure: adventure(intro) }), NOW)).toEqual([
+      'The adventure begins: Into the Mountain!',
       'The mountain rumbles.',
-      'The adventure begins: Into the Mountain! Heroes, enter the dungeon.',
+      'Heroes, enter the dungeon!',
     ])
     const won = { id: 's3', title: 'Victory!', text: 'You escaped the dungeon!' }
     expect(narrationFor(game({ adventure: adventure(exit) }), game({ status: 'won', adventure: adventure(won) }), NOW)).toEqual(['You escaped the dungeon!'])
@@ -143,7 +145,7 @@ describe('opening lines', () => {
     const before = { status: 'setup', heroes: [], lobby: [] }
     const after = { status: 'playing', heroes: [], turn: { heroIndex: 0, round: 1, phase: 0 }, adventure: { card: { title: 'Lost' }, story: { id: 's1', title: 'Lost', text: 'Once upon a time.' } } }
     const lines = linesFor(before, after, 0)
-    expect(lines.length).toBe(2)
+    expect(lines.length).toBe(3)
     expect(lines.every((l) => l.hold === 'opening')).toBe(true)
   })
 })
