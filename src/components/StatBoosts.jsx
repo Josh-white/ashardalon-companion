@@ -71,7 +71,8 @@ function Breakdown({ tile, onClose }) {
 
 // AC, Speed and Attack bonus as big tiles, each saying whether something is boosting or
 // lowering it. Tap one to see where the number comes from.
-export function StatTiles({ state, hero }) {
+// compact: one short row of chips (AC 16 · Speed 5 · Atk +0) for the narrow column beside the virtual board.
+export function StatTiles({ state, hero, compact = false }) {
   const [open, setOpen] = useState(null)
   const heroes = state?.heroes ?? []
   const ac = acParts(hero, heroes)
@@ -119,12 +120,46 @@ export function StatTiles({ state, hero }) {
   ]
   const openTile = tiles.find((t) => t.key === open)
 
+  const toneOf = (tile) => {
+    const hurt = tile.change < 0 || (tile.key === 'speed' && stuck)
+    const boost = !hurt && (tile.change > 0 || (tile.key === 'attack' && attack.damage > 0))
+    return { hurt, boost }
+  }
+
+  if (compact) {
+    return (
+      <div className="mt-2">
+        <div className="flex gap-1.5">
+          {tiles.map((tile) => {
+            const { hurt, boost } = toneOf(tile)
+            return (
+              <button
+                key={tile.key}
+                type="button"
+                aria-expanded={open === tile.key}
+                aria-label={`${tile.label} ${tile.shown}${hurt ? ', lowered' : boost ? ', boosted' : ''}. Tap to see why.`}
+                onClick={() => setOpen(open === tile.key ? null : tile.key)}
+                className={`flex min-h-10 flex-1 items-baseline justify-center gap-1 rounded-lg border-2 bg-zinc-950/70 px-1 py-1 whitespace-nowrap transition active:scale-95 ${
+                  open === tile.key ? 'border-amber-400' : hurt ? 'border-orange-500/80' : boost ? 'border-sky-500/70' : 'border-zinc-700'
+                }`}
+              >
+                <span className="text-xs text-zinc-400">{tile.key === 'attack' ? 'Atk' : tile.label}</span>
+                <span className="text-lg font-bold text-zinc-100">{tile.shown}</span>
+                {(hurt || boost) && <span className={`text-xs font-bold ${hurt ? 'text-orange-300' : 'text-sky-300'}`}>{hurt ? '▼' : '▲'}</span>}
+              </button>
+            )
+          })}
+        </div>
+        {openTile && <Breakdown tile={openTile} onClose={() => setOpen(null)} />}
+      </div>
+    )
+  }
+
   return (
     <div className="mt-3">
       <div className="grid grid-cols-3 gap-2">
         {tiles.map((tile) => {
-          const hurt = tile.change < 0 || (tile.key === 'speed' && stuck)
-          const boost = !hurt && (tile.change > 0 || (tile.key === 'attack' && attack.damage > 0))
+          const { hurt, boost } = toneOf(tile)
           const sub = tile.sub ?? (hurt ? `${signed(tile.change)} lower` : tile.change > 0 ? `${signed(tile.change)} boosted` : 'normal')
           return (
             <button

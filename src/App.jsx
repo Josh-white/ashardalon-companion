@@ -257,6 +257,8 @@ function PlayView({ state, dispatch, hero = null, soundBoard = null }) {
       powersInTurnGuide={h.id === active?.id && PHASES[state.turn.phase].key === 'hero'}
       natural20={state.turn.natural20 === h.id}
       showCardArt={showCardArt}
+      // Beside the virtual board the column is phone-narrow, even on an unfolded phone or an iPad.
+      compact={Boolean(state.board)}
     />
   )
   const monsters = monsterTotal(state)
@@ -289,7 +291,7 @@ function PlayView({ state, dispatch, hero = null, soundBoard = null }) {
         <MonsterList state={state} dispatch={dispatch} ownerId={hero?.id} />
       </>
     ),
-    party: hero ? <PartyStrip heroes={state.heroes} meId={hero.id} activeId={active?.id} /> : <div className="grid gap-3 md:grid-cols-2">{state.heroes.map((h) => heroCard(h))}</div>,
+    party: hero ? <PartyStrip heroes={state.heroes} meId={hero.id} activeId={active?.id} /> : <div className={`grid gap-3 ${state.board ? '' : 'md:grid-cols-2'}`}>{state.heroes.map((h) => heroCard(h))}</div>,
     adventure: <AdventurePanel state={state} dispatch={dispatch} full />,
     log: state.log.length ? <GameLog log={state.log} /> : <p className="text-zinc-400">Nothing has happened yet.</p>,
   }[shown]

@@ -322,20 +322,22 @@ function ItemTile({ item, spare, selected, onTap }) {
       } ${selected ? 'ring-2 ring-amber-400' : ''}`}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className="text-xs uppercase tracking-wide text-yellow-500/80">
+        <span className="min-w-0 truncate text-xs uppercase tracking-wide whitespace-nowrap text-yellow-500/80">
           {card.inPlay ? 'Item · in play' : 'Item'}
           {item.used && ' · used'}
         </span>
         {card.text && (
           <button
             type="button"
-            className="-my-2 -mr-2 min-h-9 rounded-lg px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"
+            className="-my-2 -mr-2 h-9 w-9 shrink-0 rounded-lg text-base text-zinc-400 hover:bg-zinc-800"
+            aria-label={open ? 'Hide the card text' : 'Read the card'}
+            aria-expanded={open}
             onClick={(e) => {
               e.stopPropagation()
               setOpen((o) => !o)
             }}
           >
-            {open ? 'Hide' : 'Read'}
+            {open ? '▴' : 'ⓘ'}
           </button>
         )}
       </div>
