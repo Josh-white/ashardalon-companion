@@ -16,6 +16,15 @@ function appVersion() {
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  build: {
+    rolldownOptions: {
+      output: {
+        // React rarely changes, so it gets its own file: after an update the iPads only
+        // download the app's own code again, not React too.
+        advancedChunks: { groups: [{ name: 'react', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/ }] },
+      },
+    },
+  },
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion()),
     'import.meta.env.VITE_BUILT_AT': JSON.stringify(new Date().toISOString()),
