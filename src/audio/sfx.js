@@ -392,6 +392,16 @@ const SLIDE_LEAD_MS = 600
 // A moment, board sound or new tile is news only once, and only while it's fresh.
 const isNew = (now, then) => now && now.id !== then?.id && serverNow() - now.at < STALE_MS
 
+// The doors of the dungeon open (DungeonDoors.jsx) when a game leaves the lobby.
+export const enteredDungeon = (before, after) => before?.status === 'setup' && after?.status === 'playing'
+// When the doors bang against the walls, as they finish opening.
+const DOORS_THUD_MS = 1100
+
+const newlyReady = (before, after) =>
+  before?.status === 'setup' &&
+  after?.status === 'setup' &&
+  (after.lobby ?? []).some((c) => c.ready && !(before.lobby ?? []).some((b) => b.heroKey === c.heroKey && b.ready))
+
 // What a change of game sounds like on this page: each big moment's sounds, a sound
 // someone tapped on the sound board, and music when a new tile is revealed.
 export function changeSounds(before, after) {
@@ -409,6 +419,10 @@ export function changeSounds(before, after) {
   if (isNew(after?.cast, before?.cast)) sounds.push([castSound(after.cast.power), 0])
   // A torch flares in the lobby as each hero joins.
   if (newArrivals(before, after).length > 0) sounds.push(['fire', 0])
+  // A chime as a hero taps Ready.
+  else if (newlyReady(before, after)) sounds.push(['chime', 0])
+  // The dungeon doors grind open as the heroes enter.
+  if (enteredDungeon(before, after)) sounds.push(['slide', 0], ['thud', DOORS_THUD_MS])
   return sounds
 }
 

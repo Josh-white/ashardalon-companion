@@ -6,6 +6,7 @@ import { AreaBackdrop, AreaName } from './components/AreaBackdrop.jsx'
 import HeroCard from './components/HeroCard.jsx'
 import LobbyBackdrop from './components/LobbyBackdrop.jsx'
 import DragonIntro, { useIntro } from './components/Intro.jsx'
+import DungeonDoors, { useDoorsOpening } from './components/DungeonDoors.jsx'
 import FirstRoll from './components/FirstRoll.jsx'
 import OpeningStory from './components/OpeningStory.jsx'
 import GamePicker, { GameBar } from './components/GamePicker.jsx'
@@ -510,7 +511,9 @@ export default function App() {
   // does (or the table, in a game without one).
   const sound = { on: soundOn, setOn: setSoundOn, musicOn, setMusicOn, elsewhere: !soundOn && projectorOpen && seat !== PROJECTOR_SEAT }
   useSoundEffects(soundOn)
-  useMusic(state, soundOn && musicOn)
+  const [showIntro, finishIntro] = useIntro()
+  // The big screen plays music in the lobby too, once the intro is over.
+  useMusic(state, soundOn && musicOn, { lobby: !showIntro && seat === PROJECTOR_SEAT })
   // The screen reading the opening story, or cheering the roll for first turn, tells the
   // others when it starts and ends, so they wait for it.
   const narrator = useNarrator(soundOn, {
@@ -518,7 +521,7 @@ export default function App() {
       dispatch({ type: hold === 'opening' ? (event === 'start' ? 'OPENING_NARRATING' : 'OPENING_DONE') : event === 'start' ? 'FIRST_ROLL_NARRATING' : 'FIRST_ROLL_QUIET' }),
   })
   const soundLocked = useAudioLocked(soundOn) || narrator.blocked
-  const [showIntro, finishIntro] = useIntro()
+  const doorsAt = useDoorsOpening()
 
   if (showIntro) return <DragonIntro projector={seat === PROJECTOR_SEAT} say={narrator.say} quiet={narrator.quiet} onDone={finishIntro} />
 
@@ -616,6 +619,7 @@ export default function App() {
         <FirstRoll state={state} dispatch={dispatch} big />
         <MomentOverlay moment={state.moment} heroes={state.heroes} big />
         <TapForSound locked={soundLocked} big />
+        <DungeonDoors at={doorsAt} />
         {(state.status === 'won' || state.status === 'lost') && <Recap state={state} big />}
       </main>
     )
@@ -635,6 +639,7 @@ export default function App() {
       <FirstRoll state={state} dispatch={dispatch} heroId={myHero?.id ?? null} />
       <MomentOverlay moment={state.moment} heroes={state.heroes} />
       <TapForSound locked={soundLocked} ipad={Boolean(myHero)} />
+      <DungeonDoors at={doorsAt} />
       {/* On the real board it sits above the tabs; on the virtual board, in the board's corner. */}
       {!state.board && <SoundBoard state={state} dispatch={dispatch} who={myHero ? myHero.id : 'table'} testCopy={Boolean(instance)} className="fixed bottom-20 left-4" />}
       {!myHero && <BoardToast state={state} />}

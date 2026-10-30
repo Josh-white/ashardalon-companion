@@ -18,7 +18,9 @@ const heading = (adventure) => (adventure.number ? `Adventure ${adventure.number
 // The projector's adventure choice in the lobby: a free game or one from the book,
 // plus how many healing surges (the book's easier and harder settings).
 // `board`: the solo screen, where the app lays the tiles, so there's no table to set up.
-export function AdventurePicker({ state, dispatch, board = false }) {
+// `compact`: a phone, so each adventure is one short line and only the chosen one says
+// its goal, instead of one long scroll.
+export function AdventurePicker({ state, dispatch, board = false, compact = false }) {
   const { adventures } = useCards()
   const chosen = state.lobbyAdventure
   const surges = state.lobbySurges ?? 2
@@ -27,16 +29,18 @@ export function AdventurePicker({ state, dispatch, board = false }) {
   return (
     <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
       <h2 className="font-display text-2xl font-bold text-amber-400">Choose the adventure</h2>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        <AdventureOption active={!chosen} title="Free play" detail="No adventure: just explore and fight." onClick={() => dispatch({ type: 'CHOOSE_ADVENTURE', adventure: null })} />
+      <div className={`mt-3 grid sm:grid-cols-2 ${compact ? 'gap-1.5' : 'gap-2'}`}>
+        <AdventureOption compact={compact} active={!chosen} title="Free play" detail="No adventure: just explore and fight." onClick={() => dispatch({ type: 'CHOOSE_ADVENTURE', adventure: null })} />
         {sorted.map((adventure) => {
           const missing = missingFeatures(adventure)
           return (
             <AdventureOption
               key={adventure.id}
+              compact={compact}
               active={chosen?.id === adventure.id}
               disabled={missing.length > 0}
-              title={heading(adventure)}
+              title={compact ? adventure.title : heading(adventure)}
+              number={adventure.number}
               detail={missing.length > 0 ? `Coming soon: needs ${missing.map((f) => FEATURE_LABELS[f] ?? f).join(', ')}` : adventure.goal}
               players={adventure.players}
               onClick={() => dispatch({ type: 'CHOOSE_ADVENTURE', adventure })}
@@ -77,7 +81,7 @@ export function QuestLine({ state, dispatch, boardChoice = null, onBoard = false
   if (open) {
     return (
       <div className="space-y-4">
-        <AdventurePicker state={state} dispatch={dispatch} board={onBoard} />
+        <AdventurePicker state={state} dispatch={dispatch} board={onBoard} compact={!big} />
         {boardChoice}
         <div className="text-center">
           <Button variant="gold" className="px-10 py-3 text-xl" onClick={() => setOpen(false)}>
@@ -108,7 +112,26 @@ export function QuestLine({ state, dispatch, boardChoice = null, onBoard = false
   )
 }
 
-function AdventureOption({ active, disabled, title, detail, players, onClick }) {
+function AdventureOption({ active, disabled, title, detail, players, onClick, compact = false, number = null }) {
+  if (compact) {
+    return (
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={onClick}
+        className={`min-w-0 rounded-lg border-2 px-3 py-2 text-left transition ${active ? 'border-amber-400 bg-amber-950/40' : 'border-zinc-800 bg-zinc-950'} ${
+          disabled ? 'cursor-default opacity-40' : 'active:scale-95'
+        }`}
+      >
+        <span className="flex items-baseline gap-2">
+          {number && <span className="w-5 shrink-0 text-right font-display font-bold text-amber-500">{number}</span>}
+          <span className="min-w-0 flex-1 truncate font-display font-bold text-zinc-100">{title}</span>
+          {players && <span className="shrink-0 text-xs text-zinc-500">{players}</span>}
+        </span>
+        {(active || disabled) && <span className="mt-0.5 block text-sm text-zinc-400">{detail}</span>}
+      </button>
+    )
+  }
   return (
     <button
       type="button"

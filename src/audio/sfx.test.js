@@ -193,6 +193,13 @@ describe('sounds for each change', () => {
     expect(changeSounds(lobby('rogue'), lobby('rogue'))).toEqual([])
   })
 
+  it('chimes when a hero is ready, and grinds the doors open on entering the dungeon', () => {
+    const lobby = (ready) => ({ status: 'setup', lobby: [{ heroKey: 'rogue', ready }] })
+    expect(changeSounds(lobby(false), lobby(true))).toEqual([['chime', 0]])
+    expect(changeSounds(lobby(true), lobby(true))).toEqual([])
+    expect(changeSounds(lobby(true), { status: 'playing', heroes: [], monsters: [] }).map(([s]) => s)).toEqual(['slide', 'thud'])
+  })
+
   it('springs a trap before it hits', () => {
     expect(names({ kind: 'monster', trap: true, rolls: [{ heroId: 'h', value: 15, hit: true }] })).toEqual(['dice', 'trap', 'thud'])
     expect(names({ kind: 'monster', trap: true })).toEqual(['trap', 'thud'])

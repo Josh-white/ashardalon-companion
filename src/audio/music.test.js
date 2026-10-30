@@ -16,6 +16,12 @@ describe('background music', () => {
     expect(musicMood(game({ status: 'setup' }))).toBe(null)
   })
 
+  it('plays in the lobby on the big screen only, with the explore track until the Pi has a lobby one', () => {
+    expect(musicMood(game({ status: 'setup' }), { lobby: true })).toBe('lobby')
+    expect(musicMood(game(), { lobby: true })).toBe('explore')
+    expect(musicTracks(game({ status: 'setup' }), 'lobby')).toEqual(['loop-lobby', 'loop-explore'])
+  })
+
   it('celebrates a win with the Pi\'s victory track only', () => {
     expect(musicMood(game({ status: 'won' }))).toBe('victory')
     expect(MOODS.victory).toBe(undefined)

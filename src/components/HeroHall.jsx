@@ -25,24 +25,38 @@ function Torch({ lit }) {
 }
 
 // "Heroes Assemble", on the projector: an alcove for each hero, dark until an iPad
-// picks that hero, then lit with the player's name and whether they're ready.
+// picks that hero, then the torch lights with the player's name. The card art stays in
+// shadow while they choose powers and blazes up when they tap Ready.
 export function HeroHall({ heroes, lobby, records = null }) {
   return (
     <section className="grid grid-cols-5 gap-[2vw]">
       {heroes.map((template) => {
         const claim = lobby.find((c) => c.heroKey === template.key)
+        const ready = Boolean(claim?.ready)
         const color = HERO_COLORS[template.color]
         return (
           // A new key when the torch lights, so the arrival animation plays.
           <div key={`${template.key}-${claim ? 'lit' : 'dark'}`} className={`flex flex-col items-center gap-2 ${claim ? 'torch-arrive' : ''}`}>
             <Torch lit={Boolean(claim)} />
             <div
-              className={`aspect-[3/4] w-full overflow-hidden rounded-t-full rounded-b-xl border-[3px] ${
-                claim ? `border-transparent ring-[3px] ${color.ring} shadow-[0_0_3vw_rgb(245_158_11/0.35)]` : 'border-dashed border-stone-700'
+              // A new key on Ready too, so the alcove flares once.
+              key={ready ? 'ready' : 'waiting'}
+              className={`relative aspect-[3/4] w-full overflow-hidden rounded-t-full rounded-b-xl border-[3px] ${
+                ready
+                  ? `alcove-ready border-transparent ring-[3px] ${color.ring} shadow-[0_0_4vw_rgb(245_158_11/0.55)]`
+                  : claim
+                    ? 'border-amber-900/80'
+                    : 'border-dashed border-stone-700'
               }`}
             >
-              {/* The hero's card art, dark until their torch is lit (the round token without card art). */}
-              <HeroPortrait heroKey={template.key} dim={!claim} className="h-full w-full" />
+              {/* The hero's card art: dark until their torch is lit, half lit while they
+                  choose powers (the round token without card art). */}
+              <HeroPortrait heroKey={template.key} dim={!claim} className={`h-full w-full transition duration-700 ${claim && !ready ? 'brightness-[0.55] saturate-50' : ''}`} />
+              {ready && (
+                <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent pt-[2vw] pb-[0.6vw] text-center font-display text-[1.6vw] font-black tracking-wide text-emerald-300 uppercase">
+                  Ready!
+                </span>
+              )}
             </div>
             <span className={`font-display text-[2vw] font-bold ${claim ? color.text : 'text-stone-500'}`}>{template.name}</span>
             <span className="text-center text-[1.2vw] text-zinc-400">
@@ -50,7 +64,7 @@ export function HeroHall({ heroes, lobby, records = null }) {
                 <>
                   {claim.player || template.className}
                   <PlayerTitle records={records} name={claim.player} className="mx-auto mt-[0.3vw] block w-fit text-[1vw]" />
-                  <span className={`block ${claim.ready ? 'text-emerald-400' : 'text-amber-400'}`}>{claim.ready ? 'Ready!' : 'Choosing powers'}</span>
+                  {!ready && <span className="block text-amber-400">Choosing powers…</span>}
                 </>
               ) : (
                 'Waiting…'
