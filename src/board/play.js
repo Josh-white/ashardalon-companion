@@ -137,10 +137,19 @@ const chamberIds = (board, family) =>
 const activeAt = (state) => state.board?.tokens[state.heroes[state.turn.heroIndex]?.id] ?? null
 
 // The unexplored edges the active hero stands on (a corner square can touch two).
+// With a Wizard Eye down, the edges on the eye's tile count too ("explore as if your Hero
+// was on any unexplored edge on the Wizard Eye's tile"); those carry `eye: true`.
 export function heroEdges(state) {
   const at = activeAt(state)
   if (!at) return []
-  return unexploredEdges(boardGrid(state.board)).filter((e) => e.squares.some((sq) => key(sq) === key(at)))
+  const grid = boardGrid(state.board)
+  const standing = unexploredEdges(grid).filter((e) => e.squares.some((sq) => key(sq) === key(at)))
+  const hero = state.heroes[state.turn.heroIndex]
+  const eye = (state.board.items ?? []).find((i) => i.kind === 'eye' && i.owner === hero?.id && i.at)
+  const eyeArea = eye && grid.get(key(eye.at))?.area
+  if (eyeArea === undefined || eyeArea === null) return standing
+  const seen = new Set(standing.map((e) => e.id))
+  return [...standing, ...unexploredEdges(grid).filter((e) => e.area === eyeArea && !seen.has(e.id)).map((e) => ({ ...e, eye: true }))]
 }
 
 // Where a drawn tile goes: the edge the hero explores, a long hallway's far end, or for a

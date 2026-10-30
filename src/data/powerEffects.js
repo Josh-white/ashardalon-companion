@@ -116,7 +116,7 @@ const EFFECTS = {
   },
   Invisibility: { use: { invisible: true } },
   'Mirror Image': { use: { tokens: { mirrorImage: 3 } } },
-  'Wizard Eye': { use: { note: 'Put the Wizard Eye on a tile within 1 tile of you.' } },
+  'Wizard Eye': { use: { tokens: { wizardEye: true }, note: 'Put the Wizard Eye on a tile within 1 tile of you.' } },
 }
 
 const key = (name) => String(name ?? '').toLowerCase().replace(/[^a-z]/g, '')

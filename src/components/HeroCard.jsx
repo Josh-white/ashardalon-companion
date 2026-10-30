@@ -4,6 +4,7 @@ import { CONDITIONS, HERO_COLORS, MAX_LEVEL, XP_TO_LEVEL_UP, hasAbility } from '
 import { artUrl, useArt } from '../state/useArt.js'
 import { useCards } from '../state/useCards.js'
 import Art from './Art.jsx'
+import { sphereOf, sphereVictims } from '../board/heroTokens.js'
 import { MonsterChoice } from './Pickers.jsx'
 import PowerList from './PowerList.jsx'
 import { StatTiles } from './StatBoosts.jsx'
@@ -53,13 +54,20 @@ function TokenDamage({ state, hero, source, label, prompt, many, disabled, dispa
 // What the hero's powers have left on them: shields, mirror images, tokens on the board.
 function PowerMarkers({ state, hero, dispatch }) {
   const tokens = hero.tokens ?? {}
+  const board = Boolean(state.board)
   const caster = state.heroes.find((h) => h.id === hero.shieldedBy)
   const lines = [
     caster && `🛡️ +2 AC from ${caster.name}'s Cleric's Shield`,
     tokens.mirrorImage > 0 && `🪞 ${tokens.mirrorImage} mirror image${tokens.mirrorImage > 1 ? 's' : ''}: +${2 * tokens.mirrorImage} AC. A miss pops one.`,
     tokens.invisible && "👻 Invisible: monsters don't count you as the closest hero until your next turn.",
     tokens.refuge && '✨ In the Astral Refuge: off the board until your next turn.',
+    // On the virtual board the Blade Barrier and Caltrop tokens go off by themselves.
+    board && tokens.bladeBarrier > 0 && `🗡️ ${tokens.bladeBarrier} Blade Barrier token${tokens.bladeBarrier > 1 ? 's' : ''} on the board: a monster put on one takes 1 damage.`,
+    board && tokens.caltrops > 0 && `📌 ${tokens.caltrops} Caltrop token${tokens.caltrops > 1 ? 's' : ''} on the board: a monster put on one takes 1 damage.`,
+    board && tokens.wizardEye && "👁️ Wizard Eye: you can explore from its tile, and move it 1 tile instead of moving.",
   ].filter(Boolean)
+  const sphere = board && sphereOf(state, hero)
+  const burning = sphere ? sphereVictims(state, hero) : []
   if (lines.length === 0 && !(tokens.bladeBarrier > 0) && !(tokens.flamingSphere > 0) && !(tokens.caltrops > 0)) return null
   return (
     <div className="mt-3 space-y-2">
@@ -68,7 +76,22 @@ function PowerMarkers({ state, hero, dispatch }) {
           {line}
         </p>
       ))}
-      {tokens.bladeBarrier > 0 && (
+      {board && tokens.flamingSphere > 0 && (
+        <Button
+          className="w-full text-left"
+          disabled={!sphere || burning.length === 0 || state.turn.sphereBurned}
+          onClick={() => dispatch({ type: 'POWER_DAMAGE', source: 'flamingSphere', heroId: hero.id, monsterIds: burning })}
+        >
+          {!sphere
+            ? `🔥 Flaming Sphere (${tokens.flamingSphere} left): put it on the board first`
+            : state.turn.sphereBurned
+              ? `🔥 Flaming Sphere (${tokens.flamingSphere} left): already burned this turn`
+              : burning.length === 0
+                ? `🔥 Flaming Sphere (${tokens.flamingSphere} left): no monster on its tile`
+                : `🔥 Flaming Sphere (${tokens.flamingSphere} left): burn ${burning.length} monster${burning.length > 1 ? 's' : ''} on its tile`}
+        </Button>
+      )}
+      {!board && tokens.bladeBarrier > 0 && (
         <TokenDamage
           state={state}
           hero={hero}
@@ -78,7 +101,7 @@ function PowerMarkers({ state, hero, dispatch }) {
           prompt="Which monster landed on a Blade Barrier token? Take that token off the board."
         />
       )}
-      {tokens.caltrops > 0 && (
+      {!board && tokens.caltrops > 0 && (
         <TokenDamage
           state={state}
           hero={hero}
@@ -88,7 +111,7 @@ function PowerMarkers({ state, hero, dispatch }) {
           prompt="Which monster was put on a Caltrop token? Take that token off the board."
         />
       )}
-      {tokens.flamingSphere > 0 && (
+      {!board && tokens.flamingSphere > 0 && (
         <TokenDamage
           state={state}
           hero={hero}

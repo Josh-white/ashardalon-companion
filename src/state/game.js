@@ -21,6 +21,7 @@ import { FIRST_ROLL_MAX_MS, newFirstRoll, rollFirst } from './firstRoll.js'
 import { finishOpening, openingNarrating, startOpening } from './opening.js'
 import { drawDoorKind, heroesNextToDoor, removeDoor } from '../board/doors.js'
 import { escapeAtPhaseEnd, escapedHero } from '../board/exits.js'
+import { dropItem, moveHeroToken, syncHeroTokens, trippedTokens } from '../board/heroTokens.js'
 import { layChamber, layDoorChamber, layExit, layTile, moveHero, placeNear, placeToken, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
 import { sentryMoves, wrathPull } from '../board/monsters.js'
 import { boardMove, queueEncounterMoves, queueFearMove, queueFoeStep, queueHitMoves, queueMoves, queueWandOfFear, skipBoardMove } from '../board/powerMoves.js'
@@ -1484,7 +1485,24 @@ function placeVillain(state, action) {
 const lose = (state, why) => withLog({ ...state, status: 'lost', ending: why }, why)
 
 // Every action, then a check for an adventure's victory, then the recap's counts.
-export const gameReducer = (state, action) => trackStats(state, pruneTokens(placeNewFigures(state, checkVictory(tagDrawn(reduceWithOpening(state, action))))), action)
+export const gameReducer = (state, action) => {
+  const placed = pruneTokens(placeNewFigures(state, checkVictory(tagDrawn(reduceWithOpening(state, action)))))
+  const sprung = springHeroTokens(placed)
+  return trackStats(state, sprung === placed ? placed : pruneTokens(checkVictory(sprung)), action)
+}
+
+// The tokens heroes put on the virtual board (board/heroTokens.js): the board keeps up with
+// each hero's count, and a monster that ends up on a Blade Barrier or Caltrop token takes
+// 1 damage, and the token goes.
+function springHeroTokens(state) {
+  if (!state.board) return state
+  let next = syncHeroTokens(state)
+  for (const { item, foeId } of trippedTokens(next)) {
+    next = dropItem(next, item.id)
+    next = powerDamage(next, { source: item.kind === 'blade' ? 'bladeBarrier' : 'caltrops', heroId: item.owner, monsterIds: [foeId] })
+  }
+  return syncHeroTokens(next)
+}
 
 // A game that just started begins with its story (state/opening.js).
 function reduceWithOpening(state, action) {
@@ -1896,6 +1914,8 @@ function reduce(state, action) {
       return pickUpTreasure(state, action)
     case 'FLY_CARPET':
       return flyCarpet(state, action)
+    case 'MOVE_HERO_ITEM':
+      return moveHeroToken(state, action)
 
     case 'CHOOSE_ADVENTURE': {
       // Only before the game, and only an adventure the app can run.
