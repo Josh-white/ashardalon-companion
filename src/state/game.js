@@ -764,6 +764,9 @@ function usePower(state, action) {
     next = queueFearMove(next)
   }
   if (use.board) next = queueMoves(next, hero, power, use.board)
+  // A Daily or At-Will power is the hero's attack; Dwarven Resilience is a move.
+  if (powerUsesAttack(state, hero, power)) next = spendAttack(next, hero, power.name)
+  if (use.move && inHeroPhase(state, hero) && state.board) next = { ...next, turn: { ...next.turn, boardMoves: (next.turn.boardMoves ?? 0) + 1 } }
   return next
 }
 
@@ -1007,12 +1010,35 @@ function startDamage(state, hero) {
   })
 }
 
-// Opening the Cage or disabling a trap takes the place of the active hero's attack:
-// once per Hero Phase, and not after they've attacked.
-export function canSpendAttack(state, hero) {
-  if (!hero || PHASES[state.turn.phase]?.key !== 'hero' || state.heroes[state.turn.heroIndex]?.id !== hero.id) return false
+const inHeroPhase = (state, hero) => Boolean(hero) && PHASES[state.turn.phase]?.key === 'hero' && state.heroes[state.turn.heroIndex]?.id === hero.id
+
+// Why the active hero has no attack left this Hero Phase, or null while they still have one.
+// A Hero Phase is move and attack, attack and move, or move twice (a Dazed hero gets one
+// of those). Using an At-Will or Daily power is the attack, even one without a roll
+// (Cause Fear, Blade Barrier); utility powers don't use it. The app only counts moves made
+// on the virtual board. Players can still attack anyway when a card says they can.
+export function attackGone(state, hero) {
+  if (!inHeroPhase(state, hero)) return null
+  const dazed = hero.conditions.includes('Dazed')
+  const spent = state.turn.attackSpent
+  if (spent) return `${hero.name} used this turn's attack on ${spent.on}.`
   const last = state.turn.lastAttack
-  return !state.turn.attackSpent && !(last && !last.bonus && !last.free && last.heroId === hero.id)
+  if (last && !last.bonus && !last.free && last.heroId === hero.id) {
+    return dazed ? `${hero.name} is Dazed, so that was the one action this turn.` : `${hero.name} already attacked this turn.`
+  }
+  const moves = state.board ? state.turn.boardMoves ?? 0 : 0
+  if (dazed && moves >= 1) return `${hero.name} is Dazed and already moved, so there's no attack this turn.`
+  if (moves >= 2) return `${hero.name} moved twice, so there's no attack this turn.`
+  return null
+}
+
+// Whether using this power takes the place of the hero's attack right now.
+export const powerUsesAttack = (state, hero, power) => inHeroPhase(state, hero) && (power?.type === 'at-will' || power?.type === 'daily')
+
+// Opening the Cage or disabling a trap takes the place of the active hero's attack:
+// once per Hero Phase, and not after they've attacked (or moved twice).
+export function canSpendAttack(state, hero) {
+  return inHeroPhase(state, hero) && !attackGone(state, hero)
 }
 
 const spendAttack = (state, hero, on) => ({ ...state, turn: { ...state.turn, attackSpent: { heroId: hero.id, on } } })
