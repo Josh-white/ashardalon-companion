@@ -93,3 +93,54 @@ describe('Blessed Shield on the virtual board', () => {
     expect(guardsOnTile({ ...state, board: null }, heroes[0], [heroes[1]])).toBeNull()
   })
 })
+
+describe('the board follows the active hero this turn (Volcanic Vapors, Dragon Fear)', () => {
+  const vapors = (tile) => ({ id: 'trap1', cardId: 'volcanic-vapors', name: 'Volcanic Vapors', type: 'hazard', tile, card: {} })
+  const ask = (name) => `Did ${name} start the turn on the Volcanic Vapors tile, or move onto it?`
+  const fear = (name) => `Did ${name} move onto a new tile this Hero Phase?`
+  const move = (state, id, to) => gameReducer(state, { type: 'MOVE_TOKEN', id, to })
+
+  it('sees a hero that started the turn on the Vapors tile', () => {
+    const { state, heroes } = game([1, -2])
+    expect(boardAnswer({ ...state, traps: [vapors('start')] }, ask(heroes[0].name))).toMatchObject({ answer: true })
+  })
+
+  it('sees a hero that moved onto the Vapors tile, even after moving off again', () => {
+    const { state, heroes } = game([1, -6])
+    const there = move({ ...state, traps: [vapors('t1')] }, heroes[0].id, [0, -1])
+    expect(boardAnswer(there, ask(heroes[0].name))).toMatchObject({ answer: true })
+    const back = move(there, heroes[0].id, [0, 1])
+    expect(boardAnswer(back, ask(heroes[0].name))).toMatchObject({ answer: true })
+    expect(back.turn.heroTiles[heroes[0].id]).toEqual({ start: 'start', entered: ['t1', 'start'] })
+  })
+
+  it('says no when the hero stayed clear of the Vapors tile', () => {
+    const { state, heroes } = game([1, -6])
+    const moved = move({ ...state, traps: [vapors('t2')] }, heroes[0].id, [0, -1])
+    expect(boardAnswer(moved, ask(heroes[0].name))).toMatchObject({ answer: false })
+  })
+
+  it('asks when it is not that hero’s turn, or the marker has no tile', () => {
+    const { state, heroes } = game([1, -2])
+    expect(boardAnswer({ ...state, traps: [vapors('t1')] }, ask(heroes[2].name))).toBeNull()
+    expect(boardAnswer({ ...state, traps: [vapors(undefined)] }, ask(heroes[0].name))).toBeNull()
+  })
+
+  it('answers Dragon Fear from the tiles the hero moved onto', () => {
+    const { state, heroes } = game([1, -6])
+    expect(boardAnswer(state, fear(heroes[0].name))).toMatchObject({ answer: false })
+    const sameTile = move(state, heroes[0].id, [2, 0])
+    expect(boardAnswer(sameTile, fear(heroes[0].name))).toMatchObject({ answer: false })
+    const newTile = move(state, heroes[0].id, [0, -1])
+    expect(boardAnswer(newTile, fear(heroes[0].name))).toMatchObject({ answer: true })
+  })
+
+  it('starts a fresh trail each turn', () => {
+    const { state, heroes } = game([1, -6])
+    const moved = move(state, heroes[0].id, [0, -1])
+    let next = moved
+    for (let i = 0; i < 3; i++) next = gameReducer(next, { type: 'NEXT_PHASE', rolls: [] })
+    expect(next.turn.heroIndex).toBe(1)
+    expect(next.turn.heroTiles).toBeUndefined()
+  })
+})

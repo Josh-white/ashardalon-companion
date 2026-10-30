@@ -5,7 +5,7 @@
 
 import { OPPOSITE, STEP, key, unexploredEdges } from './grid.js'
 import { adjacent, tilesBetween } from './paths.js'
-import { boardGrid } from './play.js'
+import { boardGrid, heroTrail } from './play.js'
 
 const baseId = (tokenId) => tokenId.split('#')[0]
 const squeeze = (text) => text.toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -85,6 +85,29 @@ export function boardAnswer(state, question) {
     return there.length > 0
       ? { answer: true, why: `The ${there[0].name} is on the ${m[1]} tile.` }
       : { answer: false, why: `No monster is on the ${m[1]} tile.` }
+  }
+
+  // Volcanic Vapors: "Did Quinn start the turn on the Volcanic Vapors tile, or move onto it?"
+  // Only the active hero's turn is followed.
+  if ((m = ask.match(/^Did (.+?) start the turn on the (.+?) tile, or move onto it\?/i))) {
+    const who = figureNamed(state, m[1])
+    const marker = (state.traps ?? []).find((t) => squeeze(t.name) === squeeze(m[2]) && t.tile !== undefined)
+    const trail = who && who.id === state.heroes[state.turn?.heroIndex]?.id ? heroTrail(state, who.id) : null
+    if (!marker || !trail) return null
+    if (trail.start === marker.tile) return { answer: true, why: `${who.name} started the turn on the ${marker.name} tile.` }
+    if (trail.entered.includes(marker.tile)) return { answer: true, why: `${who.name} moved onto the ${marker.name} tile.` }
+    return { answer: false, why: `${who.name} didn't start on or move onto the ${marker.name} tile.` }
+  }
+
+  // Dragon Fear: "Did Quinn move onto a new tile this Hero Phase?"
+  if ((m = ask.match(/^Did (.+?) move onto a new tile this Hero Phase\?/i))) {
+    const who = figureNamed(state, m[1])
+    const trail = who && who.id === state.heroes[state.turn?.heroIndex]?.id ? heroTrail(state, who.id) : null
+    if (!trail) return null
+    const n = trail.entered.length
+    return n > 0
+      ? { answer: true, why: `${who.name} moved onto ${n === 1 ? 'a new tile' : `${n} new tiles`} this turn.` }
+      : { answer: false, why: `${who.name} stayed on the same tile.` }
   }
 
   // Villagers: "Is Alek within 1 tile of a hero?", "Is Donnel within 1 tile of a monster?"

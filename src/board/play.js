@@ -355,7 +355,29 @@ export function heroReach(state, hero) {
   return reachable(boardGrid(state.board), at, moveSpeed(hero), occupied(state, hero.id))
 }
 
-export const placeToken = (state, id, at) => ({ ...state, board: { ...state.board, tokens: { ...state.board.tokens, [id]: [at[0], at[1]] } } })
+// Puts a figure on a square. A hero that changes tile also leaves a trail for this turn in
+// state.turn.heroTiles[id] = { start, entered }: the tile it started on and each tile it
+// moved onto, so the board can answer Volcanic Vapors and Dragon Fear.
+export function placeToken(state, id, at) {
+  const placed = { ...state, board: { ...state.board, tokens: { ...state.board.tokens, [id]: [at[0], at[1]] } } }
+  const was = state.board.tokens[id]
+  if (!was || !state.turn || !state.heroes?.some((h) => h.id === id)) return placed
+  const grid = boardGrid(state.board)
+  const [from, to] = [grid.get(key(was))?.area, grid.get(key(at))?.area]
+  if (from === undefined || to === undefined || from === to) return placed
+  const trail = state.turn.heroTiles?.[id] ?? { start: from, entered: [] }
+  return { ...placed, turn: { ...state.turn, heroTiles: { ...state.turn.heroTiles, [id]: { start: trail.start, entered: [...trail.entered, to] } } } }
+}
+
+// The tile a hero started this turn on and the tiles it moved onto since. A hero that
+// hasn't changed tile this turn is still on its starting tile.
+export function heroTrail(state, heroId) {
+  const trail = state.turn?.heroTiles?.[heroId]
+  if (trail) return trail
+  const at = state.board?.tokens[heroId]
+  const start = at ? boardGrid(state.board).get(key(at))?.area : undefined
+  return start === undefined ? null : { start, entered: [] }
+}
 
 // A hero's move in their Hero Phase: only to a square they can reach, and it uses up a move.
 export function moveHero(state, action) {

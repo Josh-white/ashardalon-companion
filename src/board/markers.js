@@ -25,14 +25,15 @@ export function markerMoves(marker) {
 
 // Every marker in play, with the squares of its tile when the board knows where it is:
 // [{ marker, look, moves, tile, squares }]. `squares` is empty for an older marker with no
-// saved tile, a tile no longer on the board, or a trap that moves.
+// saved tile, a tile no longer on the board, or a trap that moves. The saved tile is the
+// rules' tile (a square's `area`), so a marker on the Start tile's far half tints only that half.
 export function boardMarkers(state) {
   const traps = state.traps ?? []
   if (!state.board || traps.length === 0) return []
   const grid = boardGrid(state.board)
   return traps.map((marker) => {
     const moves = markerMoves(marker)
-    const squares = moves || marker.tile === undefined ? [] : [...grid.values()].filter((sq) => sq.tile === marker.tile)
+    const squares = moves || marker.tile === undefined ? [] : [...grid.values()].filter((sq) => sq.area === marker.tile)
     return { marker, look: markerLook(marker), moves, tile: squares.length > 0 ? marker.tile : undefined, squares }
   })
 }
