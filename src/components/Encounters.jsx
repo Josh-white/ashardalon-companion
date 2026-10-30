@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { HERO_COLORS, XP_TO_CANCEL_ENCOUNTER } from '../data/heroes.js'
-import { heroItems, itemTrapBonus, tileAcBonus } from '../data/items.js'
-import { heroAc, reactionsFor } from '../data/powerEffects.js'
-import { ENCOUNTER_LABELS, canSpendAttack, encounterCount, isWrathCheck, phaseChecks, villainInPlay } from '../state/game.js'
+import { heroItems, itemTrapBonus } from '../data/items.js'
+import { reactionsFor } from '../data/powerEffects.js'
+import { ENCOUNTER_LABELS, encounterCount, isWrathCheck, phaseChecks, villainInPlay } from '../state/game.js'
+import { attackBlocked, attackRolls, boardEffect, boardFound, effectWords, encounterNotes, extraEncounterReasons, firstPicks, fixedTargets, heroNames, hitWords, resolveLabel, takesWords, targetQuestion } from '../state/encounterRules.js'
 import { rollD20, shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { boardAnswer } from '../board/checks.js'
@@ -73,29 +74,6 @@ const TYPE_STYLES = {
   trap: 'border-red-700 bg-red-950/60 text-red-300',
 }
 
-// Who an attack goes after, asked as a question when the app can't tell.
-function targetQuestion(targets, hero) {
-  if (targets === 'activeTile') return `Tap every hero on ${hero.name}'s tile.`
-  if (targets === 'within1') return `Tap every hero within 1 tile of ${hero.name} (${hero.name} too).`
-  if (targets === 'trapTile') return 'Tap every hero on the trap’s tile.'
-  if (targets === 'villainWithin1') return 'Tap every hero within 1 tile of the villain.'
-  return null
-}
-
-// What the board worked out, said in plain words.
-function boardFound(targets, hero) {
-  if (targets === 'activeTile') return `on ${hero.name}'s tile`
-  if (targets === 'within1') return `within 1 tile of ${hero.name}`
-  if (targets === 'trapTile') return 'on the trap’s tile'
-  if (targets === 'villainWithin1') return 'within 1 tile of the villain'
-  return ''
-}
-
-const names = (heroes) => {
-  const list = heroes.map((h) => h.name)
-  return list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list.at(-1)}` : list[0] ?? ''
-}
-
 // The heroes a card hits, highlighted in their own colours.
 export function AffectedHeroes({ heroes, label }) {
   if (heroes.length === 0) return null
@@ -111,17 +89,14 @@ export function AffectedHeroes({ heroes, label }) {
   )
 }
 
-const describe = (attack) =>
-  [attack.damage > 0 && `${attack.damage} damage`, ...attack.conditions].filter(Boolean).join(' and ') || 'no damage'
-
 // Rolls an attack from an encounter card or a trap. `dispatchAttack` sends the targets.
 // On the virtual board the heroes it reaches are picked (and highlighted) from where they
 // stand; the players can still change the picks. `trap` is the marker for a trap's attack.
 function AttackStep({ state, hero, name, attack, onAttack, onNobody, dispatch, trap }) {
   const question = targetQuestion(attack.targets, hero)
-  const fixed = attack.targets === 'active' ? [hero.id] : attack.targets === 'all' ? state.heroes.map((h) => h.id) : null
+  const fixed = fixedTargets(state, attack, hero)
   const [fromBoard] = useState(() => (question ? encounterTargetIds(state, attack.targets, hero, { trap }) : null))
-  const [chosen, setChosen] = useState(fromBoard ?? (attack.targets === 'trapTile' || attack.targets === 'villainWithin1' ? [] : [hero.id]))
+  const [chosen, setChosen] = useState(firstPicks(attack, hero, fromBoard))
   const [guarded, setGuarded] = useState([])
   const [results, setResults] = useState(null)
   const targets = fixed ?? chosen
@@ -130,28 +105,17 @@ function AttackStep({ state, hero, name, attack, onAttack, onNobody, dispatch, t
   const roll = () => {
     const rolled = targets.map((heroId) => ({ heroId, roll: rollD20() }))
     onAttack(rolled, guarded)
-    setResults(
-      rolled.map(({ heroId, roll: value }) => {
-        const target = state.heroes.find((h) => h.id === heroId)
-        const total = value + attack.bonus
-        const ac = heroAc(target) + (guarded.includes(heroId) ? tileAcBonus(state.heroes, target) : 0)
-        return { hero: target, value, total, ac, hit: total >= ac }
-      }),
-    )
+    setResults(attackRolls(state, attack, rolled, guarded))
   }
 
   if (results) {
     return (
       <ul className="space-y-2">
         {results.map(({ hero: target, value, total, ac, hit }) => {
-          const damage = hit ? attack.damage : attack.miss
-          const conditions = hit ? attack.conditions : attack.missConditions
-          const effect = [damage > 0 && `${damage} damage`, ...conditions].filter(Boolean).join(' and ') || 'nothing'
           // Practiced Evasion turns this hit into a miss.
           const evaded = state.turn.lastEventAttack?.results.some((r) => r.heroId === target.id && r.evaded)
           const now = state.heroes.find((h) => h.id === target.id) ?? target
           const evasion = hit && !evaded && reactionsFor([now], 'evade')[0]
-          const missEffect = [attack.miss > 0 && `${attack.miss} damage`, ...(attack.missConditions ?? [])].filter(Boolean).join(' and ') || 'nothing'
           return (
             <li key={target.id} className={`rounded-xl p-3 text-lg ${hit && !evaded ? 'bg-red-950' : 'bg-zinc-900'}`}>
               {name} rolled {value} + {attack.bonus} = {total} against{' '}
@@ -159,7 +123,7 @@ function AttackStep({ state, hero, name, attack, onAttack, onNobody, dispatch, t
               <b className={hit && !evaded ? 'text-red-300' : 'text-emerald-300'}>
                 {evaded ? 'Practiced Evasion: a miss!' : hit ? 'Hit!' : 'Miss!'}
               </b>{' '}
-              {target.name} takes {evaded ? missEffect : effect}.
+              {target.name} takes {takesWords(attack, hit && !evaded)}.
               {evasion && dispatch && (
                 <Button
                   className="mt-2 w-full"
@@ -180,7 +144,7 @@ function AttackStep({ state, hero, name, attack, onAttack, onNobody, dispatch, t
   return (
     <div className="space-y-3">
       <p className="text-lg text-zinc-200">
-        It attacks with +{attack.bonus}: a hit is {describe(attack)}
+        It attacks with +{attack.bonus}: a hit is {hitWords(attack)}
         {attack.miss > 0 && `, a miss is still ${attack.miss} damage`}.
       </p>
       {question && fromBoard && (
@@ -188,7 +152,7 @@ function AttackStep({ state, hero, name, attack, onAttack, onNobody, dispatch, t
           <p className="rounded-lg bg-emerald-950/60 p-3 text-lg text-emerald-200">
             📍 The board says{' '}
             {fromBoard.length > 0
-              ? `${names(state.heroes.filter((h) => fromBoard.includes(h.id)))} ${fromBoard.length > 1 ? 'are' : 'is'} ${boardFound(attack.targets, hero)}.`
+              ? `${heroNames(state.heroes.filter((h) => fromBoard.includes(h.id)))} ${fromBoard.length > 1 ? 'are' : 'is'} ${boardFound(attack.targets, hero)}.`
               : `nobody is ${boardFound(attack.targets, hero)}.`}{' '}
             Tap a hero to change it.
           </p>
@@ -327,14 +291,6 @@ export function Perseverance({ state, dispatch }) {
   )
 }
 
-const RESOLVE_LABELS = {
-  curse: (hero) => `Put the curse on ${hero.name}`,
-  environment: () => 'Put it in play',
-  trap: () => 'Put the trap marker on the tile',
-  hazard: () => 'Put the hazard marker on the tile',
-  event: () => 'Done, discard it',
-}
-
 // The encounter card being read out, and what the app can do for it.
 function EncounterCard({ state, hero, dispatch }) {
   const { monsters: monsterCards, villains } = useCards()
@@ -360,18 +316,7 @@ function EncounterCard({ state, hero, dispatch }) {
   const villainHere = villainInPlay(state, card)
   const needsAttack = card.attack && !attacked && villainHere
 
-  const autoNotes = [
-    card.damageEach > 0 && `Every hero takes ${card.damageEach} damage when you tap the button.`,
-    card.damagePoisoned > 0 && `Every Poisoned hero takes ${card.damagePoisoned} damage when you tap the button.`,
-    card.filterMonsters && !state.encounter.filtered && `The app looks at the top 5 monster cards, keeps the ${card.filterMonsters}s on top and discards the rest.`,
-    card.drawAnother && villainHere && 'Then you draw another encounter card.',
-    !villainHere && (card.villain ? 'Its villain isn’t in play, so it’s just discarded.' : `The ${card.objective} isn’t in play, so it’s just discarded.`),
-    villainHere && card.placeVillain && 'The app puts the villain on the board when you tap the button.',
-    villainHere && card.drawMonsterType && `The app draws monster cards until ${/^[AEIOU]/.test(card.drawMonsterType) ? 'an' : 'a'} ${card.drawMonsterType} turns up, and discards the rest.`,
-    villainHere && card.timeToken && `The app takes a Time token off the ${card.objective || 'Vast Gate'} (${state.adventure?.timeTokens ?? 0} left now).`,
-    villainHere && card.returnToTop > 0 && 'Then the app shuffles it back into the top 3 encounter cards.',
-    villainHere && card.afterDrawTop && 'It goes back on top of the encounter deck after the next card is drawn.',
-  ].filter(Boolean)
+  const autoNotes = encounterNotes(state, card, villainHere)
 
   return (
     <div className={`mt-4 space-y-4 rounded-2xl border-2 p-4 ${TYPE_STYLES[card.type]}`}>
@@ -512,7 +457,7 @@ function EncounterCard({ state, hero, dispatch }) {
                 className="w-full py-3 text-lg"
                 onClick={() => resolve()}
               >
-                {!villainHere ? 'Discard it' : card.returnToTop > 0 ? 'Done, shuffle it back in' : card.afterDrawTop ? 'Done' : RESOLVE_LABELS[card.type](hero)}
+                {resolveLabel(card, hero, villainHere)}
               </Button>
             </>
           )}
@@ -551,11 +496,7 @@ export function EncounterStep({ state, hero, dispatch }) {
     return drawn > 0 ? <p className="mt-4 rounded-xl bg-emerald-950/60 p-3 text-lg text-emerald-200">✓ Encounters done.</p> : null
   }
   // Why there's more than the usual card, so a second draw isn't a surprise.
-  const reasons = [
-    ...(hero.curses ?? []).filter((c) => c.card?.extraEncounter > 0).map((c) => `${c.name}: ${hero.name} draws an extra card every Villain Phase.`),
-    state.adventure?.extraEncounters > 0 && 'The adventure adds an extra card every Villain Phase.',
-    ...(state.turn.owedBecause ?? []),
-  ].filter(Boolean)
+  const reasons = extraEncounterReasons(state, hero)
   return (
     <>
       {reasons.length > 0 && (
@@ -744,13 +685,6 @@ export function DisableTraps({ state, hero, dispatch }) {
 }
 
 // Hero Phase: what the hero's curses do, and the Cage's roll to get out.
-// What stops a hero from trying to open the Cage right now, or null when they can.
-function attackBlocked(state, hero, what) {
-  if (canSpendAttack(state, hero)) return null
-  const spent = state.turn.attackSpent
-  return spent?.heroId === hero.id ? `${hero.name} used this turn's attack on ${spent.on}.` : `${hero.name} attacked this turn, so ${what} has to wait.`
-}
-
 function CurseRollButton({ state, hero, cursed, curse, dispatch }) {
   const roll = curse.card.removeRoll
   const blocked = attackBlocked(state, hero, 'the cage')
@@ -817,20 +751,6 @@ export function EnvironmentBanner({ environment, className = '' }) {
     </div>
   )
 }
-
-const effectWords = (effect) =>
-  !effect
-    ? 'nothing happens'
-    : [effect.damage && `${effect.damage} damage`, effect.condition, effect.remove && 'the curse ends', effect.drawMonster && 'draw a monster'].filter(Boolean).join(' and ')
-
-// What the board's answer does, told before the player taps OK.
-const boardEffect = (effect, name) =>
-  !effect
-    ? 'Nothing happens.'
-    : `${[effect.damage && `${name} takes ${effect.damage} damage`, effect.condition && `${name} is ${effect.condition}`, effect.remove && 'the curse ends', effect.drawMonster && `${name} draws a monster`]
-        .filter(Boolean)
-        .join(' and ')
-        .replace(/^./, (c) => c.toUpperCase())} when you tap OK.`
 
 // The questions a phase ends with, one at a time, from curses, the environment and
 // hazards ("Did you end next to a wall?"). The turn can't move on until they're answered.
