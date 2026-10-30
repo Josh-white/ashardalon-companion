@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { HERO_COLORS, XP_TO_LEVEL_UP } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
 import { CurseNotes, PhaseChecks, DisableTraps, EncounterStep, EnvironmentBanner, PassMonsters, encountersLeft, TrapTurns } from './Encounters.jsx'
@@ -299,6 +300,9 @@ export default function TurnGuide({ state, dispatch }) {
   const { heroIndex, phase, round } = state.turn
   const hero = state.heroes[heroIndex]
   const current = PHASES[phase]
+  const section = useRef(null)
+  const footer = useRef(null)
+  const todoLine = useRef(null)
   const color = HERO_COLORS[hero.color]
   const stepKey = `${round}-${heroIndex}-${phase}`
 
@@ -320,19 +324,28 @@ export default function TurnGuide({ state, dispatch }) {
   }
   const nextHero = state.heroes[(heroIndex + 1) % state.heroes.length]
 
+  // With the virtual board the turn sits in a narrow column (a phone, or beside the board), so it's set tighter.
+  const narrow = Boolean(state.board)
+  // While something is still to do, the pinned button takes you to it instead of on to the next phase.
+  const showNext = () => {
+    const target = [...(section.current?.querySelectorAll('button[data-primary]:not(:disabled)') ?? [])].find((b) => !footer.current?.contains(b)) ?? todoLine.current
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+  const nextLabel = isLastPhase ? (state.board ? `On to ${nextHero.name}'s turn →` : `Pass to ${nextHero.player || nextHero.name} →`) : `On to ${PHASES[phase + 1].title} →`
+
   return (
-    <section className={`rounded-3xl border border-zinc-800 p-5 sm:p-6 ${color.bg}`}>
+    <section ref={section} className={`rounded-3xl border border-zinc-800 ${narrow ? 'p-4' : 'p-4 sm:p-6'} ${color.bg}`}>
       <p className="text-sm uppercase tracking-widest text-zinc-400">Round {round}</p>
-      <h2 className={`font-display text-4xl font-bold sm:text-5xl ${color.text}`}>
+      <h2 className={`font-display font-bold ${narrow ? 'text-3xl' : 'text-3xl sm:text-5xl'} ${color.text}`}>
         {state.board ? `${hero.name}'s turn!` : `Your turn, ${hero.player || hero.name}!`}
       </h2>
       {hero.player && !state.board && <p className="text-zinc-400">playing {hero.name}</p>}
 
-      <div className="mt-5 grid grid-cols-3 gap-2">
+      <div className={`grid grid-cols-3 gap-1.5 ${narrow ? 'mt-3' : 'mt-3 sm:mt-5 sm:gap-2'}`}>
         {PHASES.map((p, i) => (
           <div
             key={p.key}
-            className={`rounded-xl px-2 py-2 text-center text-sm sm:text-base ${
+            className={`truncate rounded-xl px-1 py-1.5 text-center text-sm whitespace-nowrap ${narrow ? '' : 'sm:py-2 sm:text-base'} ${
               i === phase ? 'bg-amber-500 font-bold text-zinc-950' : i < phase ? 'bg-zinc-800 text-zinc-500' : 'bg-zinc-900 text-zinc-400'
             }`}
           >
@@ -349,28 +362,36 @@ export default function TurnGuide({ state, dispatch }) {
       {current.key === 'villain' && <VillainPhase key={stepKey} state={state} hero={hero} dispatch={dispatch} />}
 
       {waiting && todo.length > 0 && (
-        <p className="mt-4 text-right text-amber-300">
+        <p ref={todoLine} className="mt-4 text-right text-amber-300">
           Still to do: {todo.join(', ')}.
           {!blocked && (
-            <button type="button" className="ml-2 text-sm text-zinc-500 underline" onClick={skip}>
+            <button type="button" className="ml-1 rounded-lg px-2 py-2 text-sm text-zinc-500 underline" onClick={skip}>
               Skip
             </button>
           )}
         </p>
       )}
-      <div className="mt-6 flex items-center justify-between gap-3">
-        <Button variant="ghost" onClick={() => dispatch({ type: 'PREVIOUS_PHASE' })}>
+      {/* Pinned to the bottom of the screen, so the way on is always in reach without scrolling,
+          however long the cards above it are. */}
+      <div
+        ref={footer}
+        className={`sticky bottom-0 z-10 mt-4 flex items-center justify-between gap-2 rounded-b-3xl border-t border-zinc-800 bg-zinc-950/90 py-2 backdrop-blur ${
+          narrow ? '-mx-4 -mb-4 px-4' : '-mx-4 -mb-4 px-4 sm:-mx-6 sm:-mb-6 sm:px-6'
+        }`}
+      >
+        <Button variant="ghost" className="shrink-0 !px-3 py-2.5 whitespace-nowrap" onClick={() => dispatch({ type: 'PREVIOUS_PHASE' })}>
           ← Back
         </Button>
-        {/* The dice are for shaking off poison after the Hero Phase and for curses that end on a roll. */}
-        <Button
-          variant="gold"
-          className="px-6 py-3 text-lg"
-          disabled={waiting}
-          onClick={next}
-        >
-          {isLastPhase ? (state.board ? `On to ${nextHero.name}'s turn →` : `Pass to ${nextHero.player || nextHero.name} →`) : `On to ${PHASES[phase + 1].title} →`}
-        </Button>
+        {waiting ? (
+          // Still something to do: the button says what, and a tap scrolls to it.
+          <Button className="min-w-0 truncate px-4 py-2.5" onClick={showNext}>
+            ↓ {todo.length ? todo[0].replace(/^the /, 'The ') : 'Finish this step first'}
+          </Button>
+        ) : (
+          <Button variant="gold" className="min-w-0 px-5 py-2.5 text-lg" onClick={next}>
+            {nextLabel}
+          </Button>
+        )}
       </div>
     </section>
   )

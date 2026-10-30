@@ -347,6 +347,12 @@ function EncounterCard({ state, hero, dispatch }) {
   const [monsterOnTile, setMonsterOnTile] = useState(() => (card.damageIfMonsterOnTile > 0 ? foeOnHeroTile(state, hero) : null))
   const [tileFromBoard, setTileFromBoard] = useState(() => card.damageIfMonsterOnTile > 0 && foeOnHeroTile(state, hero) !== null)
   const asksTile = card.damageIfMonsterOnTile > 0 && monsterOnTile === null
+  // On a phone or beside the virtual board, a long card folds to its first lines (the buttons
+  // below say what the app does) and the flavor text is left off.
+  const narrow = Boolean(state.board) || window.matchMedia?.('(max-width: 639px)').matches
+  const long = narrow && card.text.length > 180
+  const [unfolded, setUnfolded] = useState(false)
+  const folded = long && !unfolded
   const resolve = (extra = {}) =>
     dispatch({ type: 'RESOLVE_ENCOUNTER', monsterCards, villains, random: shuffleNumbers(), monsterOnTile: monsterOnTile === true, ...extra })
   const placesMarker = card.type === 'hazard' || card.type === 'trap'
@@ -371,10 +377,17 @@ function EncounterCard({ state, hero, dispatch }) {
     <div className={`mt-4 space-y-4 rounded-2xl border-2 p-4 ${TYPE_STYLES[card.type]}`}>
       <div>
         <p className="text-sm font-bold uppercase tracking-widest">{ENCOUNTER_LABELS[card.type]}</p>
-        <h3 className="font-display text-3xl font-bold text-zinc-100">{card.name}</h3>
-        {card.flavor && <p className="mt-1 italic text-zinc-400">{card.flavor}</p>}
+        <h3 className={`font-display font-bold text-zinc-100 ${narrow ? 'text-2xl' : 'text-3xl'}`}>{card.name}</h3>
+        {card.flavor && !narrow && <p className="mt-1 italic text-zinc-400">{card.flavor}</p>}
       </div>
-      <p className="whitespace-pre-line text-lg text-zinc-100">{card.text}</p>
+      <div>
+        <p className={`whitespace-pre-line text-lg text-zinc-100 ${folded ? 'line-clamp-3' : ''}`}>{card.text}</p>
+        {long && (
+          <button type="button" className="-ml-2 min-h-10 rounded-lg px-2 text-sm text-zinc-400 underline" onClick={() => setUnfolded(!unfolded)}>
+            {folded ? 'Read the whole card ▾' : 'Fold the card ▴'}
+          </button>
+        )}
+      </div>
 
       {card.noCancel && <p className="font-semibold text-amber-300">This card can’t be canceled.</p>}
       {!attacked && !card.noCancel && (

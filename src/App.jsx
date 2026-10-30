@@ -313,14 +313,14 @@ function PlayView({ state, dispatch, hero = null, soundBoard = null }) {
           fill
           readOnly={Boolean(hero) && !myTurn && !state.turn.boardMove}
           extraButtons={
-            <Button className="!px-2 !py-1 text-sm md:hidden" onClick={() => setBigBoard(!bigBoard)} aria-label={bigBoard ? 'Smaller board' : 'Bigger board'}>
+            <Button className="min-h-10 min-w-10 !px-2 !py-1 text-sm md:hidden" onClick={() => setBigBoard(!bigBoard)} aria-label={bigBoard ? 'Smaller board' : 'Bigger board'}>
               {bigBoard ? '⤒' : '⤓'}
             </Button>
           }
         />
       </div>
       <div className="flex min-h-0 flex-1 flex-col border-zinc-800 md:w-[26rem] md:flex-none md:border-l lg:w-[32rem]">
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2 pb-16">{body}</div>
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2 pb-4">{body}</div>
         {tabBar}
       </div>
       {treasure}
@@ -337,9 +337,9 @@ function SoloBar({ state, dispatch, undo, undoDepth, onSwitchSeat, sound, seatLa
   const stepper = (label, type, value) => (
     <div className="flex items-center gap-2">
       <span className="w-28 text-zinc-400">{label}</span>
-      <Button className="!px-3 !py-1" onClick={() => dispatch({ type, amount: -1 })}>−</Button>
+      <Button className="min-h-10 min-w-10 !px-3 !py-1" onClick={() => dispatch({ type, amount: -1 })}>−</Button>
       <span className="w-14 text-center text-lg font-bold text-amber-400">{value}</span>
-      <Button className="!px-3 !py-1" onClick={() => dispatch({ type, amount: 1 })}>+</Button>
+      <Button className="min-h-10 min-w-10 !px-3 !py-1" onClick={() => dispatch({ type, amount: 1 })}>+</Button>
     </div>
   )
   return (
@@ -353,7 +353,7 @@ function SoloBar({ state, dispatch, undo, undoDepth, onSwitchSeat, sound, seatLa
           {state.surges === 0 ? '0 ❤' : '❤'.repeat(state.surges)}
         </span>
         {state.tileStack && <TilesLeft state={state} className="whitespace-nowrap text-sm" />}
-        <Button variant={open ? 'gold' : 'default'} className="!px-3 !py-1" onClick={() => setOpen(!open)} aria-label="Menu" aria-expanded={open}>
+        <Button variant={open ? 'gold' : 'default'} className="min-h-10 min-w-10 !px-3 !py-1" onClick={() => setOpen(!open)} aria-label="Menu" aria-expanded={open}>
           ☰
         </Button>
       </div>
