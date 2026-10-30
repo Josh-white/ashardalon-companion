@@ -7,6 +7,7 @@ import { rollD20, shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { boardAnswer } from '../board/checks.js'
 import { encounterTargetIds, foeOnHeroTile } from '../board/encounters.js'
+import { trapsToDisable } from '../board/markers.js'
 import { DrawMonsterButton, HeroPicker } from './MonsterTurns.jsx'
 import { TileGuardQuestion } from './Treasure.jsx'
 import { DrawTileButton } from './Tiles.jsx'
@@ -627,12 +628,28 @@ export function TrapTurns({ state, hero, dispatch }) {
   )
 }
 
-// Hero Phase: instead of attacking, a hero on a trap's tile can try to disable it.
+// Hero Phase: instead of attacking, a hero on a trap's tile can try to disable it. On the
+// virtual board, traps on other tiles aren't offered, with "Disable anyway" if the board's wrong.
 export function DisableTraps({ state, hero, dispatch }) {
-  const traps = (state.traps ?? []).filter((t) => t.type === 'trap')
-  if (traps.length === 0) return null
+  // "Disable anyway" lasts for this hero's turn only.
+  const turnKey = `${hero.id}-${state.turn.round}`
+  const [anywayTurn, setAnywayTurn] = useState(null)
+  const anyway = anywayTurn === turnKey
+  const { here, away } = trapsToDisable(state, hero)
+  if (here.length + away.length === 0) return null
+  const traps = anyway ? [...here, ...away] : here
   const penalty = state.environment?.card?.trapPenalty ?? 0
   const tools = itemTrapBonus(hero)
+  if (traps.length === 0) {
+    return (
+      <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl bg-zinc-950/50 p-3 text-zinc-400">
+        <p className="flex-1">📍 No trap on {hero.name}'s tile, so nothing to disable.</p>
+        <Button variant="ghost" className="!py-1 text-sm" onClick={() => setAnywayTurn(turnKey)}>
+          Disable anyway
+        </Button>
+      </div>
+    )
+  }
   const blocked = attackBlocked(state, hero, 'disabling a trap')
   if (blocked) return <p className="mt-4 rounded-xl bg-zinc-950/50 p-3 text-zinc-400">{blocked}</p>
   return (
