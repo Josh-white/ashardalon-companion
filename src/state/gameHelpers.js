@@ -100,3 +100,6 @@ export const validRoll = (roll) => Number.isInteger(roll) && roll >= 1 && roll <
 export const pick = (list, r) => list[Math.min(list.length - 1, Math.floor((Number.isFinite(Number(r)) ? Number(r) : 0) * list.length))]
 
 export const sameName = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase()
+
+// The heroes lose: the recap opens on every screen, saying why.
+export const lose = (state, why) => withLog({ ...state, status: 'lost', ending: why }, why)
