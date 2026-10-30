@@ -12,6 +12,9 @@ export const LATTICE = 4
 
 export const key = ([x, y]) => `${x},${y}`
 
+// A board token's figure id: a monster card with two figures has tokens 'id' and 'id#2' (figureToken in play.js).
+export const baseId = (tokenId) => tokenId.split('#')[0]
+
 const turnSide = (side, turn) => {
   let s = side
   for (let i = 0; i < turn / 90; i++) s = CLOCKWISE[s]

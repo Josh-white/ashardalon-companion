@@ -6,7 +6,9 @@
 #   2. backs up the saved games and card files (scripts/backup-game.sh),
 #   3. moves to the new main and rebuilds the app,
 #   4. checks the app answers. If it doesn't, it goes back to the version that
-#      worked and leaves the broken one alone until main moves again.
+#      worked. A version that failed is tried again 30 minutes later (a download
+#      hiccup during the build shouldn't hold it back), up to 3 tries in all,
+#      then left alone until main moves again.
 #
 #   BRANCH     which branch to follow (default: main)
 #   HOST_PORT  the app's port, for the check (default: from .env, else 8081)
@@ -35,9 +37,20 @@ current=$(git rev-parse HEAD)
 target=$(git rev-parse "origin/$BRANCH")
 [ "$current" = "$target" ] && exit 0
 
-# A version that failed its check is skipped until main moves on.
-if [ -f "$skip_file" ] && [ "$(cat "$skip_file")" = "$target" ]; then
-  exit 0
+# A version that failed its check waits 30 minutes before another try, and after
+# 3 failed tries is skipped until main moves on. The file holds: commit tries time.
+attempts=0
+if [ -f "$skip_file" ]; then
+  read -r failed attempts failed_at <"$skip_file" || true
+  if [ "$failed" = "$target" ]; then
+    attempts=${attempts:-1}
+    failed_at=${failed_at:-0}
+    if [ "$attempts" -ge 3 ] || [ $(($(date +%s) - failed_at)) -lt 1800 ]; then
+      exit 0
+    fi
+  else
+    attempts=0
+  fi
 fi
 
 # Never throw away changes made by hand on the Pi, and never jump sideways:
@@ -75,10 +88,15 @@ if docker compose up -d --build && healthy; then
 fi
 
 log "the new version didn't start, going back to $(git rev-parse --short "$current")."
-echo "$target" > "$skip_file"
+attempts=$((attempts + 1))
+echo "$target $attempts $(date +%s)" > "$skip_file"
 git reset -q --hard "$current"
 if docker compose up -d --build && healthy; then
-  log "back on $(git rev-parse --short HEAD). Will try again when $BRANCH changes."
+  if [ "$attempts" -ge 3 ]; then
+    log "back on $(git rev-parse --short HEAD). That was try $attempts, so it waits until $BRANCH changes."
+  else
+    log "back on $(git rev-parse --short HEAD). Will try again in 30 minutes (try $attempts of 3)."
+  fi
 else
   log "the old version didn't start either. Check 'docker compose logs'."
 fi

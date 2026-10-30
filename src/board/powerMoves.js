@@ -13,12 +13,11 @@
 //         triangle (the tile the hero's tile's triangle points to)
 // `hit: true` steps only happen when the attack hit.
 
-import { key } from './grid.js'
+import { baseId, key } from './grid.js'
 import { distances, reachable, tilesBetween } from './paths.js'
 import { heroesFor } from './tactics.js'
 import { boardGrid, moveSpeed, occupied, placeToken } from './play.js'
 
-const baseId = (id) => id.split('#')[0]
 const parse = (k) => k.split(',').map(Number)
 
 // Queues a power's moves (nothing happens without a board or with no steps left).
@@ -91,7 +90,7 @@ export function queueHitMoves(state, tokenId) {
 // A monster that moves "to any square within 1 tile" (the Kobold Dragonlord after its
 // attack): the players tap where, on the virtual board.
 export function queueFoeStep(state, tokenId, n = 1) {
-  const foe = state.board?.tokens[tokenId] && findFoeName(state, tokenId.split('#')[0])
+  const foe = state.board?.tokens[tokenId] && findFoeName(state, baseId(tokenId))
   const hero = state.heroes[state.turn.heroIndex]
   if (!foe || !hero || !state.board.tokens[hero.id] || state.turn.boardMove) return state
   return queueMoves(state, hero, { name: foe.name }, [{ pick: 'listed', to: 'tileWithin', n, ref: 'piece' }], { tokens: [tokenId], from: tokenId, fromName: foe.name })

@@ -11,7 +11,7 @@
 // - Instead of moving, the owner can move the Flaming Sphere or the Wizard Eye 1 tile.
 // - The owner can explore from any unexplored edge on the Wizard Eye's tile.
 
-import { key, unexploredEdges } from './grid.js'
+import { baseId, key } from './grid.js'
 import { adjacent, distances, tilesBetween } from './paths.js'
 import { boardGrid, movesLeft } from './play.js'
 import { newId, withLog } from '../state/gameHelpers.js'
@@ -114,7 +114,7 @@ export function trippedTokens(state) {
   const board = state.board
   if (!board) return []
   const foes = new Set([...state.monsters.filter((m) => !m.objective), ...(state.villains ?? []).filter((v) => !v.defeated)].map((m) => m.id))
-  const standing = new Map(Object.entries(board.tokens).filter(([id]) => foes.has(id.split('#')[0])).map(([id, at]) => [key(at), id.split('#')[0]]))
+  const standing = new Map(Object.entries(board.tokens).filter(([id]) => foes.has(baseId(id))).map(([id, at]) => [key(at), baseId(id)]))
   return items(state)
     .filter((i) => (i.kind === 'blade' || i.kind === 'caltrop') && i.at && standing.has(key(i.at)))
     .map((item) => ({ item, foeId: standing.get(key(item.at)) }))
@@ -160,15 +160,5 @@ export function sphereVictims(state, hero) {
   const grid = boardGrid(state.board)
   const area = grid.get(key(sphere.at))?.area
   const foes = new Set([...state.monsters.filter((m) => !m.objective), ...(state.villains ?? []).filter((v) => !v.defeated)].map((m) => m.id))
-  return [...new Set(Object.entries(state.board.tokens).filter(([id, at]) => foes.has(id.split('#')[0]) && grid.get(key(at))?.area === area).map(([id]) => id.split('#')[0]))]
-}
-
-// The unexplored edges the active hero can explore from through their Wizard Eye.
-export function eyeEdges(state) {
-  const hero = state.heroes[state.turn.heroIndex]
-  const eye = hero && items(state).find((i) => i.kind === 'eye' && i.owner === hero.id && i.at)
-  if (!eye) return []
-  const grid = boardGrid(state.board)
-  const area = grid.get(key(eye.at))?.area
-  return unexploredEdges(grid).filter((e) => e.area === area)
+  return [...new Set(Object.entries(state.board.tokens).filter(([id, at]) => foes.has(baseId(id)) && grid.get(key(at))?.area === area).map(([id]) => baseId(id)))]
 }

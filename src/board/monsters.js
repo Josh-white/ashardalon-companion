@@ -2,7 +2,7 @@
 // picks who it attacks, and works out where it moves. The screen still shows each step,
 // and "Move by hand" fixes anything the app gets wrong.
 
-import { key, unexploredEdges } from './grid.js'
+import { baseId, key, unexploredEdges } from './grid.js'
 import { adjacent, closest, distances, tilesBetween } from './paths.js'
 import { heroesFor, seesInvisible, tacticHolds } from './tactics.js'
 import { boardGrid } from './play.js'
@@ -158,7 +158,7 @@ export function foesInRange(state, heroId, range, foes) {
   const grid = boardGrid(state.board)
   const tokens = Object.entries(state.board.tokens)
   return foes.filter((foe) => {
-    const mine = tokens.filter(([id]) => id.split('#')[0] === foe.id).map(([id, sq]) => ({ id, at: sq }))
+    const mine = tokens.filter(([id]) => baseId(id) === foe.id).map(([id, sq]) => ({ id, at: sq }))
     return mine.length === 0 || heroesFor(range, grid, at, mine).length > 0
   })
 }
@@ -169,7 +169,7 @@ export function foeDistance(state, heroId, foeId) {
   if (!state.board || !at) return null
   const grid = boardGrid(state.board)
   const mine = Object.entries(state.board.tokens)
-    .filter(([id]) => id.split('#')[0] === foeId)
+    .filter(([id]) => baseId(id) === foeId)
     .map(([id, sq]) => ({ id, at: sq }))
   if (mine.length === 0) return null
   if (heroesFor('adjacent', grid, at, mine).length > 0) return 'adjacent'
@@ -181,8 +181,8 @@ export function foeDistance(state, heroId, foeId) {
 function foeFigures(state) {
   const foes = new Map([...state.monsters, ...(state.villains ?? []).filter((v) => !v.defeated)].filter((m) => !m.objective).map((m) => [m.id, m]))
   return Object.entries(state.board.tokens)
-    .filter(([id]) => foes.has(id.split('#')[0]))
-    .map(([id, at]) => ({ id, at, name: foes.get(id.split('#')[0]).name }))
+    .filter(([id]) => foes.has(baseId(id)))
+    .map(([id, at]) => ({ id, at, name: foes.get(baseId(id)).name }))
 }
 
 // Wrath of the Enemy: the monster closest to the hero that isn't on the hero's tile goes on a
@@ -217,7 +217,7 @@ export function sentryMoves(state) {
   const out = []
   let next = state
   for (const [id, at] of Object.entries(state.board.tokens)) {
-    if (!sentries.has(id.split('#')[0])) continue
+    if (!sentries.has(baseId(id))) continue
     const area = grid.get(key(at))?.area
     if (edges.some((e) => e.area === area)) continue
     const far = distances(grid, at)
