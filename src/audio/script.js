@@ -2,6 +2,7 @@
 // server/record-narration.js records them all once, so the narrator can keep
 // playing them after the ElevenLabs key is gone. The lines come from the same
 // functions the projector uses, so the words match exactly.
+import { coachLine } from '../data/coaches.js'
 import { heroTemplates } from '../data/heroes.js'
 import { VILLAIN_LINES } from '../data/villainLines.js'
 import { INTRO_LINE, firstTurnLine, momentLines, narrationFor, previouslyLine } from './narration.js'
@@ -21,6 +22,11 @@ export function narrationScript(cards) {
   // The intro screen, and the herald calling out each hero in the lobby.
   lines.push(INTRO_LINE)
   for (const hero of templates) change({ status: 'setup', lobby: [] }, { status: 'setup', lobby: [{ heroKey: hero.key }] })
+  // Each hero's coach, for a player picking that hero for the first time (or asking again).
+  for (const hero of templates) {
+    const line = coachLine(hero.key)
+    if (line) lines.push(line)
+  }
   // Who won the roll for first turn, and the Chronicle's look back between campaign adventures.
   for (const hero of heroes) lines.push(firstTurnLine(hero))
   for (const won of [true, false]) {

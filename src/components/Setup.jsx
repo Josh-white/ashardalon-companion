@@ -5,11 +5,14 @@ import { campaignHero } from '../state/campaign.js'
 import { levelSlots, powerSlotsFor } from '../state/game.js'
 import { randomNumbers, shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
-import { useRecords } from '../state/useRecords.js'
+import { coachLine } from '../data/coaches.js'
+import { heroesPlayed } from '../state/records.js'
+import { useRecordsFile } from '../state/useRecords.js'
 import { ChosenAdventure, QuestLine } from './Adventure.jsx'
 import Art from './Art.jsx'
 import { CampaignLobby, HeroCampaign } from './Campaign.jsx'
 import Chronicle from './Chronicle.jsx'
+import HeroCoach from './HeroCoach.jsx'
 import { HeroBanner, HeroPortrait, PowerSlots } from './HeroGallery.jsx'
 import { HeroHall, HoldToPick } from './HeroHall.jsx'
 import { HallOfRecords, PlayerTitle } from './Records.jsx'
@@ -118,7 +121,15 @@ function Stats({ template, level = 1 }) {
 
 // `solo`: the solo screen's short version. The name and getting ready are asked once for
 // the whole screen, and the powers fold away (the suggested ones are already picked).
-function MyHero({ state, claim, cards, deviceId, dispatch, solo = false, records = null }) {
+// Is this hero new to the player? Null while the Pi's records load. A player with no name
+// yet counts as new.
+export function newToHero(played, name, heroKey) {
+  if (!name?.trim()) return true
+  if (!played) return null
+  return !heroesPlayed(played, name).includes(heroKey)
+}
+
+function MyHero({ state, claim, cards, deviceId, dispatch, solo = false, records = null, played = null, voice = null }) {
   const [showPowers, setShowPowers] = useState(!solo || !powersChosen(claim, cards.powers))
   const template = templateFor(claim.heroKey)
   const color = HERO_COLORS[template.color]
@@ -146,6 +157,9 @@ function MyHero({ state, claim, cards, deviceId, dispatch, solo = false, records
           {changeHero}
         </div>
         {state.campaign && <HeroCampaign state={state} heroKey={template.key} dispatch={dispatch} />}
+        <div className="mt-3">
+          <HeroCoach key={template.key} heroKey={template.key} isNew={false} voice={voice} />
+        </div>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-zinc-300">
           <span className="mr-auto">Powers: {claim.picks.map((card) => card?.name ?? '(not chosen)').join(', ')}</span>
           {!showPowers && (
@@ -209,6 +223,8 @@ function MyHero({ state, claim, cards, deviceId, dispatch, solo = false, records
         </div>
       </div>
 
+      <HeroCoach key={template.key} heroKey={template.key} isNew={newToHero(played, claim.player, template.key)} voice={voice} />
+
       <div>
         <h3 className="mb-2 font-display text-2xl font-bold text-amber-400">Your powers</h3>
         {powerSlots}
@@ -241,7 +257,7 @@ function MyHero({ state, claim, cards, deviceId, dispatch, solo = false, records
 // a hero ready works the same as on a player's iPad.
 const SOLO_SLOTS = ['~solo-1', '~solo-2', '~solo-3', '~solo-4', '~solo-5']
 
-function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave }) {
+function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave, voice }) {
   const lobby = state.lobby ?? []
   const mine = SOLO_SLOTS.map((slot) => lobby.find((c) => c.deviceId === deviceId + slot)).filter(Boolean)
   const others = lobby.filter((c) => !c.deviceId.startsWith(deviceId + '~solo'))
@@ -272,7 +288,7 @@ function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave }) {
       </header>
       {state.campaign ? <CampaignLobby state={state} dispatch={dispatch} /> : <QuestLine state={state} dispatch={dispatch} onBoard big={false} />}
       {mine.map((claim) => (
-        <MyHero key={claim.deviceId} state={state} claim={claim} cards={cards} deviceId={claim.deviceId} dispatch={dispatch} solo />
+        <MyHero key={claim.deviceId} state={state} claim={claim} cards={cards} deviceId={claim.deviceId} dispatch={dispatch} solo voice={voice} />
       ))}
       {freeSlot && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -321,11 +337,13 @@ function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave }) {
 
 // `role` is what this screen said it is on "Who stands here?" (null until it says), and
 // `projectorOpen` whether a big screen is in the game right now.
-export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watchOnly, onProjector, onLeaveProjector, onArt, onSolo, role, setRole, projectorOpen }) {
+export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watchOnly, onProjector, onLeaveProjector, onArt, onSolo, role, setRole, projectorOpen, voice = null }) {
   const cards = useCards()
   const [hall, setHall] = useState(false)
   // Loaded again after the Hall of Records closes.
-  const records = useRecords(hall)
+  const recordsFile = useRecordsFile(hall)
+  const records = recordsFile?.players ?? null
+  const played = recordsFile?.played ?? null
   const lobby = state.lobby ?? []
   if (hall) return <HallOfRecords onClose={() => setHall(false)} />
   const canBoard = cards.tiles.some((t) => t.id === 'start')
@@ -341,7 +359,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
       dispatch({ type: 'START_GAME', treasureCards: cards.treasures, chambers: cards.chambers, tokens: cards.treasureTokens, random: shuffleNumbers(), tileRandom: randomNumbers(8), boardTiles: cards.tiles, boardRandom: randomNumbers(64) })
       onSolo()
     }
-    return <SoloSetup state={state} dispatch={dispatch} deviceId={deviceId} cards={cards} onStart={start} onLeave={leave} />
+    return <SoloSetup state={state} dispatch={dispatch} deviceId={deviceId} cards={cards} onStart={start} onLeave={leave} voice={voice} />
   }
   // A screen that hasn't said what it is yet (and isn't already holding a hero) asks first.
   if (!watchOnly && !mine && (!role || role === 'big' || (role === 'solo' && !canSolo))) {
@@ -375,8 +393,12 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
     })
 
   const claim = (template) => {
-    dispatch({ type: 'CLAIM_HERO', deviceId, heroKey: template.key, picks: startingPicks(template, cards.powers), player: rememberedName() })
+    const player = rememberedName()
+    dispatch({ type: 'CLAIM_HERO', deviceId, heroKey: template.key, picks: startingPicks(template, cards.powers), player })
     onClaim(template.key)
+    // A player new to this hero hears their coach straight away.
+    const line = coachLine(template.key)
+    if (line && voice?.available && newToHero(played, player, template.key)) voice.say([line], { force: true })
   }
 
   return (
@@ -404,7 +426,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
         </>
       )}
 
-      {mine && !watchOnly && <MyHero state={state} claim={mine} cards={cards} deviceId={deviceId} dispatch={dispatch} records={records} />}
+      {mine && !watchOnly && <MyHero state={state} claim={mine} cards={cards} deviceId={deviceId} dispatch={dispatch} records={records} played={played} voice={voice} />}
 
       {!watchOnly && (
         <div className={`flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-4 ${mine ? 'pt-4' : ''}`}>
