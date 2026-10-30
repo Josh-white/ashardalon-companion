@@ -6,6 +6,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
+# The commit being built (scripts/auto-update.sh sets it), shown on the game picker.
+ARG APP_VERSION=
+ENV APP_VERSION=$APP_VERSION
 # The tests run here too, so the Pi refuses to deploy a version that fails
 # them (scripts/auto-update.sh then keeps the version that worked).
 RUN npm test && npm run build

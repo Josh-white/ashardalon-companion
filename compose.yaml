@@ -1,6 +1,10 @@
 services:
   ashardalon:
-    build: .
+    build:
+      context: .
+      args:
+        # The commit, shown on the game picker (scripts/auto-update.sh sets it).
+        - APP_VERSION=${APP_VERSION:-}
     # The test copy sets these in its own .env file (see README); the real game uses the defaults.
     image: ${CONTAINER_NAME:-ashardalon-companion}
     container_name: ${CONTAINER_NAME:-ashardalon-companion}

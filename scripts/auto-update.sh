@@ -81,7 +81,7 @@ healthy() {
 }
 
 git merge -q --ff-only "$target"
-if docker compose up -d --build && healthy; then
+if APP_VERSION=$(git rev-parse --short HEAD) docker compose up -d --build && healthy; then
   rm -f "$skip_file"
   log "done, now on $(git rev-parse --short HEAD)."
   exit 0
@@ -91,7 +91,7 @@ log "the new version didn't start, going back to $(git rev-parse --short "$curre
 attempts=$((attempts + 1))
 echo "$target $attempts $(date +%s)" > "$skip_file"
 git reset -q --hard "$current"
-if docker compose up -d --build && healthy; then
+if APP_VERSION=$(git rev-parse --short HEAD) docker compose up -d --build && healthy; then
   if [ "$attempts" -ge 3 ]; then
     log "back on $(git rev-parse --short HEAD). That was try $attempts, so it waits until $BRANCH changes."
   else
