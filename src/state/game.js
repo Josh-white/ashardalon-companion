@@ -25,6 +25,7 @@ import { boardMove, queueEncounterMoves, queueFearMove, queueFoeStep, queueHitMo
 import { heroTile } from '../board/encounters.js'
 import { guardsOnTile } from '../board/checks.js'
 import { addCarpet, addTreasureToken, flyCarpet, pickUpTreasure, placeItem, removeItem } from '../board/items.js'
+import { isLava, isMovingTrap, trapStep } from '../board/traps.js'
 import { activeVillains, buildDeck, clamp, findFoe, foes, heroLabel, markUsed, newId, pick, sameName, shuffle, toggle, updateHero, updateMonster, validRoll, withCast, withLog, withMoment, withVillainCall } from './gameHelpers.js'
 import { discardMonsterCard, drawMonster, drawMonsterOfType, filterMonsterDeck, monsterFromCard, villainInPlay } from './monsterDeck.js'
 import { discardEncounterCard, drawEncounter, intoTopThree, oweEncounter } from './encounterDeck.js'
@@ -358,7 +359,12 @@ function resolveEncounter(state, action) {
     const marker = { id: newId('trap'), cardId: card.id, name: card.name, type: card.type, ownerId: encounter.heroId, card }
     // On the virtual board the marker remembers its tile, so the trap knows who it reaches.
     const tile = heroTile(state, encounter.heroId)
-    if (tile !== undefined) marker.tile = tile
+    if (tile !== undefined) {
+      marker.tile = tile
+      // The board follows moving traps (Rolling Boulder) and spreading lava from here on.
+      if (isMovingTrap(card)) marker.tracked = true
+      if (isLava(card)) marker.tiles = [tile]
+    }
     next = withLog({ ...next, traps: [...(next.traps ?? []), marker] }, `A ${card.name} marker goes on ${hero?.name ?? 'the hero'}'s tile.`)
   } else if (card.returnToTop) {
     next = withLog({ ...next, encounterDeck: intoTopThree(next.encounterDeck, card.id, card, action.random?.slice(-1)) }, `${card.name} was shuffled back into the top of the encounter deck.`)
@@ -2285,6 +2291,9 @@ function reduce(state, action) {
         source: { kind: 'trap', trapId: trap.id },
       })
     }
+
+    case 'TRAP_STEP':
+      return trapStep(state, action, withLog)
 
     case 'TRAP_DAMAGE': {
       const trap = (state.traps ?? []).find((t) => t.id === action.trapId)

@@ -9,6 +9,7 @@ import { boardAnswer } from '../board/checks.js'
 import { encounterTargetIds, foeOnHeroTile } from '../board/encounters.js'
 import { wrathPull } from '../board/monsters.js'
 import { markerOnHeroTile, trapsToDisable } from '../board/markers.js'
+import { heroesOnTrap, isLava, isMovingTrap, trapStepChoices, trapStepped } from '../board/traps.js'
 import { DrawMonsterButton, HeroPicker } from './MonsterTurns.jsx'
 import { MonsterChoice } from './Pickers.jsx'
 import { TileGuardQuestion } from './Treasure.jsx'
@@ -563,19 +564,61 @@ export function EncounterStep({ state, hero, dispatch }) {
   )
 }
 
+// On the virtual board, a trap that moves (Rolling Boulder, Whirling Blades) or spreads (Lava
+// Flow) does that first: the board works it out, or lights the tiles to choose from.
+function TrapStep({ state, trap, dispatch }) {
+  const lava = isLava(trap)
+  const picking = state.turn.trapPick?.trapId === trap.id
+  if (picking) {
+    return (
+      <p className="rounded-xl bg-amber-950/60 p-3 text-lg text-amber-200">
+        {lava ? 'The lava can spread more than one way.' : `The ${trap.name} could go more than one way.`} Tap a lit tile on the board.
+      </p>
+    )
+  }
+  return (
+    <Button variant="danger" className="w-full py-3 text-lg font-bold" onClick={() => dispatch({ type: 'TRAP_STEP', trapId: trap.id })}>
+      {lava ? '🌋 Spread the lava' : `${trap.cardId === 'rolling-boulder' ? '🪨' : '🌀'} Move the ${trap.name} toward the closest hero`}
+    </Button>
+  )
+}
+
+// Tap every hero a damage-only trap reaches (the board picks them when it knows where the trap is).
+function TrapDamage({ state, trap, damage, dispatch, onHit }) {
+  const [chosen, setChosen] = useState(() => heroesOnTrap(state, trap) ?? [])
+  const toggle = (id) => setChosen((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]))
+  return (
+    <>
+      <p className="text-xl font-semibold text-zinc-100">Tap every hero it reaches. Each takes {damage} damage.</p>
+      <HeroPicker heroes={state.heroes} chosen={chosen} onToggle={toggle} />
+      <Button
+        variant="danger"
+        className="w-full py-3 text-lg font-bold"
+        onClick={() => {
+          if (chosen.length > 0) dispatch({ type: 'TRAP_DAMAGE', trapId: trap.id, heroIds: chosen })
+          onHit()
+        }}
+      >
+        {chosen.length > 0 ? `Deal ${damage} damage` : 'Nobody is there'}
+      </Button>
+    </>
+  )
+}
+
 // Traps take a turn in their owner's Villain Phase, after the monsters.
 function TrapActivation({ state, hero, trap, dispatch, onDone }) {
   const { attack, damage } = trap.card.trap ?? {}
-  const [chosen, setChosen] = useState([])
   const [hit, setHit] = useState(false)
-  const toggle = (id) => setChosen((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]))
   const trigger = trap.card.text.split('\n').find((line) => /^Trigger/i.test(line)) ?? ''
+  // Moving and spreading traps go first on the virtual board, when it knows where they are.
+  const stepFirst = (isMovingTrap(trap) || isLava(trap)) && trapStepChoices(state, trap) !== null && !trapStepped(state, trap)
 
   return (
     <div className="space-y-3 rounded-2xl border-2 border-red-700 bg-zinc-950/80 p-4">
       <h4 className="font-display text-2xl font-bold text-red-300">{trap.name}</h4>
       <p className="text-lg text-zinc-100">{trigger.replace(/^Trigger the trap during your Villain Phase:\s*/i, '')}</p>
-      {attack && (
+      {stepFirst && <TrapStep state={state} trap={trap} dispatch={dispatch} />}
+      {!stepFirst && attack && (
         <AttackStep
           state={state}
           hero={hero}
@@ -590,22 +633,7 @@ function TrapActivation({ state, hero, trap, dispatch, onDone }) {
           dispatch={dispatch}
         />
       )}
-      {!attack && damage > 0 && !hit && (
-        <>
-          <p className="text-xl font-semibold text-zinc-100">Tap every hero it reaches. Each takes {damage} damage.</p>
-          <HeroPicker heroes={state.heroes} chosen={chosen} onToggle={toggle} />
-          <Button
-            variant="danger"
-            className="w-full py-3 text-lg font-bold"
-            onClick={() => {
-              if (chosen.length > 0) dispatch({ type: 'TRAP_DAMAGE', trapId: trap.id, heroIds: chosen })
-              setHit(true)
-            }}
-          >
-            {chosen.length > 0 ? `Deal ${damage} damage` : 'Nobody is there'}
-          </Button>
-        </>
-      )}
+      {!stepFirst && !attack && damage > 0 && !hit && <TrapDamage state={state} trap={trap} damage={damage} dispatch={dispatch} onHit={() => setHit(true)} />}
       {(hit || (!attack && !damage)) && (
         <Button variant="gold" className="w-full py-3 text-lg" onClick={onDone}>
           Done with the {trap.name}
