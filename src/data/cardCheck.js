@@ -14,6 +14,7 @@ export const ENCOUNTER_IDS = {
   spotted: 'Spotted!: draws the bottom tile',
   lost: 'Lost: puts the bottom tile on top of the stack',
   'thief-in-the-dark': 'Thief in the Dark: picks the treasure to lose',
+  'hidden-treasure': 'Hidden Treasure: puts a Treasure token on the virtual board',
 }
 
 // What the app expects to find in the card file but can't, as sentences for the

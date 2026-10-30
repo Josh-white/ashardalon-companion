@@ -120,6 +120,20 @@ function MarkerBadges({ markers, spin, onTap }) {
   })
 }
 
+// A Treasure token lying on a square: a gold coin. Tap it to move it or hand it out.
+function Coin({ item, selected, spin, onTap }) {
+  const cx = item.at[0] * SQUARE + SQUARE / 2
+  const cy = item.at[1] * SQUARE + SQUARE / 2
+  return (
+    <g data-item={item.id} onClick={onTap} className={onTap ? 'cursor-pointer' : undefined}>
+      <circle cx={cx} cy={cy} r="15" fill="#f59e0b" stroke={selected ? '#fde047' : '#78350f'} strokeWidth={selected ? 5 : 3} />
+      <text x={cx} y={cy + 6} textAnchor="middle" fontSize="17" transform={spin ? `rotate(${-spin} ${cx} ${cy})` : undefined}>
+        💰
+      </text>
+    </g>
+  )
+}
+
 // A round figure: its token art when there is some, else a coloured disc with its initial.
 // The hero whose turn it is gets a pulsing gold glow so it is easy to spot.
 function Token({ id, at, label, color, art, selected, active, faded, spin, onTap }) {
@@ -276,13 +290,25 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   const watching = readOnly && !byHand
   // The projector's board has no dispatch: nothing to tap there.
   const tools = !readOnly || (fill && Boolean(dispatch))
-  if (!watching && picked) {
+  const items = board.items ?? []
+  const pickedItem = items.find((i) => i.id === picked)
+  // A Treasure token goes on a free square of a tile with no hero on it (Hidden Treasure).
+  const heroAreas = new Set(state.heroes.map((h) => board.tokens[h.id] && grid.get(key(board.tokens[h.id]))?.area))
+  const itemSquares = new Set(items.filter((i) => i.at && i.id !== picked).map((i) => key(i.at)))
+  if (tools && pickedItem) {
+    targets = [...grid.values()].filter((sq) => sq.floor && !heroAreas.has(sq.area) && !taken.has(key([sq.x, sq.y])) && !itemSquares.has(key([sq.x, sq.y]))).map((sq) => key([sq.x, sq.y]))
+  } else if (!watching && picked) {
     if (powerMove) targets = moveTargets(state, picked)
     else if (byHand) targets = [...grid.values()].filter((sq) => sq.floor && !taken.has(key([sq.x, sq.y]))).map((sq) => key([sq.x, sq.y]))
     else if (picked === active?.id) targets = heroReach(state, active)
   }
   const tapSquare = (sq) => {
     if (!picked || !targets.includes(key(sq))) return
+    if (pickedItem) {
+      dispatch({ type: 'PLACE_ITEM', id: picked, to: sq })
+      setPicked(null)
+      return
+    }
     dispatch(powerMove ? { type: 'BOARD_MOVE', id: picked, to: sq } : byHand ? { type: 'MOVE_TOKEN', id: picked, to: sq } : { type: 'MOVE_HERO', heroId: picked, to: sq })
     setPicked(null)
   }
@@ -329,7 +355,9 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
       {tools && (
         <div className={`mb-2 flex items-center gap-2 ${fill ? '' : 'flex-wrap'}`}>
           <p className={`flex-1 text-zinc-300 ${fill ? 'text-xs leading-snug sm:text-sm' : 'text-sm'}`}>
-            {watching
+            {pickedItem
+              ? 'Tap a lit square to put the Treasure token there.'
+              : watching
               ? `${active?.name ?? 'Someone'}'s turn. ✋ moves a figure by hand.`
               : byHand
               ? picked
@@ -385,6 +413,38 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
               {f.label}
             </button>
           ))}
+        </div>
+      )}
+      {tools && (byHand || items.length > 0) && (
+        <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+          {items.filter((i) => !i.at).map((i) => (
+            <button
+              key={i.id}
+              type="button"
+              className={`rounded-full px-3 py-1 font-semibold ${picked === i.id ? 'bg-amber-500 text-zinc-950' : 'bg-amber-900 text-amber-100 motion-safe:animate-pulse'}`}
+              onClick={() => setPicked(picked === i.id ? null : i.id)}
+            >
+              💰 {picked === i.id ? 'Tap a lit square (a tile with no hero)' : 'Put the Treasure token down'}
+            </button>
+          ))}
+          {pickedItem?.at && (
+            <>
+              <span className="text-amber-200">💰 Treasure token: tap a lit square to move it, or</span>
+              {active && (
+                <Button className="!py-1 text-sm" onClick={() => { setPicked(null); dispatch({ type: 'PICK_UP_TREASURE', id: pickedItem.id, heroId: active.id }) }}>
+                  {active.name} picks it up
+                </Button>
+              )}
+              <Button variant="ghost" className="!py-1 text-sm" onClick={() => { setPicked(null); dispatch({ type: 'REMOVE_ITEM', id: pickedItem.id }) }}>
+                Remove it
+              </Button>
+            </>
+          )}
+          {byHand && !pickedItem && (
+            <Button className="!py-1 text-sm" onClick={() => dispatch({ type: 'ADD_TREASURE_TOKEN' })}>
+              + 💰 Treasure token
+            </Button>
+          )}
         </div>
       )}
       {markers.length > 0 && (
@@ -457,6 +517,9 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
                 />
               )
             })}
+            {items.filter((i) => i.at).map((i) => (
+              <Coin key={i.id} item={i} spin={spin} selected={picked === i.id} onTap={tools ? () => setPicked(picked === i.id ? null : i.id) : undefined} />
+            ))}
             {/* The active hero is drawn last so its glow sits on top of its neighbours. */}
             {[...onBoard.filter((f) => f.id !== activeId), ...onBoard.filter((f) => f.id === activeId)].map((f) => (
               <Token key={f.id} {...f} spin={spin} at={board.tokens[f.id]} active={f.id === activeId} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)} onTap={watching ? undefined : () => tapFigure(f.id)} />
