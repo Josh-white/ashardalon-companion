@@ -1,6 +1,7 @@
 import { ABILITY_EFFECTS, CONDITIONS, HERO_COLORS, HERO_TEMPLATES } from './heroes.js'
 import { EFFECT_FIELDS } from './powerEffects.js'
 import { normalizeTiles } from '../board/tileDefs.js'
+import { WARM_UP } from './warmUp.js'
 
 // "Attack +8 · Damage 1", to compare cards while choosing.
 export function cardStats(card) {
@@ -55,7 +56,7 @@ export function normalizeCardFile(data) {
     monsters: normalizeMonsters(data?.monsters, problems),
     villains: normalizeVillains(data?.villains, problems),
     encounters: normalizeEncounters(data?.encounters, problems),
-    adventures: normalizeAdventures(data?.adventures, problems),
+    adventures: withWarmUp(normalizeAdventures(data?.adventures, problems)),
     chambers: normalizeChambers(data?.chambers, problems),
     treasures: normalizeTreasures(data?.treasures, problems),
     villagers: normalizeVillagers(data?.villagers, problems),
@@ -666,10 +667,17 @@ function normalizeAdventures(list, problems) {
       campaign: normalizeCampaign(adv.campaign),
       // Bigger features the adventure needs, such as "villains" or "chambers".
       needs: strings(adv.needs),
+      // A practice game (the Hero Swap Warm-up): it never counts toward records or titles.
+      practice: adv.practice === true,
     })
   })
   return adventures
 }
+
+// Every card file gets the app's own practice adventure (data/warmUp.js), unless it has
+// its own adventure by that id.
+const withWarmUp = (adventures) =>
+  adventures.some((a) => a.id === WARM_UP.id) ? adventures : [...adventures, ...normalizeAdventures([WARM_UP], [])]
 
 // A campaign adventure is played again and again with the same heroes, one Chamber card
 // each time. `chambers`: the Chamber deck (empty = every chamber the app can run).

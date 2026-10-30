@@ -25,7 +25,8 @@ export function AdventurePicker({ state, dispatch, board = false, compact = fals
   const { adventures } = useCards()
   const chosen = state.lobbyAdventure
   const surges = state.lobbySurges ?? 2
-  const sorted = [...adventures].sort((a, b) => (a.number ?? 99) - (b.number ?? 99))
+  // The practice warm-up first, then the book's adventures in order.
+  const sorted = [...adventures].sort((a, b) => b.practice - a.practice || (a.number ?? 99) - (b.number ?? 99))
 
   return (
     <section className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
@@ -40,7 +41,7 @@ export function AdventurePicker({ state, dispatch, board = false, compact = fals
               compact={compact}
               active={chosen?.id === adventure.id}
               disabled={missing.length > 0}
-              title={compact ? adventure.title : heading(adventure)}
+              title={`${adventure.practice ? '🔄 ' : ''}${compact ? adventure.title : heading(adventure)}`}
               number={adventure.number}
               detail={missing.length > 0 ? `Coming soon: needs ${missing.map((f) => FEATURE_LABELS[f] ?? f).join(', ')}` : adventure.goal}
               players={adventure.players}

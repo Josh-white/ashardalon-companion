@@ -34,7 +34,7 @@ const defeat = (state, monster) => gameReducer(state, { type: 'DEFEAT_MONSTER', 
 describe('adventures', () => {
   it('reads adventures from the card file', () => {
     expect(problems).toEqual([])
-    expect(adventures.map((a) => a.id)).toEqual(['hunt', 'gear', 'big'])
+    expect(adventures.map((a) => a.id)).toEqual(['hunt', 'gear', 'big', 'hero-swap-warm-up'])
   })
 
   it('starts the chosen adventure with its surges and start story', () => {
