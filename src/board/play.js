@@ -285,16 +285,18 @@ export function placeNewFigures(before, state) {
 }
 
 // Monsters with no figure on the board and no tile waiting for them (also one drawn before
-// this fix, in an older save), put on the tile tileForDrawnMonster picks.
+// this fix, in an older save), put on the tile tileForDrawnMonster picks. A villain that
+// arrives without a tile (Ashardalon Arrives!) goes there too, after the monsters.
 function placeDrawnMonsters(state) {
   const board = state.board
-  const fresh = state.monsters
+  const monsters = state.monsters
     .filter((m) => !m.objective && !board.tokens[m.id])
     .flatMap((m) => Array.from({ length: figuresLeft(m) }, (_, i) => figureToken(m.id, i + 1)))
+  const fresh = [...monsters, ...(state.villains ?? []).filter((v) => !v.defeated && !board.tokens[v.id]).map((v) => v.id)]
   if (fresh.length === 0) return state
   // Time Leap: the hero vanishes and the monster takes the very square the hero stood on.
   const hero = state.heroes[state.turn.heroIndex]
-  if (state.encounter?.card?.curse?.removeAtTurnStart && activeAt(state)) {
+  if (monsters.length > 0 && state.encounter?.card?.curse?.removeAtTurnStart && activeAt(state)) {
     const { [hero.id]: at, ...tokens } = board.tokens
     return placeDrawnMonsters({ ...state, board: { ...board, tokens: { ...tokens, [fresh[0]]: at } } })
   }
@@ -327,14 +329,17 @@ export const figuresLeft = (monster) => (monster.card?.figures > 1 && !monster.v
 
 const has = (hero, condition) => (hero.conditions ?? []).includes(condition)
 
+// The Cage curse: the hero can't move until the cage is opened.
+export const caged = (hero) => (hero.curses ?? []).some((c) => c.cardId === 'cage')
+
 // How far the hero walks in one move: Slowed heroes only 2 squares.
 export const moveSpeed = (hero) => (has(hero, 'Slowed') ? Math.min(2, hero.speed ?? 6) : hero.speed ?? 6)
 
 // Whether the active hero can still move this Hero Phase: move twice, or move and attack
-// (in either order). A Dazed hero gets one action; an Immobilized hero can't move.
+// (in either order). A Dazed hero gets one action; an Immobilized or caged hero can't move.
 export function movesLeft(state, hero) {
   if (!state.board || state.status !== 'playing' || state.turn.phase !== 0) return 0
-  if (state.heroes[state.turn.heroIndex]?.id !== hero.id || hero.hp <= 0 || has(hero, 'Immobilized')) return 0
+  if (state.heroes[state.turn.heroIndex]?.id !== hero.id || hero.hp <= 0 || has(hero, 'Immobilized') || caged(hero)) return 0
   const last = state.turn.lastAttack
   const attacked = Boolean(state.turn.attackSpent || (last && last.heroId === hero.id && !last.bonus && !last.free))
   const actions = has(hero, 'Dazed') ? 1 : 2
@@ -361,18 +366,22 @@ export function heroReach(state, hero) {
   return reachable(boardGrid(state.board), at, moveSpeed(hero), occupied(state, hero.id))
 }
 
-// Puts a figure on a square. A hero that changes tile also leaves a trail for this turn in
+// Puts a figure on a square. A hero that moves is listed in state.turn.heroesMoved (A Gap in
+// the Armor), and one that changes tile also leaves a trail for this turn in
 // state.turn.heroTiles[id] = { start, entered }: the tile it started on and each tile it
 // moved onto, so the board can answer Volcanic Vapors and Dragon Fear.
 export function placeToken(state, id, at) {
-  const placed = { ...state, board: { ...state.board, tokens: { ...state.board.tokens, [id]: [at[0], at[1]] } } }
+  let placed = { ...state, board: { ...state.board, tokens: { ...state.board.tokens, [id]: [at[0], at[1]] } } }
   const was = state.board.tokens[id]
   if (!was || !state.turn || !state.heroes?.some((h) => h.id === id)) return placed
+  if (key(was) !== key(at) && !(state.turn.heroesMoved ?? []).includes(id)) {
+    placed = { ...placed, turn: { ...placed.turn, heroesMoved: [...(state.turn.heroesMoved ?? []), id] } }
+  }
   const grid = boardGrid(state.board)
   const [from, to] = [grid.get(key(was))?.area, grid.get(key(at))?.area]
   if (from === undefined || to === undefined || from === to) return placed
   const trail = state.turn.heroTiles?.[id] ?? { start: from, entered: [] }
-  return { ...placed, turn: { ...state.turn, heroTiles: { ...state.turn.heroTiles, [id]: { start: trail.start, entered: [...trail.entered, to] } } } }
+  return { ...placed, turn: { ...placed.turn, heroTiles: { ...state.turn.heroTiles, [id]: { start: trail.start, entered: [...trail.entered, to] } } } }
 }
 
 // The tile a hero started this turn on and the tiles it moved onto since. A hero that

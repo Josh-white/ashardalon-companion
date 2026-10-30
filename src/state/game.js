@@ -19,7 +19,8 @@ import { campaignHero, campaignOutcome, campaignSurges, isCampaign, newCampaign,
 import { playBoardSound, setBoardOff, setBoardUnlimited } from './soundboard.js'
 import { FIRST_ROLL_MAX_MS, newFirstRoll, rollFirst } from './firstRoll.js'
 import { finishOpening, openingNarrating, startOpening } from './opening.js'
-import { layChamber, layExit, layTile, moveHero, placeNear, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
+import { layChamber, layExit, layTile, moveHero, placeNear, placeToken, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
+import { wrathPull } from '../board/monsters.js'
 import { boardMove, queueFearMove, queueMoves, skipBoardMove } from '../board/powerMoves.js'
 import { heroTile } from '../board/encounters.js'
 import { guardsOnTile } from '../board/checks.js'
@@ -332,10 +333,14 @@ function resolveEncounter(state, action) {
   }
   if (card.filterMonsters && !encounter.filtered) next = filterMonsterDeck(next, card.filterMonsters, action.random, action.monsterCards)
   if (card.placeVillain) next = reduce(next, { type: 'PLACE_VILLAIN', name: card.placeVillain, cards: action.villains ?? [] })
-  if (card.drawMonsterType && hero) next = drawMonsterOfType(next, hero.id, card.drawMonsterType, action.random, action.monsterCards)
+  if (card.drawMonsterType && hero) {
+    const before = next.monsters.length
+    next = drawMonsterOfType(next, hero.id, card.drawMonsterType, action.random, action.monsterCards)
+    next = besideGate(next, before)
+  }
   if (card.timeToken) next = removeTimeToken(next, card.name)
-  // Hidden Treasure: on the virtual board, a Treasure token waits for a player to tap its square.
-  if ((card.placeTreasure || card.id === 'hidden-treasure') && next.board) next = addTreasureToken(next)
+  // Hidden Treasure, Occupied Lair: on the virtual board, a Treasure token waits for a player to tap its square.
+  if ((card.placeTreasure || card.id === 'hidden-treasure' || card.id === 'occupied-lair') && next.board) next = addTreasureToken(next)
 
   if (card.type === 'curse' && hero) {
     const curse = { id: newId('curse'), cardId: card.id, name: card.name, text: card.text, card: card.curse ?? {}, checks: card.checks ?? [] }
@@ -906,11 +911,30 @@ function updateEncounterCards(state, cards) {
   }
 }
 
+// On the virtual board a monster out of the Vast Gate (the adventure's own check, The Vast
+// Gate Flares!) goes next to the gate. `before` is how many monsters there were.
+function besideGate(state, before) {
+  const gate = state.board && state.monsters.find((m) => m.objective && state.board.tokens[m.id])
+  return gate && state.monsters.length > before ? placeNear(state, state.monsters.at(-1), state.board.tokens[gate.id]) : state
+}
+
+// The end-of-Exploration note of the Wrath of the Enemy curse.
+export function isWrathCheck(state, check) {
+  if (!state.board || check.ask) return false
+  const hero = state.heroes.find((h) => h.id === check.heroId)
+  return (hero?.curses ?? []).some((c) => c.id === check.curseId && c.cardId === 'wrath-of-the-enemy')
+}
+
 function answerCheck(state, action) {
   const check = phaseChecks(state, checksFor(PHASES[state.turn.phase]?.key)).find((c) => c.key === action.key)
   if (!check) return state
   const hero = state.heroes.find((h) => h.id === check.heroId)
   let next = { ...state, turn: { ...state.turn, checksDone: [...(state.turn.checksDone ?? []), check.key] } }
+  // Wrath of the Enemy on the virtual board: the board pulls the monster over itself.
+  if (isWrathCheck(state, check)) {
+    const pull = wrathPull(state, hero.id)
+    if (pull) next = withLog(placeToken(next, pull.id, pull.to), `Wrath of the Enemy: the ${pull.name} was put next to ${hero.name}.`)
+  }
   const effect = check.ask ? (action.answer ? check.yes : check.no) : null
   if (!effect) return next
   if (effect.damage) {
@@ -934,9 +958,7 @@ function answerCheck(state, action) {
     const before = next.monsters.length
     next = drawMonster(withDeck, hero.id, action.random)
     next = { ...next, turn: { ...next.turn, monsterDrawn } }
-    // On the virtual board a monster out of the Vast Gate goes next to the gate.
-    const gate = next.board && next.monsters.find((m) => m.objective && next.board.tokens[m.id])
-    if (gate && next.monsters.length > before) next = placeNear(next, next.monsters.at(-1), next.board.tokens[gate.id])
+    next = besideGate(next, before)
   }
   return next
 }

@@ -51,3 +51,17 @@ export function trapsToDisable(state, hero) {
   const away = traps.filter((t) => placed.has(t.id) && t.tile !== tile)
   return { here: traps.filter((t) => !away.includes(t)), away }
 }
+
+// A new trap or hazard: does the hero's tile already have a marker? The marker found, false
+// when the board is sure there's none, or null when it can't tell (no board, the hero isn't
+// on it, or a marker it can't place could be anywhere: one that moves, or Lava Flow, whose
+// spread isn't followed yet), so the screen asks.
+export function markerOnHeroTile(state, hero) {
+  const at = state.board && !hero.tokens?.refuge ? state.board.tokens[hero.id] : null
+  if (!at) return null
+  const tile = boardGrid(state.board).get(`${at[0]},${at[1]}`)?.area
+  const markers = boardMarkers(state)
+  const here = markers.find((m) => m.squares.length > 0 && m.tile === tile)
+  if (here) return here.marker
+  return markers.some((m) => m.squares.length === 0 || m.marker.cardId === 'lava-flow') ? null : false
+}
