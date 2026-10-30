@@ -60,3 +60,13 @@ describe('trap and hazard markers on the board', () => {
     expect(boardMarkers(game([]))).toEqual([])
   })
 })
+
+describe('markers on the Start tile', () => {
+  it('tints only the half of the Start tile the marker is on', () => {
+    const near = boardMarkers(game([{ ...vapors, tile: 'start' }]))[0]
+    const far = boardMarkers(game([{ ...vapors, tile: 'start/2' }]))[0]
+    expect(near.squares).toHaveLength(16)
+    expect(far.squares).toHaveLength(16)
+    expect(near.squares.every((sq) => sq.y < 4)).toBe(true)
+  })
+})
