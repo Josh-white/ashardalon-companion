@@ -5,12 +5,14 @@ import { campaignHero } from '../state/campaign.js'
 import { levelSlots, powerSlotsFor } from '../state/game.js'
 import { randomNumbers, shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
+import { useRecords } from '../state/useRecords.js'
 import { ChosenAdventure, QuestLine } from './Adventure.jsx'
 import Art from './Art.jsx'
 import { CampaignLobby, HeroCampaign } from './Campaign.jsx'
 import Chronicle from './Chronicle.jsx'
 import { HeroBanner, HeroPortrait, PowerSlots } from './HeroGallery.jsx'
 import { HeroHall, HoldToPick } from './HeroHall.jsx'
+import { HallOfRecords, PlayerTitle } from './Records.jsx'
 import ScreenChoice from './ScreenChoice.jsx'
 import { Button } from './ui.jsx'
 
@@ -116,7 +118,7 @@ function Stats({ template, level = 1 }) {
 
 // `solo`: the solo screen's short version. The name and getting ready are asked once for
 // the whole screen, and the powers fold away (the suggested ones are already picked).
-function MyHero({ state, claim, cards, deviceId, dispatch, solo = false }) {
+function MyHero({ state, claim, cards, deviceId, dispatch, solo = false, records = null }) {
   const [showPowers, setShowPowers] = useState(!solo || !powersChosen(claim, cards.powers))
   const template = templateFor(claim.heroKey)
   const color = HERO_COLORS[template.color]
@@ -191,6 +193,7 @@ function MyHero({ state, claim, cards, deviceId, dispatch, solo = false }) {
                 dispatch({ type: 'SET_LOBBY_PLAYER', deviceId, player: e.target.value })
               }}
             />
+            <PlayerTitle records={records} name={claim.player} className="mt-2 text-sm" />
           </label>
           <Stats template={template} level={level} />
           {state.campaign && <HeroCampaign state={state} heroKey={template.key} dispatch={dispatch} />}
@@ -320,7 +323,11 @@ function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave }) {
 // `projectorOpen` whether a big screen is in the game right now.
 export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watchOnly, onProjector, onLeaveProjector, onArt, onSolo, role, setRole, projectorOpen }) {
   const cards = useCards()
+  const [hall, setHall] = useState(false)
+  // Loaded again after the Hall of Records closes.
+  const records = useRecords(hall)
   const lobby = state.lobby ?? []
+  if (hall) return <HallOfRecords onClose={() => setHall(false)} />
   const canBoard = cards.tiles.some((t) => t.id === 'start')
   const canSolo = !watchOnly && canBoard
   const mine = lobby.find((c) => c.deviceId === deviceId)
@@ -384,7 +391,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
       </header>
 
       {watchOnly && <Chronicle campaign={state.campaign} />}
-      {watchOnly && <HeroHall heroes={heroChoices} lobby={lobby} />}
+      {watchOnly && <HeroHall heroes={heroChoices} lobby={lobby} records={records} />}
 
       {/* Where the dungeon is: one choice for the whole table, so the big screen makes it.
           Without one in the game, any iPad can. */}
@@ -397,7 +404,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
         </>
       )}
 
-      {mine && !watchOnly && <MyHero state={state} claim={mine} cards={cards} deviceId={deviceId} dispatch={dispatch} />}
+      {mine && !watchOnly && <MyHero state={state} claim={mine} cards={cards} deviceId={deviceId} dispatch={dispatch} records={records} />}
 
       {!watchOnly && (
         <div className={`flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-4 ${mine ? 'pt-4' : ''}`}>
@@ -408,6 +415,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
             const status = taken ? (
               <span className={owner.ready ? 'text-emerald-400' : 'text-amber-400'}>
                 {owner.player || 'Another iPad'} · {owner.ready ? 'ready' : 'choosing powers'}
+                <PlayerTitle records={records} name={owner.player} className="mt-1 text-xs" />
               </span>
             ) : (
               <span className="text-zinc-400">
@@ -468,6 +476,11 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
             </button>
           )
         )}
+      </p>
+      <p className="text-center">
+        <Button variant="ghost" onClick={() => setHall(true)}>
+          🏆 Hall of Records
+        </Button>
       </p>
       {watchOnly && (
         <p className="text-center text-sm">

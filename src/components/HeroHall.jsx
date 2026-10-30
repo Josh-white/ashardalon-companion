@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { unlockAudio } from '../audio/soundSetting.js'
 import { HERO_COLORS } from '../data/heroes.js'
 import { HeroPortrait } from './HeroGallery.jsx'
+import { PlayerTitle } from './Records.jsx'
 
 // How long a player holds their hero to light the torch.
 export const HOLD_MS = 800
@@ -25,7 +26,7 @@ function Torch({ lit }) {
 
 // "Heroes Assemble", on the projector: an alcove for each hero, dark until an iPad
 // picks that hero, then lit with the player's name and whether they're ready.
-export function HeroHall({ heroes, lobby }) {
+export function HeroHall({ heroes, lobby, records = null }) {
   return (
     <section className="grid grid-cols-5 gap-[2vw]">
       {heroes.map((template) => {
@@ -48,6 +49,7 @@ export function HeroHall({ heroes, lobby }) {
               {claim ? (
                 <>
                   {claim.player || template.className}
+                  <PlayerTitle records={records} name={claim.player} className="mx-auto mt-[0.3vw] block w-fit text-[1vw]" />
                   <span className={`block ${claim.ready ? 'text-emerald-400' : 'text-amber-400'}`}>{claim.ready ? 'Ready!' : 'Choosing powers'}</span>
                 </>
               ) : (

@@ -17,6 +17,7 @@ import { setHeroTemplates } from '../src/data/heroes.js'
 import { describeAction } from '../src/state/describeAction.js'
 import { gameReducer, initialState } from '../src/state/game.js'
 import { migrateSave } from '../src/state/saves.js'
+import { playerRecords, recordGames, syncRecord } from '../src/state/records.js'
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 
@@ -348,6 +349,24 @@ export function startServer({
   const gamesDir = join(dirname(saveFile), 'games')
   const gameListFile = join(gamesDir, 'games.json')
   const finishedDir = join(gamesDir, 'finished')
+  // Every player's finished games, for their records and titles (state/records.js).
+  const recordsFile = join(dirname(saveFile), 'records.json')
+  let records = { games: {} }
+  try {
+    if (existsSync(recordsFile)) records = { games: {}, ...JSON.parse(readFileSync(recordsFile, 'utf8')) }
+  } catch (error) {
+    console.error('Could not read the players\' records:', error.message)
+  }
+  function updateRecords(state) {
+    const next = syncRecord(records, state)
+    if (!next) return
+    records = next
+    try {
+      writeSave(recordsFile, records)
+    } catch (error) {
+      console.error('Could not save the players\' records:', error.message)
+    }
+  }
   let { games: otherGames, finished } = loadGameList(gameListFile)
   // Each game in memory: its state, its own Undo steps, and the ids of its latest actions
   // (so a resent one isn't applied twice). Loaded the first time a screen joins it.
@@ -421,6 +440,12 @@ export function startServer({
     }
     if (req.url === '/games.json') {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(gameList()))
+      return
+    }
+    if (req.url === '/records.json') {
+      res
+        .writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+        .end(JSON.stringify({ players: playerRecords(recordGames(records)) }))
       return
     }
     if (narrator.handle(req, res)) return
@@ -621,6 +646,7 @@ export function startServer({
       } catch (error) {
         console.error('Could not save the game:', error.message)
       }
+      updateRecords(r.state)
       broadcast(r)
     })
   })
