@@ -74,6 +74,32 @@ describe('monster turns on the virtual board', () => {
   })
 })
 
+describe('an invisible hero on the board', () => {
+  const invisible = (state, ...ids) => ({ ...state, heroes: state.heroes.map((h) => (ids.includes(h.id) ? { ...h, tokens: { ...h.tokens, invisible: true } } : h)) })
+
+  it('is never picked as the closest hero while another hero is in reach', () => {
+    const { state, monster, heroes } = game([0, -2])
+    expect(boardTargetIds(invisible(state, heroes[0].id), monster, CULTIST.tactics[0])).toEqual([heroes[1].id])
+  })
+
+  it('is not attacked when only invisible heroes are in reach, and nobody is moved toward', () => {
+    const { state, monster, heroes } = game([0, -2])
+    const hidden = invisible(state, heroes[0].id, heroes[1].id)
+    expect(boardStep(hidden, monster)).toBe(1)
+    expect(closestTarget(hidden, 'm1')).toBeNull()
+  })
+
+  it('is still hit by attacks on every hero, and by a monster next to them', () => {
+    const { state, monster, heroes } = game([0, 1])
+    const hidden = invisible(state, heroes[0].id, heroes[1].id)
+    const all = { when: 'within1', attack: 'dagger', targets: 'all' }
+    expect(boardTargetIds(hidden, monster, all).sort()).toEqual([heroes[0].id, heroes[1].id].sort())
+    const adjacent = [{ when: 'adjacent', attack: 'dagger' }, { move: 'toward' }]
+    expect(boardStep(hidden, monster, adjacent)).toBe(0)
+    expect(boardTargetIds(hidden, monster, adjacent[0])).toHaveLength(1)
+  })
+})
+
 describe('a monster card with several figures', () => {
   it('puts a token down for each figure, and takes one away when a figure falls', () => {
     const heroes = HERO_TEMPLATES.slice(0, 1).map((t) => createHero(t))
