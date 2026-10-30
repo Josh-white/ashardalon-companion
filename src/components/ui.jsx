@@ -11,6 +11,8 @@ export function Button({ variant = 'default', className = '', ...props }) {
   return (
     <button
       type="button"
+      // Marks the turn's main buttons, so the pinned "next step" button can find the one to do now.
+      data-primary={variant === 'gold' || variant === 'danger' ? '' : undefined}
       className={`rounded-xl px-4 py-2 transition active:scale-95 disabled:opacity-40 disabled:active:scale-100 ${variants[variant]} ${className}`}
       {...props}
     />
@@ -22,7 +24,7 @@ export function Chip({ active, onClick, children }) {
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full px-3 py-1 text-sm transition ${
+      className={`min-h-10 rounded-full px-3 py-1 text-sm transition ${
         active ? 'bg-amber-500 text-zinc-950 font-semibold' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
       }`}
     >

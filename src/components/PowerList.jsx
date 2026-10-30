@@ -27,7 +27,7 @@ export function PowerTile({ power, onToggle, selected = false }) {
         {card?.text && (
           <button
             type="button"
-            className="-my-1 rounded px-2 text-xs text-zinc-400 hover:bg-zinc-800"
+            className="-my-2 -mr-2 min-h-9 rounded-lg px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"
             onClick={(e) => {
               e.stopPropagation()
               setOpen((o) => !o)

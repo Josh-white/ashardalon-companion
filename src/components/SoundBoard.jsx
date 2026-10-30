@@ -39,7 +39,7 @@ export function SoundBoard({ state, dispatch, who, testCopy = false, className =
   }
 
   return (
-    <div className={`z-40 ${className}`}>
+    <div className={`z-[32] ${className}`}>
       {open && (
         <div className="mb-2 w-72 rounded-2xl border border-zinc-700 bg-zinc-900/95 p-3 shadow-xl backdrop-blur">
           <div className="mb-2 flex items-center justify-between">

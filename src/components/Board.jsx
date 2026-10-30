@@ -414,11 +414,11 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
                     ? `${active?.name ?? 'The hero'} has no moves left this turn.`
                     : 'Heroes move in their Hero Phase.'}
           </p>
-          <Button className="!px-3 !py-1" disabled={zoomOut === null} onClick={() => zoomTo(zoomOut)} aria-label="Zoom out">−</Button>
-          <Button className="!px-3 !py-1" disabled={zoomIn === null} onClick={() => zoomTo(zoomIn)} aria-label="Zoom in">+</Button>
+          <Button className="min-h-10 min-w-10 !px-3 !py-1" disabled={zoomOut === null} onClick={() => zoomTo(zoomOut)} aria-label="Zoom out">−</Button>
+          <Button className="min-h-10 min-w-10 !px-3 !py-1" disabled={zoomIn === null} onClick={() => zoomTo(zoomIn)} aria-label="Zoom in">+</Button>
           <Button
             variant={byHand ? 'gold' : 'default'}
-            className={`!py-1 text-sm ${fill ? '!px-2' : ''}`}
+            className={`min-h-10 min-w-10 !py-1 text-sm ${fill ? '!px-2' : ''}`}
             title="Move by hand"
             onClick={() => {
               setByHand(!byHand)
