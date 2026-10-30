@@ -19,7 +19,8 @@ import { campaignHero, campaignOutcome, campaignSurges, isCampaign, newCampaign,
 import { playBoardSound, setBoardOff, setBoardUnlimited } from './soundboard.js'
 import { FIRST_ROLL_MAX_MS, newFirstRoll, rollFirst } from './firstRoll.js'
 import { finishOpening, openingNarrating, startOpening } from './opening.js'
-import { layChamber, layExit, layTile, moveHero, placeNear, placeToken, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
+import { heroesNextToDoor, removeDoor } from '../board/doors.js'
+import { layChamber, layDoorChamber, layExit, layTile, moveHero, placeNear, placeToken, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
 import { wrathPull } from '../board/monsters.js'
 import { boardMove, queueEncounterMoves, queueFearMove, queueMoves, skipBoardMove } from '../board/powerMoves.js'
 import { heroTile } from '../board/encounters.js'
@@ -1481,6 +1482,11 @@ function revealTile(state, action) {
   if (!reveal || !hero) return state
   let next = { ...state, adventure: { ...state.adventure, revealed: [...state.adventure.revealed, reveal.tile] } }
   next = withLog(next, `${hero.name} revealed the ${reveal.tile}!`)
+  // The Closed Doors: a Closed Door on the Entrance's triangle, and the Secret Chamber behind it.
+  if (next.board && /chamber entrance/i.test(reveal.tile) && reveal.steps.some((step) => /Closed Door token on the triangle/i.test(step))) {
+    const behind = state.adventure.card.reveals.find((r) => r.door && r.after === reveal.tile)
+    next = layDoorChamber(next, /horrid/i.test(reveal.tile) ? 'horrid' : 'dire', action.random, behind?.tile)
+  }
   for (const step of reveal.actions) {
     if (step.type === 'drawGuardians') {
       // The guardians come off the monster deck and go to the hero who found them.
@@ -1521,27 +1527,48 @@ function revealTile(state, action) {
   return showStory(next, `The ${reveal.tile}!`, reveal.story, steps)
 }
 
-// A hero next to a Closed Door token turned it over (Rulebook p. 15).
+// A hero next to a Closed Door token turned it over (Rulebook p. 15). On the virtual board
+// the action names the door (`doorId`): the board knows who stands next to a Trapped Door,
+// takes the token away once the door is open, and opens what waits behind it.
 function revealDoor(state, action) {
   const hero = state.heroes.find((h) => h.id === action.heroId) ?? state.heroes[state.turn.heroIndex]
   if (!state.adventure || !DOOR_KINDS.includes(action.kind) || !hero) return state
+  const door = state.board && action.doorId ? (state.board.doors ?? []).find((d) => d.id === action.doorId && !d.kind) : null
+  if (state.board && action.doorId && !door) return state
   if (action.kind === 'unlocked') {
-    return withMoment(withLog(state, `${hero.name} opened an Unlocked Door.`), { kind: 'roll', heroId: hero.id, title: 'The door swings open!', detail: 'Discard the Closed Door token.' })
+    const next = withMoment(withLog(state, `${hero.name} opened an Unlocked Door.`), { kind: 'roll', heroId: hero.id, title: 'The door swings open!', detail: door ? 'The way is open.' : 'Discard the Closed Door token.' })
+    return door ? openBoardDoor(next, door, action) : next
   }
   if (action.kind === 'trapped') {
     // Each hero next to the door takes 1 damage.
-    const ids = Array.isArray(action.heroIds) ? action.heroIds : [hero.id]
+    const ids = door ? heroesNextToDoor(state, door) : Array.isArray(action.heroIds) ? action.heroIds : [hero.id]
     const { next } = damageHeroes(state, ids, 1, 'a Trapped Door')
     const names = state.heroes.filter((h) => ids.includes(h.id)).map((h) => h.name)
-    return withMoment(next, { kind: 'fumble', heroId: hero.id, title: 'A Trapped Door!', detail: `${names.join(', ') || 'No one'} took 1 damage. Discard the Closed Door token.` })
+    const sprung = withMoment(next, { kind: 'fumble', heroId: hero.id, title: 'A Trapped Door!', detail: `${names.join(', ') || 'No one'} took 1 damage. ${door ? 'The door is open.' : 'Discard the Closed Door token.'}` })
+    return door ? openBoardDoor(sprung, door, action) : sprung
   }
-  const next = { ...state, adventure: { ...state.adventure, lockedDoors: [...(state.adventure.lockedDoors ?? []), { id: newId('door') }] } }
+  const id = door?.id ?? newId('door')
+  let next = { ...state, adventure: { ...state.adventure, lockedDoors: [...(state.adventure.lockedDoors ?? []), { id }] } }
+  if (door) next = { ...next, board: { ...next.board, doors: next.board.doors.map((d) => (d.id === door.id ? { ...d, kind: 'locked' } : d)) } }
   return withMoment(withLog(next, `${hero.name} found a Locked Door.`), {
     kind: 'roll',
     heroId: hero.id,
     title: 'A Locked Door!',
-    detail: `Put the token back face up. A hero next to it can try to unlock it instead of attacking: ${DOOR_UNLOCK_ROLL} or more.`,
+    detail: door
+      ? `It stays shut. A hero next to it can try to unlock it instead of attacking: ${DOOR_UNLOCK_ROLL} or more.`
+      : `Put the token back face up. A hero next to it can try to unlock it instead of attacking: ${DOOR_UNLOCK_ROLL} or more.`,
   })
+}
+
+// A door on the virtual board is open: its token goes, and a door the adventure was
+// waiting for (the Secret Chamber's) reveals what's behind it, with the chamber's tiles
+// waiting for their monsters this turn.
+function openBoardDoor(state, door, action) {
+  let next = { ...state, board: removeDoor(state.board, door.id) }
+  if (!door.reveal) return next
+  const waiting = (door.leadsTo ?? []).filter((uid) => next.board.tiles.some((t) => t.uid === uid)).map((uid) => ({ uid, side: null, filled: false, chamber: true }))
+  next = { ...next, turn: { ...next.turn, boardTiles: [...(next.turn.boardTiles ?? []), ...waiting] } }
+  return revealTile(next, { ...action, tile: door.reveal, door: true })
 }
 
 // A chamber's entrance turned up. The chamber card (named by the adventure, or drawn
@@ -1859,9 +1886,16 @@ function reduce(state, action) {
       const door = (state.adventure?.lockedDoors ?? []).find((d) => d.id === action.doorId)
       const hero = state.heroes.find((h) => h.id === action.heroId)
       if (!door || !hero || !validRoll(action.roll)) return state
+      // It takes the place of the hero's attack this Hero Phase ("Unlock anyway" sends `free`).
+      if (!action.free && inHeroPhase(state, hero) && !canSpendAttack(state, hero)) return state
       const unlocked = action.roll >= DOOR_UNLOCK_ROLL
-      let next = withLog(state, `${hero.name} rolled ${action.roll} to unlock the door (needed ${DOOR_UNLOCK_ROLL}).${unlocked ? ' Unlocked!' : ''}`)
+      let next = withLog(action.free || !inHeroPhase(state, hero) ? state : spendAttack(state, hero, 'a Locked Door'), `${hero.name} rolled ${action.roll} to unlock the door (needed ${DOOR_UNLOCK_ROLL}).${unlocked ? ' Unlocked!' : ''}`)
       if (unlocked) next = { ...next, adventure: { ...next.adventure, lockedDoors: next.adventure.lockedDoors.filter((d) => d.id !== door.id) } }
+      const onBoard = unlocked && (next.board?.doors ?? []).find((d) => d.id === door.id)
+      if (onBoard) {
+        next = withMoment(next, { kind: 'defeat', heroId: hero.id, value: action.roll, title: 'The door is unlocked!', detail: 'The way is open.' })
+        return openBoardDoor(next, onBoard, action)
+      }
       return withMoment(next, {
         kind: unlocked ? 'defeat' : 'roll',
         heroId: hero.id,

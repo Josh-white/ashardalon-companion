@@ -3,6 +3,8 @@ import { HERO_COLORS, hasAbility } from '../data/heroes.js'
 import { DOOR_KINDS, DOOR_UNLOCK_ROLL, FEATURE_LABELS, MAX_SURGES, MIN_SURGES, escapeBlockers, goalParts, missingFeatures, playableChambers, revealsReady, tilesToCome, usesDoors } from '../state/adventure.js'
 import { randomNumbers, rollD20, shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
+import { canSpendAttack } from '../state/game.js'
+import { doorsNearHero } from '../board/doors.js'
 import { tileSpots } from '../state/tiles.js'
 import { TileSetup, TilesLeft } from './Tiles.jsx'
 import { AreaName } from './AreaBackdrop.jsx'
@@ -408,7 +410,7 @@ export function RevealButtons({ state, dispatch }) {
   const { monsters, villains = [], chambers = [], villagers: villagerCards = [] } = useCards()
   // With the tile stack, the app reveals special tiles itself when they're drawn.
   const tiles = state.tileStack ? [] : revealsReady(state.adventure)
-  const doors = usesDoors(state.adventure) && (
+  const doors = usesDoors(state.adventure) && !state.board?.doors && (
     <p className="mt-4 text-sm text-zinc-400">🚪 New tile with an open door symbol? Put the top Closed Door token on it, face down.</p>
   )
   if (tiles.length === 0) return doors || null
@@ -438,6 +440,8 @@ export function RevealButtons({ state, dispatch }) {
 export function Doors({ state, hero, dispatch }) {
   const [trapped, setTrapped] = useState(null) // heroes next to a Trapped Door, while picking them
   if (!usesDoors(state.adventure)) return null
+  // A board that places its own Closed Doors (an older save's doesn't) knows which are next to the hero.
+  if (state.board?.doors) return <BoardDoors state={state} hero={hero} dispatch={dispatch} />
   const locked = state.adventure.lockedDoors ?? []
   const reveal = (kind, heroIds) => dispatch({ type: 'DOOR_REVEALED', kind, heroId: hero.id, heroIds })
   const special = revealsReady(state.adventure, true)
@@ -496,14 +500,79 @@ export function Doors({ state, hero, dispatch }) {
           <p className="text-zinc-300">{near} a Locked Door? Instead of attacking, try to unlock it.</p>
           <div className="mt-1 flex flex-wrap gap-2">
             {locked.map((door, i) => (
-              <Button key={door.id} onClick={() => dispatch({ type: 'DOOR_UNLOCK', doorId: door.id, heroId: hero.id, roll: rollD20() })}>
-                🎲 Unlock {locked.length > 1 ? `door ${i + 1}` : 'the door'} ({DOOR_UNLOCK_ROLL}+)
+              <Button key={door.id} onClick={() => dispatch({ type: 'DOOR_UNLOCK', doorId: door.id, heroId: hero.id, roll: rollD20(), free: !canSpendAttack(state, hero) })}>
+                🎲 {canSpendAttack(state, hero) ? 'Unlock' : 'Try anyway: unlock'} {locked.length > 1 ? `door ${i + 1}` : 'the door'} ({DOOR_UNLOCK_ROLL}+)
               </Button>
             ))}
           </div>
         </div>
       )}
     </details>
+  )
+}
+
+// The virtual board's Closed Doors next to the hero: turn one over (the app picks the token
+// at random), or roll to unlock a Locked one instead of attacking. Opening the Secret
+// Chamber's door fills the chamber, so the cards go along.
+function BoardDoors({ state, hero, dispatch }) {
+  const { monsters, villains = [], chambers = [], villagers: villagerCards = [] } = useCards()
+  const mageHand = hasAbility(hero, 'mage-hand')
+  const near = doorsNearHero(state, hero, mageHand) ?? []
+  const shut = near.filter((d) => !d.kind)
+  const locked = near.filter((d) => d.kind === 'locked')
+  const cards = { cards: monsters, villains, chambers, villagerCards, random: shuffleNumbers() }
+  const label = (door, verb) => `${verb} ${door.reveal ? `the ${door.reveal.replace(/ door$/i, '')} door` : near.length > 1 ? `door ${near.indexOf(door) + 1}` : 'the door'}`
+  const unplaced = revealsReady(state.adventure, true).some((r) => !state.board.doors.some((d) => d.reveal === r.tile))
+  if (near.length === 0 && !unplaced) {
+    const count = state.board.doors.length
+    if (count === 0) return null
+    return (
+      <p className="mt-4 rounded-xl bg-zinc-950/50 p-3 text-zinc-400">
+        🚪 {count} Closed Door{count > 1 ? 's' : ''} on the board. Stand next to one{mageHand ? ' (or on its tile, with Mage Hand)' : ''} to open it.
+      </p>
+    )
+  }
+  const attack = canSpendAttack(state, hero)
+  // A door the adventure waits for that the board couldn't put down (no room): the old button.
+  const special = revealsReady(state.adventure, true).filter((r) => !state.board.doors.some((d) => d.reveal === r.tile))
+  return (
+    <div className="mt-4 rounded-xl bg-zinc-950/50 p-3">
+      {special.length > 0 && <SpecialDoors special={special} dispatch={dispatch} />}
+      {shut.length > 0 && (
+        <>
+          <p className="text-lg text-zinc-100">🚪 {mageHand ? 'A Closed Door on your tile (Mage Hand).' : 'Next to a Closed Door.'} Open it to see what kind it is.</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {shut.map((door) => (
+              <Button
+                key={door.id}
+                variant={door.reveal ? 'gold' : undefined}
+                onClick={() => {
+                  const kind = DOOR_KINDS[Math.floor(randomNumbers(1)[0] * DOOR_KINDS.length)]
+                  dispatch({ type: 'DOOR_REVEALED', kind, heroId: hero.id, doorId: door.id, ...cards })
+                }}
+              >
+                🚪 {label(door, 'Open')}
+              </Button>
+            ))}
+          </div>
+        </>
+      )}
+      {locked.length > 0 && (
+        <div className={shut.length > 0 ? 'mt-3' : ''}>
+          <p className="text-zinc-300">
+            🔒 Next to a Locked Door. Instead of attacking, try to unlock it.
+            {!attack && <span className="text-amber-300"> {hero.name} has no attack left this turn.</span>}
+          </p>
+          <div className="mt-1 flex flex-wrap gap-2">
+            {locked.map((door) => (
+              <Button key={door.id} variant={attack ? undefined : 'ghost'} onClick={() => dispatch({ type: 'DOOR_UNLOCK', doorId: door.id, heroId: hero.id, roll: rollD20(), free: !attack, ...cards })}>
+                🎲 {label(door, attack ? 'Unlock' : 'Try anyway:')} ({DOOR_UNLOCK_ROLL}+)
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 

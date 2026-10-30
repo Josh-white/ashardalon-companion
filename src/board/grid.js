@@ -18,16 +18,31 @@ const turnSide = (side, turn) => {
   return s
 }
 
-// A tile's squares turned clockwise by 0, 90, 180 or 270 degrees, still in its own frame.
-export function turnedCells(def, turn = 0) {
-  const { width, height, cells } = tileCells(def)
+// Where a square of a tile's own frame ends up when the tile turns clockwise.
+function turnSquare(width, height, turn) {
   const quarter = ((turn / 90) % 4 + 4) % 4
-  const place = ({ x, y }) => {
+  return ({ x, y }) => {
     if (quarter === 1) return [height - 1 - y, x]
     if (quarter === 2) return [width - 1 - x, height - 1 - y]
     if (quarter === 3) return [y, width - 1 - x]
     return [x, y]
   }
+}
+
+// A placed tile's squares ([x, y] in the tile's own frame, triangle at the bottom) as board squares.
+export function boardSquares(placed, def, squares) {
+  const place = turnSquare(def.rows[0].length, def.rows.length, placed.turn)
+  return squares.map(([x, y]) => {
+    const [bx, by] = place({ x, y })
+    return [placed.at[0] + bx, placed.at[1] + by]
+  })
+}
+
+// A tile's squares turned clockwise by 0, 90, 180 or 270 degrees, still in its own frame.
+export function turnedCells(def, turn = 0) {
+  const { width, height, cells } = tileCells(def)
+  const quarter = ((turn / 90) % 4 + 4) % 4
+  const place = turnSquare(width, height, turn)
   const size = quarter % 2 ? [height, width] : [width, height]
   return {
     width: size[0],
@@ -41,7 +56,9 @@ export function turnedCells(def, turn = 0) {
 
 // Every square on the board: "x,y" -> { x, y, tile (its uid), area, floor, scorch, blocked }.
 // `area` is the tile as the rules count it: the tile's uid, except that the Start tile is
-// two tiles (JJ's table counts it that way), so its far half is "uid/2".
+// two tiles (JJ's table counts it that way), so its far half is "uid/2". A Closed Door
+// (state.board.doors) shuts its squares like rock until it's opened: no one walks or sees
+// through it, and the tiles on either side aren't joined. Its squares keep `door` (its id).
 export function buildGrid(board, defs) {
   const byId = new Map(defs.map((d) => [d.id, d]))
   const squares = new Map()
@@ -54,6 +71,12 @@ export function buildGrid(board, defs) {
       const at = [placed.at[0] + c.x, placed.at[1] + c.y]
       const area = double && (c.x >= LATTICE || c.y >= LATTICE) ? `${placed.uid}/2` : placed.uid
       squares.set(key(at), { x: at[0], y: at[1], tile: placed.uid, area, floor: c.floor, scorch: c.scorch, blocked: c.blocked })
+    }
+  }
+  for (const door of board?.doors ?? []) {
+    for (const at of door.squares) {
+      const sq = squares.get(key(at))
+      if (sq) squares.set(key(at), { ...sq, floor: false, door: door.id })
     }
   }
   return squares

@@ -6,6 +6,7 @@
 //   tiles: [{ uid, tileId, at, turn }],     where each tile sits (state/grid.js)
 //   tokens: { [figure id]: [x, y] },        heroes, monsters and villains on their squares
 //   pile: [tileId],                         the regular tiles not drawn yet, shuffled
+//   doors, doorTokens                       Closed Doors, in adventures with doors (board/doors.js)
 // }
 // The moves the active hero has made this turn live in state.turn.boardMoves, and the tiles
 // laid this turn in state.turn.boardTiles ([{ uid, side, filled }]), so a new turn starts
@@ -13,6 +14,7 @@
 
 import { buildGrid, key, placeTile, scorchSquare, unexploredEdges } from './grid.js'
 import { distances, reachable } from './paths.js'
+import { DOOR_TOKENS, doorTokensLeft, placeDoors } from './doors.js'
 
 // The board's grid, worked out once per board (the board object changes on every move).
 const grids = new WeakMap()
@@ -112,7 +114,12 @@ export function newBoard(tiles, heroes, random, card, objectiveId) {
     pile: shuffle(list.filter((t) => t.kind === 'regular' && !doorTiles.includes(t.id)).map((t) => t.id), random),
   }
   if (centre) board.tokens[objectiveId] = centre
-  if (doorTiles.length > 0) board = layAround(board, 'start', doorTiles)
+  if (doorTiles.length > 0) {
+    board = layAround(board, 'start', doorTiles)
+    // "Place one face-down on each open door symbol on the two tiles."
+    for (const placed of board.tiles.filter((t) => doorTiles.includes(t.tileId))) board = placeDoors(board, placed.uid, { left: board.doorTokens ?? DOOR_TOKENS })
+  }
+  if (card?.needs?.includes('doors') && board.doorTokens === undefined) board = { ...board, doorTokens: DOOR_TOKENS }
   if (how.around) {
     const ids = shuffle(chamberIds(board, how.around), random?.slice?.(32))
     board = layAround(board, 'start', ids)
@@ -179,16 +186,20 @@ export function layTile(state, drawn, drawKey = 'explore', edgeId) {
   const grid = boardGrid(board)
   const edge = edgeFor(state, grid, drawKey, edgeId)
   const uid = `t${board.tiles.length}`
-  const laid = edge && placeTile(withPile.board, grid, edge, def, uid)
+  let laid = edge && placeTile(withPile.board, grid, edge, def, uid)
   if (!laid) return { state: withPile, def: null }
+  // "When a Hero draws a tile with an open door symbol, place the top Closed Door token face-down on the symbol."
+  if (doorTokensLeft(state) > 0) laid = placeDoors(laid, uid, { left: doorTokensLeft(state) })
   // The long hallway's monster goes on the tile at its far end, so it takes none itself.
   const entry = { uid, side: edge.side, filled: def.name === 'Long Hallway' }
   return { state: { ...withPile, board: laid, turn: { ...state.turn, boardTiles: [...(state.turn.boardTiles ?? []), entry] } }, def }
 }
 
 // A Chamber Entrance turned up: the chamber's tiles (Horrid or Dire, shuffled) go on each
-// of the Entrance's open edges, turned to face it. They wait for the chamber's monsters.
-export function layChamber(state, family, random) {
+// of the Entrance's open edges, turned to face it. They wait for the chamber's monsters:
+// this turn's, or with `later` (behind the Secret Chamber door) the ones that come when
+// the door opens, so they aren't listed in this turn's tiles.
+export function layChamber(state, family, random, later = false) {
   const board = state.board
   const entrance = (state.turn.boardTiles ?? []).at(-1)
   if (!board || !entrance) return state
@@ -200,9 +211,22 @@ export function layChamber(state, family, random) {
     const uid = `t${next.board.tiles.length}`
     const laid = placeTile(next.board, boardGrid(next.board), edge, def, uid)
     if (!laid) continue
-    next = { ...next, board: laid, turn: { ...next.turn, boardTiles: [...next.turn.boardTiles, { uid, side: edge.side, filled: false, chamber: true }] } }
+    next = later ? { ...next, board: laid } : { ...next, board: laid, turn: { ...next.turn, boardTiles: [...next.turn.boardTiles, { uid, side: edge.side, filled: false, chamber: true }] } }
   }
   return next
+}
+
+// The Closed Doors' Horrid Chamber Entrance: "Place a Closed Door token on the triangle on the
+// tile", then the Secret Chamber's tiles on its other edges. The door remembers the chamber
+// tiles behind it and the reveal (`reveal`) that opening it sets off.
+export function layDoorChamber(state, family, random, reveal) {
+  const entrance = (state.turn.boardTiles ?? []).at(-1)
+  if (!state.board || !entrance) return state
+  const before = new Set(state.board.tiles.map((t) => t.uid))
+  const next = layChamber(state, family, random, true)
+  const leadsTo = next.board.tiles.filter((t) => !before.has(t.uid)).map((t) => t.uid)
+  const left = Math.max(1, doorTokensLeft(next))
+  return { ...next, board: placeDoors(next.board, entrance.uid, { left, triangle: true, extra: { reveal, leadsTo } }) }
 }
 
 // The exit an adventure puts next to its chamber ("Place the Tunnel Exit tile next to any
