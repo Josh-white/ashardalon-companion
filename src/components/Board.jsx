@@ -3,6 +3,7 @@ import { heroArt, monsterArt } from '../data/art.js'
 import { boardGrid, figureToken, figuresLeft, heroReach, moveSpeed, movesLeft } from '../board/play.js'
 import { moveChoices, movePrompt, moveTargets } from '../board/powerMoves.js'
 import { key, STEP, unexploredEdges } from '../board/grid.js'
+import { boardMarkers } from '../board/markers.js'
 import { activeVillains } from '../state/game.js'
 import { artUrl, useArt } from '../state/useArt.js'
 import { SQUARE, TileShapes } from './TileDrawing.jsx'
@@ -65,6 +66,48 @@ function OpenEdges({ grid }) {
   )
 }
 
+// Trap and hazard markers (Volcanic Vapors, Pit, Poisoned Dart Trap...): the marker's tile gets
+// a colour wash and a dashed outline. The badges are drawn separately, on top of the figures.
+function MarkerTiles({ markers }) {
+  return (
+    <g pointerEvents="none">
+      {markers.map(({ marker, look, squares }) => {
+        const xs = squares.map((sq) => sq.x)
+        const ys = squares.map((sq) => sq.y)
+        const [x0, y0] = [Math.min(...xs) * SQUARE, Math.min(...ys) * SQUARE]
+        const [x1, y1] = [(Math.max(...xs) + 1) * SQUARE, (Math.max(...ys) + 1) * SQUARE]
+        return (
+          <g key={marker.id} data-marker-tile={marker.id}>
+            {squares.map((sq) => (
+              <rect key={key([sq.x, sq.y])} x={sq.x * SQUARE} y={sq.y * SQUARE} width={SQUARE} height={SQUARE} fill={look.color} fillOpacity="0.3" />
+            ))}
+            <rect x={x0 + 3} y={y0 + 3} width={x1 - x0 - 6} height={y1 - y0 - 6} rx="8" fill="none" stroke={look.color} strokeWidth="4" strokeDasharray="12 8" />
+          </g>
+        )
+      })}
+    </g>
+  )
+}
+
+// A round badge in the top-left corner of the marker's tile; tap it to read the card.
+// A second marker on the same tile sits next to the first.
+function MarkerBadges({ markers, onTap }) {
+  const seen = {}
+  return markers.map(({ marker, look, squares, tile }) => {
+    const n = (seen[tile] = (seen[tile] ?? -1) + 1)
+    const cx = Math.min(...squares.map((sq) => sq.x)) * SQUARE + 22 + n * 40
+    const cy = Math.min(...squares.map((sq) => sq.y)) * SQUARE + 22
+    return (
+      <g key={marker.id} data-marker={marker.id} className="cursor-pointer" onClick={() => onTap(marker.id)}>
+        <circle cx={cx} cy={cy} r="18" fill="#18181b" stroke={look.color} strokeWidth="4" />
+        <text x={cx} y={cy + 7} textAnchor="middle" fontSize="20">
+          {look.icon}
+        </text>
+      </g>
+    )
+  })
+}
+
 // A round figure: its token art when there is some, else a coloured disc with its initial.
 // The hero whose turn it is gets a pulsing gold glow so it is easy to spot.
 function Token({ id, at, label, color, art, selected, active, faded, onTap }) {
@@ -115,6 +158,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   const art = useArt()
   const [picked, setPicked] = useState(null) // id of the figure being moved
   const [byHand, setByHand] = useState(false)
+  const [reading, setReading] = useState(null) // id of the trap or hazard marker whose card is open
   const [zoom, setZoom] = useState(fill ? 'fit' : 4)
   const [boxRef, box] = useBoxSize()
   const board = state.board
@@ -143,6 +187,9 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
     ...(state.villagers ?? []).filter((v) => !v.removed).map((v) => ({ id: v.id, label: v.name, color: '#065f46' })),
   ]
   const onBoard = figures.filter((f) => board.tokens[f.id])
+  const markers = boardMarkers(state)
+  const placedMarkers = markers.filter((m) => m.squares.length > 0)
+  const open = markers.find((m) => m.marker.id === reading)
   const offBoard = figures.filter((f) => !board.tokens[f.id])
 
   // Squares to light up: where the active hero can move, or every free floor square by hand.
@@ -189,7 +236,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   const small = readOnly && !fill
 
   return (
-    <section className={`rounded-2xl border border-zinc-800 bg-zinc-950/80 ${fill ? 'flex h-full flex-col p-2' : 'p-3'}`}>
+    <section className={`relative rounded-2xl border border-zinc-800 bg-zinc-950/80 ${fill ? 'flex h-full flex-col p-2' : 'p-3'}`}>
       {!readOnly && (
         <div className={`mb-2 flex items-center gap-2 ${fill ? '' : 'flex-wrap'}`}>
           <p className={`flex-1 text-zinc-300 ${fill ? 'text-xs leading-snug sm:text-sm' : 'text-sm'}`}>
@@ -249,6 +296,38 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
           ))}
         </div>
       )}
+      {markers.length > 0 && (
+        <div className={`mb-2 flex items-center gap-2 ${fill ? 'overflow-x-auto whitespace-nowrap text-xs sm:text-sm' : 'flex-wrap text-sm'}`}>
+          <span className="text-zinc-400">Markers:</span>
+          {markers.map(({ marker, look, moves, squares }) => (
+            <button
+              key={marker.id}
+              type="button"
+              className={`shrink-0 rounded-full border-2 px-3 py-1 ${reading === marker.id ? 'bg-zinc-700' : 'bg-zinc-900'} text-zinc-100`}
+              style={{ borderColor: look.color }}
+              onClick={() => setReading(reading === marker.id ? null : marker.id)}
+            >
+              {look.icon} {marker.name}
+              {squares.length === 0 && <span className="text-zinc-400">{moves ? ' (moves)' : ' (tile not known)'}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      {open && (
+        // Over the board when it fills the screen, so a phone's small board doesn't shrink further.
+        <div className={`rounded-xl border-2 bg-zinc-900 p-3 ${fill ? 'absolute inset-x-2 bottom-2 z-[45] shadow-2xl shadow-black' : 'mb-2'}`} style={{ borderColor: open.look.color }}>
+          <div className="flex items-start gap-2">
+            <p className="flex-1 text-lg font-bold text-zinc-100">
+              {open.look.icon} {open.marker.name} <span className="text-sm font-normal capitalize text-zinc-400">{open.marker.type}</span>
+            </p>
+            <Button className="!px-3 !py-1 text-sm" onClick={() => setReading(null)} aria-label="Close">
+              ✕
+            </Button>
+          </div>
+          {open.marker.card?.text && <p className="mt-1 whitespace-pre-line text-zinc-200">{open.marker.card.text}</p>}
+          {open.moves && <p className="mt-1 text-sm text-amber-300">This marker moves when the trap goes off, so the board can't show where it is yet.</p>}
+        </div>
+      )}
       <div ref={boxRef} className={fill ? `min-h-0 flex-1 ${readOnly ? 'overflow-hidden' : 'overflow-auto'}` : readOnly ? '' : 'max-h-[70vh] overflow-auto'}>
         <svg
           viewBox={`${minX * SQUARE} ${minY * SQUARE} ${cols * SQUARE} ${rows * SQUARE}`}
@@ -266,6 +345,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
           <rect x={minX * SQUARE} y={minY * SQUARE} width={cols * SQUARE} height={rows * SQUARE} fill="#0b1220" />
           <rect x={minX * SQUARE} y={minY * SQUARE} width={cols * SQUARE} height={rows * SQUARE} fill="url(#board-dots)" />
           {board.tiles.map((placed) => board.defs[placed.tileId] && <PlacedTile key={placed.uid} placed={placed} def={board.defs[placed.tileId]} />)}
+          <MarkerTiles markers={placedMarkers} />
           <OpenEdges grid={grid} />
           {targets.map((k) => {
             const [x, y] = k.split(',').map(Number)
@@ -289,6 +369,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
           {[...onBoard.filter((f) => f.id !== activeId), ...onBoard.filter((f) => f.id === activeId)].map((f) => (
             <Token key={f.id} {...f} at={board.tokens[f.id]} active={f.id === activeId} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)} onTap={readOnly ? undefined : () => tapFigure(f.id)} />
           ))}
+          <MarkerBadges markers={placedMarkers} onTap={(id) => setReading(reading === id ? null : id)} />
         </svg>
       </div>
     </section>
