@@ -118,6 +118,12 @@ export const findPlayer = (records, name) => (counted(name) ? records?.find((r) 
 // ended is written in (again, if Undo took it back and it ended differently), and one
 // Undo took back to playing is taken out.
 export function syncRecord(file, state, now = Date.now()) {
+  const played = syncPlayed(file, state, now)
+  const next = syncGame(played ?? file, state, now)
+  return next ?? played
+}
+
+function syncGame(file, state, now) {
   const key = recordKey(state)
   if (!key) return null
   const games = file.games ?? {}
@@ -133,3 +139,24 @@ export function syncRecord(file, state, now = Date.now()) {
 }
 
 export const recordGames = (file) => Object.values(file?.games ?? {}).sort((a, b) => a.endedAt - b.endedAt)
+
+// Which heroes each player has taken into the dungeon, so the hero coach knows who's new
+// to a hero: { played: { [player key]: { [hero key]: when first played } } }. Counted from
+// the moment a game is under way, finished or not, and never taken back.
+function syncPlayed(file, state, now) {
+  if (state.status !== 'playing') return null
+  const played = file.played ?? {}
+  let changed = false
+  const next = { ...played }
+  for (const hero of state.heroes ?? []) {
+    if (!counted(hero.player) || !hero.key) continue
+    const key = playerKey(hero.player)
+    if (next[key]?.[hero.key]) continue
+    next[key] = { ...next[key], [hero.key]: now }
+    changed = true
+  }
+  return changed ? { ...file, played: next } : null
+}
+
+// The heroes a player has played, by hero key, from /records.json's `played`.
+export const heroesPlayed = (played, name) => (counted(name) ? Object.keys(played?.[playerKey(name)] ?? {}) : [])

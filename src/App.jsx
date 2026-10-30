@@ -602,6 +602,7 @@ export default function App() {
           role={screenRole ?? (seat && seat !== TABLE_SEAT && seat !== PROJECTOR_SEAT ? 'hero' : null)}
           setRole={setScreenRole}
           projectorOpen={projectorOpen}
+          voice={narrator}
         />
       </main>
     )
