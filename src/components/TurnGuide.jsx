@@ -97,11 +97,7 @@ function HeroPhase({ state, hero, dispatch }) {
 
       <CurseNotes state={state} hero={hero} dispatch={dispatch} />
 
-      {state.turn.attackSpent?.heroId === hero.id ? (
-        <Note>{hero.name} used this turn's attack on {state.turn.attackSpent.on}.</Note>
-      ) : (
-        <HeroAttack state={state} hero={hero} dispatch={dispatch} />
-      )}
+      <HeroAttack state={state} hero={hero} dispatch={dispatch} />
       <DisableTraps state={state} hero={hero} dispatch={dispatch} />
       <Doors state={state} hero={hero} dispatch={dispatch} />
       <EscapeNote state={state} hero={hero} dispatch={dispatch} />

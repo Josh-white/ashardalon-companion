@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { effectsOf, heroAc, maxRolls, POWER_EFFECT_NAMES } from '../data/powerEffects.js'
-import { canSpendAttack, createHero, gameReducer, initialState } from './game.js'
+import { attackGone, canSpendAttack, createHero, gameReducer, initialState } from './game.js'
 import { heroStats } from './stats.js'
 
 // Quinn, Vistra, Keyleth, Tarak, Heskan, in turn order.
@@ -329,5 +329,43 @@ describe('hero card abilities', () => {
     state = attack(state, 4, 'daily', [[state.monsters[0], 2]])
     expect(state.turn.lastAttack.free).toBe(true)
     expect(canSpendAttack(state, heroAt(state, 4))).toBe(true)
+  })
+})
+
+describe("the hero's one attack each Hero Phase", () => {
+  const quinnsTurn = () => withMonsters({ ...start(), turn: { heroIndex: 0, phase: 0, round: 1 } }, [ogre])
+
+  it('is gone after an attack, and only for the hero whose turn it is', () => {
+    let state = give(quinnsTurn(), 0, { name: 'Sure Strike', attack: '+1', damage: '1' })
+    expect(attackGone(state, heroAt(state, 0))).toBeNull()
+    state = attack(state, 0, 'at-will', [[state.monsters[0], 2]])
+    expect(attackGone(state, heroAt(state, 0))).toBe('Quinn already attacked this turn.')
+    expect(attackGone(state, heroAt(state, 1))).toBeNull()
+  })
+
+  it('is used up by a Daily power without a roll, like Cause Fear', () => {
+    let state = give(quinnsTurn(), 0, { name: 'Cause Fear' }, 'daily')
+    state = gameReducer(state, { type: 'USE_POWER', heroId: heroAt(state, 0).id, powerId: slot(state, 0, 'daily').id, heroIds: [] })
+    expect(state.turn.attackSpent).toEqual({ heroId: heroAt(state, 0).id, on: 'Cause Fear' })
+    expect(attackGone(state, heroAt(state, 0))).toBe("Quinn used this turn's attack on Cause Fear.")
+    expect(canSpendAttack(state, heroAt(state, 0))).toBe(false)
+  })
+
+  it("isn't used up by a utility power, or by a power used outside the hero's own Hero Phase", () => {
+    let state = give(quinnsTurn(), 0, { name: 'Healing Hymn' }, 'utility')
+    state = gameReducer(state, { type: 'USE_POWER', heroId: heroAt(state, 0).id, powerId: slot(state, 0, 'utility').id, heroIds: [] })
+    expect(attackGone(state, heroAt(state, 0))).toBeNull()
+    state = give(state, 1, { name: 'Blade Barrier' }, 'daily')
+    state = gameReducer(state, { type: 'USE_POWER', heroId: heroAt(state, 1).id, powerId: slot(state, 1, 'daily').id })
+    expect(state.turn.attackSpent).toBeUndefined()
+  })
+
+  it('is gone after two moves on the virtual board, or one when Dazed', () => {
+    let state = { ...quinnsTurn(), board: { tiles: [], tokens: {} } }
+    state = { ...state, turn: { ...state.turn, boardMoves: 1 } }
+    expect(attackGone(state, heroAt(state, 0))).toBeNull()
+    expect(attackGone(state, { ...heroAt(state, 0), conditions: ['Dazed'] })).toMatch(/Dazed and already moved/)
+    state = { ...state, turn: { ...state.turn, boardMoves: 2 } }
+    expect(attackGone(state, heroAt(state, 0))).toBe("Quinn moved twice, so there's no attack this turn.")
   })
 })

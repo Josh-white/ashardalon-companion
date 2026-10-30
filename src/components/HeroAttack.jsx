@@ -3,7 +3,7 @@ import { foeDistance, foesInRange, powerRange } from '../board/monsters.js'
 import { asksIfStayed, attackItems, distanceChoices, heroItems, itemsWithUse } from '../data/items.js'
 import { effectsOf, maxRolls, reactionsFor } from '../data/powerEffects.js'
 import { rollD20 } from '../state/random.js'
-import { foes, powerNumber } from '../state/game.js'
+import { attackGone, foes, powerNumber } from '../state/game.js'
 import { HeroChoice, MonsterChoice, monsterName } from './Pickers.jsx'
 import { Button } from './ui.jsx'
 
@@ -160,6 +160,19 @@ function BeforeQuestion({ hero, effects, answers, setAnswers }) {
   return null
 }
 
+// The hero's attack is used up: says why, with a way past it for when a card allows
+// another attack.
+function AttackUsed({ reason, onAnyway }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-zinc-900 p-3">
+      <p className="text-zinc-400">{reason}</p>
+      <Button className="text-sm" onClick={onAnyway}>
+        ⚔️ Attack anyway
+      </Button>
+    </div>
+  )
+}
+
 // "3 Miss: 1 Damage" → "3 damage, 1 on a miss".
 function damageLabel(text) {
   const damage = powerNumber(text) ?? 0
@@ -219,6 +232,9 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   const [distances, setDistances] = useState({})
   const [stayed, setStayed] = useState(false)
   const [rolled, setRolled] = useState(false)
+  // Tapped "Attack anyway" past a used-up attack. Each extra attack needs its own tap.
+  const [anyway, setAnyway] = useState(false)
+  const gone = extra ? null : attackGone(state, hero)
   const item = items.find((i) => i.id === powerId)
   // An item's attack reads like a power's: a name, an attack number and damage.
   const power = powers.find((p) => p.id === powerId) ?? (item && { ...item, type: 'item', card: { attack: `+${item.card.attack.bonus}`, damage: String(item.card.attack.damage), text: item.card.text } })
@@ -275,6 +291,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
     const source = item ? { itemId: item.id } : { powerId: power.id }
     dispatch({ type: 'HERO_ATTACK', heroId: hero.id, ...source, targets, bonusAttack: Boolean(extra), distances: allDistances, stayed, ...answers })
     setRolled(true)
+    setAnyway(false)
   }
 
   const pickHint = effects.sameTarget
@@ -289,21 +306,29 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
 
   return (
     <div className="mt-5 space-y-3 rounded-2xl border-2 border-amber-600/60 bg-zinc-950/60 p-4">
-      <h3 className="font-display text-xl font-bold text-amber-300">
+      <h3 className={`font-display text-xl font-bold ${gone && !anyway && !showResults ? 'text-zinc-500' : 'text-amber-300'}`}>
         {extra ? `⚔️ ${hero.name}'s extra attack from ${extra.source}${extra.bonus ? ` (+${extra.bonus})` : ''}` : '⚔️ Attack a monster'}
       </h3>
 
       {showResults ? (
         <>
           <AttackAftermath state={state} last={last} dispatch={dispatch} />
-          {hero.conditions.includes('Dazed') ? (
-            <p className="text-amber-300">{hero.name} is Dazed, so that was the one action this turn.</p>
+          {gone ? (
+            <AttackUsed
+              reason={gone}
+              onAnyway={() => {
+                reset()
+                setAnyway(true)
+              }}
+            />
           ) : (
             <Button className="w-full" onClick={reset}>
               Attack again
             </Button>
           )}
         </>
+      ) : gone && !anyway ? (
+        <AttackUsed reason={gone} onAnyway={() => setAnyway(true)} />
       ) : (
         <>
           {powers.length + items.length === 0 ? (

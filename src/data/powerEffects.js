@@ -21,7 +21,8 @@ import { itemAc } from './items.js'
 //   keepOnMiss  a daily that isn't used up when it misses.
 //   free        doesn't use up the hero's attack (a trap can still be disabled after it).
 // Other powers have a `use`, done from the power's tile:
-//   healSelf, heal + pick ('other': one other hero), tokens, endCondition, refuge, invisible, causeFear, note.
+//   healSelf, heal + pick ('other': one other hero), tokens, endCondition, refuge, invisible, causeFear, note,
+//   move (it takes the place of a move, so on the virtual board it uses one up).
 // A card in cards.json can carry its own `effect` with these fields (a homebrew power);
 // a power listed below by name always uses the entry here instead.
 // `reaction` powers are offered where they happen: 'reroll', 'furious', 'dodge', 'evade', 'noble-shield', 'perseverance',
@@ -44,7 +45,7 @@ const EFFECTS = {
   Perseverance: { reaction: 'perseverance' },
 
   // Vistra, the fighter
-  'Dwarven Resilience': { use: { healSelf: 4, note: "That's instead of moving this turn." } },
+  'Dwarven Resilience': { use: { healSelf: 4, move: true, note: "That's instead of moving this turn." } },
   Charge: { before: 'First move up to your speed.', board: { before: [{ pick: 'self', to: 'squares', n: 'speed' }] } },
   'Reaping Strike': { attacks: 2, sameTarget: true },
   'Sure Strike': {},

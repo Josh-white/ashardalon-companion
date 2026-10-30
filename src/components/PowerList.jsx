@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { cardStats } from '../data/cards.js'
 import { effectsOf, pendingDodge } from '../data/powerEffects.js'
-import { powerNumber } from '../state/game.js'
+import { attackGone, powerNumber, powerUsesAttack } from '../state/game.js'
 import { rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { HeroChoice } from './Pickers.jsx'
@@ -77,6 +77,9 @@ function UsePanel({ state, hero, power, dispatch, onClose }) {
     use.invisible && `Monsters won't count ${hero.name} as the closest hero until ${hero.name}'s next turn.`,
     use.note,
   ].filter(Boolean)
+  // A Daily or At-Will power is the hero's attack this turn.
+  const usesAttack = powerUsesAttack(state, hero, power)
+  const gone = usesAttack && attackGone(state, hero)
 
   return (
     <div className="col-span-2 space-y-3 rounded-xl border-2 border-amber-500 bg-zinc-950/80 p-3">
@@ -86,6 +89,11 @@ function UsePanel({ state, hero, power, dispatch, onClose }) {
           {line}
         </p>
       ))}
+      {usesAttack && (
+        <p className={gone ? 'rounded-lg bg-red-950/70 p-2 text-red-200' : 'text-zinc-400'}>
+          {gone ? `⚠️ ${gone} Use it anyway only if a card says you can.` : `⚔️ This is ${hero.name}'s attack this turn.`}
+        </p>
+      )}
       {use.causeFear && (
         <>
           <p className="text-zinc-200">Tap each ally on that tile who is next to a monster. Each gets an at-will attack at +2.</p>
