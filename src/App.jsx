@@ -17,6 +17,7 @@ import Board from './components/Board.jsx'
 import SeatPicker from './components/SeatPicker.jsx'
 import SinceLastTurn from './components/SinceLastTurn.jsx'
 import { BoostBadges } from './components/StatBoosts.jsx'
+import { acParts, attackParts, speedParts } from './data/statParts.js'
 import Setup from './components/Setup.jsx'
 import { TreasureStep } from './components/Treasure.jsx'
 import { TilesLeft } from './components/Tiles.jsx'
@@ -182,6 +183,72 @@ function PartyStrip({ heroes, meId, activeId }) {
   )
 }
 
+// The Party tab beside the virtual board: every hero on one short row (HP you can change,
+// AC, speed, attack, conditions), so the whole party fits at a glance. Tap a row for that
+// hero's full card.
+function PartyGlance({ state, dispatch, activeId, heroCard }) {
+  const [openId, setOpenId] = useState(null)
+  const stat = (label, value, change) => (
+    <span className="whitespace-nowrap">
+      <span className="text-zinc-400">{label}</span>{' '}
+      <b className={change < 0 ? 'text-orange-300' : change > 0 ? 'text-sky-300' : 'text-zinc-100'}>
+        {value}
+        {change < 0 ? '▼' : change > 0 ? '▲' : ''}
+      </b>
+    </span>
+  )
+  return (
+    <div className="space-y-2">
+      {state.heroes.map((hero) => {
+        const color = HERO_COLORS[hero.color]
+        const ac = acParts(hero, state.heroes).total
+        const speed = speedParts(hero).total
+        const attack = attackParts(hero).total
+        const open = openId === hero.id
+        return (
+          <div key={hero.id}>
+            <div className={`rounded-xl p-2 ${color.bg} ${hero.id === activeId ? 'ring-2 ring-amber-400' : ''} ${hero.hp === 0 ? 'opacity-80' : ''}`}>
+              <div className="flex items-center gap-2">
+                <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-expanded={open} onClick={() => setOpenId(open ? null : hero.id)}>
+                  <Art name={heroArt(hero.key)} className={`w-10 shrink-0 ${hero.hp === 0 ? 'grayscale' : ''}`} />
+                  <span className="min-w-0">
+                    <span className={`block truncate font-display text-lg leading-tight font-bold ${color.text}`}>
+                      {hero.name}
+                      {hero.id === activeId && <span className="ml-1.5 font-sans text-xs font-normal text-amber-300">turn now</span>}
+                    </span>
+                    <span className="flex gap-2 text-sm">
+                      {stat('AC', ac, ac - hero.ac)}
+                      {stat('Spd', speed, speed - (hero.speed ?? 6))}
+                      {stat('Atk', attack >= 0 ? `+${attack}` : `−${-attack}`, attack)}
+                    </span>
+                  </span>
+                  <span className="ml-auto shrink-0 text-zinc-500">{open ? '▴' : '▾'}</span>
+                </button>
+                <Button className="h-10 w-10 shrink-0 !px-0 text-xl" aria-label={`${hero.name} loses 1 HP`} onClick={() => dispatch({ type: 'ADJUST_HP', heroId: hero.id, amount: -1 })}>
+                  −
+                </Button>
+                <span className={`w-12 shrink-0 text-center text-xl font-bold whitespace-nowrap ${hero.hp === 0 ? 'text-red-400' : 'text-zinc-100'}`}>
+                  {hero.hp}
+                  <span className="text-sm font-normal text-zinc-500">/{hero.maxHp}</span>
+                </span>
+                <Button className="h-10 w-10 shrink-0 !px-0 text-xl" aria-label={`${hero.name} gains 1 HP`} onClick={() => dispatch({ type: 'ADJUST_HP', heroId: hero.id, amount: 1 })}>
+                  +
+                </Button>
+              </div>
+              <div className="mt-1.5">
+                <HpBar hp={hero.hp} maxHp={hero.maxHp} />
+              </div>
+              {hero.conditions.length > 0 && <p className="mt-1 text-sm text-amber-400">{hero.conditions.join(', ')}</p>}
+              <BoostBadges hero={hero} heroes={state.heroes} className="mt-1" badgeClass="px-2 py-0.5 text-xs" />
+            </div>
+            {open && <div className="mt-2">{heroCard(hero)}</div>}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // The row of tabs at the bottom of the screen: [id, emoji, label, badge] for each; a badge is a red dot.
 function TabBar({ tabs, tab, setTab, className = '' }) {
   return (
@@ -257,6 +324,8 @@ function PlayView({ state, dispatch, hero = null, soundBoard = null }) {
       powersInTurnGuide={h.id === active?.id && PHASES[state.turn.phase].key === 'hero'}
       natural20={state.turn.natural20 === h.id}
       showCardArt={showCardArt}
+      // Beside the virtual board the column is phone-narrow, even on an unfolded phone or an iPad.
+      compact={Boolean(state.board)}
     />
   )
   const monsters = monsterTotal(state)
@@ -285,11 +354,17 @@ function PlayView({ state, dispatch, hero = null, soundBoard = null }) {
     ),
     monsters: (
       <>
-        <VillainList state={state} dispatch={dispatch} canPlace={!hero} />
-        <MonsterList state={state} dispatch={dispatch} ownerId={hero?.id} />
+        <VillainList state={state} dispatch={dispatch} canPlace={!hero} glance={Boolean(state.board)} />
+        <MonsterList state={state} dispatch={dispatch} ownerId={hero?.id} glance={Boolean(state.board)} />
       </>
     ),
-    party: hero ? <PartyStrip heroes={state.heroes} meId={hero.id} activeId={active?.id} /> : <div className="grid gap-3 md:grid-cols-2">{state.heroes.map((h) => heroCard(h))}</div>,
+    party: hero ? (
+      <PartyStrip heroes={state.heroes} meId={hero.id} activeId={active?.id} />
+    ) : state.board ? (
+      <PartyGlance state={state} dispatch={dispatch} activeId={active?.id} heroCard={heroCard} />
+    ) : (
+      <div className="grid gap-3 md:grid-cols-2">{state.heroes.map((h) => heroCard(h))}</div>
+    ),
     adventure: <AdventurePanel state={state} dispatch={dispatch} full />,
     log: state.log.length ? <GameLog log={state.log} /> : <p className="text-zinc-400">Nothing has happened yet.</p>,
   }[shown]

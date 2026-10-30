@@ -8,7 +8,8 @@ import { HeroChoice, InReach } from './Pickers.jsx'
 import { heroesInReach } from '../board/encounters.js'
 import { Button } from './ui.jsx'
 
-export function PowerTile({ power, onToggle, selected = false }) {
+// compact: two short lines (name, then type · attack · damage) for the narrow column beside the board.
+export function PowerTile({ power, onToggle, selected = false, compact = false }) {
   const [open, setOpen] = useState(false)
   const card = power.card
   const usable = power.type !== 'at-will'
@@ -21,25 +22,40 @@ export function PowerTile({ power, onToggle, selected = false }) {
       } ${selected ? 'ring-2 ring-amber-400' : ''}`}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className="text-xs uppercase tracking-wide text-amber-500/80">
-          {power.type}
-          {power.used && ' · used'}
-        </span>
+        {compact ? (
+          <span className={`min-w-0 font-semibold ${power.used ? 'line-through' : ''}`}>{power.name}</span>
+        ) : (
+          <span className="min-w-0 truncate text-xs uppercase tracking-wide whitespace-nowrap text-amber-500/80">
+            {power.type}
+            {power.used && ' · used'}
+          </span>
+        )}
         {card?.text && (
           <button
             type="button"
-            className="-my-2 -mr-2 min-h-9 rounded-lg px-3 py-2 text-xs text-zinc-400 hover:bg-zinc-800"
+            className="-my-2 -mr-2 h-9 w-9 shrink-0 rounded-lg text-base text-zinc-400 hover:bg-zinc-800"
+            aria-label={open ? 'Hide the card text' : 'Read the card'}
+            aria-expanded={open}
             onClick={(e) => {
               e.stopPropagation()
               setOpen((o) => !o)
             }}
           >
-            {open ? 'Hide' : 'Read'}
+            {open ? '▴' : 'ⓘ'}
           </button>
         )}
       </div>
-      <div className={`font-semibold ${power.used ? 'line-through' : ''}`}>{power.name}</div>
-      {(card?.attack || card?.damage) && (
+      {compact ? (
+        <div className="text-xs text-zinc-400">
+          <span className="text-amber-500/80">{power.type[0].toUpperCase() + power.type.slice(1)}</span>
+          {power.used && ' · used'}
+          {card?.attack && ` · ${card.attack}`}
+          {card?.damage && ` · ${card.damage} dmg`}
+        </div>
+      ) : (
+        <div className={`font-semibold ${power.used ? 'line-through' : ''}`}>{power.name}</div>
+      )}
+      {!compact && (card?.attack || card?.damage) && (
         <div className="text-xs text-zinc-400">
           {card.attack && `Attack ${card.attack}`}
           {card.attack && card.damage && ' · '}
@@ -166,7 +182,7 @@ function PowerPicker({ hero, power, options, dispatch }) {
 
 // tilesHidden: the turn guide's attack box is already showing this hero's attack
 // powers, so only the others (utilities, used dailies) and empty slots show here.
-export default function PowerList({ state, hero, dispatch, tilesHidden = false }) {
+export default function PowerList({ state, hero, dispatch, tilesHidden = false, compact = false }) {
   const cards = useCards()
   const [usingId, setUsingId] = useState(null)
   const using = hero.powers.find((p) => p.id === usingId && !p.used)
@@ -189,6 +205,7 @@ export default function PowerList({ state, hero, dispatch, tilesHidden = false }
           <PowerTile
             key={power.id}
             power={power}
+            compact={compact}
             selected={power.id === using?.id}
             onToggle={() => {
               // Tumbling Escape or Practiced Evasion right after a hit undoes that hit.
