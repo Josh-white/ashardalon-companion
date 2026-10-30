@@ -4,7 +4,8 @@ import { effectsOf, pendingDodge } from '../data/powerEffects.js'
 import { attackGone, powerNumber, powerUsesAttack } from '../state/game.js'
 import { rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
-import { HeroChoice } from './Pickers.jsx'
+import { HeroChoice, InReach } from './Pickers.jsx'
+import { heroesInReach } from '../board/encounters.js'
 import { Button } from './ui.jsx'
 
 export function PowerTile({ power, onToggle, selected = false }) {
@@ -106,7 +107,9 @@ function UsePanel({ state, hero, power, dispatch, onClose }) {
           {choices.length === 0 ? (
             <p className="text-zinc-400">Nobody has a condition to end.</p>
           ) : (
-            <HeroChoice heroes={choices} chosen={chosen} onToggle={pickOne} />
+            <InReach items={choices} near={heroesInReach(state, hero.id, use.reach)}>
+              {(shown) => <HeroChoice heroes={shown} chosen={chosen} onToggle={pickOne} />}
+            </InReach>
           )}
         </>
       )}
