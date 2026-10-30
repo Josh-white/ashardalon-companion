@@ -23,6 +23,7 @@ import { layChamber, layExit, layTile, moveHero, placeNear, moveToken, newBoard,
 import { boardMove, queueFearMove, queueMoves, skipBoardMove } from '../board/powerMoves.js'
 import { heroTile } from '../board/encounters.js'
 import { guardsOnTile } from '../board/checks.js'
+import { addTreasureToken, pickUpTreasure, placeItem, removeItem } from '../board/items.js'
 import { activeVillains, buildDeck, clamp, findFoe, foes, heroLabel, markUsed, newId, pick, sameName, shuffle, toggle, updateHero, updateMonster, validRoll, withCast, withLog, withMoment } from './gameHelpers.js'
 import { discardMonsterCard, drawMonster, drawMonsterOfType, filterMonsterDeck, monsterFromCard, villainInPlay } from './monsterDeck.js'
 import { discardEncounterCard, drawEncounter, intoTopThree, oweEncounter } from './encounterDeck.js'
@@ -333,6 +334,8 @@ function resolveEncounter(state, action) {
   if (card.placeVillain) next = reduce(next, { type: 'PLACE_VILLAIN', name: card.placeVillain, cards: action.villains ?? [] })
   if (card.drawMonsterType && hero) next = drawMonsterOfType(next, hero.id, card.drawMonsterType, action.random, action.monsterCards)
   if (card.timeToken) next = removeTimeToken(next, card.name)
+  // Hidden Treasure: on the virtual board, a Treasure token waits for a player to tap its square.
+  if ((card.placeTreasure || card.id === 'hidden-treasure') && next.board) next = addTreasureToken(next)
 
   if (card.type === 'curse' && hero) {
     const curse = { id: newId('curse'), cardId: card.id, name: card.name, text: card.text, card: card.curse ?? {}, checks: card.checks ?? [] }
@@ -1736,6 +1739,14 @@ function reduce(state, action) {
       return moveHero(state, action)
     case 'MOVE_TOKEN':
       return moveToken(state, action)
+    case 'ADD_TREASURE_TOKEN':
+      return addTreasureToken(state)
+    case 'PLACE_ITEM':
+      return placeItem(state, action)
+    case 'REMOVE_ITEM':
+      return removeItem(state, action)
+    case 'PICK_UP_TREASURE':
+      return pickUpTreasure(state, action)
 
     case 'CHOOSE_ADVENTURE': {
       // Only before the game, and only an adventure the app can run.

@@ -12,9 +12,26 @@ import { treasurePending } from './Treasure.jsx'
 import { DrawnTile, HallwayDraws, useTileDraw } from './Tiles.jsx'
 import { Button } from './ui.jsx'
 import { heroEdges } from '../board/play.js'
+import { treasureInReach } from '../board/items.js'
 
 // Each phase asks only what the app can't see for itself. The checklist each phase
 // used to show is still on the projector, as a reminder for the whole table.
+
+// Hero Phase on the virtual board: a hero next to a Treasure token, with no monster on its
+// tile, can pick it up. (Anything else: tap the coin on the board.)
+function TreasurePickUp({ state, hero, dispatch }) {
+  const item = treasureInReach(state, hero)
+  if (!item) return null
+  const busy = Boolean(state.treasure || state.turn.treasureOwed || state.turn.tokenOwed)
+  return (
+    <Note tone="good">
+      <p>💰 {hero.name} is next to a Treasure token. End the Hero Phase here to pick it up.</p>
+      <Button variant="gold" className="mt-2 w-full" disabled={busy} onClick={() => dispatch({ type: 'PICK_UP_TREASURE', id: item.id, heroId: hero.id })}>
+        💰 {hero.name} picks up the Treasure token
+      </Button>
+    </Note>
+  )
+}
 
 function Note({ children, tone = 'plain' }) {
   const tones = {
@@ -99,6 +116,7 @@ function HeroPhase({ state, hero, dispatch }) {
 
       <HeroAttack state={state} hero={hero} dispatch={dispatch} />
       <DisableTraps state={state} hero={hero} dispatch={dispatch} />
+      <TreasurePickUp state={state} hero={hero} dispatch={dispatch} />
       <Doors state={state} hero={hero} dispatch={dispatch} />
       <EscapeNote state={state} hero={hero} dispatch={dispatch} />
       <ExtraAttacks state={state} dispatch={dispatch} />

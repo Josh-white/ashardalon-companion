@@ -137,7 +137,12 @@ export function describeAction(state, action) {
     case 'END_CAMPAIGN':
       return 'End the campaign'
     case 'DRAW_TREASURE_TOKEN':
+    case 'ADD_TREASURE_TOKEN':
+    case 'PLACE_ITEM':
+    case 'REMOVE_ITEM':
       return 'Treasure token'
+    case 'PICK_UP_TREASURE':
+      return hero ? `${hero.name} picks up the Treasure token` : 'Treasure token'
     case 'USE_BOON':
       return action.boon?.name ?? 'Boon'
     default:
