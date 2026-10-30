@@ -110,3 +110,23 @@ describe('powers that move figures on the board', () => {
     expect(moveChoices(state)).toEqual(['m1'])
   })
 })
+
+describe('Hypnotism on the board', () => {
+  it('moves a monster within 1 tile onto a tile next to its own, then offers only the monsters it ends next to', async () => {
+    const { hypnotized } = await import('./powerMoves.js')
+    const { effectsOf } = await import('../data/powerEffects.js')
+    const { state, heroes } = game()
+    const other = { ...state.monsters[0], id: 'm2', name: 'Bat' }
+    let next = { ...state, monsters: [...state.monsters, other], board: { ...state.board, tokens: { ...state.board.tokens, m2: [2, 1] } } }
+    next = queueMoves(next, heroes[0], { name: 'Hypnotism' }, effectsOf({ name: 'Hypnotism' }).board.before)
+    expect(moveChoices(next)).toContain('m1')
+    expect(moveTargets(next, 'm1')).toContain('2,0')
+    expect(hypnotized(next, 'Hypnotism')).toBeNull()
+    next = gameReducer(next, { type: 'BOARD_MOVE', id: 'm1', to: [2, 0] })
+    expect(next.turn.boardMove).toBeNull()
+    expect(hypnotized(next, 'Hypnotism')).toEqual({ id: 'm1', nextTo: ['m2'] })
+    // Nobody next to it: nothing to attack.
+    const alone = gameReducer(queueMoves({ ...next, turn: { ...next.turn, powerMoved: null } }, heroes[0], { name: 'Hypnotism' }, effectsOf({ name: 'Hypnotism' }).board.before), { type: 'BOARD_MOVE', id: 'm2', to: [0, 4] })
+    expect(hypnotized(alone, 'Hypnotism')?.nextTo ?? []).toEqual([])
+  })
+})

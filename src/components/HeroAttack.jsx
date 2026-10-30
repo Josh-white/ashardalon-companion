@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { stayedOnBoard } from '../board/play.js'
 import { foeDistance, foesInRange, powerRange } from '../board/monsters.js'
+import { hypnotized } from '../board/powerMoves.js'
 import { asksIfStayed, attackItems, distanceChoices, heroItems, itemsWithUse } from '../data/items.js'
 import { effectsOf, maxRolls, reactionsFor } from '../data/powerEffects.js'
 import { rollD20 } from '../state/random.js'
@@ -346,7 +347,10 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   // On the virtual board only the monsters the power can reach are offered.
   const [showAll, setShowAll] = useState(false)
   const range = state.board && !moving ? powerRange(item ? item.card.text : power?.card?.text) : null
-  const everyTarget = foes(state).filter((m) => !moving || m.id !== answers.movedId)
+  // On the virtual board Hypnotism's move is done there, and the board knows who it's next to.
+  const trance = moving && power ? hypnotized(state, power.name) : null
+  const asked = trance ? { movedId: trance.id } : answers
+  const everyTarget = foes(state).filter((m) => !moving || (m.id !== asked.movedId && (!trance || trance.nextTo.includes(m.id))))
   const reachable = foesInRange(state, hero.id, range, everyTarget)
   const targets = showAll ? everyTarget : reachable
   // The board says how far each monster is, for magic weapons that care.
@@ -366,7 +370,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   const stayed = stayedTap ?? boardStayed ?? false
   const unknownAc = targets.find((m) => chosen.includes(m.id) && !m.ac)
   const needsAnswer =
-    (effects.ask && Object.keys(answers).length === 0) || (choices && chosen.some((id) => !allDistances[id]))
+    (effects.ask && Object.keys(asked).length === 0) || (choices && chosen.some((id) => !allDistances[id]))
   const last = state.turn.lastAttack
   const showResults = rolled && last && !last.bonus && last.heroId === hero.id
 
@@ -402,7 +406,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   const roll = () => {
     const targets = chosen.map((monsterId) => ({ monsterId, roll: rollD20() }))
     const source = item ? { itemId: item.id } : { powerId: power.id }
-    dispatch({ type: 'HERO_ATTACK', heroId: hero.id, ...source, targets, bonusAttack: Boolean(extra), distances: allDistances, stayed, ...answers })
+    dispatch({ type: 'HERO_ATTACK', heroId: hero.id, ...source, targets, bonusAttack: Boolean(extra), distances: allDistances, stayed, ...asked })
     setRolled(true)
     setAnyway(false)
   }
@@ -504,7 +508,12 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
                   )}
                 </div>
               )}
-              {moving && (
+              {moving && trance && (
+                <p className="text-zinc-200">
+                  The {foes(state).find((m) => m.id === trance.id)?.name ?? 'monster'} moved. {trance.nextTo.length > 0 ? 'It attacks a monster it ended up next to.' : ''}
+                </p>
+              )}
+              {moving && !trance && !(state.board && state.turn.boardMove?.source === power.name) && (
                 <>
                   <p className="text-zinc-200">
                     Which monster within 1 tile did {hero.name} hypnotize? Move it 1 tile. It doesn't get hurt.
@@ -520,7 +529,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
                   />
                 </>
               )}
-              {moving && !answers.movedId ? null : moving && targets.length === 0 ? (
+              {moving && !asked.movedId ? null : moving && targets.length === 0 ? (
                 <p className="text-zinc-400">There's no other monster for it to attack, so nothing happens.</p>
               ) : (
               <>
