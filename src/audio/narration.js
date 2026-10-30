@@ -165,7 +165,8 @@ export function narrationFor(before, after, now = Date.now()) {
     if (turnChanged && after.turn.phase === 0 && hero && !waitingOnRoll) lines.push(turnLine(hero))
     if (!before.turn.explored && after.turn.explored) lines.push(say('narrator', `${OMINOUS} ${pick(NEW_TILE, `${after.turn.round}-${after.turn.heroIndex}`)}`))
   }
-  const starting = before.status === 'setup' && after.status === 'playing'
+  // A new game, from the lobby or Try again after a loss (not Back to the game).
+  const starting = after.status === 'playing' && (before.status === 'setup' || (before.status !== 'playing' && Boolean(after.opening) && after.opening.until !== before.opening?.until))
   const storyAt = lines.length
   // An adventure's red "Read aloud" box: the whole story, not just its title.
   const story = after.adventure?.story
@@ -182,7 +183,7 @@ export function narrationFor(before, after, now = Date.now()) {
   }
   // The lines that open a game are the opening story (state/opening.js): the roll for
   // first turn waits for them. `hold` names what waits for a line.
-  if (before.status === 'setup' && after.status === 'playing') {
+  if (starting) {
     for (let i = 0; i < lines.length; i++) if (lines[i]) lines[i] = { ...lines[i], hold: 'opening' }
   }
   const moment = after.moment

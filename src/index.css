@@ -36,8 +36,16 @@ body {
 .moment-glow { animation: moment-pop 0.35s ease-out both, moment-glow 1.2s ease-in-out 0.35s infinite; }
 .moment-shake { animation: moment-pop 0.35s ease-out both, moment-shake 0.5s ease-in-out 0.35s 2; }
 
+/* The recap after a loss: a dim red glow from below, and the skull sinking in slowly. */
+@keyframes defeat-skull {
+  0% { transform: translateY(-0.5em) scale(1.4); opacity: 0; filter: blur(4px); }
+  100% { transform: none; opacity: 1; filter: none; }
+}
+.recap-defeat { background-image: radial-gradient(ellipse at 50% 120%, rgb(127 29 29 / 0.45), transparent 65%); }
+.defeat-skull { animation: defeat-skull 1.6s ease-out both; }
+
 @media (prefers-reduced-motion: reduce) {
-  .moment-pop, .moment-reveal, .moment-glow, .moment-shake { animation: none; }
+  .moment-pop, .moment-reveal, .moment-glow, .moment-shake, .defeat-skull { animation: none; }
 }
 
 /* The 3D d20 pops as it lands on its number; a natural 20 then glows. */

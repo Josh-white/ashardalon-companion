@@ -137,3 +137,20 @@ export function recap(state) {
     party: { rounds: state.turn.round, kills: sum('kills'), xpEarned: sum('xpEarned'), nat20s: sum('nat20s'), damageDealt: sum('damageDealt'), treasure: sum('treasure') },
   }
 }
+
+// The few lines a lost game ends on: how far the party got, and who came closest to falling.
+export function defeatHighlights(state) {
+  const { heroes, party } = recap(state)
+  const lines = [
+    { emoji: '⏳', label: 'Rounds survived', value: String(party.rounds) },
+    { emoji: '⚔️', label: 'Monsters defeated', value: String(party.kills) },
+  ]
+  const tiles = state.tileStack?.drawn ?? 0
+  if (tiles > 0) lines.push({ emoji: '🗺️', label: 'Tiles explored', value: String(tiles) })
+  const most = (key) => heroes.reduce((best, h) => (h.stats[key] > (best?.stats[key] ?? 0) ? h : best), null)
+  const downed = most('downs')
+  const hurt = most('damageTaken')
+  if (downed) lines.push({ emoji: '😱', label: 'Closest call', value: `${downed.hero.name}, knocked down ${downed.stats.downs === 1 ? 'once' : `${downed.stats.downs} times`}` })
+  else if (hurt) lines.push({ emoji: '🩸', label: 'Toughest fight', value: `${hurt.hero.name} took ${hurt.stats.damageTaken} damage` })
+  return lines
+}

@@ -76,4 +76,16 @@ describe('adventures on the virtual board', () => {
     // Only once.
     expect(layExit(state, 'Tunnel Exit')).toBe(state)
   })
+
+  it('Try again after a loss sets the board up fresh, the same way', () => {
+    const lost = { ...start(GATE_OPENS, 2), status: 'lost' }
+    const again = gameReducer(lost, { type: 'TRY_AGAIN', tileRandom: [], boardTiles: TILES })
+    expect(again.status).toBe('playing')
+    expect(again.board.tiles[0].tileId).toBe('dire-chamber-start')
+    expect(again.monsters.find((m) => m.objective)).toBeTruthy()
+    for (const h of again.heroes) expect(again.board.tokens[h.id]).toBeTruthy()
+    // A game on the real tiles stays on the real tiles.
+    const table = gameReducer({ ...lost, board: null }, { type: 'TRY_AGAIN', tileRandom: [], boardTiles: TILES })
+    expect(table.board).toBe(null)
+  })
 })
