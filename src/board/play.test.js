@@ -62,6 +62,16 @@ describe('solo game on the virtual board', () => {
     expect(gameReducer(state, { type: 'MOVE_HERO', heroId: h.id, to: [2, 1] })).toBe(state)
   })
 
+  it("knows whether the active hero has moved this Hero Phase (Dwarven Hammer)", () => {
+    let state = start()
+    const h = hero(state)
+    expect(play.stayedOnBoard(state, h)).toBe(true)
+    // Not the other hero's Hero Phase: the players answer that themselves.
+    expect(play.stayedOnBoard(state, hero(state, 1))).toBeNull()
+    state = gameReducer(state, { type: 'MOVE_HERO', heroId: h.id, to: [0, 4] })
+    expect(play.stayedOnBoard(state, hero(state))).toBe(false)
+  })
+
   it('counts an attack as an action, and Dazed or Immobilized heroes move less', () => {
     const state = start()
     const attacked = { ...state, turn: { ...state.turn, lastAttack: { heroId: hero(state).id } } }

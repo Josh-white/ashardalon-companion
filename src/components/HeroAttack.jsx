@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { stayedOnBoard } from '../board/play.js'
 import { foeDistance, foesInRange, powerRange } from '../board/monsters.js'
 import { asksIfStayed, attackItems, distanceChoices, heroItems, itemsWithUse } from '../data/items.js'
 import { effectsOf, maxRolls, reactionsFor } from '../data/powerEffects.js'
@@ -185,7 +186,8 @@ const RANGE_WORDS = { adjacent: 'next to', sameTile: 'on the same tile as', with
 const DISTANCE_LABELS = { adjacent: 'Next to me', within1: 'Within 1 tile', far: 'Farther' }
 
 // Magic weapons only help against monsters close enough, so the app asks how far each one is.
-function DistanceQuestion({ state, hero, chosen, distances, setDistances, stayed, setStayed }) {
+// On the virtual board both are pre-answered from the board, and a tap still changes them.
+function DistanceQuestion({ state, hero, chosen, distances, setDistances, fromBoard, stayed, setStayed, stayedFromBoard }) {
   const choices = distanceChoices(hero)
   const ids = chosen.filter((id, i) => chosen.indexOf(id) === i)
   if (!choices && !asksIfStayed(hero)) return null
@@ -196,7 +198,10 @@ function DistanceQuestion({ state, hero, chosen, distances, setDistances, stayed
           const monster = state.monsters.find((m) => m.id === id)
           return (
             <div key={id}>
-              <p className="text-zinc-200">💰 How far is the {monster ? monsterName(state, monster) : 'monster'} from {hero.name}?</p>
+              <p className="text-zinc-200">
+                💰 How far is the {monster ? monsterName(state, monster) : 'monster'} from {hero.name}?
+                {fromBoard[id] && <span className="text-sm text-zinc-400"> (from the board, tap to change)</span>}
+              </p>
               <div className="mt-1 grid grid-cols-3 gap-2">
                 {choices.map((d) => (
                   <Button key={d} variant={distances[id] === d ? 'gold' : 'default'} onClick={() => setDistances({ ...distances, [id]: d })}>
@@ -210,7 +215,10 @@ function DistanceQuestion({ state, hero, chosen, distances, setDistances, stayed
       {asksIfStayed(hero) && (
         <label className="flex items-center gap-3 text-zinc-200">
           <input type="checkbox" className="h-6 w-6" checked={stayed} onChange={() => setStayed(!stayed)} />
-          {hero.name} didn't move this Hero Phase (Dwarven Hammer hits harder)
+          <span>
+            {hero.name} didn't move this Hero Phase (Dwarven Hammer hits harder)
+            {stayedFromBoard && <span className="block text-sm text-zinc-400">From the board: {stayed ? `${hero.name} hasn't moved yet.` : `${hero.name} has moved.`} Tap to change.</span>}
+          </span>
         </label>
       )}
     </div>
@@ -230,7 +238,8 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   const [chosen, setChosen] = useState([])
   const [answers, setAnswers] = useState({})
   const [distances, setDistances] = useState({})
-  const [stayed, setStayed] = useState(false)
+  // null until a player taps it: then the board's answer is used.
+  const [stayedTap, setStayed] = useState(null)
   const [rolled, setRolled] = useState(false)
   // Tapped "Attack anyway" past a used-up attack. Each extra attack needs its own tap.
   const [anyway, setAnyway] = useState(false)
@@ -249,11 +258,23 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   const reachable = foesInRange(state, hero.id, range, everyTarget)
   const targets = showAll ? everyTarget : reachable
   // The board says how far each monster is, for magic weapons that care.
-  const boardDistances = Object.fromEntries(chosen.map((id) => [id, foeDistance(state, hero.id, id)]).filter(([, d]) => d))
-  const allDistances = { ...distances, ...boardDistances }
+  // An item that only cares about "next to you" offers no "within 1 tile" answer, so the
+  // board's within1 counts as farther. A player's tap beats the board.
+  const choices = distanceChoices(hero)
+  const boardDistances = Object.fromEntries(
+    chosen
+      .map((id) => [id, foeDistance(state, hero.id, id)])
+      .filter(([, d]) => d)
+      .map(([id, d]) => [id, choices && !choices.includes(d) ? 'far' : d]),
+  )
+  const allDistances = { ...boardDistances, ...distances }
+  const fromBoard = Object.fromEntries(Object.keys(boardDistances).filter((id) => !distances[id]).map((id) => [id, true]))
+  // The board knows whether the active hero has moved this Hero Phase (Dwarven Hammer).
+  const boardStayed = stayedOnBoard(state, hero)
+  const stayed = stayedTap ?? boardStayed ?? false
   const unknownAc = targets.find((m) => chosen.includes(m.id) && !m.ac)
   const needsAnswer =
-    (effects.ask && Object.keys(answers).length === 0) || (distanceChoices(hero) && chosen.some((id) => !allDistances[id]))
+    (effects.ask && Object.keys(answers).length === 0) || (choices && chosen.some((id) => !allDistances[id]))
   const last = state.turn.lastAttack
   const showResults = rolled && last && !last.bonus && last.heroId === hero.id
 
@@ -442,8 +463,10 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
                   chosen={chosen}
                   distances={allDistances}
                   setDistances={setDistances}
+                  fromBoard={fromBoard}
                   stayed={stayed}
                   setStayed={setStayed}
+                  stayedFromBoard={stayedTap === null && boardStayed !== null}
                 />
               )}
               {item?.card.note && <p className="rounded-lg bg-amber-950/60 p-3 text-amber-200">{item.card.note}</p>}
