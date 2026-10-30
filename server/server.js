@@ -102,12 +102,28 @@ export function listArt(artDir) {
 const SOUND_FILE = /^([a-z0-9-]+)\.(mp3|ogg|wav|m4a)$/
 const SOUND_TYPES = { mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', m4a: 'audio/mp4' }
 
+// How loud each music track is (integrated LUFS), measured on the Pi by
+// scripts/measure-music.sh into cards/sounds/music-levels.json, so screens can even
+// the tracks out without changing the files.
+export const MUSIC_LEVELS = 'music-levels.json'
+
+function musicLevels(soundsDir) {
+  try {
+    return JSON.parse(readFileSync(join(soundsDir, MUSIC_LEVELS), 'utf8'))
+  } catch {
+    return {}
+  }
+}
+
 export function listSounds(soundsDir) {
   const sounds = {}
   try {
+    const levels = musicLevels(soundsDir)
     for (const file of readdirSync(soundsDir)) {
       const [, name] = file.match(SOUND_FILE) ?? []
-      if (name) sounds[name] = { file, v: Math.round(statSync(join(soundsDir, file)).mtimeMs) }
+      if (!name) continue
+      sounds[name] = { file, v: Math.round(statSync(join(soundsDir, file)).mtimeMs) }
+      if (Number.isFinite(levels[name])) sounds[name].lufs = levels[name]
     }
   } catch {
     // No sounds folder: every sound is made up.

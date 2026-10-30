@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { activeVillains } from '../state/game.js'
+import { dungeonArea } from '../state/area.js'
 import { NOTE, burst, changeSounds, soundMs, pad, tone } from './sfx.js'
 import { useGameStates } from '../state/useSharedGame.js'
 import { audioContext } from './soundSetting.js'
@@ -51,13 +52,37 @@ export const MOODS = {
   },
 }
 
-// Which music fits the game right now, or null for none.
+// Which music fits the game right now, or null for none. Victory has a track on the Pi
+// or nothing: there's no made-up music for it.
 export function musicMood(state) {
   if (state?.status === 'lost') return 'lament'
+  if (state?.status === 'won') return 'victory'
   if (state?.status !== 'playing') return null
   if (activeVillains(state).length > 0) return 'boss'
   if (state.monsters.length > 0) return 'battle'
   return 'explore'
+}
+
+// Explore music by dungeon area (src/state/area.js). The Start tile and the way out
+// keep the plain explore track.
+const AREA_MUSIC = {
+  battlefield: 'halls',
+  halls: 'halls',
+  tunnels: 'tunnels',
+  depths: 'depths',
+  'dire-chamber': 'chamber',
+  'horrid-chamber': 'chamber',
+  chamber: 'chamber',
+  vault: 'chamber',
+}
+
+// The Pi's tracks to try for `mood` (cards/sounds/<name>.mp3), most specific first.
+export function musicTracks(state, mood) {
+  if (!mood) return []
+  const area = dungeonArea(state)?.key
+  if (mood === 'explore' && AREA_MUSIC[area]) return [`loop-explore-${AREA_MUSIC[area]}`, 'loop-explore']
+  if (mood === 'boss' && area === 'ashardalon') return ['loop-boss-ashardalon', 'loop-boss']
+  return [`loop-${mood}`]
 }
 
 // One eighth note of a mood: what each part plays on it. Exported so a browser
@@ -127,18 +152,20 @@ const player = {
   volume: null,
   moodGain: null,
 
-  setMood(mood) {
-    if (mood === this.wanted) return
-    this.wanted = mood
+  // `music` is "<mood> <tracks to try...>", so a new area changes it too.
+  setMood(music) {
+    if (music === this.wanted) return
+    this.wanted = music
     const ctx = audioContext()
     if (!ctx) return
-    if (!mood) {
+    if (!music) {
       stopLoop(ctx)
       this.makeUp(null)
       return
     }
-    playLoop(ctx, mood).then((looped) => {
-      if (this.wanted === mood) this.makeUp(looped ? null : mood)
+    const [mood, ...names] = music.split(' ')
+    playLoop(ctx, names).then((looped) => {
+      if (this.wanted === music) this.makeUp(looped || !MOODS[mood] ? null : mood)
     })
   },
 
@@ -200,9 +227,10 @@ function fadeOut(ctx, gain) {
 // Plays the music that fits the game while `on`, and dips it under big moments.
 export function useMusic(state, on) {
   const mood = on ? musicMood(state) : null
+  const music = mood && [mood, ...musicTracks(state, mood)].join(' ')
   useEffect(() => {
-    player.setMood(mood)
-  }, [mood])
+    player.setMood(music)
+  }, [music])
   useEffect(() => () => player.setMood(null), [])
 
   // Every state from the Pi, so two changes that land together both duck the music.

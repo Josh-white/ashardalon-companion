@@ -525,6 +525,18 @@ describe('recordings', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
+  it('adds how loud each music track is, when the Pi has measured it', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ashardalon-sounds-'))
+    writeFileSync(join(dir, 'loop-battle.mp3'), 'x')
+    writeFileSync(join(dir, 'loop-boss.mp3'), 'x')
+    writeFileSync(join(dir, 'music-levels.json'), JSON.stringify({ 'loop-battle': -15.2, 'loop-boss': 'loud' }))
+    const sounds = listSounds(dir)
+    expect(sounds['loop-battle'].lufs).toBe(-15.2)
+    expect(sounds['loop-boss'].lufs).toBe(undefined)
+    expect(sounds['music-levels']).toBe(undefined)
+    rmSync(dir, { recursive: true, force: true })
+  })
+
   it('serves part of a long track when a player asks for a range', () => {
     expect(byteRange(undefined, 1000)).toBe(null)
     expect(byteRange('bytes=0-', 1000)).toEqual([0, 999])

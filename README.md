@@ -64,6 +64,8 @@ Each sound gets two or three takes in `cards/sounds/takes/`. Open the app at `/#
 
 Put a music track for each mood in `cards/sounds/` as `loop-explore.mp3`, `loop-battle.mp3` and `loop-boss.mp3` (JJ uses free tracks from Tabletop Audio: Dungeon I, Light the Beacons and Red Dragon Dawn). Each one streams in place of the made-up music for its mood, starting somewhere in the track and fading over 1.5 seconds when the mood changes. Music dips from 30% to 10% while the narrator talks, and the 🎵 switch turns it on or off on each screen. A mood with no track gets the made-up music.
 
+More tracks can go in for particular moments; the game tries the most specific one first and falls back to the plain mood: `loop-explore-halls.mp3`, `loop-explore-tunnels.mp3`, `loop-explore-depths.mp3` and `loop-explore-chamber.mp3` (chambers and the Vault) by dungeon area, `loop-boss-ashardalon.mp3` when Ashardalon is out, `loop-victory.mp3` after a win (no music without it) and `loop-lament.mp3` after a loss. After adding or swapping a track, run `scripts/measure-music.sh` on the Pi: it writes each track's loudness to `cards/sounds/music-levels.json`, and the game brings every track into the same band (-26 to -20 LUFS) so none overpowers the others. The files themselves stay exactly as downloaded. A track that hasn't been measured plays at half volume.
+
 ## Run it on the Raspberry Pi
 
 ```sh
