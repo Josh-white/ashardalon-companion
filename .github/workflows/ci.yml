@@ -30,6 +30,10 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm test
+      # The robot plays a dozen whole solo games by itself, tapping the real screens at
+      # random, to catch a screen that crashes. A failure names the seed to play it again.
+      - name: Robot plays whole games
+        run: npm run robot
       - run: npm run build
 
   docker:
