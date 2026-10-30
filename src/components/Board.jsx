@@ -202,6 +202,8 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   let targets = []
   // Watching someone else's turn, the board still zooms, and ✋ moves any figure by hand.
   const watching = readOnly && !byHand
+  // The projector's board has no dispatch: nothing to tap there.
+  const tools = !readOnly || (fill && Boolean(dispatch))
   if (!watching && picked) {
     if (powerMove) targets = moveTargets(state, picked)
     else if (byHand) targets = [...grid.values()].filter((sq) => sq.floor && !taken.has(key([sq.x, sq.y]))).map((sq) => key([sq.x, sq.y]))
@@ -240,7 +242,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
 
   return (
     <section className={`relative rounded-2xl border border-zinc-800 bg-zinc-950/80 ${fill ? 'flex h-full flex-col p-2' : 'p-3'}`}>
-      {(!readOnly || fill) && (
+      {tools && (
         <div className={`mb-2 flex items-center gap-2 ${fill ? '' : 'flex-wrap'}`}>
           <p className={`flex-1 text-zinc-300 ${fill ? 'text-xs leading-snug sm:text-sm' : 'text-sm'}`}>
             {watching
@@ -283,7 +285,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
           </Button>
         </div>
       )}
-      {(!readOnly || fill) && offBoard.length > 0 && (
+      {tools && offBoard.length > 0 && (
         <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
           <span className="text-zinc-400">Not on the board yet:</span>
           {offBoard.map((f) => (
