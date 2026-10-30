@@ -77,6 +77,11 @@ else
   echo "$(date '+%F %T') No family game in $CONTAINER yet, nothing to back up."
 fi
 
+# The players' records and titles, in their own folder of backups.
+if docker cp "$CONTAINER:/data/records.json" "$incoming/records.json" 2>/dev/null; then
+  backup_save "$incoming/records.json" "$BACKUP_DIR/records" "Players' records"
+fi
+
 # Every other game (solo games and the like) is in the games folder. Each gets its
 # own folder of backups, $BACKUP_DIR/games/<game>/, next to a copy of the list of games.
 if docker cp "$CONTAINER:/data/games" "$incoming/" 2>/dev/null; then

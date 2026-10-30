@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { HallOfRecords } from './Records.jsx'
 import { Button } from './ui.jsx'
 
 const FAMILY_GAME = 'family'
@@ -39,6 +40,7 @@ export default function GamePicker({ current, onPick, onClose, startGame, change
   const [problem, setProblem] = useState(null)
   const [starting, setStarting] = useState(false)
   const [renaming, setRenaming] = useState(null) // { id, name }
+  const [hall, setHall] = useState(false)
 
   useEffect(() => {
     let stopped = false
@@ -93,11 +95,15 @@ export default function GamePicker({ current, onPick, onClose, startGame, change
   if (onlyFamily) return null
 
   const full = list && list.games.length >= list.max
+  if (hall) return <HallOfRecords onClose={() => setHall(false)} />
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4 sm:p-8">
       <div className="flex items-center gap-3">
         <h1 className="mr-auto font-display text-4xl font-bold text-amber-400">Which game?</h1>
+        <Button variant="ghost" onClick={() => setHall(true)}>
+          🏆 Records
+        </Button>
         {onClose && (
           <Button variant="ghost" onClick={onClose}>
             Back to my game

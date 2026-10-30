@@ -1,9 +1,13 @@
+import { useState } from 'react'
 import { HERO_COLORS } from '../data/heroes.js'
 import { defeatHighlights, recap } from '../state/stats.js'
 import { campaignOutcome } from '../state/campaign.js'
 import { randomNumbers, shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
+import { findPlayer, recordKey } from '../state/records.js'
+import { useRecords } from '../state/useRecords.js'
 import { CampaignRecap } from './Campaign.jsx'
+import { HallOfRecords } from './Records.jsx'
 import { Button, useConfirm } from './ui.jsx'
 
 // The end-of-game recap, win or lose: what the party did, and an award for every
@@ -53,6 +57,10 @@ export const LOST_QUESTION = { title: 'Did the party lose?', body: 'This shows t
 export default function Recap({ state, dispatch, big, onFinish }) {
   const [ask, dialog] = useConfirm()
   const cards = useCards()
+  const [hall, setHall] = useState(false)
+  // The Pi adds this game to the records as it ends, so they're loaded again for each ending.
+  const thisGame = recordKey(state)
+  const records = useRecords(`${thisGame}:${state.status}:${hall}`)
   const won = state.status === 'won'
   const { heroes, mvpIds, party } = recap(state)
   const title = state.adventure?.card.title
@@ -79,6 +87,14 @@ export default function Recap({ state, dispatch, big, onFinish }) {
     )
   // Mid-campaign, the way on is the campaign's own button above.
   const canNewGame = !state.campaign || campaignOutcome(state)?.over
+
+  if (hall) {
+    return (
+      <div className="fixed inset-0 z-[35] overflow-y-auto bg-zinc-950">
+        <HallOfRecords onClose={() => setHall(false)} />
+      </div>
+    )
+  }
 
   return (
     <div className={`fixed inset-0 z-[35] overflow-y-auto bg-zinc-950 ${won ? '' : 'recap-defeat'} ${big ? 'p-[1.5vw] text-[1.2vw]' : 'p-4 text-base'}`}>
@@ -129,6 +145,7 @@ export default function Recap({ state, dispatch, big, onFinish }) {
                 {hero.player || hero.name}
               </h3>
               {hero.player && <p className="text-[0.9em] text-zinc-400">{hero.name}</p>}
+              <PlayerTitles record={findPlayer(records, hero.player)} thisGame={thisGame} />
               <ul className="mt-[0.6em] space-y-[0.4em]">
                 {awards.slice(0, 3).map((award) => (
                   <li key={award.key} className="flex items-center gap-[0.5em] rounded-[0.8em] bg-zinc-950/60 px-[0.6em] py-[0.3em]">
@@ -173,6 +190,9 @@ export default function Recap({ state, dispatch, big, onFinish }) {
               </Button>
             )}
             {onFinish && <Button onClick={() => ask(finishQuestion(onFinish.name), onFinish.finish)}>Finish and archive</Button>}
+            <Button variant="ghost" onClick={() => setHall(true)}>
+              🏆 Hall of Records
+            </Button>
             <Button variant="ghost" onClick={() => dispatch({ type: 'RESUME' })}>
               Back to the game
             </Button>
@@ -180,6 +200,31 @@ export default function Recap({ state, dispatch, big, onFinish }) {
         </div>
       )}
       {dialog}
+    </div>
+  )
+}
+
+// The player's best title, and any title this game just earned them, called out big.
+function PlayerTitles({ record, thisGame }) {
+  if (!record) return null
+  const fresh = record.titles.filter((t) => t.newIn === thisGame)
+  const best = record.titles[0]
+  return (
+    <div className="mt-[0.4em] space-y-[0.3em]">
+      {best && !fresh.includes(best) && (
+        <p className="text-[0.9em] text-amber-200">
+          {best.emoji} {best.title}
+        </p>
+      )}
+      {fresh.map((t) => (
+        <p key={t.key} className="moment-glow rounded-[0.8em] border border-amber-400 bg-amber-950/70 px-[0.6em] py-[0.3em]">
+          <span className="block text-[0.75em] font-bold uppercase tracking-widest text-amber-400">New title!</span>
+          <span className="block font-bold text-amber-100">
+            {t.emoji} {t.title}
+          </span>
+          <span className="block text-[0.85em] text-zinc-400">{t.how}</span>
+        </p>
+      ))}
     </div>
   )
 }

@@ -118,6 +118,25 @@ describe('sync server', () => {
     son.socket.close()
   })
 
+  it("adds a finished game to the players' records, and takes it out again on Undo", async () => {
+    const dad = connect(server.port)
+    await dad.nextState(1)
+    const records = async () => (await (await fetch(`http://localhost:${server.port}/records.json`)).json()).players
+    expect(await records()).toEqual([])
+    dad.send({ type: 'START_GAME', heroes: [{ ...createHero(HERO_TEMPLATES[0]), player: 'Colton' }] })
+    await dad.nextState(2)
+    dad.send({ type: 'END_GAME', result: 'won' })
+    await dad.nextState(3)
+    const [colton] = await records()
+    expect(colton).toMatchObject({ name: 'Colton', games: 1, wins: 1 })
+    expect(colton.titles[0].key).toBe('untouchable')
+    expect(JSON.parse(readFileSync(join(dir, 'records.json'), 'utf8')).games).not.toEqual({})
+    dad.send({ type: 'UNDO', depth: 2 })
+    expect((await dad.nextState(4)).status).toBe('playing')
+    expect(await records()).toEqual([])
+    dad.socket.close()
+  })
+
   it('undoes the last change for everyone, but never a dice roll', async () => {
     const dad = connect(server.port)
     const son = connect(server.port)
