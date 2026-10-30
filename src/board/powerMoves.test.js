@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
-import { moveChoices, moveTargets, queueMoves } from './powerMoves.js'
+import { moveChoices, movePrompt, moveTargets, queueMoves } from './powerMoves.js'
 import { normalizeTiles } from './tileDefs.js'
 
 const TILES = normalizeTiles(
@@ -68,5 +68,45 @@ describe('powers that move figures on the board', () => {
     const spots = moveTargets(next, 'm1')
     expect(spots.length).toBeGreaterThan(0)
     expect(spots.every((k) => Number(k.split(',')[1]) >= 0)).toBe(true)
+  })
+
+  it('Cause Fear moves the monsters left on the cleric\'s tile after the extra attacks', () => {
+    const { state: base, heroes } = game()
+    const fear = { id: 'cf', name: 'Cause Fear', type: 'daily', used: false, card: { name: 'Cause Fear' } }
+    const strike = { id: 'ss', name: 'Sure Strike', type: 'at-will', used: false, card: { name: 'Sure Strike', attack: '+1', damage: '1' } }
+    const tough = { ...base.monsters[0], id: 'm2', name: 'Ogre', hp: 5, maxHp: 5, ac: 10 }
+    let state = {
+      ...base,
+      heroes: base.heroes.map((h, i) => ({ ...h, powers: [i === 0 ? fear : strike] })),
+      monsters: [...base.monsters, tough],
+      board: { ...base.board, tokens: { ...base.board.tokens, m1: [2, 2], m2: [2, 1] } },
+    }
+    state = gameReducer(state, { type: 'USE_POWER', heroId: heroes[0].id, powerId: 'cf', heroIds: [heroes[1].id] })
+    // Nothing moves until the ally's attack is done.
+    expect(state.turn.boardMove).toBeFalsy()
+    state = gameReducer(state, { type: 'HERO_ATTACK', heroId: heroes[1].id, powerId: 'ss', bonusAttack: true, targets: [{ monsterId: 'm1', roll: 15 }] })
+    expect(state.monsters.map((m) => m.id)).toEqual(['m2'])
+    expect(state.turn.boardMove.source).toBe('Cause Fear')
+    expect(moveChoices(state)).toEqual(['m2'])
+    expect(movePrompt(state)).toMatch(/within 2 tiles/)
+    const spot = moveTargets(state, 'm2').find((k) => Number(k.split(',')[1]) < 0)
+    state = gameReducer(state, { type: 'BOARD_MOVE', id: 'm2', to: spot.split(',').map(Number) })
+    expect(state.board.tokens.m2).toEqual(spot.split(',').map(Number))
+    expect(state.turn.boardMove).toBeNull()
+    expect(state.turn.causeFear).toBeNull()
+  })
+
+  it('Cause Fear still asks for the moves when an ally skips the extra attack', () => {
+    const { state: base, heroes } = game()
+    const fear = { id: 'cf', name: 'Cause Fear', type: 'daily', used: false, card: { name: 'Cause Fear' } }
+    let state = {
+      ...base,
+      heroes: base.heroes.map((h, i) => (i === 0 ? { ...h, powers: [fear] } : h)),
+      board: { ...base.board, tokens: { ...base.board.tokens, m1: [2, 2] } },
+    }
+    state = gameReducer(state, { type: 'USE_POWER', heroId: heroes[0].id, powerId: 'cf', heroIds: [heroes[1].id] })
+    state = gameReducer(state, { type: 'SKIP_BONUS_ATTACK', heroId: heroes[1].id })
+    expect(state.turn.bonusAttacks).toEqual([])
+    expect(moveChoices(state)).toEqual(['m1'])
   })
 })
