@@ -7,9 +7,14 @@ export const newId = (prefix) => `${prefix}-${Date.now().toString(36)}-${(idCoun
 
 export const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
 
+// The newest entry first. Each entry keeps whose turn it was (heroIndex), so a hero's iPad
+// can show what happened since that hero's last turn (state/sinceLastTurn.js). 200 entries
+// covers a long round with four or five heroes.
+export const LOG_LIMIT = 200
+
 export const withLog = (state, text) => ({
   ...state,
-  log: [{ id: newId('log'), round: state.turn.round, text }, ...state.log].slice(0, 50),
+  log: [{ id: newId('log'), round: state.turn.round, heroIndex: state.turn.heroIndex, text }, ...state.log].slice(0, LOG_LIMIT),
 })
 
 export const withMoment = (state, moment) => ({
