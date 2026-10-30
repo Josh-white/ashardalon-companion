@@ -133,18 +133,21 @@ function WaitingBanner({ state }) {
   )
 }
 
-function PartyStrip({ heroes, exceptId }) {
-  const others = heroes.filter((h) => h.id !== exceptId)
-  if (others.length === 0) return null
+// Every hero in the party at a glance, yours marked, whoever's turn it is ringed.
+function PartyStrip({ heroes, meId, activeId }) {
   return (
     <section>
       <h2 className="mb-2 font-display text-xl font-bold text-zinc-300">Your party</h2>
       <div className="grid gap-3 sm:grid-cols-2">
-        {others.map((hero) => (
-          <div key={hero.id} className={`rounded-xl p-3 ${HERO_COLORS[hero.color].bg}`}>
+        {heroes.map((hero) => (
+          <div key={hero.id} className={`rounded-xl p-3 ${HERO_COLORS[hero.color].bg} ${hero.id === activeId ? 'ring-2 ring-amber-400' : ''}`}>
             <div className="flex items-center justify-between gap-2">
               <Art name={heroArt(hero.key)} className="w-10" />
-              <span className={`mr-auto font-display text-lg font-bold ${HERO_COLORS[hero.color].text}`}>{hero.name}</span>
+              <span className={`mr-auto font-display text-lg font-bold ${HERO_COLORS[hero.color].text}`}>
+                {hero.name}
+                {hero.id === meId && <span className="ml-2 text-sm font-normal text-zinc-300">(you)</span>}
+                {hero.id === activeId && <span className="ml-2 text-sm font-normal text-amber-300">· turn now</span>}
+              </span>
               <span className="text-zinc-300">
                 {hero.hp} / {hero.maxHp} HP
               </span>
@@ -267,7 +270,7 @@ function PlayView({ state, dispatch, hero = null, soundBoard = null }) {
         <MonsterList state={state} dispatch={dispatch} ownerId={hero?.id} />
       </>
     ),
-    party: hero ? <PartyStrip heroes={state.heroes} exceptId={hero.id} /> : <div className="grid gap-3 md:grid-cols-2">{state.heroes.map((h) => heroCard(h))}</div>,
+    party: hero ? <PartyStrip heroes={state.heroes} meId={hero.id} activeId={active?.id} /> : <div className="grid gap-3 md:grid-cols-2">{state.heroes.map((h) => heroCard(h))}</div>,
     adventure: <AdventurePanel state={state} dispatch={dispatch} full />,
     log: state.log.length ? <GameLog log={state.log} /> : <p className="text-zinc-400">Nothing has happened yet.</p>,
   }[shown]
