@@ -163,6 +163,9 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
   const [scroll] = itemsWithUse(activeHero ? [activeHero] : [], 'monsterControl')
   const { attack, table } = stepAttack(card, step)
   const asking = step?.when && !answered
+  // Before anyone has answered or rolled for this figure. On the virtual board the board
+  // has already answered its questions, so the turn starts part way down the card.
+  const untouched = !results && trail.length === 0 && (byBoard || (stepIndex === 0 && !answered))
 
   const answer = (yes) => {
     setTrail((list) => [...list, { stepIndex, answered }])
@@ -275,12 +278,12 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
       {byBoard && !results && step?.when && answered && (
         <p className="rounded-lg bg-emerald-950/60 p-3 text-emerald-200">📍 The board says yes: {QUESTIONS[step.when](name)}</p>
       )}
-      {!results && stepIndex === 0 && !answered && <Bravery state={state} name={name} dispatch={dispatch} />}
-      {card.special && figure === 1 && stepIndex === 0 && !answered && (
+      {untouched && <Bravery state={state} name={name} dispatch={dispatch} />}
+      {card.special && figure === 1 && untouched && (
         <p className="rounded-lg bg-zinc-900 p-2 text-sm text-zinc-400">{card.special}</p>
       )}
 
-      {scroll && !results && stepIndex === 0 && !answered &&
+      {scroll && untouched &&
         (controlling ? (
           <MonsterControl state={state} hero={scroll.hero} monster={monster} item={scroll.item} dispatch={dispatch} onDone={onDone} />
         ) : (
