@@ -7,9 +7,10 @@ import { MOMENT_DUCK, holdQuiet, layer } from './mixer.js'
 import { playLoop, stopLoop } from './ambience.js'
 
 // Background music, like an RPG's: calm and eerie while exploring, drums when
-// monsters are about, darker still when a villain is on the board. A mood with an
-// ambient loop on the Pi (see ambience.js) plays that; the rest is made up as it plays
-// from a few chords and scales, so it never loops the same way twice.
+// monsters are about, darker still when a villain is on the board, and a slow lament
+// after a loss. A mood with an ambient loop on the Pi (see ambience.js) plays that; the
+// rest is made up as it plays from a few chords and scales, so it never loops the same
+// way twice.
 
 const VOLUME = 0.3
 const FADE_S = 2.5
@@ -40,10 +41,19 @@ export const MOODS = {
     scale: [60, 61, 63, 65, 67, 68, 70, 72],
     melody: 0.18,
   },
+  // After a loss: slow, soft and sad, under the recap.
+  lament: {
+    bpm: 50,
+    barsPerChord: 2,
+    chords: [[45, 48, 52], [41, 45, 48], [43, 46, 50], [40, 44, 47]],
+    scale: [57, 59, 60, 62, 64, 65, 67, 69],
+    melody: 0.14,
+  },
 }
 
 // Which music fits the game right now, or null for none.
 export function musicMood(state) {
+  if (state?.status === 'lost') return 'lament'
   if (state?.status !== 'playing') return null
   if (activeVillains(state).length > 0) return 'boss'
   if (state.monsters.length > 0) return 'battle'
@@ -79,6 +89,11 @@ export function playStep(ctx, out, mood, step, at) {
     if (inBar % 2 === 1) burst(ctx, out, { at, type: 'highpass', freq: 7000, peak: 0.06, decay: 0.03 })
   }
 
+  if (mood === 'lament') {
+    // Just a low, slow bell at the start of each bar.
+    if (inBar === 0) tone(ctx, out, { at, freq: NOTE(root - 12), peak: 0.25, attack: 0.08, decay: eighth * 6 })
+  }
+
   if (mood === 'boss') {
     // Slow, heavy timpani and a low brass stab at each bar.
     if (inBar === 0) {
@@ -94,8 +109,8 @@ export function playStep(ctx, out, mood, step, at) {
     const fits = m.scale.filter((n) => chord.some((c) => (n - c) % 12 === 0))
     const pool = Math.random() < 0.6 && fits.length ? fits : m.scale
     const note = pool[Math.floor(Math.random() * pool.length)]
-    const type = mood === 'explore' ? 'sine' : 'triangle'
-    tone(ctx, out, { at, freq: NOTE(note), type, peak: mood === 'battle' ? 0.12 : 0.16, attack: 0.01, decay: eighth * (mood === 'explore' ? 4 : 1.5) })
+    const soft = mood === 'explore' || mood === 'lament'
+    tone(ctx, out, { at, freq: NOTE(note), type: soft ? 'sine' : 'triangle', peak: mood === 'battle' ? 0.12 : 0.16, attack: 0.01, decay: eighth * (soft ? 4 : 1.5) })
   }
 }
 

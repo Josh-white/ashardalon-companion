@@ -1,11 +1,14 @@
 import { HERO_COLORS } from '../data/heroes.js'
-import { recap } from '../state/stats.js'
+import { defeatHighlights, recap } from '../state/stats.js'
 import { campaignOutcome } from '../state/campaign.js'
+import { randomNumbers, shuffleNumbers } from '../state/random.js'
+import { useCards } from '../state/useCards.js'
 import { CampaignRecap } from './Campaign.jsx'
 import { Button, useConfirm } from './ui.jsx'
 
 // The end-of-game recap, win or lose: what the party did, and an award for every
-// hero. The projector shows it big with no buttons; the iPads can go back or start over.
+// hero. The projector shows it big with no buttons; the iPads choose what's next: Try again
+// after a loss, a new game, or finishing this one.
 // Sizes are in em, so the projector only has to set a bigger font.
 const BIG_COLUMNS = ['', 'mx-auto max-w-[30em]', 'grid-cols-2', 'grid-cols-3', 'grid-cols-4', 'grid-cols-5']
 
@@ -22,10 +25,34 @@ export function newGameQuestion(state) {
   }
 }
 
+export function tryAgainQuestion(state) {
+  const title = state.adventure?.card.title
+  return {
+    title: 'Try again?',
+    body: [
+      `${title ? `${title} again` : 'The same game again'}, with the same heroes and power cards. Everyone starts back at level 1, with fresh decks and a new dungeon.`,
+      'Changed your mind? Tap Undo.',
+    ],
+    yes: 'Try again',
+  }
+}
+
+export const finishQuestion = (name) => ({
+  title: `Finish "${name}"?`,
+  body: ['It goes on the Finished list on the "Which game?" screen, where you can bring it back. Every screen in it goes back to the family game.'],
+  yes: 'Finish and archive',
+})
+
+// After a loss, Try again is the big button. A campaign has its own way on.
+export const canTryAgain = (state) => state.status === 'lost' && !state.campaign
+
 export const LOST_QUESTION = { title: 'Did the party lose?', body: 'This shows the end-of-game recap.', yes: 'We lost', danger: true }
 
-export default function Recap({ state, dispatch, big }) {
+// `onFinish` ({ name, finish }) finishes and archives this game. Only a named game has
+// one: the family game always stays.
+export default function Recap({ state, dispatch, big, onFinish }) {
   const [ask, dialog] = useConfirm()
+  const cards = useCards()
   const won = state.status === 'won'
   const { heroes, mvpIds, party } = recap(state)
   const title = state.adventure?.card.title
@@ -35,11 +62,28 @@ export default function Recap({ state, dispatch, big }) {
     party.nat20s > 0 && `${party.nat20s} natural ${party.nat20s === 1 ? '20' : '20s'}`,
     party.treasure > 0 && `${party.treasure} ${party.treasure === 1 ? 'treasure' : 'treasures'} found`,
   ].filter(Boolean)
+  const highlights = won ? [] : defeatHighlights(state)
+  const tryAgain = () =>
+    ask(tryAgainQuestion(state), () =>
+      dispatch({
+        type: 'TRY_AGAIN',
+        treasureCards: cards.treasures,
+        chambers: cards.chambers,
+        tokens: cards.treasureTokens,
+        random: shuffleNumbers(),
+        tileRandom: randomNumbers(8),
+        // Only used when the lost game was on the virtual board.
+        boardTiles: cards.tiles,
+        boardRandom: randomNumbers(64),
+      }),
+    )
+  // Mid-campaign, the way on is the campaign's own button above.
+  const canNewGame = !state.campaign || campaignOutcome(state)?.over
 
   return (
-    <div className={`fixed inset-0 z-[35] overflow-y-auto bg-zinc-950 ${big ? 'p-[1.5vw] text-[1.2vw]' : 'p-4 text-base'}`}>
+    <div className={`fixed inset-0 z-[35] overflow-y-auto bg-zinc-950 ${won ? '' : 'recap-defeat'} ${big ? 'p-[1.5vw] text-[1.2vw]' : 'p-4 text-base'}`}>
       <div className="mx-auto max-w-[60em] text-center">
-        <div className="moment-pop text-[4em] leading-none">{won ? '🏆' : '💀'}</div>
+        <div className={`text-[4em] leading-none ${won ? 'moment-pop' : 'defeat-skull'}`}>{won ? '🏆' : '💀'}</div>
         <h2 className={`moment-pop mt-[0.2em] font-display text-[2.6em] font-bold leading-tight ${won ? 'text-amber-400' : 'text-red-400'}`}>
           {won ? 'Victory!' : 'The party has fallen'}
         </h2>
@@ -47,7 +91,26 @@ export default function Recap({ state, dispatch, big }) {
         {won && state.adventure?.card.story.victory && (
           <p className="mx-auto mt-[0.5em] max-w-[40em] italic text-zinc-300">{state.adventure.card.story.victory}</p>
         )}
-        <p className="mt-[0.5em] text-[1.1em] text-zinc-300">{totals.join(' · ')}</p>
+        {!won && state.ending && <p className="mx-auto mt-[0.5em] max-w-[40em] italic text-zinc-300">{state.ending}</p>}
+        {won ? (
+          <p className="mt-[0.5em] text-[1.1em] text-zinc-300">{totals.join(' · ')}</p>
+        ) : (
+          <ul className="mx-auto mt-[0.8em] flex max-w-[50em] flex-wrap justify-center gap-[0.5em]">
+            {highlights.map((line, i) => (
+              <li
+                key={line.label}
+                className="moment-pop rounded-[0.8em] border border-red-900/60 bg-zinc-900/80 px-[0.8em] py-[0.4em] text-left"
+                style={{ animationDelay: `${0.3 + i * 0.2}s` }}
+              >
+                <span className="block text-[0.8em] uppercase tracking-widest text-zinc-500">
+                  {line.emoji} {line.label}
+                </span>
+                <span className="block text-[1.2em] font-bold text-zinc-100">{line.value}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {big && canTryAgain(state) && <p className="mt-[0.8em] text-[1.1em] text-amber-300">Try again, or start something new, from any iPad.</p>}
         <CampaignRecap state={state} dispatch={dispatch} big={big} />
       </div>
 
@@ -91,15 +154,29 @@ export default function Recap({ state, dispatch, big }) {
       </div>
 
       {!big && (
-        <div className="mt-6 flex justify-center gap-3 pb-6">
-          <Button onClick={() => dispatch({ type: 'RESUME' })}>Back to the game</Button>
-          {/* Mid-campaign, the way on is the campaign's own button above. */}
-          {(!state.campaign || campaignOutcome(state)?.over) && <Button
-            variant="gold"
-            onClick={() => ask(newGameQuestion(state), () => dispatch({ type: 'NEW_GAME' }))}
-          >
-            New game
-          </Button>}
+        <div className="mx-auto mt-6 max-w-[40em] pb-6 text-center">
+          {canTryAgain(state) && (
+            <>
+              <Button variant="gold" className="px-8 py-4 font-display text-2xl" onClick={tryAgain}>
+                ⚔️ Try again
+              </Button>
+              <p className="mt-2 text-sm text-zinc-400">Same adventure, heroes and powers. Back to level 1, with fresh decks and a new dungeon.</p>
+            </>
+          )}
+          <div className="mt-4 flex flex-wrap justify-center gap-3">
+            {canNewGame && (
+              <Button
+                variant={canTryAgain(state) ? 'default' : 'gold'}
+                onClick={() => ask(newGameQuestion(state), () => dispatch({ type: 'NEW_GAME' }))}
+              >
+                New game
+              </Button>
+            )}
+            {onFinish && <Button onClick={() => ask(finishQuestion(onFinish.name), onFinish.finish)}>Finish and archive</Button>}
+            <Button variant="ghost" onClick={() => dispatch({ type: 'RESUME' })}>
+              Back to the game
+            </Button>
+          </div>
         </div>
       )}
       {dialog}

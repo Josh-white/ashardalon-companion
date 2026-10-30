@@ -14,6 +14,10 @@ describe('background music', () => {
   it('is silent outside a game', () => {
     expect(musicMood(game({ status: 'setup' }))).toBe(null)
     expect(musicMood(game({ status: 'won' }))).toBe(null)
+  })
+
+  it('plays a lament after a loss', () => {
+    expect(musicMood(game({ status: 'lost', monsters: [{ id: 'm' }] }))).toBe('lament')
     expect(musicMood(null)).toBe(null)
   })
 

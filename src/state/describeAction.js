@@ -119,6 +119,8 @@ export function describeAction(state, action) {
       return 'Starting the game'
     case 'NEW_GAME':
       return 'New game'
+    case 'TRY_AGAIN':
+      return 'Try again'
     case 'END_GAME':
     case 'RESUME':
       return 'Ending the game'

@@ -557,7 +557,13 @@ export default function App() {
       {/* On the real board it sits above the tabs; on the virtual board, in the board's corner. */}
       {!state.board && <SoundBoard state={state} dispatch={dispatch} who={myHero ? myHero.id : 'table'} testCopy={Boolean(instance)} className="fixed bottom-20 left-4" />}
       {!myHero && <BoardToast state={state} />}
-      {(state.status === 'won' || state.status === 'lost') && <Recap state={state} dispatch={dispatch} />}
+      {(state.status === 'won' || state.status === 'lost') && (
+        <Recap
+          state={state}
+          dispatch={dispatch}
+          onFinish={game && game.id !== FAMILY_GAME ? { name: game.name, finish: () => changeGames({ type: 'finish-game', id: game.id }) } : null}
+        />
+      )}
     </>
   )
   // The whole game fits the screen and nothing scrolls but the tab that's open. A hero's iPad

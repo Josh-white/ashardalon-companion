@@ -95,6 +95,11 @@ export const initialState = {
   opening: null,
   // The virtual board for a solo game (board/play.js), or null when the real tiles are on the table.
   board: null,
+  // How a lost game ended, in words for the recap ("Quinn fell with no healing surges left."),
+  // or null when the players said they lost.
+  ending: null,
+  // The settings the game started with, so Try again can start it the same way: { surges, tiles }.
+  retry: null,
 }
 
 // A hero's AC against an attack. Heroes standing on a Blessed Shield owner's tile get its
@@ -193,7 +198,7 @@ function hurtVillager(state, villager, hp) {
   if (hp > 0 || villager.removed) return next
   next = withLog(next, `The villager ${villager.name} is gone. Take the token off the board.`)
   if (aliveVillagers(next).length > 0) return next
-  const lost = withLog({ ...next, status: 'lost' }, 'The last villager is gone. The heroes lose.')
+  const lost = lose(next, 'The last villager is gone. The heroes lose.')
   return withMoment(showStory(lost, 'The captives are lost', 'The last villager has fallen. There is no one left to rescue, and the heroes lose.'), {
     kind: 'down',
     title: 'The last villager is gone!',
@@ -390,7 +395,7 @@ function removeTimeToken(state, why) {
   if (left - 1 > 0) {
     return withMoment(next, { kind: 'encounter', title: `${left - 1} Time token${left - 1 === 1 ? '' : 's'} left!`, detail: 'Take one Time token off the Vast Gate. Destroy it before they run out!' })
   }
-  const lost = withLog({ ...next, status: 'lost' }, 'The last Time token is gone. The Vast Gate opens!')
+  const lost = lose(next, 'The last Time token is gone. The Vast Gate opens!')
   const defeat = state.adventure.card.story.defeat
   return withMoment(showStory(lost, 'The Vast Gate opens!', defeat || 'The last Time token is gone, and a horde of aberrant monsters pours out of the Far Realm. The heroes lose.'), {
     kind: 'down',
@@ -1029,7 +1034,7 @@ function startTurn(state) {
   // A hero who starts the turn at 0 HP spends a healing surge first; the poison and curse
   // damage comes after that (USE_SURGE), so getting back up doesn't skip it.
   if (hero.hp === 0 && state.surges <= 0) {
-    return withLog({ ...state, status: 'lost' }, `${hero.name} is down at the start of the turn with no healing surges left.`)
+    return lose(state, `${hero.name} is down at the start of the turn with no healing surges left.`)
   }
   if (hero.hp === 0) return { ...state, turn: { ...state.turn, startDamageDue: hero.id } }
   return startDamage(state, hero)
@@ -1447,13 +1452,16 @@ function placeVillain(state, action) {
   })
 }
 
+// The heroes lose: the recap opens on every screen, saying why.
+const lose = (state, why) => withLog({ ...state, status: 'lost', ending: why }, why)
+
 // Every action, then a check for an adventure's victory, then the recap's counts.
 export const gameReducer = (state, action) => trackStats(state, pruneTokens(placeNewFigures(state, checkVictory(tagDrawn(reduceWithOpening(state, action))))), action)
 
 // A game that just started begins with its story (state/opening.js).
 function reduceWithOpening(state, action) {
   const next = reduce(state, action)
-  const started = (action.type === 'START_GAME' || action.type === 'START_DEMO') && next !== state && next.status === 'playing'
+  const started = ['START_GAME', 'START_DEMO', 'TRY_AGAIN'].includes(action.type) && next !== state && next.status === 'playing'
   return started ? startOpening(next, Date.now()) : next
 }
 
@@ -1648,6 +1656,27 @@ function monsterSteps(state, before) {
   return placed.length > 0 ? [`Place these monsters on Chamber tiles, empty tiles first: ${owners.join(', ')}.`] : []
 }
 
+// Try again after a loss: the same adventure, heroes, players and power cards, back at
+// level 1 with fresh decks and a new dungeon, on the virtual board if the lost game was.
+// A campaign has its own way on (CAMPAIGN_NEXT, or New game once it's lost).
+function tryAgain(state, action) {
+  if (state.status !== 'lost' || state.campaign) return state
+  const heroes = state.heroes.flatMap((hero) => {
+    const template = templateFor(hero.key)
+    return template ? [{ ...withPicks(createHero(template), hero.powers.map((p) => p.card)), player: hero.player ?? '' }] : []
+  })
+  const setup = {
+    ...initialState,
+    lobbyAdventure: state.adventure?.card ?? null,
+    lobbySurges: state.retry?.surges ?? STARTING_SURGES,
+    lobbyTiles: state.retry?.tiles ?? STARTING_TILES,
+  }
+  const { boardTiles, boardRandom, ...rest } = action
+  const board = state.board && Array.isArray(boardTiles) ? { boardTiles, boardRandom } : {}
+  const next = reduce(setup, { ...rest, ...board, type: 'START_GAME', heroes })
+  return next.status === 'playing' ? withLog(next, 'The heroes try again!') : state
+}
+
 function reduce(state, action) {
   switch (action.type) {
     case 'NEW_GAME': {
@@ -1749,6 +1778,7 @@ function reduce(state, action) {
         firstRoll: newFirstRoll(heroes),
         // A game on the virtual board (solo or the party's) starts with the adventure's start tile and the heroes on it.
         board: action.boardTiles ? newBoard(action.boardTiles, heroes, action.boardRandom, card, objectiveId) : null,
+        retry: { surges: clamp(Number(state.lobbySurges) || STARTING_SURGES, MIN_SURGES, MAX_SURGES), tiles: lobbyTiles },
       }
       // The Vast Gate Opens: the gate is on the Start tile, and its Flares! card is in the top 3 encounters.
       if (objective) {
@@ -1991,7 +2021,7 @@ function reduce(state, action) {
       const hero = state.heroes.find((h) => h.id === action.heroId)
       if (!hero) return state
       if (state.surges <= 0) {
-        return withLog({ ...state, status: 'lost' }, `${hero.name} fell with no healing surges left.`)
+        return lose(state, `${hero.name} fell with no healing surges left.`)
       }
       // Keyleth's Healing Hands: her own surge heals 1 more. Anyone else's is offered,
       // since only the players know who is on Keyleth's tile.
@@ -2465,10 +2495,13 @@ function reduce(state, action) {
     }
 
     case 'END_GAME':
-      return withLog({ ...state, status: action.result }, action.result === 'won' ? 'Victory!' : 'The party was defeated.')
+      return withLog({ ...state, status: action.result, ending: null }, action.result === 'won' ? 'Victory!' : 'The party was defeated.')
 
     case 'RESUME':
-      return { ...state, status: 'playing' }
+      return { ...state, status: 'playing', ending: null }
+
+    case 'TRY_AGAIN':
+      return tryAgain(state, action)
 
     case 'PLAY_BOARD_SOUND':
       return playBoardSound(state, action)
