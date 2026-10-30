@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { normalizeCardFile } from '../data/cards.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
-import { doorsNearHero } from './doors.js'
+import { DOOR_MIX, doorsNearHero, drawDoorKind } from './doors.js'
 import { key, unexploredEdges } from './grid.js'
 import { boardGrid, layTile } from './play.js'
 import { normalizeTiles } from './tileDefs.js'
@@ -152,5 +152,23 @@ describe('Closed Doors on the virtual board', () => {
     const behind = new Set(chamberTiles.map((t) => t.uid))
     expect(behind.has(grid.get(key(state.board.tokens[boss.id])).tile)).toBe(true)
     for (const m of state.monsters.filter((m) => m.chamber)) expect(behind.has(grid.get(key(state.board.tokens[m.id])).tile)).toBe(true)
+  })
+
+  it("draws door tokens from the box's mix: 4 unlocked, 2 trapped, 2 locked, without putting them back", () => {
+    expect(DOOR_MIX).toEqual({ unlocked: 4, trapped: 2, locked: 2 })
+    expect([0, 0.49, 0.5, 0.74, 0.75, 0.99].map((r) => drawDoorKind(r))).toEqual(['unlocked', 'unlocked', 'trapped', 'trapped', 'locked', 'locked'])
+    // Both Locked tokens are gone, so the rest are unlocked or trapped.
+    expect(drawDoorKind(0.99, ['locked', 'locked'])).toBe('trapped')
+    expect(drawDoorKind(0.5, ['unlocked', 'unlocked', 'unlocked', 'unlocked', 'trapped', 'trapped'])).toBe('locked')
+  })
+
+  it('opening a board door picks its kind from the tokens left and remembers it', () => {
+    let state = start(adventures[0])
+    const hero = state.heroes[state.turn.heroIndex]
+    const door = state.board.doors[0]
+    state = put(state, hero.id, besideDoor(state, door))
+    state = gameReducer(state, { type: 'DOOR_REVEALED', pick: 0.9, heroId: hero.id, doorId: door.id })
+    expect(state.board.doorsTurned).toEqual(['locked'])
+    expect(state.board.doors.find((d) => d.id === door.id).kind).toBe('locked')
   })
 })

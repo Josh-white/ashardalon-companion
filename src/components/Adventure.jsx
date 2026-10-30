@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { HERO_COLORS, hasAbility } from '../data/heroes.js'
-import { DOOR_KINDS, DOOR_UNLOCK_ROLL, FEATURE_LABELS, MAX_SURGES, MIN_SURGES, escapeBlockers, goalParts, missingFeatures, playableChambers, revealsReady, tilesToCome, usesDoors } from '../state/adventure.js'
+import { DOOR_UNLOCK_ROLL, FEATURE_LABELS, MAX_SURGES, MIN_SURGES, escapeBlockers, goalParts, missingFeatures, playableChambers, revealsReady, tilesToCome, usesDoors } from '../state/adventure.js'
 import { randomNumbers, rollD20, shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { canSpendAttack } from '../state/game.js'
-import { doorsNearHero } from '../board/doors.js'
+import { doorsNearHero, drawDoorKind } from '../board/doors.js'
 import { tileSpots } from '../state/tiles.js'
 import { TileSetup, TilesLeft } from './Tiles.jsx'
 import { AreaName } from './AreaBackdrop.jsx'
@@ -475,7 +475,7 @@ export function Doors({ state, hero, dispatch }) {
             <Button
               className="mt-1"
               onClick={() => {
-                const kind = DOOR_KINDS[Math.floor(randomNumbers(1)[0] * DOOR_KINDS.length)]
+                const kind = drawDoorKind(randomNumbers(1)[0])
                 if (kind === 'trapped') setTrapped([hero.id])
                 else reveal(kind)
               }}
@@ -546,10 +546,7 @@ function BoardDoors({ state, hero, dispatch }) {
               <Button
                 key={door.id}
                 variant={door.reveal ? 'gold' : undefined}
-                onClick={() => {
-                  const kind = DOOR_KINDS[Math.floor(randomNumbers(1)[0] * DOOR_KINDS.length)]
-                  dispatch({ type: 'DOOR_REVEALED', kind, heroId: hero.id, doorId: door.id, ...cards })
-                }}
+                onClick={() => dispatch({ type: 'DOOR_REVEALED', pick: randomNumbers(1)[0], heroId: hero.id, doorId: door.id, ...cards })}
               >
                 🚪 {label(door, 'Open')}
               </Button>

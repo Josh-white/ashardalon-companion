@@ -19,7 +19,7 @@ import { campaignHero, campaignOutcome, campaignSurges, isCampaign, newCampaign,
 import { playBoardSound, setBoardOff, setBoardUnlimited } from './soundboard.js'
 import { FIRST_ROLL_MAX_MS, newFirstRoll, rollFirst } from './firstRoll.js'
 import { finishOpening, openingNarrating, startOpening } from './opening.js'
-import { heroesNextToDoor, removeDoor } from '../board/doors.js'
+import { drawDoorKind, heroesNextToDoor, removeDoor } from '../board/doors.js'
 import { layChamber, layDoorChamber, layExit, layTile, moveHero, placeNear, placeToken, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
 import { sentryMoves, wrathPull } from '../board/monsters.js'
 import { boardMove, queueEncounterMoves, queueFearMove, queueFoeStep, queueHitMoves, queueMoves, queueWandOfFear, skipBoardMove } from '../board/powerMoves.js'
@@ -1539,9 +1539,15 @@ function revealTile(state, action) {
 // takes the token away once the door is open, and opens what waits behind it.
 function revealDoor(state, action) {
   const hero = state.heroes.find((h) => h.id === action.heroId) ?? state.heroes[state.turn.heroIndex]
-  if (!state.adventure || !DOOR_KINDS.includes(action.kind) || !hero) return state
   const door = state.board && action.doorId ? (state.board.doors ?? []).find((d) => d.id === action.doorId && !d.kind) : null
   if (state.board && action.doorId && !door) return state
+  // A board door's token comes from those not turned over yet (`pick`, a random number from the device).
+  if (door && action.pick !== undefined) {
+    const turned = state.board.doorsTurned ?? []
+    const kind = drawDoorKind(Number(action.pick), turned)
+    return revealDoor({ ...state, board: { ...state.board, doorsTurned: [...turned, kind] } }, { ...action, kind, pick: undefined })
+  }
+  if (!state.adventure || !DOOR_KINDS.includes(action.kind) || !hero) return state
   if (action.kind === 'unlocked') {
     const next = withMoment(withLog(state, `${hero.name} opened an Unlocked Door.`), { kind: 'roll', heroId: hero.id, title: 'The door swings open!', detail: door ? 'The way is open.' : 'Discard the Closed Door token.' })
     return door ? openBoardDoor(next, door, action) : next
