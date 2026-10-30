@@ -200,7 +200,11 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   const movable = powerMove ? moveChoices(state) : []
   const swap = powerMove?.steps?.[0]?.to === 'swap'
   let targets = []
-  if (!readOnly && picked) {
+  // Watching someone else's turn, the board still zooms, and ✋ moves any figure by hand.
+  const watching = readOnly && !byHand
+  // The projector's board has no dispatch: nothing to tap there.
+  const tools = !readOnly || (fill && Boolean(dispatch))
+  if (!watching && picked) {
     if (powerMove) targets = moveTargets(state, picked)
     else if (byHand) targets = [...grid.values()].filter((sq) => sq.floor && !taken.has(key([sq.x, sq.y]))).map((sq) => key([sq.x, sq.y]))
     else if (picked === active?.id) targets = heroReach(state, active)
@@ -211,7 +215,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
     setPicked(null)
   }
   const tapFigure = (id) => {
-    if (readOnly) return
+    if (watching) return
     if (powerMove ? !movable.includes(id) : !byHand && id !== active?.id) return
     if (swap) {
       dispatch({ type: 'BOARD_MOVE', id })
@@ -238,10 +242,12 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
 
   return (
     <section className={`relative rounded-2xl border border-zinc-800 bg-zinc-950/80 ${fill ? 'flex h-full flex-col p-2' : 'p-3'}`}>
-      {!readOnly && (
+      {tools && (
         <div className={`mb-2 flex items-center gap-2 ${fill ? '' : 'flex-wrap'}`}>
           <p className={`flex-1 text-zinc-300 ${fill ? 'text-xs leading-snug sm:text-sm' : 'text-sm'}`}>
-            {byHand
+            {watching
+              ? `${active?.name ?? 'Someone'}'s turn. ✋ moves a figure by hand.`
+              : byHand
               ? picked
                 ? 'Tap a free square to put it there.'
                 : 'Moving by hand: tap any figure, then a square.'
@@ -279,7 +285,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
           </Button>
         </div>
       )}
-      {!readOnly && offBoard.length > 0 && (
+      {tools && offBoard.length > 0 && (
         <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
           <span className="text-zinc-400">Not on the board yet:</span>
           {offBoard.map((f) => (
@@ -329,7 +335,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
           {open.moves && <p className="mt-1 text-sm text-amber-300">This marker moves when the trap goes off, so the board can't show where it is yet.</p>}
         </div>
       )}
-      <div ref={boxRef} className={fill ? `min-h-0 flex-1 ${readOnly ? 'overflow-hidden' : 'overflow-auto'}` : readOnly ? '' : 'max-h-[70vh] overflow-auto'}>
+      <div ref={boxRef} className={fill ? 'min-h-0 flex-1 overflow-auto' : readOnly ? '' : 'max-h-[70vh] overflow-auto'}>
         <svg
           viewBox={`${minX * SQUARE} ${minY * SQUARE} ${cols * SQUARE} ${rows * SQUARE}`}
           width={small || fit ? '100%' : cols * SQUARE * scale}
@@ -368,7 +374,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
           })}
           {/* The active hero is drawn last so its glow sits on top of its neighbours. */}
           {[...onBoard.filter((f) => f.id !== activeId), ...onBoard.filter((f) => f.id === activeId)].map((f) => (
-            <Token key={f.id} {...f} at={board.tokens[f.id]} active={f.id === activeId} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)} onTap={readOnly ? undefined : () => tapFigure(f.id)} />
+            <Token key={f.id} {...f} at={board.tokens[f.id]} active={f.id === activeId} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)} onTap={watching ? undefined : () => tapFigure(f.id)} />
           ))}
           <MarkerBadges markers={placedMarkers} onTap={(id) => setReading(reading === id ? null : id)} />
         </svg>
