@@ -7,6 +7,7 @@ import { canFlyCarpet, carpetTargets } from '../board/items.js'
 import { boardMarkers } from '../board/markers.js'
 import { activeVillains } from '../state/game.js'
 import { artUrl, useArt } from '../state/useArt.js'
+import HazardFloor, { hasHazardFloor } from './HazardFloor.jsx'
 import { SQUARE, TileShapes } from './TileDrawing.jsx'
 import { Button } from './ui.jsx'
 
@@ -79,8 +80,9 @@ function OpenEdges({ grid }) {
   )
 }
 
-// Trap and hazard markers (Volcanic Vapors, Pit, Poisoned Dart Trap...): the marker's tile gets
-// a colour wash and a dashed outline. The badges are drawn separately, on top of the figures.
+// Trap and hazard markers on their tile. Lava Flow, Volcanic Vapors, Cave-in and Pit change the
+// floor itself (HazardFloor); any other marker's tile gets a colour wash and a dashed outline.
+// The badges are drawn separately, on top of the figures.
 function MarkerTiles({ markers }) {
   return (
     <g pointerEvents="none">
@@ -89,6 +91,13 @@ function MarkerTiles({ markers }) {
         const ys = squares.map((sq) => sq.y)
         const [x0, y0] = [Math.min(...xs) * SQUARE, Math.min(...ys) * SQUARE]
         const [x1, y1] = [(Math.max(...xs) + 1) * SQUARE, (Math.max(...ys) + 1) * SQUARE]
+        if (hasHazardFloor(marker)) {
+          return (
+            <g key={marker.id} data-marker-tile={marker.id}>
+              <HazardFloor marker={marker} squares={squares} />
+            </g>
+          )
+        }
         return (
           <g key={marker.id} data-marker-tile={marker.id}>
             {squares.map((sq) => (
@@ -550,8 +559,8 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
             </pattern>
           </defs>
           <g transform={spin ? `rotate(${spin})` : undefined}>
-            <rect x={bounds.x} y={bounds.y} width={bounds.w} height={bounds.h} fill="#0b1220" />
-            <rect x={bounds.x} y={bounds.y} width={bounds.w} height={bounds.h} fill="url(#board-dots)" />
+            <rect x={bounds.x} y={bounds.y} width={bounds.w} height={bounds.h} fill="#0a0c10" />
+            <rect x={bounds.x} y={bounds.y} width={bounds.w} height={bounds.h} fill="url(#board-dots)" opacity="0.6" />
             {board.tiles.map((placed) => board.defs[placed.tileId] && <PlacedTile key={placed.uid} placed={placed} def={board.defs[placed.tileId]} spin={spin} />)}
             <MarkerTiles markers={placedMarkers} />
             <OpenEdges grid={grid} />
