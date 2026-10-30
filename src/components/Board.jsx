@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { heroArt, monsterArt } from '../data/art.js'
 import { boardGrid, figureToken, figuresLeft, heroReach, moveSpeed, movesLeft, timeLeapt } from '../board/play.js'
 import { moveChoices, movePrompt, moveTargets } from '../board/powerMoves.js'
@@ -17,17 +17,29 @@ const TOKEN_COLORS = {
   sky: '#0ea5e9', red: '#ef4444', amber: '#f59e0b', emerald: '#10b981', violet: '#8b5cf6',
   teal: '#14b8a6', rose: '#f43f5e', orange: '#f97316', lime: '#84cc16', fuchsia: '#d946ef',
 }
-const ZOOMS = [0.6, 0.8, 1, 1.3, 1.6, 2]
+const ZOOMS = [0.6, 0.8, 1, 1.3, 1.6, 2, 2.5, 3]
+// Room round the dungeon for the open-edge arrows, in board units.
+const PAD = 32
+
+// The dungeon's outline in board units: left, top, width and height.
+export function boardBounds(board) {
+  const squares = [...boardGrid(board).values()]
+  if (squares.length === 0) return { x: 0, y: 0, w: SQUARE, h: SQUARE }
+  const xs = squares.map((s) => s.x)
+  const ys = squares.map((s) => s.y)
+  const [x, y] = [Math.min(...xs) * SQUARE - PAD, Math.min(...ys) * SQUARE - PAD]
+  return { x, y, w: (Math.max(...xs) + 1) * SQUARE + PAD - x, h: (Math.max(...ys) + 1) * SQUARE + PAD - y }
+}
 
 // A placed tile drawn in board squares: moved to its spot and turned.
-function PlacedTile({ placed, def }) {
+function PlacedTile({ placed, def, spin }) {
   const w = def.rows[0].length * SQUARE
   const h = def.rows.length * SQUARE
   const [x, y] = [placed.at[0] * SQUARE, placed.at[1] * SQUARE]
   const shift = { 0: [0, 0], 90: [h, 0], 180: [w, h], 270: [0, w] }[placed.turn] ?? [0, 0]
   return (
     <g transform={`translate(${x + shift[0]} ${y + shift[1]}) rotate(${placed.turn})`}>
-      <TileShapes tile={def} turn={placed.turn} />
+      <TileShapes tile={def} turn={placed.turn + spin} />
     </g>
   )
 }
@@ -91,7 +103,7 @@ function MarkerTiles({ markers }) {
 
 // A round badge in the top-left corner of the marker's tile; tap it to read the card.
 // A second marker on the same tile sits next to the first.
-function MarkerBadges({ markers, onTap }) {
+function MarkerBadges({ markers, spin, onTap }) {
   const seen = {}
   return markers.map(({ marker, look, squares, tile }) => {
     const n = (seen[tile] = (seen[tile] ?? -1) + 1)
@@ -100,7 +112,7 @@ function MarkerBadges({ markers, onTap }) {
     return (
       <g key={marker.id} data-marker={marker.id} className="cursor-pointer" onClick={() => onTap(marker.id)}>
         <circle cx={cx} cy={cy} r="18" fill="#18181b" stroke={look.color} strokeWidth="4" />
-        <text x={cx} y={cy + 7} textAnchor="middle" fontSize="20">
+        <text x={cx} y={cy + 7} textAnchor="middle" fontSize="20" transform={spin ? `rotate(${-spin} ${cx} ${cy})` : undefined}>
           {look.icon}
         </text>
       </g>
@@ -110,13 +122,14 @@ function MarkerBadges({ markers, onTap }) {
 
 // A round figure: its token art when there is some, else a coloured disc with its initial.
 // The hero whose turn it is gets a pulsing gold glow so it is easy to spot.
-function Token({ id, at, label, color, art, selected, active, faded, onTap }) {
+function Token({ id, at, label, color, art, selected, active, faded, spin, onTap }) {
   const cx = at[0] * SQUARE + SQUARE / 2
   const cy = at[1] * SQUARE + SQUARE / 2
   const r = SQUARE / 2 - 3
   const clip = `clip-${id.replace(/#/g, '-')}`
   return (
-    <g data-token={id} onClick={onTap} className={onTap ? 'cursor-pointer' : undefined} opacity={faded ? 0.6 : 1}>
+    // On a turned board the figure turns back so its picture stays upright.
+    <g data-token={id} onClick={onTap} className={onTap ? 'cursor-pointer' : undefined} opacity={faded ? 0.6 : 1} transform={spin ? `rotate(${-spin} ${cx} ${cy})` : undefined}>
       {active && (
         <g pointerEvents="none" className="motion-safe:animate-pulse">
           <circle cx={cx} cy={cy} r={r + 8} fill="#facc15" fillOpacity="0.4" stroke="#422006" strokeWidth="2" />
@@ -159,21 +172,80 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   const [picked, setPicked] = useState(null) // id of the figure being moved
   const [byHand, setByHand] = useState(false)
   const [reading, setReading] = useState(null) // id of the trap or hazard marker whose card is open
-  const [zoom, setZoom] = useState(fill ? 'fit' : 4)
+  // 'fit' (the whole dungeon fills the box) or how many screen pixels per board unit.
+  const [zoom, setZoom] = useState(fill ? 'fit' : 1.6)
   const [boxRef, box] = useBoxSize()
   const board = state.board
   const activeId = state.heroes[state.turn.heroIndex]?.id
   const activeAt = board?.tokens[activeId]?.join(',')
-  // Zoomed in, keep the active hero in the middle of the view as it moves or the turn passes.
+  const live = useRef({}) // the latest sizes, for the pinch handlers
+  const pinch = useRef(null)
+  const pinched = useRef(false)
+  // Where the dungeon itself is on screen (zoomed to fit, the svg has empty bands round it).
+  const drawn = () => {
+    const r = boxRef.current.querySelector('svg').getBoundingClientRect()
+    const { scale, viewW, viewH } = live.current
+    const [w, h] = [viewW * scale, viewH * scale]
+    return { left: r.left + (r.width - w) / 2, top: r.top + (r.height - h) / 2, width: w, height: h }
+  }
+  // Zoomed in, keep the active hero in the middle of the view as it moves or the turn passes
+  // (but not straight after a pinch, which zooms on the fingers instead).
   useEffect(() => {
     const el = boxRef.current
-    if (!fill || zoom === 'fit' || !el || !activeAt) return
-    const svg = el.querySelector('svg')
+    if (!fill || zoom === 'fit' || !el || !activeAt || pinched.current) return
     const token = el.querySelector(`[data-token="${activeId}"]`)
-    if (!svg || !token) return
-    const [s, t] = [svg.getBoundingClientRect(), token.getBoundingClientRect()]
-    el.scrollTo({ left: t.left - s.left + t.width / 2 - el.clientWidth / 2, top: t.top - s.top + t.height / 2 - el.clientHeight / 2, behavior: 'smooth' })
+    if (!token) return
+    const [b, t] = [el.getBoundingClientRect(), token.getBoundingClientRect()]
+    el.scrollTo({ left: el.scrollLeft + t.left - b.left + t.width / 2 - el.clientWidth / 2, top: el.scrollTop + t.top - b.top + t.height / 2 - el.clientHeight / 2, behavior: 'smooth' })
   }, [fill, zoom, activeId, activeAt]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    pinched.current = false
+  }, [activeId, activeAt])
+  // Two fingers zoom the board (not the whole page); one finger scrolls it.
+  useEffect(() => {
+    const el = boxRef.current
+    if (!fill || !el) return
+    const gap = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
+    const middle = (t) => [(t[0].clientX + t[1].clientX) / 2, (t[0].clientY + t[1].clientY) / 2]
+    const start = (e) => {
+      if (e.touches.length !== 2) return
+      pinch.current = { gap: gap(e.touches), scale: live.current.scale }
+    }
+    const move = (e) => {
+      if (e.touches.length !== 2 || !pinch.current) return
+      e.preventDefault()
+      const { fitScale } = live.current
+      const next = Math.min(ZOOMS[ZOOMS.length - 1], (pinch.current.scale * gap(e.touches)) / pinch.current.gap)
+      // Keep the board point under the fingers where it is.
+      const r = drawn()
+      const [mx, my] = middle(e.touches)
+      live.current.anchor = { mx, my, fx: (mx - r.left) / r.width, fy: (my - r.top) / r.height }
+      pinched.current = true
+      setZoom(next <= fitScale * 1.05 ? 'fit' : next)
+    }
+    const end = (e) => {
+      if (e.touches.length < 2) pinch.current = null
+    }
+    el.addEventListener('touchstart', start, { passive: true })
+    el.addEventListener('touchmove', move, { passive: false })
+    el.addEventListener('touchend', end)
+    el.addEventListener('touchcancel', end)
+    return () => {
+      el.removeEventListener('touchstart', start)
+      el.removeEventListener('touchmove', move)
+      el.removeEventListener('touchend', end)
+      el.removeEventListener('touchcancel', end)
+    }
+  }, [fill]) // eslint-disable-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    const el = boxRef.current
+    const a = live.current.anchor
+    if (!el || !a) return
+    live.current.anchor = null
+    const r = drawn()
+    el.scrollLeft += r.left + a.fx * r.width - a.mx
+    el.scrollTop += r.top + a.fy * r.height - a.my
+  }, [zoom]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!board) return null
 
   const grid = boardGrid(board)
@@ -224,18 +296,30 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
     setPicked(picked === id ? null : id)
   }
 
-  const squares = [...grid.values()]
-  const xs = squares.map((s) => s.x)
-  const ys = squares.map((s) => s.y)
-  const [minX, minY] = [Math.min(...xs) - 1, Math.min(...ys) - 1]
-  const [cols, rows] = [Math.max(...xs) - minX + 2, Math.max(...ys) - minY + 2]
-  // Zoom to fit: the biggest size that shows the whole dungeon in the box. Zooming in from
-  // there goes through the fixed steps bigger than it.
-  const fitScale = box ? Math.min(box.w / (cols * SQUARE), box.h / (rows * SQUARE)) : 1
-  const steps = fill ? ['fit', ...ZOOMS.map((_, i) => i).filter((i) => ZOOMS[i] > fitScale * 1.15)] : ZOOMS.map((_, i) => i)
-  const step = Math.max(0, steps.indexOf(zoom))
-  const fit = fill && steps[step] === 'fit'
-  const scale = fit ? fitScale : ZOOMS[steps[step]]
+  const bounds = boardBounds(board)
+  // A long, thin dungeon in a box the other shape (a tall one on the projector's wide
+  // screen) turns a quarter turn when that makes it clearly bigger. The figures stay upright.
+  const fitFor = (w, h) => (box ? Math.min(box.w / w, box.h / h) : 1)
+  const spin = fill && fitFor(bounds.h, bounds.w) > fitFor(bounds.w, bounds.h) * 1.2 ? 90 : 0
+  const [viewW, viewH] = spin ? [bounds.h, bounds.w] : [bounds.w, bounds.h]
+  // rotate(90) sends (x, y) to (-y, x), so the turned dungeon sits left of the origin.
+  const viewBox = spin ? `${-(bounds.y + bounds.h)} ${bounds.x} ${bounds.h} ${bounds.w}` : `${bounds.x} ${bounds.y} ${bounds.w} ${bounds.h}`
+  // Zoom to fit: the biggest size that shows the whole dungeon in the box. The buttons step
+  // through the fixed sizes bigger than it; a pinch goes anywhere in between.
+  const fitScale = fitFor(viewW, viewH)
+  const fit = fill && zoom === 'fit'
+  const scale = fit ? fitScale : zoom
+  const sizes = fill ? ZOOMS.filter((z) => z > fitScale * 1.15) : ZOOMS
+  const zoomOut = fit ? null : [...sizes].reverse().find((z) => z < scale / 1.05) ?? (fill ? 'fit' : null)
+  const zoomIn = sizes.find((z) => z > (fit ? fitScale : scale) * 1.05) ?? null
+  const zoomTo = (z) => {
+    pinched.current = false
+    setZoom(z)
+  }
+  live.current.scale = scale
+  live.current.fitScale = fitScale
+  live.current.viewW = viewW
+  live.current.viewH = viewH
   const left = active ? movesLeft(state, active) : 0
   // Read only and not filling a box: a small board to glance at.
   const small = readOnly && !fill
@@ -259,8 +343,8 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
                     ? `${active?.name ?? 'The hero'} has no moves left this turn.`
                     : 'Heroes move in their Hero Phase.'}
           </p>
-          <Button className="!px-3 !py-1" disabled={step === 0} onClick={() => setZoom(steps[step - 1])} aria-label="Zoom out">−</Button>
-          <Button className="!px-3 !py-1" disabled={step === steps.length - 1} onClick={() => setZoom(steps[step + 1])} aria-label="Zoom in">+</Button>
+          <Button className="!px-3 !py-1" disabled={zoomOut === null} onClick={() => zoomTo(zoomOut)} aria-label="Zoom out">−</Button>
+          <Button className="!px-3 !py-1" disabled={zoomIn === null} onClick={() => zoomTo(zoomIn)} aria-label="Zoom in">+</Button>
           <Button
             variant={byHand ? 'gold' : 'default'}
             className={`!py-1 text-sm ${fill ? '!px-2' : ''}`}
@@ -335,11 +419,11 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
           {open.moves && <p className="mt-1 text-sm text-amber-300">This marker moves when the trap goes off, so the board can't show where it is yet.</p>}
         </div>
       )}
-      <div ref={boxRef} className={fill ? 'min-h-0 flex-1 overflow-auto' : readOnly ? '' : 'max-h-[70vh] overflow-auto'}>
+      <div ref={boxRef} className={fill ? 'min-h-0 flex-1 touch-pan-x touch-pan-y overflow-auto' : readOnly ? '' : 'max-h-[70vh] overflow-auto'}>
         <svg
-          viewBox={`${minX * SQUARE} ${minY * SQUARE} ${cols * SQUARE} ${rows * SQUARE}`}
-          width={small || fit ? '100%' : cols * SQUARE * scale}
-          height={small ? undefined : fit ? '100%' : rows * SQUARE * scale}
+          viewBox={viewBox}
+          width={small || fit ? '100%' : viewW * scale}
+          height={small ? undefined : fit ? '100%' : viewH * scale}
           className={small ? 'mx-auto max-h-[45vh]' : fit ? 'block' : 'mx-auto'}
           role="img"
           aria-label="The dungeon board"
@@ -349,34 +433,36 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
               <circle cx={SQUARE / 2} cy={SQUARE / 2} r="1.5" fill="#334155" />
             </pattern>
           </defs>
-          <rect x={minX * SQUARE} y={minY * SQUARE} width={cols * SQUARE} height={rows * SQUARE} fill="#0b1220" />
-          <rect x={minX * SQUARE} y={minY * SQUARE} width={cols * SQUARE} height={rows * SQUARE} fill="url(#board-dots)" />
-          {board.tiles.map((placed) => board.defs[placed.tileId] && <PlacedTile key={placed.uid} placed={placed} def={board.defs[placed.tileId]} />)}
-          <MarkerTiles markers={placedMarkers} />
-          <OpenEdges grid={grid} />
-          {targets.map((k) => {
-            const [x, y] = k.split(',').map(Number)
-            return (
-              <rect
-                key={k}
-                x={x * SQUARE + 2}
-                y={y * SQUARE + 2}
-                width={SQUARE - 4}
-                height={SQUARE - 4}
-                rx="6"
-                fill="#34d399"
-                fillOpacity="0.45"
-                stroke="#059669"
-                className="cursor-pointer"
-                onClick={() => tapSquare([x, y])}
-              />
-            )
-          })}
-          {/* The active hero is drawn last so its glow sits on top of its neighbours. */}
-          {[...onBoard.filter((f) => f.id !== activeId), ...onBoard.filter((f) => f.id === activeId)].map((f) => (
-            <Token key={f.id} {...f} at={board.tokens[f.id]} active={f.id === activeId} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)} onTap={watching ? undefined : () => tapFigure(f.id)} />
-          ))}
-          <MarkerBadges markers={placedMarkers} onTap={(id) => setReading(reading === id ? null : id)} />
+          <g transform={spin ? `rotate(${spin})` : undefined}>
+            <rect x={bounds.x} y={bounds.y} width={bounds.w} height={bounds.h} fill="#0b1220" />
+            <rect x={bounds.x} y={bounds.y} width={bounds.w} height={bounds.h} fill="url(#board-dots)" />
+            {board.tiles.map((placed) => board.defs[placed.tileId] && <PlacedTile key={placed.uid} placed={placed} def={board.defs[placed.tileId]} spin={spin} />)}
+            <MarkerTiles markers={placedMarkers} />
+            <OpenEdges grid={grid} />
+            {targets.map((k) => {
+              const [x, y] = k.split(',').map(Number)
+              return (
+                <rect
+                  key={k}
+                  x={x * SQUARE + 2}
+                  y={y * SQUARE + 2}
+                  width={SQUARE - 4}
+                  height={SQUARE - 4}
+                  rx="6"
+                  fill="#34d399"
+                  fillOpacity="0.45"
+                  stroke="#059669"
+                  className="cursor-pointer"
+                  onClick={() => tapSquare([x, y])}
+                />
+              )
+            })}
+            {/* The active hero is drawn last so its glow sits on top of its neighbours. */}
+            {[...onBoard.filter((f) => f.id !== activeId), ...onBoard.filter((f) => f.id === activeId)].map((f) => (
+              <Token key={f.id} {...f} spin={spin} at={board.tokens[f.id]} active={f.id === activeId} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)} onTap={watching ? undefined : () => tapFigure(f.id)} />
+            ))}
+            <MarkerBadges markers={placedMarkers} spin={spin} onTap={(id) => setReading(reading === id ? null : id)} />
+          </g>
         </svg>
       </div>
     </section>
