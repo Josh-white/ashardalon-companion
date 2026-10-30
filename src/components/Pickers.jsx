@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { HERO_COLORS } from '../data/heroes.js'
 import { heroAc } from '../data/powerEffects.js'
 
@@ -31,6 +32,24 @@ export function HeroChoice({ heroes, chosen, onToggle }) {
         )
       })}
     </div>
+  )
+}
+
+// On the virtual board, only the heroes or monsters in reach (`near`: their ids, or null when
+// the board can't tell), with a way to show everyone when the board has it wrong.
+export function InReach({ items, near, what = 'heroes', children }) {
+  const [all, setAll] = useState(false)
+  const shown = near && !all ? items.filter((i) => near.includes(i.id)) : items
+  const hidden = items.length - shown.length
+  return (
+    <>
+      {children(shown)}
+      {near && (hidden > 0 || all) && (
+        <button type="button" className="text-sm text-emerald-300 underline" onClick={() => setAll((a) => !a)}>
+          {all ? `📍 Only the ${what} in reach` : `📍 Only the ${what} in reach are shown. Show all ${hidden} more`}
+        </button>
+      )}
+    </>
   )
 }
 

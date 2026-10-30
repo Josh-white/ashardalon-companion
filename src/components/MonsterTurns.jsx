@@ -12,13 +12,16 @@ import { MonsterControl, TileGuardQuestion } from './Treasure.jsx'
 import { DrawTileButton } from './Tiles.jsx'
 import { Button } from './ui.jsx'
 import { figureToken } from '../board/play.js'
-import { boardStep, boardTargetIds, closestTarget, squareAway, squareNextTo, squareToward } from '../board/monsters.js'
+import { boardStep, boardTargetIds, closestTarget, foeDistance, squareAway, squareNextTo, squareToward } from '../board/monsters.js'
 import { seesInvisible } from '../board/tactics.js'
+import { hitMoveStep } from '../board/powerMoves.js'
 
 // Keyleth's Bravery: when a monster within 1 tile of her activates, she can step next to it and heal 1.
-function Bravery({ state, name, dispatch }) {
-  return reactionsFor(state.heroes.filter((h) => !h.tokens?.refuge && h.hp > 0), 'bravery').map(({ hero, power }) => (
-    <Button key={power.id} className="w-full text-left" onClick={() => dispatch({ type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: [] })}>
+function Bravery({ state, name, monsterId, token, dispatch }) {
+  // On the virtual board only a hero within 1 tile of the monster is offered.
+  const near = (h) => !state.board || ['adjacent', 'within1', null].includes(foeDistance(state, h.id, monsterId))
+  return reactionsFor(state.heroes.filter((h) => !h.tokens?.refuge && h.hp > 0 && near(h)), 'bravery').map(({ hero, power }) => (
+    <Button key={power.id} className="w-full text-left" onClick={() => dispatch({ type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: [], foeToken: token })}>
       🦁 {hero.name} uses Bravery (the {name} is within 1 tile of {hero.name}): put {hero.name} next to it and heal 1 HP
     </Button>
   ))
@@ -247,9 +250,13 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
     if (towardFigure) moveTo(squareToward(state, token, state.board.tokens[towardFigure.id], step?.tiles ?? 1))
     finish()
   }
+  // A hit that moves the hero ("1 tile away from the duergar"): the board asks where they go.
+  const pushes = byBoard && Boolean(hitMoveStep(used.effect)) && rows.some((r) => r.hit && !r.dodged && !r.villager)
   const finishAttack = () => {
+    if (pushes) dispatch({ type: 'HIT_MOVES', tokenId: token })
     if (byBoard && step.then === 'adjacent' && movedTo) moveTo(squareNextTo(state, token, state.board.tokens[movedTo.id]))
     if (byBoard && step.then === 'away') moveTo(squareAway(state, token))
+    if (byBoard && step.then === 'within1') dispatch({ type: 'FOE_STEP', tokenId: token, n: 1 })
     finish()
   }
 
@@ -278,7 +285,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
       {byBoard && !results && step?.when && answered && (
         <p className="rounded-lg bg-emerald-950/60 p-3 text-emerald-200">📍 The board says yes: {QUESTIONS[step.when](name)}</p>
       )}
-      {untouched && <Bravery state={state} name={name} dispatch={dispatch} />}
+      {untouched && <Bravery state={state} name={name} monsterId={monster.id} token={token} dispatch={dispatch} />}
       {card.special && figure === 1 && untouched && (
         <p className="rounded-lg bg-zinc-900 p-2 text-sm text-zinc-400">{card.special}</p>
       )}
@@ -408,6 +415,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
                   <b className={hit ? 'text-red-300' : 'text-emerald-300'}>{row.dodged ? 'Tumbling Escape: a miss!' : hit ? 'Hit!' : 'Miss!'}</b>{' '}
                   {hero.name} takes {effect(hit)}.
                   {hit && used.effect && <span className="mt-1 block font-semibold text-amber-200">{used.effect}</span>}
+                  {hit && pushes && <span className="mt-1 block text-emerald-200">📍 The board lights the squares to move {hero.name} to when you tap Done.</span>}
                   {escape && (
                     <Button className="mt-2 w-full" onClick={() => dispatch({ type: 'DODGE_HIT', heroId: hero.id, powerId: escape.power.id })}>
                       🤸 {hero.name} uses Tumbling Escape: the attack misses
@@ -424,7 +432,11 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
           </ul>
           {step.then && rows.length > 0 && (
             <p className="rounded-lg bg-amber-950/60 p-3 text-lg text-amber-200">
-              {byBoard && step.then !== 'within1' ? `The ${name} moves away when you tap Done.` : THEN[step.then](name, movedTo?.name ?? 'that hero')}
+              {!byBoard
+                ? THEN[step.then](name, movedTo?.name ?? 'that hero')
+                : step.then === 'within1'
+                  ? `When you tap Done, the board lights the squares within 1 tile: tap the ${name}, then where it goes.`
+                  : `The ${name} moves away when you tap Done.`}
             </p>
           )}
           <Button variant="gold" className="w-full py-3 text-lg" onClick={finishAttack}>

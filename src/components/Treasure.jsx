@@ -5,7 +5,9 @@ import { guardsOnTile } from '../board/checks.js'
 import { foes } from '../state/game.js'
 import { rollD20, shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
-import { HeroChoice, MonsterChoice } from './Pickers.jsx'
+import { HeroChoice, InReach, MonsterChoice } from './Pickers.jsx'
+import { heroesInReach } from '../board/encounters.js'
+import { foesInRange } from '../board/monsters.js'
 import { Button } from './ui.jsx'
 
 const RANGE_WORDS = { adjacent: 'next to you', within1: 'within 1 tile' }
@@ -197,7 +199,9 @@ function ItemPanel({ state, hero, item, dispatch, onClose }) {
     body = (
       <>
         <p className="text-zinc-200">Who gets {card.heal} HP? {hero.name}, or a hero next to {hero.name}.</p>
-        <HeroChoice heroes={state.heroes} chosen={chosen} onToggle={pickOne} />
+        <InReach items={state.heroes} near={heroesInReach(state, hero.id, 'adjacent')}>
+          {(shown) => <HeroChoice heroes={shown} chosen={chosen} onToggle={pickOne} />}
+        </InReach>
       </>
     )
   } else if (card.use === 'endCondition') {
@@ -208,7 +212,9 @@ function ItemPanel({ state, hero, item, dispatch, onClose }) {
         {withConditions.length === 0 ? (
           <p className="text-zinc-400">Nobody has a condition right now.</p>
         ) : (
-          <HeroChoice heroes={withConditions} chosen={chosen} onToggle={pickOne} />
+          <InReach items={withConditions} near={heroesInReach(state, hero.id, 'adjacent')}>
+            {(shown) => <HeroChoice heroes={shown} chosen={chosen} onToggle={pickOne} />}
+          </InReach>
         )}
         {picked && (
           <div className="flex flex-wrap gap-2">
@@ -251,7 +257,9 @@ function ItemPanel({ state, hero, item, dispatch, onClose }) {
     body = (
       <>
         <p className="text-zinc-200">Which monster within 2 tiles turns into something else? The app draws its new monster card.</p>
-        <MonsterChoice state={state} chosen={targetId ? [targetId] : []} onToggle={setTargetId} />
+        <InReach items={state.monsters} near={state.board ? foesInRange(state, hero.id, 'within2', state.monsters).map((m) => m.id) : null} what="monsters">
+          {(shown) => <MonsterChoice state={state} monsters={shown} chosen={targetId ? [targetId] : []} onToggle={setTargetId} />}
+        </InReach>
       </>
     )
   } else if (card.use === 'caltrops') {
