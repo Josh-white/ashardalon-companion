@@ -127,7 +127,7 @@ function MyHero({ state, claim, cards, deviceId, dispatch, solo = false }) {
   const pick = (slot, card) => dispatch({ type: 'SET_LOBBY_PICK', deviceId, slot, card })
   const powerSlots = <PowerSlots template={template} slots={slots} picks={claim.picks} powers={cards.powers} onPick={pick} />
   const changeHero = (
-    <button type="button" className="text-sm text-zinc-400 underline" onClick={() => dispatch({ type: 'RELEASE_HERO', deviceId })}>
+    <button type="button" className="-my-2 py-2 text-sm text-zinc-400 underline" onClick={() => dispatch({ type: 'RELEASE_HERO', deviceId })}>
       Pick a different hero
     </button>
   )
@@ -146,11 +146,21 @@ function MyHero({ state, claim, cards, deviceId, dispatch, solo = false }) {
         {state.campaign && <HeroCampaign state={state} heroKey={template.key} dispatch={dispatch} />}
         <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-zinc-300">
           <span className="mr-auto">Powers: {claim.picks.map((card) => card?.name ?? '(not chosen)').join(', ')}</span>
-          <Button variant="ghost" className="!py-1 text-sm" onClick={() => setShowPowers(!showPowers)}>
-            {showPowers ? 'Done' : 'Change powers'}
-          </Button>
+          {!showPowers && (
+            <Button className="min-h-11 text-base" onClick={() => setShowPowers(true)}>
+              ✏️ Change powers
+            </Button>
+          )}
         </div>
-        {showPowers && <div className="mt-3">{powerSlots}</div>}
+        {/* Done comes after the last power, and stays in reach at the bottom of a phone while scrolling the list. */}
+        {showPowers && (
+          <div className="mt-3">
+            {powerSlots}
+            <Button variant="gold" className="sticky bottom-3 mt-3 w-full py-3 text-lg shadow-xl" onClick={() => setShowPowers(false)}>
+              ✓ Done choosing powers
+            </Button>
+          </div>
+        )}
       </section>
     )
   }
