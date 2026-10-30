@@ -33,6 +33,31 @@ const villainSays = (villain, when) => {
   return say(lines.voice, lines[when] ?? VILLAIN_DEFAULT[when])
 }
 
+// The narrator announces a villain, then the villain has its say.
+const villainArrives = (villain, title = `${villain.fullName ?? villain.name} appears!`) => [
+  say('narrator', `[dark, suspenseful] ${pick(SPAWN_OPENERS, title)} ${title}`),
+  villainSays(villain, 'arrive'),
+]
+// A beaten villain gets its last words before the herald cheers.
+const villainFalls = (villain, title = `${villain.name} defeated!`) => [villainSays(villain, 'fall'), say('herald', `${CHEER} ${title}`)]
+
+// A villain that arrived, flipped or fell since the last state, when the screen's moment
+// is something else (the chamber it waits in, the attack that beat it), so it still speaks.
+// The lines match the recorded script (script.js), so nothing new needs ElevenLabs.
+function villainCallLines(before, after, now, said) {
+  const old = new Set((before.villainCalls ?? []).map((c) => c.id))
+  const lines = []
+  for (const call of after.villainCalls ?? []) {
+    const villain = (after.villains ?? []).find((v) => v.id === call.villainId)
+    if (old.has(call.id) || !villain || now - call.at >= STALE_MS) continue
+    const own = call.when === 'arrive' ? villainArrives(villain) : call.when === 'fall' ? villainFalls(villain) : [villainSays(villain, 'enraged')]
+    // The moment already gave the villain its line.
+    if (said.some((line) => line?.text === villainSays(villain, call.when)?.text)) continue
+    lines.push(...own)
+  }
+  return lines
+}
+
 const pick = (list, seed = '') => list[[...String(seed)].reduce((sum, c) => sum + c.charCodeAt(0), 0) % list.length]
 const say = (voice, text) => (text ? { text, voice } : null)
 // Lines use hero names, not the players' names typed in each game, so every line
@@ -60,7 +85,7 @@ export function momentLines(moment, state) {
       if (!villain) return [say('danger', `${ALARM} ${pick(SPAWN_OPENERS, moment.title)} ${moment.title}`)]
       // The narrator announces a villain, then the villain has its say.
       if (moment.title.includes('enraged')) return [villainSays(villain, 'enraged')]
-      return [say('narrator', `[dark, suspenseful] ${pick(SPAWN_OPENERS, moment.title)} ${moment.title}`), villainSays(villain, 'arrive')]
+      return villainArrives(villain, moment.title)
     }
     case 'encounter': {
       const card = state.encounter?.card
@@ -75,7 +100,7 @@ export function momentLines(moment, state) {
     case 'defeat': {
       // A beaten villain gets its last words before the herald cheers.
       const villain = villainIn(moment.title, state)
-      if (villain) return [villainSays(villain, 'fall'), say('herald', `${CHEER} ${moment.title}`)]
+      if (villain) return villainFalls(villain, moment.title)
       // A hero's attack ("Keyleth: Sun Strike!") changes with every power, so it gets
       // a set line per hero that can be recorded ahead of time.
       return [say('herald', `${CHEER} ${moment.title.includes(':') ? `${heroName(hero)} wins the fight!` : moment.title}`)]
@@ -164,6 +189,7 @@ export function narrationFor(before, after, now = Date.now()) {
   if (moment && moment.id !== before.moment?.id && now - moment.at < STALE_MS) {
     lines.push(...momentLines(moment, after))
   }
+  lines.push(...villainCallLines(before, after, now, lines))
   if (rollOver && after.status === 'playing' && after.turn.phase === 0 && after.heroes[after.turn.heroIndex]) lines.push(turnLine(after.heroes[after.turn.heroIndex]))
   if (before.status !== after.status && after.status === 'won' && !newStory) lines.push(say('herald', `${CHEER} Victory! The heroes have triumphed. Songs will be sung of this day!`))
   if (before.status !== after.status && after.status === 'lost') lines.push(say('narrator', '[somber, tragic] Alas… the heroes have fallen. The dungeon claims another party.'))

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { narrationFor } from '../audio/narration.js'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { normalizeCardFile } from '../data/cards.js'
 import { goalParts } from './adventure.js'
@@ -88,6 +89,15 @@ describe('chambers', () => {
     const boss = state.villains[0]
     state = defeat(state, boss)
     expect(state.status).toBe('won')
+  })
+
+  it("lets the chamber's villain speak, though the chamber's moment takes the screen", () => {
+    const before = start(adventures[1])
+    const after = reveal(before, 'Dire Chamber Entrance', [0.4])
+    expect(after.moment.title).toBe('The Lair!')
+    const lines = narrationFor(before, after, after.moment.at).map((l) => l.text)
+    expect(lines.some((t) => /Big Boss appears!$/.test(t))).toBe(true)
+    expect(lines.some((t) => /you have come far into my domain/.test(t))).toBe(true)
   })
 
   it('never draws a chamber card the app cannot run', () => {
