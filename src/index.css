@@ -241,3 +241,17 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .hazard-glow, .hazard-fog { animation: none; }
 }
+
+/* Torchlight on the virtual board (Torchlight.jsx): an uneven flicker, opacity only. */
+@keyframes torch-flicker {
+  0%, 100% { opacity: 1; }
+  12% { opacity: 0.78; }
+  20% { opacity: 0.95; }
+  38% { opacity: 0.7; }
+  47% { opacity: 1; }
+  63% { opacity: 0.83; }
+  80% { opacity: 0.96; }
+  88% { opacity: 0.74; }
+}
+.torch-flicker { animation: torch-flicker 2.6s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .torch-flicker { animation: none; } }

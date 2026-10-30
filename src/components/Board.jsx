@@ -14,6 +14,7 @@ import { artUrl, useArt } from '../state/useArt.js'
 import { Carpet, Coin, ExitSquares, figureBadges, HeroTokenMark, heroTokenGroups, MarkerBadges, MarkerTiles, OpenEdges, PlacedTile, Token } from './BoardPieces.jsx'
 import { ClosedDoor, SQUARE } from './TileDrawing.jsx'
 import { useBoardZoom } from './useBoardZoom.js'
+import Torchlight, { lightSources, useTorchlight } from './Torchlight.jsx'
 import { Button } from './ui.jsx'
 
 // The virtual board (a solo game's, or the party's on the projector and iPads): the tiles laid so far and every figure on its square.
@@ -44,6 +45,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   const [picked, setPicked] = useState(null) // id of the figure being moved
   const [byHand, setByHand] = useState(false)
   const [reading, setReading] = useState(null) // id of the trap or hazard marker whose card is open
+  const [torch, toggleTorch] = useTorchlight()
   const board = state.board
   const activeId = state.heroes[state.turn.heroIndex]?.id
   const activeAt = board?.tokens[activeId]?.join(',')
@@ -179,6 +181,15 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
             }}
           >
             {fill ? '✋' : '✋ Move by hand'}
+          </Button>
+          <Button
+            variant={torch ? 'gold' : 'default'}
+            className={`min-h-10 min-w-10 !py-1 text-sm ${fill ? '!px-2' : ''}`}
+            title={torch ? 'Turn torchlight off' : 'Turn torchlight on'}
+            aria-pressed={torch}
+            onClick={toggleTorch}
+          >
+            {fill ? '🔥' : '🔥 Torchlight'}
           </Button>
           {extraButtons}
         </div>
@@ -347,6 +358,8 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
             {(board.doors ?? []).map((door) => (
               <ClosedDoor key={door.id} squares={door.squares} kind={door.kind} special={Boolean(door.reveal)} spin={spin} />
             ))}
+            {/* Open edges, exits, lit squares and figures stay on top of the dark. */}
+            {torch && <Torchlight bounds={bounds} lights={lightSources({ heroes: state.heroes, tokens: board.tokens, activeId, markers: placedMarkers })} />}
             <OpenEdges grid={grid} />
             <ExitSquares squares={exits} open={exitOpen} />
             {targets.map((k) => {
