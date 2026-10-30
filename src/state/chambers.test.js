@@ -134,7 +134,9 @@ describe('doors', () => {
     const hero = state.heroes[0]
     state = gameReducer(state, { type: 'DOOR_UNLOCK', doorId: door.id, heroId: hero.id, roll: 9 })
     expect(state.adventure.lockedDoors).toHaveLength(1)
-    state = gameReducer(state, { type: 'DOOR_UNLOCK', doorId: door.id, heroId: hero.id, roll: 10 })
+    // A try takes the place of the attack, so a second one this turn is refused.
+    expect(gameReducer(state, { type: 'DOOR_UNLOCK', doorId: door.id, heroId: hero.id, roll: 10 })).toBe(state)
+    state = gameReducer(state, { type: 'DOOR_UNLOCK', doorId: door.id, heroId: hero.id, roll: 10, free: true })
     expect(state.adventure.lockedDoors).toHaveLength(0)
   })
 

@@ -160,6 +160,37 @@ function Door({ at, width, height }) {
   )
 }
 
+// A Closed Door token on the board, over the squares it shuts (board units): a heavy stone
+// door with iron bands. Face down it shows a ?, turned over and locked a lock. The door
+// an adventure waits for (the Secret Chamber's) has a gold rim.
+export function ClosedDoor({ squares, kind, special = false, spin = 0 }) {
+  const xs = squares.map(([x]) => x)
+  const ys = squares.map(([, y]) => y)
+  const [x0, y0] = [Math.min(...xs) * SQUARE, Math.min(...ys) * SQUARE]
+  const [w, h] = [(Math.max(...xs) + 1) * SQUARE - x0, (Math.max(...ys) + 1) * SQUARE - y0]
+  const long = w >= h
+  const bands = [0.25, 0.75].map((f) => (long ? x0 + w * f : y0 + h * f))
+  const [cx, cy] = [x0 + w / 2, y0 + h / 2]
+  return (
+    <g pointerEvents="none">
+      <rect x={x0 + 2} y={y0 + 5} width={w - 4} height={h - 4} rx="3" fill="#000" fillOpacity="0.45" />
+      <rect x={x0 + 2} y={y0 + 2} width={w - 4} height={h - 4} rx="3" fill={DOOR_STONE} stroke={special ? '#fbbf24' : '#3f3a33'} strokeWidth={special ? 4 : 2} />
+      <rect x={x0 + 7} y={y0 + 7} width={w - 14} height={h - 14} rx="2" fill="none" stroke={DOOR_EDGE} strokeWidth="1.5" />
+      {bands.map((b, i) =>
+        long ? (
+          <rect key={i} x={b - 3} y={y0 + 2} width="6" height={h - 4} fill="#3b3631" />
+        ) : (
+          <rect key={i} x={x0 + 2} y={b - 3} width={w - 4} height="6" fill="#3b3631" />
+        ),
+      )}
+      <circle cx={cx} cy={cy} r="11" fill="#1c1917" stroke="#a8a29e" strokeWidth="1.5" />
+      <text x={cx} y={cy + 6} textAnchor="middle" fontSize={kind === 'locked' ? 13 : 16} fontWeight="bold" fill="#e7e5e4" transform={spin ? `rotate(${-spin} ${cx} ${cy})` : undefined}>
+        {kind === 'locked' ? '🔒' : '?'}
+      </text>
+    </g>
+  )
+}
+
 // The tile's shapes in its own frame (triangle at the bottom), SQUARE units per square.
 // `turn` keeps the marks upright when the board turns the tile.
 export function TileShapes({ tile, turn = 0 }) {

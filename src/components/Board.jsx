@@ -8,7 +8,7 @@ import { boardMarkers } from '../board/markers.js'
 import { activeVillains } from '../state/game.js'
 import { artUrl, useArt } from '../state/useArt.js'
 import HazardFloor, { hasHazardFloor } from './HazardFloor.jsx'
-import { SQUARE, TileShapes } from './TileDrawing.jsx'
+import { ClosedDoor, SQUARE, TileShapes } from './TileDrawing.jsx'
 import { Button } from './ui.jsx'
 
 // The virtual board (a solo game's, or the party's on the projector and iPads): the tiles laid so far and every figure on its square.
@@ -582,6 +582,9 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
             <rect x={bounds.x} y={bounds.y} width={bounds.w} height={bounds.h} fill="url(#board-dots)" opacity="0.6" />
             {board.tiles.map((placed) => board.defs[placed.tileId] && <PlacedTile key={placed.uid} placed={placed} def={board.defs[placed.tileId]} spin={spin} />)}
             <MarkerTiles markers={placedMarkers} />
+            {(board.doors ?? []).map((door) => (
+              <ClosedDoor key={door.id} squares={door.squares} kind={door.kind} special={Boolean(door.reveal)} spin={spin} />
+            ))}
             <OpenEdges grid={grid} />
             {targets.map((k) => {
               const [x, y] = k.split(',').map(Number)
