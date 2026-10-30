@@ -8,13 +8,15 @@
 // or patterns, so a tile needs nothing from <defs> and draws the same in any svg.
 
 export const SQUARE = 40
-const FEATURE_MARKS = { desk: '📖', ladder: '🪜', door: '🚪' }
+const FEATURE_MARKS = { desk: '📖', ladder: '🪜' }
 const TRIANGLE_COLORS = { black: '#09090b', white: '#fafafa', red: '#b91c1c' }
 const SLABS = ['#9d9a93', '#918e87', '#aaa69e', '#88857e']
 const GROUT = '#3f3a33'
 const BRICKS = ['#5a5148', '#504840', '#625950']
 const MORTAR = '#2e2924'
 const STEPS = ['#6b6258', '#5a5148', '#4a423a', '#3b342e']
+const DOOR_STONE = '#e4dfd3'
+const DOOR_EDGE = '#8f8778'
 
 // A steady 0..1 number for a square, so the slabs and bricks don't change between redraws.
 export function squareNoise(seed, x, y, k = 0) {
@@ -112,6 +114,52 @@ function Steps({ x, y }) {
   )
 }
 
+// A pale stone door leaf from its hinge (x1, y1) to its tip, with a darker lower edge so it
+// stands up off the floor.
+function Leaf({ x1, y1, x2, y2 }) {
+  const angle = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI
+  const length = Math.hypot(x2 - x1, y2 - y1)
+  return (
+    <g transform={`translate(${x1} ${y1}) rotate(${angle})`}>
+      <rect x="0" y="-3.5" width={length} height="11" rx="1.5" fill={DOOR_EDGE} />
+      <rect x="0" y="-5.5" width={length} height="9" rx="1.5" fill={DOOR_STONE} stroke="#57534e" strokeWidth="0.8" />
+    </g>
+  )
+}
+
+// A doorway as printed on the tile: two stone leaves swung open, hinged on the rock at each
+// end of the doorway squares and set toward the tile's nearer edge, swinging inward.
+function Door({ at, width, height }) {
+  const xs = at.map(([x]) => x)
+  const ys = at.map(([, y]) => y)
+  const across = new Set(xs).size === 1 && at.length > 1
+  const hinges = []
+  const leaves = []
+  if (across) {
+    const out = xs[0] >= width / 2 ? 1 : -1
+    const hx = xs[0] * SQUARE + SQUARE / 2 + out * 4
+    const [top, bottom] = [Math.min(...ys) * SQUARE, (Math.max(...ys) + 1) * SQUARE]
+    hinges.push([hx, top], [hx, bottom])
+    leaves.push([hx, top + 2, hx - out * 18, top + 34], [hx, bottom - 2, hx - out * 18, bottom - 34])
+  } else {
+    const out = ys[0] >= height / 2 ? 1 : -1
+    const hy = ys[0] * SQUARE + SQUARE / 2 + out * 4
+    const [left, right] = [Math.min(...xs) * SQUARE, (Math.max(...xs) + 1) * SQUARE]
+    hinges.push([left, hy], [right, hy])
+    leaves.push([left + 2, hy, left + 34, hy - out * 18], [right - 2, hy, right - 34, hy - out * 18])
+  }
+  return (
+    <g>
+      {leaves.map(([x1, y1, x2, y2], i) => (
+        <Leaf key={i} x1={x1} y1={y1} x2={x2} y2={y2} />
+      ))}
+      {hinges.map(([x, y], i) => (
+        <rect key={`h${i}`} x={x - 4} y={y - 4} width="8" height="8" rx="1" fill="#141210" />
+      ))}
+    </g>
+  )
+}
+
 // The tile's shapes in its own frame (triangle at the bottom), SQUARE units per square.
 // `turn` keeps the marks upright when the board turns the tile.
 export function TileShapes({ tile, turn = 0 }) {
@@ -135,8 +183,9 @@ export function TileShapes({ tile, turn = 0 }) {
       {shadowStrips(squares)}
       {squares.filter((s) => s.scorch).map(({ x, y }) => <Scorch key="scorch" x={x} y={y} />)}
       {marks.filter((m) => m.type === 'stairs').map(({ x, y }) => <Steps key={`stairs${x},${y}`} x={x} y={y} />)}
+      {(tile.features ?? []).filter((f) => f.type === 'door').map((f, i) => <Door key={`door${i}`} at={f.at} width={width} height={height} />)}
       {marks
-        .filter((m) => m.type !== 'stairs')
+        .filter((m) => m.type !== 'stairs' && m.type !== 'door')
         .map(({ x, y, type }) => {
           const mx = x * SQUARE + SQUARE / 2
           const my = y * SQUARE + SQUARE / 2
