@@ -57,6 +57,29 @@ export const ABILITY_EFFECTS = [
   'cast-iron-stomach', // +5 to rolls to end Poisoned (Vistra)
   'mage-hand', // opens doors anywhere on the hero's tile (Heskan)
 ]
+// Each box ability in a few plain words, for the hero pick screens (our own short reminders,
+// not the card text). The Ready screen and the hero card show the card's own words.
+export const ABILITY_HINTS = {
+  'saving-grace': { name: 'Saving Grace', hint: 'When a hero on your tile gets healed, they can shake off a condition too.' },
+  'cast-iron-stomach': { name: 'Cast-Iron Stomach', hint: '+5 on your rolls to stop being Poisoned.' },
+  'healing-hands': { name: 'Healing Hands', hint: 'Healing surges heal 1 extra HP, for you or a hero on your tile.' },
+  'brutal-recovery': { name: 'Brutal Recovery', hint: 'A natural 20 on your tile flips Furious Assault back over to use again.' },
+  'mage-hand': { name: 'Mage Hand', hint: 'Open doors anywhere on your tile, not just next to you.' },
+}
+const simple = (name) => name.toLowerCase().replace(/[^a-z0-9]/g, '')
+
+// The hero's abilities at `level` for a pick screen: the card file's, each with its short
+// hint when it's one of the box's (else the card's own words), or the box's hints when the
+// card file has none for this hero.
+export function heroAbilities(template, cardAbilities = [], level = 1) {
+  const listed = cardAbilities.filter((a) => a.hero === template.key && a.level <= level)
+  if (listed.length === 0) return (template.abilityEffects ?? []).map((effect) => ABILITY_HINTS[effect]).filter(Boolean)
+  return listed.map((a) => ({
+    name: a.name,
+    hint: Object.values(ABILITY_HINTS).find((h) => simple(h.name) === simple(a.name))?.hint ?? a.text,
+  }))
+}
+
 // A hero in a saved game from before abilities were saved on the hero uses its template's.
 export const hasAbility = (hero, effect) => Boolean(hero) && (hero.abilityEffects ?? templateFor(hero.key)?.abilityEffects ?? []).includes(effect)
 

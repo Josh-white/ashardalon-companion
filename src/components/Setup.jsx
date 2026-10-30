@@ -13,7 +13,7 @@ import Art from './Art.jsx'
 import { CampaignLobby, HeroCampaign } from './Campaign.jsx'
 import Chronicle from './Chronicle.jsx'
 import HeroCoach from './HeroCoach.jsx'
-import { HeroBanner, HeroPortrait, PowerSlots } from './HeroGallery.jsx'
+import { HeroAbilities, HeroBanner, HeroPortrait, PowerSlots } from './HeroGallery.jsx'
 import { HeroHall, HoldToPick } from './HeroHall.jsx'
 import { HallOfRecords, PlayerTitle } from './Records.jsx'
 import ScreenChoice from './ScreenChoice.jsx'
@@ -156,6 +156,7 @@ function MyHero({ state, claim, cards, deviceId, dispatch, solo = false, records
           </div>
           {changeHero}
         </div>
+        <HeroAbilities template={template} level={level} className="mt-2 text-sm" />
         {state.campaign && <HeroCampaign state={state} heroKey={template.key} dispatch={dispatch} />}
         <div className="mt-3">
           <HeroCoach key={template.key} heroKey={template.key} isNew={false} voice={voice} />
@@ -298,7 +299,7 @@ function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave, voice }
               <button
                 key={template.key}
                 type="button"
-                className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 p-2 text-left transition active:scale-95"
+                className="flex items-start gap-2 rounded-xl border border-zinc-800 bg-zinc-900 p-2 text-left transition active:scale-95"
                 onClick={() => pick(template)}
               >
                 <Art name={heroArt(template.key)} className="w-10" />
@@ -307,6 +308,7 @@ function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave, voice }
                   <span className="text-sm text-zinc-400">
                     {template.className} · Speed {template.speed}
                   </span>
+                  <HeroAbilities template={template} level={campaignHero(state, template.key)?.level ?? 1} className="mt-1 text-sm" />
                 </span>
               </button>
             ))}
@@ -413,7 +415,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
       </header>
 
       {watchOnly && <Chronicle campaign={state.campaign} />}
-      {watchOnly && <HeroHall heroes={heroChoices} lobby={lobby} records={records} onFree={(c) => dispatch({ type: 'RELEASE_HERO', deviceId: c.deviceId })} />}
+      {watchOnly && <HeroHall heroes={heroChoices} lobby={lobby} records={records} onFree={(c) => dispatch({ type: 'RELEASE_HERO', deviceId: c.deviceId })} levelOf={(key) => campaignHero(state, key)?.level ?? 1} />}
 
       {/* Where the dungeon is: one choice for the whole table, so the big screen makes it.
           Without one in the game, any iPad can. */}
@@ -444,7 +446,13 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
                 AC {template.ac} · HP {template.maxHp} · Speed {template.speed}
               </span>
             )
-            const banner = <HeroBanner template={template} status={status} taken={taken} faded={!taken && Boolean(mine)} small={Boolean(mine)} />
+            // Before picking, each hero shows what their card ability does.
+            const banner = (
+              <>
+                <HeroBanner template={template} status={status} taken={taken} faded={!taken && Boolean(mine)} small={Boolean(mine)} />
+                {!mine && <HeroAbilities template={template} level={campaignHero(state, template.key)?.level ?? 1} dim={taken} className="mt-2 px-1 text-sm" />}
+              </>
+            )
             const size = mine ? 'sm:w-[18%]' : 'sm:w-[30%] lg:w-[18%]'
             return !taken && !mine ? (
               <HoldToPick key={template.key} label={`Hold to pick ${template.name}`} onPick={() => claim(template)} className={`block w-full text-center transition active:scale-95 ${size}`}>
