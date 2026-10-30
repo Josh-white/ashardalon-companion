@@ -445,7 +445,7 @@ export function startServer({
     if (req.url === '/records.json') {
       res
         .writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
-        .end(JSON.stringify({ players: playerRecords(recordGames(records)) }))
+        .end(JSON.stringify({ players: playerRecords(recordGames(records)), played: records.played ?? {} }))
       return
     }
     if (narrator.handle(req, res)) return

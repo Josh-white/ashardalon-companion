@@ -9,7 +9,7 @@ import { VILLAIN_DEFAULT, VILLAIN_LINES } from '../src/data/villainLines.js'
 
 // The cast, picked by JJ from the ElevenLabs voice library. Each can be
 // swapped with a voice id in .env: ELEVENLABS_VOICE_ID for the narrator, and
-// ELEVENLABS_VOICE_<ROLE> for the rest (ELEVENLABS_VOICE_HERALD, _MEERAK, ...).
+// ELEVENLABS_VOICE_<ROLE> for the rest (ELEVENLABS_VOICE_HERALD, _MEERAK, _COACH_FIGHTER, ...).
 export const DEFAULT_VOICES = {
   narrator: 'oR4uRy4fHDUGGISL0Rev', // the storyteller: tiles, turns, encounters and stories
   herald: 'ZF6FPAbjXT4488VcRRnw', // cheers the heroes on
@@ -20,6 +20,12 @@ export const DEFAULT_VOICES = {
   kraash: 'IDuDsTbqg77GnVCQrair', // the orc storm shaman
   ashardalon: 'd5zuFgodxfQobkK5AfKH', // the red dragon
   bellax: 'mLw8kuDeVGqVstOYjRII', // the gauth's whisper of madness
+  // The hero coaches (src/data/coaches.js), from ElevenLabs' own voices, which every plan has.
+  coach_cleric: 'pFZP5JQG7iQjIQuC4Bku', // Mother Ardra (Lily)
+  coach_fighter: 'N2lVS1w4EtoT3dr4eOWO', // Sergeant Brumm (Callum)
+  coach_paladin: 'onwK4e9ZLuTAKqWW03F9', // Sir Edric (Daniel)
+  coach_rogue: 'IKne3meq5aSn9XLyUdCD', // Whisper (Charlie)
+  coach_wizard: 'pqHfZKP75CvOlQylNhV4', // Master Thessaly (Bill)
 }
 
 const castFromEnv = (env) =>

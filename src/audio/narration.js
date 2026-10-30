@@ -5,10 +5,13 @@
 // The cast (the Pi's server/narrator.js picks the actual ElevenLabs voice for each):
 // narrator tells the story, herald cheers the heroes on, danger brings bad news,
 // and each villain speaks for itself in its own voice.
+import { COACHES } from '../data/coaches.js'
 import { templateFor } from '../data/heroes.js'
 import { VILLAIN_DEFAULT, VILLAIN_LINES } from '../data/villainLines.js'
 
-export const VOICES = [...new Set(['narrator', 'herald', 'danger', 'villain', ...Object.values(VILLAIN_LINES).map((v) => v.voice)])]
+export const VOICES = [
+  ...new Set(['narrator', 'herald', 'danger', 'villain', ...Object.values(VILLAIN_LINES).map((v) => v.voice), ...Object.keys(COACHES).map((key) => `coach_${key}`)]),
+]
 
 // A moment older than this is a device catching up, not news.
 export const STALE_MS = 8000
