@@ -141,18 +141,29 @@ function PartyStrip({ heroes, meId, activeId }) {
       <div className="grid gap-3 sm:grid-cols-2">
         {heroes.map((hero) => (
           <div key={hero.id} className={`rounded-xl p-3 ${HERO_COLORS[hero.color].bg} ${hero.id === activeId ? 'ring-2 ring-amber-400' : ''}`}>
-            <div className="flex items-center justify-between gap-2">
-              <Art name={heroArt(hero.key)} className="w-10" />
-              <span className={`mr-auto font-display text-lg font-bold ${HERO_COLORS[hero.color].text}`}>
-                {hero.name}
-                {hero.id === meId && <span className="ml-2 text-sm font-normal text-zinc-300">(you)</span>}
-                {hero.id === activeId && <span className="ml-2 text-sm font-normal text-amber-300">· turn now</span>}
-              </span>
-              <span className="text-zinc-300">
-                {hero.hp} / {hero.maxHp} HP
+            <div className="flex items-center gap-2">
+              <Art name={heroArt(hero.key)} className="w-10 shrink-0" />
+              <span className="min-w-0">
+                <span className={`block font-display text-lg leading-tight font-bold ${HERO_COLORS[hero.color].text}`}>{hero.name}</span>
+                {(hero.id === meId || hero.id === activeId) && (
+                  <span className="block text-sm text-zinc-300">
+                    {hero.id === meId && 'You'}
+                    {hero.id === meId && hero.id === activeId && ' · '}
+                    {hero.id === activeId && <span className="text-amber-300">Turn now</span>}
+                  </span>
+                )}
               </span>
             </div>
-            <HpBar hp={hero.hp} maxHp={hero.maxHp} />
+            {/* HP big on its own line, so it reads at a glance on a phone. */}
+            <div className="mt-2 flex items-center gap-3">
+              <span className={`shrink-0 text-2xl font-bold whitespace-nowrap ${hero.hp === 0 ? 'text-red-400' : 'text-zinc-100'}`}>
+                {hero.hp}
+                <span className="text-base font-normal text-zinc-400"> / {hero.maxHp} HP</span>
+              </span>
+              <div className="min-w-0 flex-1">
+                <HpBar hp={hero.hp} maxHp={hero.maxHp} />
+              </div>
+            </div>
             {hero.conditions.length > 0 && <p className="mt-1 text-sm text-amber-400">{hero.conditions.join(', ')}</p>}
             {(hero.items ?? []).length > 0 && (
               <p className="mt-1 text-sm text-yellow-300">💰 {hero.items.map((i) => (i.used ? `${i.name} (used)` : i.name)).join(', ')}</p>
