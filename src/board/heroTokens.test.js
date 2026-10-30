@@ -119,3 +119,31 @@ describe('tokens heroes put on the virtual board', () => {
     expect(edges.filter((e) => e.eye).every((e) => e.area === 't1')).toBe(true)
   })
 })
+
+describe('monsters the board moves stop on Blade Barrier and Caltrop tokens', () => {
+  it('a monster headed for a hero stops on the first token on its way and takes 1 damage', async () => {
+    const { squareNextTo, squareToward } = await import('./monsters.js')
+    let state = use(give(game(), 0, 'Blade Barrier', 'daily'), 0, 'daily')
+    const ogreId = state.monsters.find((m) => m.name === 'Ogre').id
+    const impId = state.monsters.find((m) => m.name === 'Imp').id
+    state = moveFoe(moveFoe(state, impId, [3, -8]), ogreId, [1, -7])
+    // A token in the room between the ogre and Quinn (on the Start tile at 0,1).
+    state = put(state, mine(state, 'blade')[0].id, [1, -3])
+    const quinnAt = state.board.tokens[state.heroes[0].id]
+    expect(squareNextTo(state, ogreId, quinnAt)).toEqual([1, -3])
+    expect(squareToward(state, ogreId, quinnAt, 1)).toEqual([1, -3])
+    state = moveFoe(state, ogreId, [1, -3])
+    expect(state.monsters.find((m) => m.id === ogreId).hp).toBe(2)
+  })
+
+  it('a token off the way is left alone', async () => {
+    const { squareNextTo } = await import('./monsters.js')
+    let state = use(give(game(), 0, 'Blade Barrier', 'daily'), 0, 'daily')
+    const ogreId = state.monsters.find((m) => m.name === 'Ogre').id
+    const impId = state.monsters.find((m) => m.name === 'Imp').id
+    state = moveFoe(moveFoe(state, impId, [3, -8]), ogreId, [0, -3])
+    state = put(state, mine(state, 'blade')[0].id, [3, -4])
+    const to = squareNextTo(state, ogreId, state.board.tokens[state.heroes[0].id])
+    expect(to).not.toEqual([3, -4])
+  })
+})

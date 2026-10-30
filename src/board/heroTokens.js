@@ -12,7 +12,7 @@
 // - The owner can explore from any unexplored edge on the Wizard Eye's tile.
 
 import { key, unexploredEdges } from './grid.js'
-import { tilesBetween } from './paths.js'
+import { adjacent, distances, tilesBetween } from './paths.js'
 import { boardGrid, movesLeft } from './play.js'
 import { newId, withLog } from '../state/gameHelpers.js'
 
@@ -118,6 +118,34 @@ export function trippedTokens(state) {
   return items(state)
     .filter((i) => (i.kind === 'blade' || i.kind === 'caltrop') && i.at && standing.has(key(i.at)))
     .map((item) => ({ item, foeId: standing.get(key(item.at)) }))
+}
+
+// A monster the board moves stops on the first Blade Barrier or Caltrop token along its way,
+// the way the players at the table walk it onto one on purpose: any free token square on a
+// shortest walk from where it stands to where it was going, the nearest one first. Null
+// when there's none on the way.
+export function trapOnWay(state, from, to) {
+  const board = state.board
+  if (!board || !from || !to || key(from) === key(to)) return null
+  const taken = new Set(Object.values(board.tokens).map(key))
+  const traps = items(state).filter((i) => (i.kind === 'blade' || i.kind === 'caltrop') && i.at && !taken.has(key(i.at)))
+  if (traps.length === 0) return null
+  const grid = boardGrid(board)
+  const fromHere = distances(grid, from)
+  const toThere = distances(grid, to)
+  const total = fromHere.get(key(to))
+  if (total === undefined) return null
+  const onWay = traps
+    .filter((t) => fromHere.get(key(t.at)) + toThere.get(key(t.at)) === total)
+    .sort((a, b) => fromHere.get(key(a.at)) - fromHere.get(key(b.at)))
+  return onWay.length > 0 ? [onWay[0].at[0], onWay[0].at[1]] : null
+}
+
+// Did a monster headed next to a figure stop short on a token, so it can't attack this turn?
+export function stoppedShort(state, square, targetAt) {
+  if (!state.board || !square || !targetAt) return false
+  const onTrap = items(state).some((i) => (i.kind === 'blade' || i.kind === 'caltrop') && i.at && key(i.at) === key(square))
+  return onTrap && !adjacent(boardGrid(state.board), square, targetAt)
 }
 
 export const dropItem = (state, id) => withItems(state, items(state).filter((i) => i.id !== id))
