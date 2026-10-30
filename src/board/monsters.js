@@ -6,6 +6,7 @@ import { key, unexploredEdges } from './grid.js'
 import { adjacent, closest, distances, tilesBetween } from './paths.js'
 import { heroesFor, seesInvisible, tacticHolds } from './tactics.js'
 import { boardGrid } from './play.js'
+import { trapOnWay } from './heroTokens.js'
 
 // The figures a monster can go after, with their squares: villagers first (a monster picks
 // one when it can), then heroes still in the fight and not in the Astral Refuge.
@@ -26,6 +27,11 @@ function stepTargets(state, step) {
 }
 
 const squareOf = (state, id) => state.board?.tokens?.[id] ?? null
+
+// Where a move really ends: on a Blade Barrier or Caltrop token along the way, if there is one.
+function stopOnTrap(state, tokenId, to) {
+  return (to && trapOnWay(state, squareOf(state, tokenId), to)) ?? to
+}
 
 // Squares other figures stand on, so a monster won't end on one.
 function takenSquares(state, exceptId) {
@@ -80,10 +86,11 @@ export function squareNextTo(state, monsterId, targetAt) {
   const taken = takenSquares(state, monsterId)
   const walk = distances(grid, at)
   const spots = distances(grid, targetAt, { limit: 1 })
-  return [...spots.keys()]
+  const spot = [...spots.keys()]
     .filter((k) => k !== key(targetAt) && !taken.has(k))
     .sort((a, b) => (walk.get(a) ?? Infinity) - (walk.get(b) ?? Infinity))
     .map((k) => k.split(',').map(Number))[0] ?? null
+  return stopOnTrap(state, monsterId, spot)
 }
 
 // "Moves 1 tile toward the closest hero": onto the next tile along the way, on its free
@@ -103,7 +110,7 @@ export function squareToward(state, monsterId, targetAt, tiles = 1) {
     .filter((sq) => sq.floor && !taken.has(key([sq.x, sq.y])) && toHero.has(key([sq.x, sq.y])))
     .filter((sq) => tilesBetween(grid, [sq.x, sq.y], targetAt) === goal && tilesBetween(grid, at, [sq.x, sq.y]) === tiles)
     .sort((a, b) => toHero.get(key([a.x, a.y])) - toHero.get(key([b.x, b.y])))
-  return spots.length > 0 ? [spots[0].x, spots[0].y] : at
+  return spots.length > 0 ? stopOnTrap(state, monsterId, [spots[0].x, spots[0].y]) : at
 }
 
 // "Moves to the closest square that isn't next to a hero."
@@ -118,7 +125,7 @@ export function squareAway(state, monsterId) {
     return !taken.has(k) && !heroes.some((h) => adjacent(grid, sq, h.at))
   }
   const found = [...distances(grid, at)].sort((a, b) => a[1] - b[1]).find(([k]) => clear(k))
-  return found ? found[0].split(',').map(Number) : at
+  return found ? stopOnTrap(state, monsterId, found[0].split(',').map(Number)) : at
 }
 
 // The hero a monster moving "toward the closest hero" heads for. Null when the only heroes

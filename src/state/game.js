@@ -20,6 +20,8 @@ import { playBoardSound, setBoardOff, setBoardUnlimited } from './soundboard.js'
 import { FIRST_ROLL_MAX_MS, newFirstRoll, rollFirst } from './firstRoll.js'
 import { finishOpening, openingNarrating, startOpening } from './opening.js'
 import { drawDoorKind, heroesNextToDoor, removeDoor } from '../board/doors.js'
+import { escapeAtPhaseEnd, escapedHero } from '../board/exits.js'
+import { dropItem, moveHeroToken, syncHeroTokens, trippedTokens } from '../board/heroTokens.js'
 import { layChamber, layDoorChamber, layExit, layTile, moveHero, placeNear, placeToken, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
 import { sentryMoves, wrathPull } from '../board/monsters.js'
 import { boardMove, queueEncounterMoves, queueFearMove, queueFoeStep, queueHitMoves, queueMoves, queueWandOfFear, skipBoardMove } from '../board/powerMoves.js'
@@ -1483,7 +1485,24 @@ function placeVillain(state, action) {
 const lose = (state, why) => withLog({ ...state, status: 'lost', ending: why }, why)
 
 // Every action, then a check for an adventure's victory, then the recap's counts.
-export const gameReducer = (state, action) => trackStats(state, pruneTokens(placeNewFigures(state, checkVictory(tagDrawn(reduceWithOpening(state, action))))), action)
+export const gameReducer = (state, action) => {
+  const placed = pruneTokens(placeNewFigures(state, checkVictory(tagDrawn(reduceWithOpening(state, action)))))
+  const sprung = springHeroTokens(placed)
+  return trackStats(state, sprung === placed ? placed : pruneTokens(checkVictory(sprung)), action)
+}
+
+// The tokens heroes put on the virtual board (board/heroTokens.js): the board keeps up with
+// each hero's count, and a monster that ends up on a Blade Barrier or Caltrop token takes
+// 1 damage, and the token goes.
+function springHeroTokens(state) {
+  if (!state.board) return state
+  let next = syncHeroTokens(state)
+  for (const { item, foeId } of trippedTokens(next)) {
+    next = dropItem(next, item.id)
+    next = powerDamage(next, { source: item.kind === 'blade' ? 'bladeBarrier' : 'caltrops', heroId: item.owner, monsterIds: [foeId] })
+  }
+  return syncHeroTokens(next)
+}
 
 // A game that just started begins with its story (state/opening.js).
 function reduceWithOpening(state, action) {
@@ -1565,11 +1584,13 @@ function revealTile(state, action) {
       next = fillChamber(next, { perPlayer: step.count, types: [], redrawXp: [] }, action)
     }
   }
-  // "Place the Tunnel Exit tile next to any unexplored Chamber edge": the board does it.
-  const exit = next.board && reveal.steps.join(' ').match(/Place the (Tunnel Exit|Secure Exit) tile next to/i)?.[1]
-  if (exit) next = layExit(next, exit)
   // A new chamber (Wrath of Ashardalon has two) adds its card's steps.
   const chamber = next.adventure.chamber !== state.adventure.chamber && next.adventure.chamber
+  // "Place the Tunnel Exit tile next to any unexplored Chamber edge" (the adventure's words,
+  // or a chamber card's, like the Refuse Pit's): the board does it.
+  const exitWords = [...reveal.steps, ...(chamber ? chamber.card.setup : [])].join(' ')
+  const exit = next.board && exitWords.match(/Place the (Tunnel Exit|Secure Exit) tile (?:next to|adjacent to)/i)?.[1]
+  if (exit) next = layExit(next, exit)
   const steps = [...reveal.steps, ...(chamber ? chamberSteps(next, chamber, state) : monsterSteps(next, state))]
   return showStory(next, `The ${reveal.tile}!`, reveal.story, steps)
 }
@@ -1893,6 +1914,8 @@ function reduce(state, action) {
       return pickUpTreasure(state, action)
     case 'FLY_CARPET':
       return flyCarpet(state, action)
+    case 'MOVE_HERO_ITEM':
+      return moveHeroToken(state, action)
 
     case 'CHOOSE_ADVENTURE': {
       // Only before the game, and only an adventure the app can run.
@@ -2536,16 +2559,21 @@ function reduce(state, action) {
       if (phase < PHASES.length - 1) {
         const ended = endPhaseCurses(state, state.heroes[heroIndex], PHASES[phase].key, action.rolls)
         const next = { ...ended, turn: { ...ended.turn, phase: phase + 1 } }
-        return PHASES[phase].key === 'hero' ? endHeroPhase(next, next.heroes[heroIndex], action.roll) : next
+        if (PHASES[phase].key !== 'hero') return next
+        const out = endHeroPhase(next, next.heroes[heroIndex], action.roll)
+        // Ending the Hero Phase on the exit's stairs gets the hero out (virtual board).
+        return escapeAtPhaseEnd(out, out.heroes[heroIndex])
       }
       // An encounter or treasure card has to be finished before the turn moves on.
       if (state.encounter || state.treasure) return state
-      const nextIndex = (heroIndex + 1) % state.heroes.length
+      // A hero who escaped (The Vast Gate Opens) has no more turns.
+      let nextIndex = (heroIndex + 1) % state.heroes.length
+      for (let i = 0; i < state.heroes.length && escapedHero(state.heroes[nextIndex]); i++) nextIndex = (nextIndex + 1) % state.heroes.length
       // Read-aloud text belongs to the turn it came up in; it doesn't stay on the projector.
       const told = state.adventure?.story ? { ...state, adventure: { ...state.adventure, story: null } } : state
       return startTurn({
         ...endPhaseCurses(told, state.heroes[heroIndex], 'villain', action.rolls),
-        turn: { heroIndex: nextIndex, phase: 0, round: nextIndex === 0 ? round + 1 : round },
+        turn: { heroIndex: nextIndex, phase: 0, round: nextIndex <= heroIndex ? round + 1 : round },
       })
     }
 

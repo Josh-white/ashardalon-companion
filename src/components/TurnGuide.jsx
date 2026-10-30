@@ -205,10 +205,10 @@ function ExplorationPhase({ state, hero, dispatch }) {
     }
     return (
       <Note>
-        <p>{hero.name} is on an unexplored edge. Draw a tile to see what's there!</p>
+        <p>{edges.every((e) => e.eye) ? `${hero.name}'s Wizard Eye is on a tile with an unexplored edge.` : `${hero.name} is on an unexplored edge.`} Draw a tile to see what's there!</p>
         {edges.map((edge) => (
           <Button key={edge.id} variant="gold" className="mt-2 w-full" onClick={() => dispatch({ type: 'SET_EXPLORED', explored: true, edge: edge.id, ...tileDraw })}>
-            🗺️ Explore{edges.length > 1 ? ` ${SIDE_NAMES[edge.side]}` : ''}: draw a tile
+            {edge.eye ? '👁️' : '🗺️'} Explore{edges.length > 1 ? ` ${SIDE_NAMES[edge.side]}` : ''}{edge.eye ? ' through the Wizard Eye' : ''}: draw a tile
           </Button>
         ))}
       </Note>

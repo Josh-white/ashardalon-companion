@@ -4,7 +4,10 @@ import { boardGrid, figureToken, figuresLeft, heroReach, moveSpeed, movesLeft, t
 import { moveChoices, movePrompt, moveTargets } from '../board/powerMoves.js'
 import { key, STEP, unexploredEdges } from '../board/grid.js'
 import { canFlyCarpet, carpetTargets } from '../board/items.js'
+import { HERO_TOKENS, isHeroToken, movableToken, tokenMoveTargets, tokenTargets } from '../board/heroTokens.js'
 import { boardMarkers } from '../board/markers.js'
+import { exitSquares } from '../board/exits.js'
+import { escapeBlockers } from '../state/adventure.js'
 import { activeVillains } from '../state/game.js'
 import { artUrl, useArt } from '../state/useArt.js'
 import HazardFloor, { hasHazardFloor } from './HazardFloor.jsx'
@@ -83,6 +86,24 @@ function OpenEdges({ grid }) {
 // Trap and hazard markers on their tile. Lava Flow, Volcanic Vapors, Cave-in and Pit change the
 // floor itself (HazardFloor); any other marker's tile gets a colour wash and a dashed outline.
 // The badges are drawn separately, on top of the figures.
+// The way out (the exit's stairs or ladder) in adventures that end with an escape: a faint
+// outline while there's still work to do, a bright glow once the heroes can leave.
+function ExitSquares({ squares, open }) {
+  if (squares.length === 0) return null
+  return (
+    <g pointerEvents="none" data-exit={open ? 'open' : 'closed'}>
+      {squares.map((k) => {
+        const [x, y] = k.split(',').map(Number)
+        return (
+          <rect key={k} x={x * SQUARE + 3} y={y * SQUARE + 3} width={SQUARE - 6} height={SQUARE - 6} rx="6" fill="#10b981" fillOpacity={open ? 0.35 : 0.08} stroke="#34d399" strokeWidth={open ? 4 : 2} strokeDasharray={open ? undefined : '6 6'}>
+            {open && <animate attributeName="fill-opacity" values="0.2;0.5;0.2" dur="2s" repeatCount="indefinite" />}
+          </rect>
+        )
+      })}
+    </g>
+  )
+}
+
 function MarkerTiles({ markers }) {
   return (
     <g pointerEvents="none">
@@ -144,6 +165,38 @@ function Coin({ item, selected, spin, onTap }) {
   )
 }
 
+// A token a hero put down (board/heroTokens.js): its icon in a coloured disc, with the
+// Flaming Sphere's stack height beside it.
+function HeroTokenMark({ item, count, spin, selected, onTap }) {
+  const look = HERO_TOKENS[item.kind]
+  const cx = item.at[0] * SQUARE + SQUARE / 2
+  const cy = item.at[1] * SQUARE + SQUARE / 2
+  return (
+    <g data-item={item.id} data-kind={item.kind} onClick={onTap} className={onTap ? 'cursor-pointer' : undefined} transform={spin ? `rotate(${-spin} ${cx} ${cy})` : undefined}>
+      <circle cx={cx} cy={cy} r={SQUARE * 0.3} fill={look.color} fillOpacity="0.85" stroke={selected ? '#f59e0b' : '#0a0c10'} strokeWidth={selected ? 4 : 2} />
+      <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fontSize={SQUARE * 0.32} pointerEvents="none">
+        {look.icon}
+      </text>
+      {count > 1 && (
+        <text x={cx + SQUARE * 0.3} y={cy - SQUARE * 0.24} textAnchor="middle" fontSize={SQUARE * 0.22} fontWeight="bold" fill="#fde68a" stroke="#0a0c10" strokeWidth="3" paintOrder="stroke" pointerEvents="none">
+          {count}
+        </text>
+      )}
+    </g>
+  )
+}
+
+// Hero tokens still in hand, one group per kind and owner.
+function heroTokenGroups(items) {
+  const groups = new Map()
+  for (const i of items.filter((x) => isHeroToken(x) && !x.at)) {
+    const k = `${i.kind}-${i.owner}`
+    if (!groups.has(k)) groups.set(k, { first: i, left: 0, kind: i.kind, owner: i.owner })
+    groups.get(k).left++
+  }
+  return [...groups.values()]
+}
+
 // The Flying Carpet: a purple rug under the square's figure. Tap it to move it by hand.
 function Carpet({ item, selected, onTap }) {
   const [x, y] = [item.at[0] * SQUARE, item.at[1] * SQUARE]
@@ -157,7 +210,36 @@ function Carpet({ item, selected, onTap }) {
 
 // A round figure: its token art when there is some, else a coloured disc with its initial.
 // The hero whose turn it is gets a pulsing gold glow so it is easy to spot.
-function Token({ id, at, label, color, art, selected, active, faded, spin, onTap }) {
+// Small icons around a figure for its conditions, so the big screen shows them at a glance.
+export const CONDITION_ICONS = { Dazed: '💫', Immobilized: '⛓️', Poisoned: '🧪', Slowed: '🐌', Weakened: '💔' }
+export function figureBadges(figure) {
+  const badges = (figure.conditions ?? []).filter((c) => CONDITION_ICONS[c]).map((c) => ({ id: c, icon: CONDITION_ICONS[c] }))
+  if (figure.tokens?.invisible) badges.push({ id: 'Invisible', icon: '👻' })
+  return badges
+}
+
+function Badges({ cx, cy, r, badges }) {
+  // Around the top of the token, right to left, so two or three still fit on a square.
+  return (
+    <g pointerEvents="none">
+      {badges.map((b, i) => {
+        const angle = (-50 - i * 40) * (Math.PI / 180)
+        const [bx, by] = [cx + Math.cos(angle) * r, cy + Math.sin(angle) * r]
+        return (
+          <g key={b.id} data-badge={b.id}>
+            <title>{b.id}</title>
+            <circle cx={bx} cy={by} r={SQUARE * 0.21} fill="#0a0c10" stroke="#e4e4e7" strokeWidth="1.5" />
+            <text x={bx} y={by} textAnchor="middle" dominantBaseline="central" fontSize={SQUARE * 0.26}>
+              {b.icon}
+            </text>
+          </g>
+        )
+      })}
+    </g>
+  )
+}
+
+function Token({ id, at, label, color, art, selected, active, faded, spin, badges = [], onTap }) {
   const cx = at[0] * SQUARE + SQUARE / 2
   const cy = at[1] * SQUARE + SQUARE / 2
   const r = SQUARE / 2 - 3
@@ -183,6 +265,7 @@ function Token({ id, at, label, color, art, selected, active, faded, spin, onTap
         </text>
       )}
       <circle cx={cx} cy={cy} r={r} fill="none" stroke={selected ? '#fbbf24' : '#09090b'} strokeWidth={selected ? 4 : 2} />
+      {badges.length > 0 && <Badges cx={cx} cy={cy} r={r} badges={badges} />}
     </g>
   )
 }
@@ -286,19 +369,21 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   const grid = boardGrid(board)
   const active = state.heroes[state.turn.heroIndex]
   const figures = [
-    ...state.heroes.map((h) => ({ id: h.id, label: h.name, color: TOKEN_COLORS[h.color] ?? '#71717a', art: artUrl(art, heroArt(h.key)), faded: h.hp <= 0 })),
+    ...state.heroes.map((h) => ({ id: h.id, label: h.name, color: TOKEN_COLORS[h.color] ?? '#71717a', art: artUrl(art, heroArt(h.key)), faded: h.hp <= 0, badges: figureBadges(h) })),
     ...state.monsters.flatMap((m) =>
-      Array.from({ length: figuresLeft(m) }, (_, i) => ({ id: figureToken(m.id, i + 1), label: figuresLeft(m) > 1 ? `${m.name} ${i + 1}` : m.name, color: '#7f1d1d', art: artUrl(art, monsterArt(m)) })),
+      Array.from({ length: figuresLeft(m) }, (_, i) => ({ id: figureToken(m.id, i + 1), label: figuresLeft(m) > 1 ? `${m.name} ${i + 1}` : m.name, color: '#7f1d1d', art: artUrl(art, monsterArt(m)), badges: figureBadges(m) })),
     ),
-    ...activeVillains(state).map((v) => ({ id: v.id, label: v.name, color: '#581c87', art: artUrl(art, monsterArt(v)) })),
+    ...activeVillains(state).map((v) => ({ id: v.id, label: v.name, color: '#581c87', art: artUrl(art, monsterArt(v)), badges: figureBadges(v) })),
     ...(state.villagers ?? []).filter((v) => !v.removed).map((v) => ({ id: v.id, label: v.name, color: '#065f46' })),
   ]
   const onBoard = figures.filter((f) => board.tokens[f.id])
   const markers = boardMarkers(state)
   const placedMarkers = markers.filter((m) => m.squares.length > 0)
   const open = markers.find((m) => m.marker.id === reading)
-  // A hero lost in a Time Leap waits for their turn before coming back.
-  const offBoard = figures.filter((f) => !board.tokens[f.id] && !state.heroes.some((h) => h.id === f.id && timeLeapt(h)))
+  // A hero lost in a Time Leap waits for their turn before coming back; one who escaped is gone.
+  const exits = [...exitSquares(state)]
+  const exitOpen = exits.length > 0 && !state.adventure?.escaped && escapeBlockers(state).length === 0
+  const offBoard = figures.filter((f) => !board.tokens[f.id] && !state.heroes.some((h) => h.id === f.id && (timeLeapt(h) || h.escaped)))
 
   // Squares to light up: where the active hero can move, or every free floor square by hand.
   const taken = new Set(Object.values(board.tokens).map(key))
@@ -312,6 +397,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   // The projector's board has no dispatch: nothing to tap there.
   const tools = !readOnly || (fill && Boolean(dispatch))
   const items = board.items ?? []
+  const ownerName = (item) => state.heroes.find((h) => h.id === item.owner)?.name ?? 'The hero'
   const pickedItem = items.find((i) => i.id === picked)
   // A Treasure token goes on a free square of a tile with no hero on it (Hidden Treasure).
   const heroAreas = new Set(state.heroes.map((h) => board.tokens[h.id] && grid.get(key(board.tokens[h.id]))?.area))
@@ -330,6 +416,16 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
     targets = [...grid.values()].filter((sq) => sq.floor && trapPick.tiles.includes(sq.area)).map((sq) => key([sq.x, sq.y]))
   } else if (flying) {
     targets = carpetTargets(state)
+  } else if (tools && isHeroToken(pickedItem)) {
+    // A token a hero puts down: its card says where; once down, by hand anywhere, or the
+    // Flaming Sphere and Wizard Eye 1 tile instead of the owner moving.
+    targets = !pickedItem.at
+      ? tokenTargets(state, pickedItem)
+      : byHand
+        ? [...grid.values()].filter((sq) => sq.floor && !itemSquares.has(key([sq.x, sq.y]))).map((sq) => key([sq.x, sq.y]))
+        : movableToken(state, active, pickedItem)
+          ? tokenMoveTargets(state, pickedItem)
+          : []
   } else if (tools && pickedItem?.kind === 'carpet') {
     targets = [...grid.values()].filter((sq) => sq.floor && !markerAreas.has(sq.area) && (!taken.has(key([sq.x, sq.y])) || heroSquares.has(key([sq.x, sq.y]))) && !itemSquares.has(key([sq.x, sq.y]))).map((sq) => key([sq.x, sq.y]))
   } else if (tools && pickedItem) {
@@ -350,9 +446,16 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
       setPicked(null)
       return
     }
+    if (isHeroToken(pickedItem) && pickedItem.at && !byHand) {
+      dispatch({ type: 'MOVE_HERO_ITEM', id: picked, to: sq })
+      setPicked(null)
+      return
+    }
     if (pickedItem) {
       dispatch({ type: 'PLACE_ITEM', id: picked, to: sq })
-      setPicked(null)
+      // The Blade Barrier's five (and the three Caltrops) go down one after another.
+      const nextOne = isHeroToken(pickedItem) && !pickedItem.at && items.find((i) => i.id !== picked && !i.at && i.kind === pickedItem.kind && i.owner === pickedItem.owner)
+      setPicked(nextOne ? nextOne.id : null)
       return
     }
     dispatch(powerMove ? { type: 'BOARD_MOVE', id: picked, to: sq } : byHand ? { type: 'MOVE_TOKEN', id: picked, to: sq } : { type: 'MOVE_HERO', heroId: picked, to: sq })
@@ -412,6 +515,12 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
           <p className={`flex-1 text-zinc-300 ${fill ? 'text-xs leading-snug sm:text-sm' : 'text-sm'}`}>
             {flying
               ? `Tap a lit square: the carpet flies ${active.name} up to 1 tile.`
+              : isHeroToken(pickedItem)
+              ? pickedItem.at && !byHand
+                ? targets.length > 0
+                  ? `Tap a lit square: the ${HERO_TOKENS[pickedItem.kind].name} moves up to 1 tile, instead of ${ownerName(pickedItem)} moving.`
+                  : `The ${HERO_TOKENS[pickedItem.kind].name} can only move in ${ownerName(pickedItem)}'s Hero Phase, instead of moving.`
+                : `Tap a lit square to put the ${HERO_TOKENS[pickedItem.kind].name} token there.`
               : pickedItem
               ? `Tap a lit square to put the ${pickedItem.kind === 'carpet' ? 'Flying Carpet' : 'Treasure token'} there.`
               : watching
@@ -479,7 +588,30 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
       )}
       {tools && (byHand || items.length > 0) && (
         <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
-          {items.filter((i) => !i.at).map((i) => (
+          {heroTokenGroups(items).map(({ first, left, kind, owner }) => (
+            <button
+              key={`${kind}-${owner}`}
+              type="button"
+              className={`rounded-full px-3 py-1 font-semibold ${items.some((i) => i.id === picked && i.kind === kind && i.owner === owner) ? 'bg-amber-500 text-zinc-950' : 'bg-amber-900 text-amber-100 motion-safe:animate-pulse'}`}
+              onClick={() => setPicked(picked === first.id ? null : first.id)}
+            >
+              {HERO_TOKENS[kind].icon} Put down {ownerName(first)}'s {HERO_TOKENS[kind].name}{left > 1 ? ` (${left} tokens)` : ''}
+            </button>
+          ))}
+          {!readOnly && items.filter((i) => isHeroToken(i) && i.at && movableToken(state, active, i)).map((i) => (
+            <button
+              key={`move-${i.id}`}
+              type="button"
+              className={`rounded-full px-3 py-1 font-semibold ${picked === i.id ? 'bg-amber-500 text-zinc-950' : 'bg-violet-800 text-violet-100'}`}
+              onClick={() => {
+                setByHand(false)
+                setPicked(picked === i.id ? null : i.id)
+              }}
+            >
+              {HERO_TOKENS[i.kind].icon} {picked === i.id ? 'Tap a lit square (up to 1 tile away)' : `Move the ${HERO_TOKENS[i.kind].name} instead of moving`}
+            </button>
+          ))}
+          {items.filter((i) => !i.at && !isHeroToken(i)).map((i) => (
             <button
               key={i.id}
               type="button"
@@ -511,7 +643,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
               </Button>
             </>
           )}
-          {pickedItem?.kind !== 'carpet' && pickedItem?.at && (
+          {pickedItem?.kind === 'treasure' && pickedItem?.at && (
             <>
               <span className="text-amber-200">💰 Treasure token: tap a lit square to move it, or</span>
               {active && (
@@ -586,6 +718,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
               <ClosedDoor key={door.id} squares={door.squares} kind={door.kind} special={Boolean(door.reveal)} spin={spin} />
             ))}
             <OpenEdges grid={grid} />
+            <ExitSquares squares={exits} open={exitOpen} />
             {targets.map((k) => {
               const [x, y] = k.split(',').map(Number)
               return (
@@ -607,7 +740,10 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
             {items.filter((i) => i.at && i.kind === 'carpet').map((i) => (
               <Carpet key={i.id} item={i} selected={picked === i.id} onTap={tools ? () => setPicked(picked === i.id ? null : i.id) : undefined} />
             ))}
-            {items.filter((i) => i.at && i.kind !== 'carpet').map((i) => (
+            {items.filter((i) => i.at && isHeroToken(i)).map((i) => (
+              <HeroTokenMark key={i.id} item={i} spin={spin} count={i.kind === 'sphere' ? state.heroes.find((h) => h.id === i.owner)?.tokens?.flamingSphere : null} selected={picked === i.id} onTap={tools ? () => setPicked(picked === i.id ? null : i.id) : undefined} />
+            ))}
+            {items.filter((i) => i.at && i.kind === 'treasure').map((i) => (
               <Coin key={i.id} item={i} spin={spin} selected={picked === i.id} onTap={tools ? () => setPicked(picked === i.id ? null : i.id) : undefined} />
             ))}
             {/* The active hero is drawn last so its glow sits on top of its neighbours. */}

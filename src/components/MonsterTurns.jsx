@@ -12,6 +12,7 @@ import { MonsterControl, TileGuardQuestion } from './Treasure.jsx'
 import { DrawTileButton } from './Tiles.jsx'
 import { Button } from './ui.jsx'
 import { figureToken } from '../board/play.js'
+import { stoppedShort } from '../board/heroTokens.js'
 import { boardStep, boardTargetIds, closestTarget, foeDistance, squareAway, squareNextTo, squareToward } from '../board/monsters.js'
 import { seesInvisible } from '../board/tactics.js'
 import { hitMoveStep } from '../board/powerMoves.js'
@@ -223,7 +224,13 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
     // On the board it steps next to the hero first, when the card says so.
     if (byBoard && step.move === 'adjacent') {
       const goal = targetable.find((h) => h.id === (step.targets === 'all' ? boardTargetIds(state, monster, { when: step.when }, token)[0] : targetIds[0]))
-      moveTo(squareNextTo(state, token, state.board.tokens[goal?.id]))
+      const to = squareNextTo(state, token, state.board.tokens[goal?.id])
+      moveTo(to)
+      // It stopped on a Blade Barrier or Caltrop token on the way, so it doesn't reach anyone.
+      if (stoppedShort(state, to, state.board.tokens[goal?.id])) {
+        finish()
+        return
+      }
     }
     const targets = targetIds.map((heroId) => ({ heroId, roll: rollD20() }))
     const tableRoll = table.length > 0 ? rollD20() : undefined
