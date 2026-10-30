@@ -4,7 +4,7 @@
 
 import { key } from './grid.js'
 import { adjacent, closest, distances, tilesBetween } from './paths.js'
-import { heroesFor, tacticHolds } from './tactics.js'
+import { heroesFor, seesInvisible, tacticHolds } from './tactics.js'
 import { boardGrid } from './play.js'
 
 // The figures a monster can go after, with their squares: villagers first (a monster picks
@@ -16,6 +16,13 @@ export function boardTargets(state) {
   return [...villagers.map((v) => ({ ...v, villager: true })), ...heroes]
     .filter((f) => tokens[f.id])
     .map((f) => ({ id: f.id, at: tokens[f.id], hp: f.hp, villager: Boolean(f.villager), invisible: Boolean(f.tokens?.invisible) }))
+}
+
+// The figures one tactic step can go after: an invisible hero only counts for the steps
+// that don't look for the closest hero (and for "a tile with no Heroes", where they still stand).
+function stepTargets(state, step) {
+  const all = boardTargets(state)
+  return seesInvisible(step) || step?.when === 'aloneByUnexploredEdge' ? all : all.filter((f) => !f.invisible)
 }
 
 const squareOf = (state, id) => state.board?.tokens?.[id] ?? null
@@ -31,8 +38,7 @@ export function boardStep(state, monster, tactics = monster.card?.tactics ?? [],
   const at = squareOf(state, tokenId)
   if (!state.board || !at) return null
   const grid = boardGrid(state.board)
-  const targets = boardTargets(state)
-  const index = tactics.findIndex((step) => tacticHolds(step.when, grid, at, targets))
+  const index = tactics.findIndex((step) => tacticHolds(step.when, grid, at, stepTargets(state, step)))
   return index === -1 ? tactics.length : index
 }
 
@@ -49,7 +55,7 @@ export function boardTargetIds(state, monster, step, tokenId = monster.id) {
   const at = squareOf(state, tokenId)
   if (!state.board || !at || !step) return []
   const grid = boardGrid(state.board)
-  const all = boardTargets(state)
+  const all = stepTargets(state, step)
   const inReach = step.when ? heroesFor(step.when, grid, at, all) : all
   if (inReach.length === 0) return []
   if (step.targets === 'all' || step.target === 'mostHp') return inReach.map((f) => f.id)
@@ -115,11 +121,12 @@ export function squareAway(state, monsterId) {
   return found ? found[0].split(',').map(Number) : at
 }
 
-// The hero a monster moving "toward the closest hero" heads for.
+// The hero a monster moving "toward the closest hero" heads for. Null when the only heroes
+// left are invisible: then it has nobody to go after.
 export function closestTarget(state, monsterId) {
   const at = squareOf(state, monsterId)
   if (!state.board || !at) return null
-  return closestOf(boardGrid(state.board), at, boardTargets(state))
+  return closestOf(boardGrid(state.board), at, stepTargets(state, { move: 'toward' }))
 }
 
 // How far a power reaches, read from its card text before "Hit:": "an adjacent monster",

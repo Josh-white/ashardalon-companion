@@ -13,6 +13,7 @@ import { DrawTileButton } from './Tiles.jsx'
 import { Button } from './ui.jsx'
 import { figureToken } from '../board/play.js'
 import { boardStep, boardTargetIds, closestTarget, squareAway, squareNextTo, squareToward } from '../board/monsters.js'
+import { seesInvisible } from '../board/tactics.js'
 
 // Keyleth's Bravery: when a monster within 1 tile of her activates, she can step next to it and heal 1.
 function Bravery({ state, name, dispatch }) {
@@ -205,7 +206,9 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
     if (to && at && (to[0] !== at[0] || to[1] !== at[1])) dispatch({ type: 'MOVE_TOKEN', id: token, to })
   }
 
-  const targetable = monsterTargets(state)
+  // An invisible hero isn't the closest hero, so only some steps can pick them.
+  const unseen = seesInvisible(step) || step?.when === 'aloneByUnexploredEdge' || step?.explore ? [] : state.heroes.filter((h) => h.tokens?.invisible && !h.tokens?.refuge)
+  const targetable = monsterTargets(state).filter((h) => !unseen.includes(h))
   const villagers = targetable.filter((h) => h.villager)
   const toggle = (heroId) => setChosen((list) => toggleTarget(list, heroId, tapsMany(step)))
   const { tapped, strongest, tied, top, targetIds } = chooseTargets(step, targetable, chosen, tiePick)
@@ -261,6 +264,12 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
         <p className="rounded-lg bg-sky-950/60 p-3 text-sky-200">
           ✨ {away.map((h) => h.name).join(' and ')} {away.length > 1 ? 'are' : 'is'} in the Astral Refuge, off the board.{' '}
           {nobody ? `No hero is on the board for the ${name} to go after.` : `Leave ${away.length > 1 ? 'them' : away[0].name} out when you answer.`}
+        </p>
+      )}
+      {unseen.length > 0 && !results && !nobody && (
+        <p className="rounded-lg bg-sky-950/60 p-3 text-sky-200">
+          👻 {unseen.map((h) => h.name).join(' and ')} {unseen.length > 1 ? 'are' : 'is'} invisible, so the {name} can't pick{' '}
+          {unseen.length > 1 ? 'them' : unseen[0].name} as the closest hero.{byBoard ? '' : ` Answer as if ${unseen.length > 1 ? 'they weren’t' : `${unseen[0].name} wasn’t`} there.`}
         </p>
       )}
       {byBoard && !results && step?.when && answered && (
@@ -428,6 +437,8 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
               ? `The ${name} has nobody to go after, so it does nothing this turn.`
               : towardName
               ? `The ${name} moves ${tiles} toward ${towardName}.`
+              : byBoard && unseen.length > 0 && step?.toward !== 'mostHp'
+              ? `The ${name} can't see anyone to go after, so it stays put.`
               : step?.move === 'toward' || !step
               ? step?.toward === 'mostHp'
                 ? `Move the ${name} ${tiles} toward ${towardHero ? `${towardHero.name}, the hero with the most HP` : 'the hero with the most HP (pick one if they’re tied)'}.`
