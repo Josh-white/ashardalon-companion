@@ -2,7 +2,7 @@
 // picks who it attacks, and works out where it moves. The screen still shows each step,
 // and "Move by hand" fixes anything the app gets wrong.
 
-import { key } from './grid.js'
+import { key, unexploredEdges } from './grid.js'
 import { adjacent, closest, distances, tilesBetween } from './paths.js'
 import { heroesFor, seesInvisible, tacticHolds } from './tactics.js'
 import { boardGrid } from './play.js'
@@ -198,4 +198,34 @@ export function wrathPull(state, heroId) {
     .filter((k) => k !== key(at) && !taken.has(k))
     .sort((a, b) => (fromFoe.get(a) ?? Infinity) - (fromFoe.get(b) ?? Infinity))[0]
   return to ? { id: foe.id, name: foe.name, to: to.split(',').map(Number) } : null
+}
+
+// Blinding Bomb: after the attack, each Sentry monster moves 1 tile toward the closest tile
+// with an unexplored edge (one already on such a tile stays). Returns [{ id, to }].
+export function sentryMoves(state) {
+  if (!state.board) return []
+  const grid = boardGrid(state.board)
+  const edges = unexploredEdges(grid)
+  const sentries = new Set(state.monsters.filter((m) => (m.card?.types ?? []).some((t) => /^sentry$/i.test(t))).map((m) => m.id))
+  const out = []
+  let next = state
+  for (const [id, at] of Object.entries(state.board.tokens)) {
+    if (!sentries.has(id.split('#')[0])) continue
+    const area = grid.get(key(at))?.area
+    if (edges.some((e) => e.area === area)) continue
+    const far = distances(grid, at)
+    const goal = edges.flatMap((e) => e.squares).sort((a, b) => (far.get(key(a)) ?? Infinity) - (far.get(key(b)) ?? Infinity))[0]
+    if (!goal || !far.has(key(goal))) continue
+    // The next tile over: onto its free square nearest the monster; farther: 1 tile along the way.
+    const goalArea = grid.get(key(goal)).area
+    const taken = takenSquares(next, id)
+    const to =
+      tilesBetween(grid, at, goal) <= 1
+        ? [...grid.values()].filter((sq) => sq.area === goalArea && sq.floor && !taken.has(key([sq.x, sq.y])) && far.has(key([sq.x, sq.y]))).sort((a, b) => far.get(key([a.x, a.y])) - far.get(key([b.x, b.y]))).map((sq) => [sq.x, sq.y])[0]
+        : squareToward(next, id, goal, 1)
+    if (!to || key(to) === key(at)) continue
+    out.push({ id, to })
+    next = { ...next, board: { ...next.board, tokens: { ...next.board.tokens, [id]: to } } }
+  }
+  return out
 }

@@ -20,8 +20,8 @@ import { playBoardSound, setBoardOff, setBoardUnlimited } from './soundboard.js'
 import { FIRST_ROLL_MAX_MS, newFirstRoll, rollFirst } from './firstRoll.js'
 import { finishOpening, openingNarrating, startOpening } from './opening.js'
 import { layChamber, layExit, layTile, moveHero, placeNear, placeToken, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
-import { wrathPull } from '../board/monsters.js'
-import { boardMove, queueEncounterMoves, queueFearMove, queueMoves, skipBoardMove } from '../board/powerMoves.js'
+import { sentryMoves, wrathPull } from '../board/monsters.js'
+import { boardMove, queueEncounterMoves, queueFearMove, queueFoeStep, queueHitMoves, queueMoves, queueWandOfFear, skipBoardMove } from '../board/powerMoves.js'
 import { heroTile } from '../board/encounters.js'
 import { guardsOnTile } from '../board/checks.js'
 import { addCarpet, addTreasureToken, flyCarpet, pickUpTreasure, placeItem, removeItem } from '../board/items.js'
@@ -341,6 +341,10 @@ function resolveEncounter(state, action) {
   if (card.timeToken) next = removeTimeToken(next, card.name)
   // Concussive Blast, Quick Advance: the virtual board asks for the moves.
   next = queueEncounterMoves(next, hero, card)
+  // Blinding Bomb: the Sentry monsters head for the unexplored edges.
+  if (card.id === 'blinding-bomb') {
+    for (const { id, to } of sentryMoves(next)) next = placeToken(next, id, to)
+  }
   // Hidden Treasure, Occupied Lair: on the virtual board, a Treasure token waits for a player to tap its square.
   if ((card.placeTreasure || card.id === 'hidden-treasure' || card.id === 'occupied-lair') && next.board) next = addTreasureToken(next)
 
@@ -779,7 +783,9 @@ function usePower(state, action) {
     next = { ...next, turn: { ...next.turn, bonusAttacks: [...(next.turn.bonusAttacks ?? []), ...extras], causeFear } }
     next = queueFearMove(next)
   }
-  if (use.board) next = queueMoves(next, hero, power, use.board)
+  // Bravery, offered on a monster's turn, carries that monster's token so the hero goes next to it.
+  const foe = typeof action.foeToken === 'string' && findFoe(state, action.foeToken.split('#')[0])
+  if (use.board) next = queueMoves(next, hero, power, use.board, foe ? { from: action.foeToken, fromName: foe.name } : {})
   // A Daily or At-Will power is the hero's attack; Dwarven Resilience is a move.
   if (powerUsesAttack(state, hero, power)) next = spendAttack(next, hero, power.name)
   if (use.move && inHeroPhase(state, hero) && state.board) next = { ...next, turn: { ...next.turn, boardMoves: (next.turn.boardMoves ?? 0) + 1 } }
@@ -1204,7 +1210,8 @@ function useItem(state, action) {
       if (item.cardId === 'flying-carpet') next = addCarpet(next)
       // Potion of Speed: on the virtual board the hero walks their speed.
       if (item.cardId === 'potion-of-speed') next = queueMoves(next, hero, card, [{ pick: 'self', to: 'squares', n: 'speed' }])
-      // A Lucky Charm used on another roll, Wand of Fear: the table does the rest.
+      if (item.cardId === 'wand-of-fear') next = queueWandOfFear(next, hero, card)
+      // A Lucky Charm used on another roll: the table does the rest.
       break
   }
   // Wands "used instead of an attack" take the place of the hero's attack.
@@ -2081,6 +2088,14 @@ function reduce(state, action) {
 
     case 'MONSTER_ATTACK':
       return monsterAttack(state, action)
+
+    case 'FOE_STEP':
+      // The Kobold Dragonlord's step to any square within 1 tile, tapped on the virtual board.
+      return queueFoeStep(state, action.tokenId, action.n)
+
+    case 'HIT_MOVES':
+      // A villain's hit that moves the hero: the virtual board asks where they go.
+      return queueHitMoves(state, action.tokenId)
 
     case 'PLACE_VILLAIN':
       return placeVillain(state, action)

@@ -3,7 +3,7 @@
 // board can't tell (no board, or a figure isn't on it), so the screen asks instead.
 
 import { key } from './grid.js'
-import { tilesBetween } from './paths.js'
+import { adjacent, tilesBetween } from './paths.js'
 import { boardGrid } from './play.js'
 
 const baseId = (tokenId) => tokenId.split('#')[0]
@@ -57,4 +57,16 @@ export function foeOnHeroTile(state, hero) {
 export function heroTile(state, heroId) {
   if (!state.board) return undefined
   return tileAt(boardGrid(state.board), state.board.tokens[heroId])
+}
+
+// The heroes a power or item can reach from `heroId` ('sameTile', 'adjacent', 'within2'),
+// the hero included, for pickers that should offer only them. Null when the board can't
+// tell (no board, or the hero isn't on it), so every hero is offered.
+export function heroesInReach(state, heroId, reach) {
+  const at = state.board?.tokens[heroId]
+  if (!at || !reach) return null
+  const grid = boardGrid(state.board)
+  return heroesOnBoard(state)
+    .filter((h) => h.id === heroId || (reach === 'sameTile' ? tileAt(grid, h.at) === tileAt(grid, at) : reach === 'adjacent' ? adjacent(grid, at, h.at) : tilesBetween(grid, at, h.at) <= 2))
+    .map((h) => h.id)
 }

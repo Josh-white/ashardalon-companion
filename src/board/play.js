@@ -153,7 +153,9 @@ function edgeFor(state, grid, drawKey, edgeId) {
     const steps = (e) => Math.min(...e.squares.map((sq) => far.get(key(sq)) ?? Infinity))
     return edges.filter((e) => e.area === area).sort((a, b) => steps(a) - steps(b))[0] ?? null
   }
-  const at = activeAt(state)
+  // Scream of the Sentry: the edge closest to the monster the players chose ("encounter-x~monsterId").
+  const chosen = drawKey.includes('~') && state.board.tokens[drawKey.split('~')[1]]
+  const at = chosen || activeAt(state)
   if (!at) return null
   const far = distances(grid, at)
   const steps = (e) => Math.min(...e.squares.map((sq) => far.get(key(sq)) ?? Infinity))
