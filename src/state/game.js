@@ -975,8 +975,10 @@ function startTurn(state) {
   const hero = state.heroes[state.turn.heroIndex]
   state = returnFromPowers(state, hero)
   for (const curse of (hero?.curses ?? []).filter((c) => c.card?.removeAtTurnStart)) {
-    state = removeCurse(state, hero.id, curse.id, `${hero.name} is back from the ${curse.name}. Put ${hero.name} on any tile.`)
-    state = withMoment(state, { kind: 'encounter', heroId: hero.id, title: `${hero.name} is back!`, detail: `${curse.name} is over. Put ${hero.name} on any tile.` })
+    // On the virtual board the hero waits under "Not on the board yet" for a tap.
+    const put = state.board ? `Tap ${hero.name} under "Not on the board yet", then any square.` : `Put ${hero.name} on any tile.`
+    state = removeCurse(state, hero.id, curse.id, `${hero.name} is back from the ${curse.name}. ${put}`)
+    state = withMoment(state, { kind: 'encounter', heroId: hero.id, title: `${hero.name} is back!`, detail: `${curse.name} is over. ${put}` })
   }
   if (!hero) return state
   // A hero who starts the turn at 0 HP spends a healing surge first; the poison and curse
