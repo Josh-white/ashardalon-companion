@@ -155,11 +155,18 @@ npm run dev:server   # the shared game, on port 3000
 npm run dev          # the app, http://localhost:5173
 npm test
 npm run lint         # ESLint: unused names, typos, hooks used the wrong way
+npm run robot        # the robot plays whole solo games by itself (see below)
 ```
+
+### The robot
+
+`npm run robot` (`src/robot/robot.test.jsx`) plays a dozen whole solo games on the virtual board by itself: random adventure, one to three random heroes, then a few hundred random taps on the real screens, each one going through the real game rules. It doesn't try to win; it looks for a screen that crashes or a tap the rules can't take. It plays with made-up cards and tiles (`src/robot/robotCards.js`), so it runs anywhere. It isn't part of `npm test`, so the Pi's build doesn't take longer.
+
+Every game has a seed, so a failure can be played again exactly; the failure names it and lists the robot's last taps. `ROBOT_SEED=7 ROBOT_GAMES=1 npm run robot` plays game 7 again, `ROBOT_GAMES=40 ROBOT_TAPS=600 npm run robot` digs deeper, and `ROBOT_CARDS=cards/cards.json npm run robot` plays with your own card file.
 
 ### Checks on GitHub
 
-Every pull request runs `.github/workflows/ci.yml`: ESLint, the tests and the build, then the Docker image is built on an arm64 machine like the Pi and checked to answer `/health`. Merging to `main` puts it on the real game within 5 minutes, so wait for the green check before merging.
+Every pull request runs `.github/workflows/ci.yml`: ESLint, the tests, the robot and the build, then the Docker image is built on an arm64 machine like the Pi and checked to answer `/health`. Merging to `main` puts it on the real game within 5 minutes, so wait for the green check before merging.
 
 ## Not built yet
 
