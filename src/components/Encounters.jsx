@@ -11,6 +11,7 @@ import { wrathPull } from '../board/monsters.js'
 import { markerOnHeroTile, trapsToDisable } from '../board/markers.js'
 import { heroesOnTrap, isLava, isMovingTrap, trapStepChoices, trapStepped } from '../board/traps.js'
 import { DrawMonsterButton, HeroPicker } from './MonsterTurns.jsx'
+import { MonsterChoice } from './Pickers.jsx'
 import { TileGuardQuestion } from './Treasure.jsx'
 import { DrawTileButton } from './Tiles.jsx'
 import { Button } from './ui.jsx'
@@ -43,6 +44,23 @@ function ThiefStep({ hero, dispatch }) {
           </Button>
         ))}
       </div>
+    </div>
+  )
+}
+
+// Scream of the Sentry on the virtual board: the players choose the monster, and the bottom
+// tile goes next to the unexplored edge closest to it (the draw key carries its token).
+function ScreamTile({ state, dispatch }) {
+  const base = `encounter-${state.encounter.id}`
+  const drawn = Object.keys(state.turn.tiles ?? {}).find((k) => k === base || k.startsWith(`${base}~`))
+  const [monsterId, setMonsterId] = useState(null)
+  const onBoard = state.monsters.filter((m) => !m.objective && state.board.tokens[m.id])
+  if (drawn || onBoard.length === 0) return <DrawTileButton state={state} dispatch={dispatch} drawKey={drawn ?? base} from="bottom" />
+  return (
+    <div className="space-y-2">
+      <p className="text-lg text-zinc-100">Choose a monster: the new tile goes next to the unexplored edge closest to it.</p>
+      <MonsterChoice state={state} monsters={onBoard} chosen={monsterId ? [monsterId] : []} onToggle={setMonsterId} />
+      {monsterId && <DrawTileButton state={state} dispatch={dispatch} drawKey={`${base}~${monsterId}`} from="bottom" />}
     </div>
   )
 }
@@ -450,9 +468,12 @@ function EncounterCard({ state, hero, dispatch }) {
                 <AffectedHeroes heroes={state.heroes.filter((h) => h.conditions.includes('Poisoned'))} label="Poisoned now" />
               )}
               {card.id === 'thief-in-the-dark' && <ThiefStep hero={hero} dispatch={dispatch} />}
-              {BOTTOM_TILE_CARDS.has(card.id) && (
-                <DrawTileButton state={state} dispatch={dispatch} drawKey={`encounter-${state.encounter.id}`} from="bottom" />
-              )}
+              {BOTTOM_TILE_CARDS.has(card.id) &&
+                (card.id === 'scream-of-the-sentry' && state.board ? (
+                  <ScreamTile state={state} dispatch={dispatch} />
+                ) : (
+                  <DrawTileButton state={state} dispatch={dispatch} drawKey={`encounter-${state.encounter.id}`} from="bottom" />
+                ))}
               {card.drawMonster && card.filterMonsters && !state.encounter.filtered ? (
                 <Button
                   variant="danger"
