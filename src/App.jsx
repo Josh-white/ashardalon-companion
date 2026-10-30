@@ -354,8 +354,8 @@ function PlayView({ state, dispatch, hero = null, soundBoard = null }) {
     ),
     monsters: (
       <>
-        <VillainList state={state} dispatch={dispatch} canPlace={!hero} />
-        <MonsterList state={state} dispatch={dispatch} ownerId={hero?.id} />
+        <VillainList state={state} dispatch={dispatch} canPlace={!hero} glance={Boolean(state.board)} />
+        <MonsterList state={state} dispatch={dispatch} ownerId={hero?.id} glance={Boolean(state.board)} />
       </>
     ),
     party: hero ? (

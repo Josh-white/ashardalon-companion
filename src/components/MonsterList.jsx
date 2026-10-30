@@ -6,6 +6,47 @@ import { useCards } from '../state/useCards.js'
 import Art from './Art.jsx'
 import { Button, Chip, HpBar } from './ui.jsx'
 
+// A monster or villain on one short row (picture, name, whose it is, AC, HP with -/+), for
+// the narrow column beside the virtual board. Tap it for the full card with conditions,
+// Remove and Defeated.
+function GlanceRow({ monster, sub, villain = false, highlight = false, dispatch, children }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div>
+      <div className={`rounded-xl border bg-zinc-900 p-2 ${villain ? 'border-fuchsia-700' : highlight ? 'border-red-500/70' : 'border-zinc-800'}`}>
+        <div className="flex items-center gap-2">
+          <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-expanded={open} onClick={() => setOpen(!open)}>
+            <Art name={monsterArt(monster)} className="w-10 shrink-0" />
+            <span className="min-w-0">
+              <span className={`block truncate font-display text-lg leading-tight font-bold ${villain ? 'text-fuchsia-200' : 'text-red-300'}`}>
+                {villain && '👑 '}
+                {monster.name}
+              </span>
+              <span className="block truncate text-sm text-zinc-400">{sub}</span>
+            </span>
+            <span className="ml-auto shrink-0 text-zinc-500">{open ? '▴' : '▾'}</span>
+          </button>
+          <Button className="h-10 w-10 shrink-0 !px-0 text-xl" aria-label={`${monster.name} loses 1 HP`} onClick={() => dispatch({ type: 'ADJUST_MONSTER_HP', monsterId: monster.id, amount: -1 })}>
+            −
+          </Button>
+          <span className={`w-12 shrink-0 text-center text-xl font-bold whitespace-nowrap ${monster.hp === 0 ? 'text-red-400' : 'text-zinc-100'}`}>
+            {monster.hp}
+            <span className="text-sm font-normal text-zinc-500">/{monster.maxHp}</span>
+          </span>
+          <Button className="h-10 w-10 shrink-0 !px-0 text-xl" aria-label={`${monster.name} gains 1 HP`} onClick={() => dispatch({ type: 'ADJUST_MONSTER_HP', monsterId: monster.id, amount: 1 })}>
+            +
+          </Button>
+        </div>
+        <div className="mt-1.5">
+          <HpBar hp={monster.hp} maxHp={monster.maxHp} />
+        </div>
+        {monster.conditions.length > 0 && <p className="mt-1 text-sm text-amber-400">{monster.conditions.join(', ')}</p>}
+      </div>
+      {open && <div className="mt-2">{children}</div>}
+    </div>
+  )
+}
+
 function VillainRow({ villain, dispatch }) {
   const { card } = villain
   return (
@@ -102,17 +143,24 @@ function PlaceVillain({ state, dispatch }) {
 }
 
 // Villains on the board, shown on every screen. `canPlace` adds the hand-placing button (table view).
-export function VillainList({ state, dispatch, canPlace = false }) {
+// `glance`: one short row each (beside the virtual board), tap for the full card.
+export function VillainList({ state, dispatch, canPlace = false, glance = false }) {
   const villains = activeVillains(state)
   if (villains.length === 0 && !canPlace) return null
   return (
     <section className="space-y-3">
-      {villains.length > 0 && <h2 className="font-display text-2xl font-bold text-fuchsia-200">Villains</h2>}
+      {villains.length > 0 && <h2 className={`font-display font-bold text-fuchsia-200 ${glance ? 'text-xl' : 'text-2xl'}`}>Villains</h2>}
       {villains.length > 0 && (
-        <div className="grid gap-3 md:grid-cols-2">
-          {villains.map((villain) => (
-            <VillainRow key={villain.id} villain={villain} dispatch={dispatch} />
-          ))}
+        <div className={glance ? 'space-y-2' : 'grid gap-3 md:grid-cols-2'}>
+          {villains.map((villain) =>
+            glance ? (
+              <GlanceRow key={villain.id} monster={villain} villain sub={`AC ${villain.ac}${villain.enraged ? ' · enraged' : ''}`} dispatch={dispatch}>
+                <VillainRow villain={villain} dispatch={dispatch} />
+              </GlanceRow>
+            ) : (
+              <VillainRow key={villain.id} villain={villain} dispatch={dispatch} />
+            ),
+          )}
         </div>
       )}
       {canPlace && <PlaceVillain state={state} dispatch={dispatch} />}
@@ -203,8 +251,8 @@ function OtherMonster({ monster, owner }) {
 }
 
 // With ownerId (a player's own iPad), that hero's monster cards first, then everyone else's
-// below, to look at.
-export default function MonsterList({ state, dispatch, ownerId }) {
+// below, to look at. `glance`: one short row per monster (beside the virtual board), tap for the full card.
+export default function MonsterList({ state, dispatch, ownerId, glance = false }) {
   const activeHero = state.heroes[state.turn.heroIndex]
   const monsters = ownerId ? state.monsters.filter((m) => m.ownerId === ownerId) : state.monsters
   const others = ownerId ? state.monsters.filter((m) => m.ownerId !== ownerId) : []
@@ -212,22 +260,30 @@ export default function MonsterList({ state, dispatch, ownerId }) {
   return (
     <section className="space-y-6">
       <div>
-        <h2 className="mb-3 font-display text-2xl font-bold text-zinc-100">{ownerId ? 'Your monsters' : 'Monsters'}</h2>
+        <h2 className={`mb-3 font-display font-bold text-zinc-100 ${glance ? 'text-xl' : 'text-2xl'}`}>{ownerId ? 'Your monsters' : 'Monsters'}</h2>
         {monsters.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-zinc-800 p-6 text-center text-zinc-500">
             {others.length > 0 ? 'None of the monsters are yours.' : 'The dungeon is quiet... for now.'}
           </p>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2">
-            {monsters.map((monster) => (
-              <MonsterRow
-                key={monster.id}
-                monster={monster}
-                owner={state.heroes.find((h) => h.id === monster.ownerId)}
-                isActiveOwner={monster.ownerId === activeHero.id}
-                dispatch={dispatch}
-              />
-            ))}
+          <div className={glance ? 'space-y-2' : 'grid gap-3 md:grid-cols-2'}>
+            {monsters.map((monster) => {
+              const owner = state.heroes.find((h) => h.id === monster.ownerId)
+              const row = <MonsterRow key={monster.id} monster={monster} owner={owner} isActiveOwner={monster.ownerId === activeHero.id} dispatch={dispatch} />
+              if (!glance) return row
+              const whose = monster.objective || monster.chamber ? 'In the chamber' : owner ? `${owner.name}'s` : 'No owner'
+              return (
+                <GlanceRow
+                  key={monster.id}
+                  monster={monster}
+                  highlight={monster.ownerId === activeHero.id}
+                  sub={[whose, monster.ac && `AC ${monster.ac}`, !monster.objective && `${monster.xp} XP`].filter(Boolean).join(' · ')}
+                  dispatch={dispatch}
+                >
+                  {row}
+                </GlanceRow>
+              )
+            })}
           </div>
         )}
       </div>
