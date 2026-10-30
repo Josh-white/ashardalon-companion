@@ -42,6 +42,14 @@ export const MOODS = {
     scale: [60, 61, 63, 65, 67, 68, 70, 72],
     melody: 0.18,
   },
+  // The big screen's lobby, while the heroes gather: slow and warm, a fire in the hall.
+  lobby: {
+    bpm: 58,
+    barsPerChord: 2,
+    chords: [[50, 57, 62], [46, 53, 58], [48, 55, 60], [45, 52, 57]],
+    scale: [62, 64, 65, 67, 69, 72, 74],
+    melody: 0.16,
+  },
   // After a loss: slow, soft and sad, under the recap.
   lament: {
     bpm: 50,
@@ -53,8 +61,10 @@ export const MOODS = {
 }
 
 // Which music fits the game right now, or null for none. Victory has a track on the Pi
-// or nothing: there's no made-up music for it.
-export function musicMood(state) {
+// or nothing: there's no made-up music for it. `lobby`: this screen is the big screen in
+// the lobby (past the intro), the only place the lobby gets music.
+export function musicMood(state, { lobby = false } = {}) {
+  if (state?.status === 'setup' && lobby) return 'lobby'
   if (state?.status === 'lost') return 'lament'
   if (state?.status === 'won') return 'victory'
   if (state?.status !== 'playing') return null
@@ -82,6 +92,8 @@ export function musicTracks(state, mood) {
   const area = dungeonArea(state)?.key
   if (mood === 'explore' && AREA_MUSIC[area]) return [`loop-explore-${AREA_MUSIC[area]}`, 'loop-explore']
   if (mood === 'boss' && area === 'ashardalon') return ['loop-boss-ashardalon', 'loop-boss']
+  // Until the Pi has a lobby track, the plain explore one sets the mood.
+  if (mood === 'lobby') return ['loop-lobby', 'loop-explore']
   return [`loop-${mood}`]
 }
 
@@ -101,7 +113,7 @@ export function playStep(ctx, out, mood, step, at) {
     for (const note of chord) pad(ctx, out, { at, freq: NOTE(note), length: length + 0.3, peak: 0.07, detune: (note % 4) * 3, tremolo: mood === 'boss' ? 5 : 0 })
   }
 
-  if (mood === 'explore') {
+  if (mood === 'explore' || mood === 'lobby') {
     if (inBar === 0 || inBar === 4) tone(ctx, out, { at, freq: NOTE(root - 12), peak: 0.35, attack: 0.05, decay: eighth * 3.5 })
     if (inBar === 0) burst(ctx, out, { at, type: 'lowpass', freq: 200, peak: 0.25, decay: 0.4 })
   }
@@ -134,7 +146,7 @@ export function playStep(ctx, out, mood, step, at) {
     const fits = m.scale.filter((n) => chord.some((c) => (n - c) % 12 === 0))
     const pool = Math.random() < 0.6 && fits.length ? fits : m.scale
     const note = pool[Math.floor(Math.random() * pool.length)]
-    const soft = mood === 'explore' || mood === 'lament'
+    const soft = mood === 'explore' || mood === 'lament' || mood === 'lobby'
     tone(ctx, out, { at, freq: NOTE(note), type: soft ? 'sine' : 'triangle', peak: mood === 'battle' ? 0.12 : 0.16, attack: 0.01, decay: eighth * (soft ? 4 : 1.5) })
   }
 }
@@ -225,8 +237,8 @@ function fadeOut(ctx, gain) {
 }
 
 // Plays the music that fits the game while `on`, and dips it under big moments.
-export function useMusic(state, on) {
-  const mood = on ? musicMood(state) : null
+export function useMusic(state, on, { lobby = false } = {}) {
+  const mood = on ? musicMood(state, { lobby }) : null
   const music = mood && [mood, ...musicTracks(state, mood)].join(' ')
   useEffect(() => {
     player.setMood(music)
