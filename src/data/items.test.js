@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { betterItem } from './items.js'
+import { betterItem, itemsOutdone, spareItems } from './items.js'
 
 const item = (name, card) => ({ id: name, name, card: { inPlay: true, ...card } })
 const hero = (...items) => ({ id: 'h', items })
@@ -29,5 +29,27 @@ describe('betterItem (Rulebook p. 13: only the best item bonus counts)', () => {
     expect(betterItem(hero(item('Amulet', amulet)), { inPlay: true, acBonus: 1, tileAcBonus: 2 })).toBeNull()
     expect(betterItem(hero(sword2), { name: 'Potion of Healing' })).toBeNull()
     expect(betterItem(hero(), sword1)).toBeNull()
+  })
+})
+
+describe('spareItems and itemsOutdone (items that add nothing for their owner)', () => {
+  const amuletItem = item('Amulet of Protection', amulet)
+  const shieldOfProtection = item('Shield of Protection', { acBonus: 1 })
+
+  it('flags the newer of two equal items as the spare', () => {
+    const spare = spareItems(hero(amuletItem, shieldOfProtection))
+    expect(spare.map((s) => s.item.name)).toEqual(['Shield of Protection'])
+    expect(spare[0].cover.name).toBe('Amulet of Protection')
+  })
+
+  it('flags an older item a better one has outdone', () => {
+    expect(spareItems(hero(item('+1 Magic Sword', sword1), sword2)).map((s) => s.item.name)).toEqual(['+1 Magic Sword'])
+    expect(spareItems(hero(amuletItem, sword2))).toEqual([])
+  })
+
+  it('names the held item a new card would outdo', () => {
+    expect(itemsOutdone(hero(amuletItem), { inPlay: true, acBonus: 2 }).map((s) => s.item.name)).toEqual(['Amulet of Protection'])
+    expect(itemsOutdone(hero(amuletItem), amulet)).toEqual([])
+    expect(itemsOutdone(hero(amuletItem), sword1)).toEqual([])
   })
 })

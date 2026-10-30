@@ -2294,6 +2294,18 @@ function reduce(state, action) {
       return item ? withLog(spendItem(state, hero.id, item.id, 'discard'), `${hero.name} discarded the ${item.name}.`) : state
     }
 
+    case 'GIVE_ITEM': {
+      // A hero hands an item to another hero (JJ's table: a spare item goes to someone it helps).
+      const hero = state.heroes.find((h) => h.id === action.heroId)
+      const to = state.heroes.find((h) => h.id === action.toHeroId)
+      const item = heroItems(hero).find((i) => i.id === action.itemId)
+      if (!item || !to || to.id === hero.id) return state
+      const next = updateHero(updateHero(state, hero.id, (h) => ({ items: h.items.filter((i) => i.id !== item.id) })), to.id, (h) => ({
+        items: [...heroItems(h), item],
+      }))
+      return withLog(next, `${hero.name} gave the ${item.name} to ${to.name}.`)
+    }
+
     case 'UPDATE_ENCOUNTER_CARDS':
       return updateEncounterCards(state, action.cards)
 

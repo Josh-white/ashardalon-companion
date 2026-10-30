@@ -1065,3 +1065,17 @@ describe('opening story', () => {
     expect(started.firstRoll.after.kind).toBe('treasure')
   })
 })
+
+describe('giving an item to another hero', () => {
+  it('moves the item and logs it', () => {
+    let state = startGame()
+    const [a, b] = state.heroes
+    const item = { id: 'item-1', cardId: 'amulet', name: 'Amulet of Protection', used: false, card: { inPlay: true, acBonus: 1 } }
+    state = { ...state, heroes: state.heroes.map((h) => (h.id === a.id ? { ...h, items: [item] } : h)) }
+    state = gameReducer(state, { type: 'GIVE_ITEM', heroId: a.id, itemId: 'item-1', toHeroId: b.id })
+    expect(state.heroes[0].items).toEqual([])
+    expect(state.heroes[1].items.map((i) => i.id)).toEqual(['item-1'])
+    expect(itemAc(state.heroes[1])).toBe(1)
+    expect(gameReducer(state, { type: 'GIVE_ITEM', heroId: b.id, itemId: 'item-1', toHeroId: b.id })).toBe(state)
+  })
+})
