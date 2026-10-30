@@ -437,6 +437,11 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
               </Button>
             </>
           )}
+          {extra && (
+            <Button variant="ghost" className="w-full" onClick={() => dispatch({ type: 'SKIP_BONUS_ATTACK', heroId: hero.id })}>
+              {hero.name} skips this attack
+            </Button>
+          )}
         </>
       )}
     </div>

@@ -20,7 +20,7 @@ import { playBoardSound, setBoardOff, setBoardUnlimited } from './soundboard.js'
 import { FIRST_ROLL_MAX_MS, newFirstRoll, rollFirst } from './firstRoll.js'
 import { finishOpening, openingNarrating, startOpening } from './opening.js'
 import { layChamber, layExit, layTile, moveHero, placeNear, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
-import { boardMove, queueMoves, skipBoardMove } from '../board/powerMoves.js'
+import { boardMove, queueFearMove, queueMoves, skipBoardMove } from '../board/powerMoves.js'
 import { heroTile } from '../board/encounters.js'
 import { guardsOnTile } from '../board/checks.js'
 import { activeVillains, buildDeck, clamp, findFoe, foes, heroLabel, markUsed, newId, pick, sameName, shuffle, toggle, updateHero, updateMonster, validRoll, withCast, withLog, withMoment } from './gameHelpers.js'
@@ -580,6 +580,7 @@ function heroAttack(state, action) {
 
   // On the virtual board a power that moves a hero waits for the player to pick the square.
   if (effects.board?.after) next = queueMoves(next, hero, power, effects.board.after, { attacked: targets.map((t) => t.monsterId), hit: anyHit })
+  next = queueFearMove(next)
 
   // Bloodlust ends when the hero defeats a monster.
   const ending = defeated.length > 0 ? (hero.curses ?? []).filter((c) => c.card?.removeOnDefeat) : []
@@ -757,7 +758,10 @@ function usePower(state, action) {
   }
   if (use.causeFear) {
     const extras = heroIds.filter((id) => id !== hero.id).map((heroId) => ({ heroId, bonus: 2, source: power.name }))
-    next = { ...next, turn: { ...next.turn, bonusAttacks: [...(next.turn.bonusAttacks ?? []), ...extras] } }
+    // Afterwards the monsters left on the cleric's tile are moved (on the virtual board).
+    const causeFear = { heroId: hero.id, source: power.name }
+    next = { ...next, turn: { ...next.turn, bonusAttacks: [...(next.turn.bonusAttacks ?? []), ...extras], causeFear } }
+    next = queueFearMove(next)
   }
   if (use.board) next = queueMoves(next, hero, power, use.board)
   return next
@@ -1679,10 +1683,19 @@ function reduce(state, action) {
     }
 
     case 'BOARD_MOVE':
-      return boardMove(state, action)
+      return queueFearMove(boardMove(state, action))
 
     case 'SKIP_BOARD_MOVE':
-      return skipBoardMove(state)
+      return queueFearMove(skipBoardMove(state))
+
+    case 'SKIP_BONUS_ATTACK': {
+      // An ally passes on a Cause Fear or Acrobatic Onslaught attack.
+      const bonusAttacks = state.turn.bonusAttacks ?? []
+      const skipped = bonusAttacks.find((b) => b.heroId === action.heroId)
+      if (!skipped) return state
+      const next = { ...state, turn: { ...state.turn, bonusAttacks: bonusAttacks.filter((b) => b !== skipped) } }
+      return queueFearMove(withLog(next, `${state.heroes.find((h) => h.id === action.heroId)?.name ?? 'A hero'} skipped the extra attack.`))
+    }
 
     case 'START_BOARD_MOVE': {
       // A power's "first move..." done on the board before its attack roll.
