@@ -213,13 +213,14 @@ export default function GamePicker({ current, onPick, onClose, startGame, change
   )
 }
 
-// The game this screen is in, with a way to switch, along the top of every screen.
+// The game this screen is in, with a way to switch, along the top of every screen. From the
+// home screen an iPad draws the page under its status bar, so the bar starts below it.
 export function GameBar({ name, onSwitch }) {
   if (!name) return null
   return (
-    <div className="flex items-center justify-center gap-3 bg-zinc-900 px-4 py-0.5 text-sm text-zinc-400">
+    <div className="flex shrink-0 items-center justify-center gap-3 bg-zinc-900 px-4 pt-[env(safe-area-inset-top)] text-sm text-zinc-400">
       <span className="truncate">🎲 {name}</span>
-      <button type="button" className="text-amber-400 underline" onClick={onSwitch}>
+      <button type="button" className="py-1.5 text-amber-400 underline" onClick={onSwitch}>
         Switch game
       </button>
     </div>
