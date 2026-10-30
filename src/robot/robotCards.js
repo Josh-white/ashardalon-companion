@@ -64,8 +64,19 @@ const POWERS = ['cleric', 'fighter', 'paladin', 'rogue', 'wizard'].flatMap((hero
   { id: `robot-${hero}-daily`, hero, type: 'daily', name: `Robot Daily (${hero})`, attack: '+8', damage: '2', text: 'Made-up daily power: attack one monster.' },
 ])
 
+// A made-up campaign, so the robot plays campaign games too: the same adventure again and
+// again, with Treasure tokens for kills. No chambers, so beating it once ends the campaign.
+const CAMPAIGN = {
+  id: 'robot-campaign', title: 'Robot Campaign', players: '1-5', goal: 'Defeat 3 monsters.',
+  blurb: 'Made-up campaign for the robot.', setup: [], story: { start: 'Made-up start.', victory: 'Made-up victory.' },
+  win: { figures: 3 }, campaign: { secondChance: true },
+}
+const TREASURE_TOKENS = [{ gold: 50, count: 4 }, { gold: 100, count: 2 }, { treasure: true, count: 2 }]
+
 export const ROBOT_CARD_FILE = {
   ...EXAMPLE,
+  adventures: [...EXAMPLE.adventures, CAMPAIGN],
+  treasureTokens: TREASURE_TOKENS,
   powers: [...EXAMPLE.powers, ...POWERS],
   monsters: [...EXAMPLE.monsters, ...MONSTERS],
   tiles: TILES,

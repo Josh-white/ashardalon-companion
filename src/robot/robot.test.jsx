@@ -10,8 +10,9 @@ import { ROBOT_CARD_FILE } from './robotCards.js'
 
 // The robot: plays whole games by itself, tapping a random button on the real screens again
 // and again, with every tap going through the real game rules. Most games are solo games on
-// the virtual board; every 4th is a party game on the shared table screen, every other one of
-// those on the party's virtual board and the rest with real tiles on the table.
+// the virtual board; every 4th is a party game on the shared table screen (every other one of
+// those on the party's virtual board, the rest with real tiles on the table), and every 4th
+// after seed 2 is a solo game of a made-up campaign (robotCards.js).
 // It doesn't try to win; it looks for a screen that goes blank or a tap the rules can't take
 // (like the monster-move crash in PR 131), so those are caught before a merge goes live.
 //
@@ -184,20 +185,20 @@ function pickWeighted(options) {
   return options.find((o) => (roll -= o.weight) < 0) ?? options.at(-1)
 }
 
-// Which kind of game a seed plays: 'solo', or a party game ('party-board' on the party's
-// virtual board, 'party-tiles' with real tiles). Picked from the seed, not the dice, so the
-// solo seeds play the same games as before party games came along.
-const kindOf = (seed) => (seed % 4 !== 0 ? 'solo' : seed % 8 === 0 ? 'party-board' : 'party-tiles')
+// Which kind of game a seed plays: 'solo', 'campaign' (solo, on the made-up campaign), or a
+// party game ('party-board' on the party's virtual board, 'party-tiles' with real tiles).
+// Picked from the seed, not the dice.
+const kindOf = (seed) => (seed % 4 === 2 ? 'campaign' : seed % 4 !== 0 ? 'solo' : seed % 8 === 0 ? 'party-board' : 'party-tiles')
 
 // The lobby, filled in the way the solo screen does: an adventure, 1 to 5 heroes, their powers.
 function lobbyFor(game) {
   const { gameReducer, initialState } = app
-  const adventures = CARDS.adventures.filter((a) => gameReducer(initialState, { type: 'CHOOSE_ADVENTURE', adventure: a }).lobbyAdventure)
-  const adventure = adventures.length > 0 && random() < 0.8 ? pick(adventures) : null
+  const adventures = CARDS.adventures.filter((a) => !a.campaign && gameReducer(initialState, { type: 'CHOOSE_ADVENTURE', adventure: a }).lobbyAdventure)
+  const adventure = game.kind === 'campaign' ? CARDS.adventures.find((a) => a.campaign) : adventures.length > 0 && random() < 0.8 ? pick(adventures) : null
   const heroCount = 1 + Math.floor(random() * 3)
   const heroes = [...HERO_TEMPLATES].sort(() => random() - 0.5).slice(0, heroCount)
   let state = gameReducer(initialState, { type: 'CHOOSE_ADVENTURE', adventure })
-  const party = game.kind !== 'solo'
+  const party = game.kind.startsWith('party')
   if (party) state = gameReducer(state, { type: 'SET_LOBBY_BOARD', on: game.kind === 'party-board' })
   heroes.forEach((template, i) => {
     const deviceId = party ? `robot-ipad-${i + 1}` : `robot~solo-${i + 1}`
@@ -240,15 +241,15 @@ async function playGame(seed) {
   store.crash = null
   store.history = []
   store.state = lobbyFor(game)
-  if (game.kind !== 'solo' && store.state.status !== 'playing') return { ...game, problem: "the party game didn't start" }
+  if (game.kind.startsWith('party') && store.state.status !== 'playing') return { ...game, problem: "the party game didn't start" }
   localStorage.clear()
   sessionStorage.clear()
   sessionStorage.setItem('ashardalon-companion/intro-seen', 'yes')
   localStorage.setItem('ashardalon-companion/device', 'robot')
   localStorage.setItem('ashardalon-companion/game', 'family')
-  localStorage.setItem('ashardalon-companion/screen', game.kind === 'solo' ? 'solo' : 'hero')
+  localStorage.setItem('ashardalon-companion/screen', game.kind.startsWith('party') ? 'hero' : 'solo')
   // The party plays on the shared table screen, with every hero's turn on it.
-  if (game.kind !== 'solo') localStorage.setItem('ashardalon-companion/seat', 'table')
+  if (game.kind.startsWith('party')) localStorage.setItem('ashardalon-companion/seat', 'table')
 
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'cancelAnimationFrame', 'Date'] })
   vi.setSystemTime(new Date('2026-10-30T19:00:00'))
@@ -261,7 +262,7 @@ async function playGame(seed) {
   const wait = () => act(async () => vi.advanceTimersByTimeAsync(4000))
   await wait()
 
-  if (game.kind === 'solo') {
+  if (!game.kind.startsWith('party')) {
     const enter = [...document.querySelectorAll('button')].find((b) => /Enter the dungeon/.test(b.textContent))
     if (!enter || enter.disabled) return { ...game, problem: `the solo lobby wouldn't let the robot in (${document.body.textContent.slice(0, 200)})` }
     fireEvent.click(enter)
@@ -292,6 +293,7 @@ async function playGame(seed) {
   game.round = store.state.turn.round
   game.tiles = store.state.board?.tiles.length ?? 0
   if (store.crash) game.problem = `crashed in ${store.crash.where}: ${store.crash.error?.stack ?? store.crash.error}`
+  else if (game.kind === 'campaign' && !store.state.campaign) game.problem = "the campaign didn't start"
   return game
 }
 
