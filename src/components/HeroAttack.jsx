@@ -5,14 +5,17 @@ import { asksIfStayed, attackItems, distanceChoices, heroItems, itemsWithUse } f
 import { effectsOf, maxRolls, reactionsFor } from '../data/powerEffects.js'
 import { rollD20 } from '../state/random.js'
 import { attackGone, foes, powerNumber } from '../state/game.js'
-import { HeroChoice, MonsterChoice, monsterName } from './Pickers.jsx'
+import { HeroChoice, InReach, MonsterChoice, monsterName } from './Pickers.jsx'
+import { heroesInReach } from '../board/encounters.js'
 import { Button } from './ui.jsx'
 
 // The question a power asks after its attack (Sacred Flame's healing, Cleric's Shield,
 // Righteous Smite, Wrathful Thunder). Answered once.
 function FollowUp({ state, hero, power, last, dispatch }) {
   const effects = effectsOf(power)
-  const [chosen, setChosen] = useState(effects.after === 'heal-tile' ? [hero.id] : [])
+  // On the virtual board Righteous Smite already knows who shares the tile.
+  const onTile = heroesInReach(state, hero.id, 'sameTile')
+  const [chosen, setChosen] = useState(effects.after === 'heal-tile' ? onTile ?? [hero.id] : [])
   const [skipped, setSkipped] = useState(false)
   const anyHit = last.rolls.some((r) => r.hit)
   const kind = effects.onHit?.heal && anyHit ? 'heal-one' : effects.after
@@ -36,9 +39,13 @@ function FollowUp({ state, hero, power, last, dispatch }) {
     <div className="space-y-3 rounded-xl border border-emerald-700 bg-emerald-950/40 p-3">
       <p className="text-lg font-semibold text-emerald-200">✨ {power.name}: {question}</p>
       {kind === 'pass-monster' ? (
-        <MonsterChoice state={state} chosen={chosen} onToggle={pickOne} />
+        <InReach items={state.monsters} near={state.board ? foesInRange(state, hero.id, 'sameTile', state.monsters).map((m) => m.id) : null} what="monsters">
+          {(shown) => <MonsterChoice state={state} monsters={shown} chosen={chosen} onToggle={pickOne} />}
+        </InReach>
       ) : (
-        <HeroChoice heroes={state.heroes} chosen={chosen} onToggle={kind === 'heal-tile' ? toggle : pickOne} />
+        <InReach items={state.heroes} near={onTile}>
+          {(shown) => <HeroChoice heroes={shown} chosen={chosen} onToggle={kind === 'heal-tile' ? toggle : pickOne} />}
+        </InReach>
       )}
       <div className="flex gap-2">
         <Button

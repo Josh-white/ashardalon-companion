@@ -10,13 +10,14 @@ export const ENCOUNTER_IDS = {
   'high-alert': 'High Alert: reminder in the turn guide',
   surrounded: 'Surrounded!: reminder in the turn guide',
   'occupied-lair': 'Occupied Lair: draws the bottom tile and puts a Treasure token on the virtual board',
-  'scream-of-the-sentry': 'Scream of the Sentry: draws the bottom tile',
+  'scream-of-the-sentry': 'Scream of the Sentry: draws the bottom tile, next to the chosen monster on the virtual board',
   spotted: 'Spotted!: draws the bottom tile',
   lost: 'Lost: puts the bottom tile on top of the stack',
   'thief-in-the-dark': 'Thief in the Dark: picks the treasure to lose',
   'wrath-of-the-enemy': 'Wrath of the Enemy: the virtual board pulls the monster next to the hero',
   'concussive-blast': 'Concussive Blast: the virtual board asks where each hero is pushed',
   'quick-advance': 'Quick Advance: the virtual board asks which monster moves closer',
+  'blinding-bomb': 'Blinding Bomb: the virtual board moves the Sentry monsters',
   'hidden-treasure': 'Hidden Treasure: puts a Treasure token on the virtual board',
 }
 

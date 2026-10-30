@@ -21,7 +21,8 @@ import { itemAc } from './items.js'
 //   keepOnMiss  a daily that isn't used up when it misses.
 //   free        doesn't use up the hero's attack (a trap can still be disabled after it).
 // Other powers have a `use`, done from the power's tile:
-//   healSelf, heal + pick ('other': one other hero), tokens, endCondition, refuge, invisible, causeFear, note,
+//   healSelf, heal + pick ('other': one other hero; reach: 'sameTile', 'adjacent' or 'within2' on the
+//   virtual board), tokens, endCondition, refuge, invisible, causeFear, note,
 //   move (it takes the place of a move, so on the virtual board it uses one up).
 // A card in cards.json can carry its own `effect` with these fields (a homebrew power);
 // a power listed below by name always uses the entry here instead.
@@ -29,7 +30,7 @@ import { itemAc } from './items.js'
 // 'bravery' (offered when a monster activates, and still usable from its tile).
 const EFFECTS = {
   // Quinn, the cleric
-  'Healing Hymn': { use: { healSelf: 2, heal: 2, pick: 'other', optional: true, prompt: 'Who else on your tile gets 2 HP?' } },
+  'Healing Hymn': { use: { healSelf: 2, heal: 2, pick: 'other', reach: 'sameTile', optional: true, prompt: 'Who else on your tile gets 2 HP?' } },
   "Cleric's Shield": { after: 'shield' },
   'Righteous Advance': { note: 'Hit or miss: move one hero on your tile 2 squares.', board: { after: [{ pick: 'heroOnTile', to: 'squares', n: 2 }] } },
   'Sacred Flame': { onHit: { heal: 1, pick: 'tile' } },
@@ -40,7 +41,7 @@ const EFFECTS = {
     use: { causeFear: true, note: 'Afterwards, put each monster that is left on a tile within 2 tiles of you.' },
   },
   'Wrathful Thunder': { after: 'pass-monster' },
-  'Astral Refuge': { use: { refuge: true, pick: 'any', prompt: 'Which hero within 2 tiles goes to the Astral Refuge?' } },
+  'Astral Refuge': { use: { refuge: true, pick: 'any', reach: 'within2', prompt: 'Which hero within 2 tiles goes to the Astral Refuge?' } },
   Command: { use: { note: 'Put one monster on your tile onto a tile within 2 tiles of you.', board: [{ pick: 'monsterOnTile', to: 'tileWithin', n: 2 }] } },
   Perseverance: { reaction: 'perseverance' },
 
@@ -65,16 +66,16 @@ const EFFECTS = {
   },
 
   // Keyleth, the paladin
-  'Lay On Hands': { use: { heal: 2, pick: 'other', prompt: 'Who is next to you?' } },
+  'Lay On Hands': { use: { heal: 2, pick: 'other', reach: 'adjacent', prompt: 'Who is next to you?' } },
   'Divine Challenge': { before: 'First pull a monster within 1 tile next to you.', board: { before: [{ pick: 'monsterWithin1', to: 'nextToSelf' }] } },
   'Holy Strike': { ask: 'started-adjacent' },
   'Valiant Strike': { ask: 'adjacent-count' },
   'Arcing Smite': { targets: 2 },
   'Benign Transposition': { before: 'First swap places with a hero within 2 tiles.', board: { before: [{ pick: 'heroWithin2', to: 'swap' }] } },
   'Righteous Smite': { after: 'heal-tile' },
-  Bravery: { use: { healSelf: 1, note: 'Put your hero next to the monster.' }, reaction: 'bravery' },
+  Bravery: { use: { healSelf: 1, note: 'Put your hero next to the monster.', board: [{ pick: 'self', to: 'nextToFoe' }] }, reaction: 'bravery' },
   'Noble Shield': { reaction: 'noble-shield' },
-  "Virtue's Touch": { use: { endCondition: true, pick: 'other', prompt: 'Who is next to you?' } },
+  "Virtue's Touch": { use: { endCondition: true, pick: 'other', reach: 'adjacent', prompt: 'Who is next to you?' } },
 
   // Tarak, the rogue
   'Furious Assault': { reaction: 'furious' },

@@ -15,6 +15,7 @@ import ProjectorView from './components/ProjectorView.jsx'
 import Recap, { LOST_QUESTION, newGameQuestion } from './components/Recap.jsx'
 import Board from './components/Board.jsx'
 import SeatPicker from './components/SeatPicker.jsx'
+import SinceLastTurn from './components/SinceLastTurn.jsx'
 import Setup from './components/Setup.jsx'
 import { TreasureStep } from './components/Treasure.jsx'
 import { TilesLeft } from './components/Tiles.jsx'
@@ -264,6 +265,7 @@ function PlayView({ state, dispatch, hero = null, soundBoard = null }) {
   const body = {
     turn: hero ? (
       <>
+        {myTurn && <SinceLastTurn state={state} hero={hero} />}
         {myTurn ? <TurnGuide state={state} dispatch={dispatch} /> : <WaitingBanner state={state} />}
         {/* Cause Fear gives other heroes an attack during someone else's turn. */}
         {!myTurn && <ExtraAttacks state={state} dispatch={dispatch} onlyHeroId={hero.id} />}
