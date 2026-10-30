@@ -57,7 +57,12 @@ const EFFECTS = {
   },
   'Inspiring Advice': { reaction: 'reroll' },
   'One for the Team': { use: { note: 'Take the encounter card and do it as if you drew it.' } },
-  'To Arms!': { use: { note: 'You and one hero on your tile can each move your speed.' } },
+  'To Arms!': {
+    use: {
+      note: 'You and one hero on your tile can each move your speed.',
+      board: [{ pick: 'otherOnTile', to: 'squares', n: 'speed' }, { pick: 'self', to: 'squares', n: 'speed' }],
+    },
+  },
 
   // Keyleth, the paladin
   'Lay On Hands': { use: { heal: 2, pick: 'other', prompt: 'Who is next to you?' } },

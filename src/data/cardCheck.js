@@ -5,15 +5,18 @@ import { POWER_EFFECT_NAMES, effectsOf } from './powerEffects.js'
 // the extra help, and nothing else says so. cardCheck.test.js keeps this list in step
 // with the code.
 export const ENCOUNTER_IDS = {
-  cage: 'Cage: reminds the hero they are caged',
+  cage: "Cage: reminds the hero they are caged, and the virtual board won't let them move",
   'dragon-s-tribute': "Dragon's Tribute: draws two treasures and keeps the lower one",
   'high-alert': 'High Alert: reminder in the turn guide',
   surrounded: 'Surrounded!: reminder in the turn guide',
-  'occupied-lair': 'Occupied Lair: draws the bottom tile',
+  'occupied-lair': 'Occupied Lair: draws the bottom tile and puts a Treasure token on the virtual board',
   'scream-of-the-sentry': 'Scream of the Sentry: draws the bottom tile',
   spotted: 'Spotted!: draws the bottom tile',
   lost: 'Lost: puts the bottom tile on top of the stack',
   'thief-in-the-dark': 'Thief in the Dark: picks the treasure to lose',
+  'wrath-of-the-enemy': 'Wrath of the Enemy: the virtual board pulls the monster next to the hero',
+  'concussive-blast': 'Concussive Blast: the virtual board asks where each hero is pushed',
+  'quick-advance': 'Quick Advance: the virtual board asks which monster moves closer',
   'hidden-treasure': 'Hidden Treasure: puts a Treasure token on the virtual board',
 }
 

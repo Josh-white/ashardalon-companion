@@ -169,3 +169,33 @@ export function foeDistance(state, heroId, foeId) {
   if (heroesFor('within1', grid, at, mine).length > 0) return 'within1'
   return 'far'
 }
+
+// Monster and villain figures on the board (not objectives like the Vast Gate), with names.
+function foeFigures(state) {
+  const foes = new Map([...state.monsters, ...(state.villains ?? []).filter((v) => !v.defeated)].filter((m) => !m.objective).map((m) => [m.id, m]))
+  return Object.entries(state.board.tokens)
+    .filter(([id]) => foes.has(id.split('#')[0]))
+    .map(([id, at]) => ({ id, at, name: foes.get(id.split('#')[0]).name }))
+}
+
+// Wrath of the Enemy: the monster closest to the hero that isn't on the hero's tile goes on a
+// free square next to the hero (the one nearest where it stood). Null when the board can't
+// tell or there's no such monster: { id, name, to }.
+export function wrathPull(state, heroId) {
+  const at = squareOf(state, heroId)
+  if (!state.board || !at) return null
+  const grid = boardGrid(state.board)
+  const tile = grid.get(key(at))?.area
+  const fromHero = distances(grid, at)
+  const far = (f) => fromHero.get(key(f.at)) ?? Infinity
+  const foe = foeFigures(state)
+    .filter((f) => grid.get(key(f.at))?.area !== tile)
+    .sort((a, b) => far(a) - far(b))[0]
+  if (!foe) return null
+  const taken = takenSquares(state, foe.id)
+  const fromFoe = distances(grid, foe.at)
+  const to = [...distances(grid, at, { limit: 1 }).keys()]
+    .filter((k) => k !== key(at) && !taken.has(k))
+    .sort((a, b) => (fromFoe.get(a) ?? Infinity) - (fromFoe.get(b) ?? Infinity))[0]
+  return to ? { id: foe.id, name: foe.name, to: to.split(',').map(Number) } : null
+}

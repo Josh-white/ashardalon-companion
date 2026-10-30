@@ -79,7 +79,7 @@ describe('board answers to end-of-phase questions', () => {
 
   it('asks when the board can’t tell', () => {
     const { state, heroes } = game([1, -2])
-    expect(boardAnswer(state, `Did ${heroes[0].name} move during this Hero Phase?`)).toBeNull()
+    expect(boardAnswer(state, `Did ${heroes[1].name} move during this Hero Phase?`)).toBeNull()
     expect(boardAnswer({ ...state, board: null }, `Is another hero on ${heroes[0].name}'s tile?`)).toBeNull()
     expect(boardAnswer(state, 'Is another hero on Nobody’s tile?')).toBeNull()
   })

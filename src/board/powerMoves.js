@@ -3,10 +3,12 @@
 //   { heroId, source, attacked: [monster ids], steps: [step, ...] }
 // and the board does the first step, then the next. A step says which figure moves (`pick`)
 // and where it can go (`to`):
-//   pick  self, heroOnTile, heroWithin1/2 (another hero), monsterWithin1/2/3, monsterOnTile, attacked,
-//         listed (the figures in move.tokens, each moved once: Cause Fear)
+//   pick  self, heroOnTile, otherOnTile (another hero on the tile), heroWithin1/2 (another hero),
+//         monsterWithin1/2/3, monsterOnTile, monsterOffHeroTiles, attacked,
+//         listed (the figures in move.tokens, each moved once: Cause Fear, Concussive Blast)
 //   to    squares (walk `n` squares, or 'speed'), nextToSelf, nextToHeroWithin2, tileWithin (`n` tiles
-//         of the hero, or of the figure itself with ref: 'piece'), ownTile, adjacentTile, swap
+//         of the hero, or of the figure itself with ref: 'piece'), ownTile, adjacentTile,
+//         tileCloser (onto a tile 1 tile closer to the hero), swap
 // `hit: true` steps only happen when the attack hit.
 
 import { key } from './grid.js'
@@ -43,6 +45,23 @@ export function queueFearMove(state) {
   return queueMoves(cleared, hero, { name: fear.source }, steps, { tokens })
 }
 
+// Encounter cards that move figures on the virtual board, queued when the card is resolved
+// with the active hero as the one the moves are measured from:
+//   Concussive Blast  each hero on the active hero's tile goes to an adjacent tile
+//   Quick Advance     a monster not on any hero's tile moves 1 tile closer to the active hero
+export function queueEncounterMoves(state, hero, card) {
+  const self = state.board && hero && state.board.tokens[hero.id]
+  if (!self) return state
+  if (card.id === 'concussive-blast') {
+    const grid = boardGrid(state.board)
+    const tile = grid.get(key(self))?.area
+    const tokens = heroTokens(state).filter((h) => grid.get(key(h.at))?.area === tile).map((h) => h.id)
+    return queueMoves(state, hero, card, tokens.map(() => ({ pick: 'listed', to: 'adjacentTile' })), { tokens })
+  }
+  if (card.id === 'quick-advance') return queueMoves(state, hero, card, [{ pick: 'monsterOffHeroTiles', to: 'tileCloser' }])
+  return state
+}
+
 const step = (state) => state.turn.boardMove?.steps?.[0] ?? null
 
 // Tokens of figures: heroes still standing, and every monster or villain figure.
@@ -69,6 +88,8 @@ export function moveChoices(state) {
       return [move.heroId]
     case 'heroOnTile':
       return heroTokens(state).filter((h) => tileOf(h.at) === tileOf(self)).map((h) => h.id)
+    case 'otherOnTile':
+      return others.filter((h) => tileOf(h.at) === tileOf(self)).map((h) => h.id)
     case 'heroWithin1':
     case 'heroWithin2':
       return near(others, s.pick === 'heroWithin1' ? 'within1' : 'within2')
@@ -78,10 +99,14 @@ export function moveChoices(state) {
       return near(foeTokens(state), s.pick.replace('monsterW', 'w'))
     case 'monsterOnTile':
       return foeTokens(state).filter((f) => tileOf(f.at) === tileOf(self)).map((f) => f.id)
+    case 'monsterOffHeroTiles': {
+      const heroTiles = new Set(heroTokens(state).map((h) => tileOf(h.at)))
+      return foeTokens(state).filter((f) => !heroTiles.has(tileOf(f.at))).map((f) => f.id)
+    }
     case 'attacked':
       return foeTokens(state).filter((f) => (move.attacked ?? []).includes(baseId(f.id))).map((f) => f.id)
     case 'listed':
-      return foeTokens(state).filter((f) => (move.tokens ?? []).includes(f.id)).map((f) => f.id)
+      return [...heroTokens(state), ...foeTokens(state)].filter((f) => (move.tokens ?? []).includes(f.id)).map((f) => f.id)
     default:
       return []
   }
@@ -126,6 +151,10 @@ export function moveTargets(state, id) {
     }
     case 'adjacentTile':
       return all.filter((k) => tilesBetween(grid, at, parse(k)) === 1)
+    case 'tileCloser': {
+      const apart = tilesBetween(grid, at, self)
+      return all.filter((k) => tilesBetween(grid, at, parse(k)) === 1 && tilesBetween(grid, parse(k), self) === apart - 1)
+    }
     default:
       return []
   }
@@ -174,14 +203,21 @@ export const skipBoardMove = (state) => (state.turn.boardMove ? nextStep(state) 
 const PICKS = {
   self: (me) => `${me}`,
   heroOnTile: (me) => `a hero on ${me}'s tile`,
+  otherOnTile: (me) => `another hero on ${me}'s tile`,
   heroWithin1: () => 'a hero within 1 tile',
   heroWithin2: () => 'a hero within 2 tiles',
   monsterWithin1: () => 'a monster within 1 tile',
   monsterWithin2: () => 'a monster within 2 tiles',
   monsterWithin3: () => 'a monster within 3 tiles',
   monsterOnTile: (me) => `a monster on ${me}'s tile`,
+  monsterOffHeroTiles: () => 'a monster not on any hero’s tile',
   attacked: () => 'the monster',
   listed: () => 'a monster',
+}
+// Where the figure goes, for the prompt of a listed figure.
+const WHERE = {
+  tileWithin: (s, me) => `within ${s.n ?? 1} tiles of ${me}`,
+  adjacentTile: () => 'on a tile next to its own',
 }
 export function movePrompt(state) {
   const move = state.turn.boardMove
@@ -190,6 +226,10 @@ export function movePrompt(state) {
   const me = state.heroes.find((h) => h.id === move.heroId)?.name ?? 'the hero'
   const who = PICKS[s.pick]?.(me) ?? 'a figure'
   if (s.to === 'swap') return `Tap ${who} to swap places with ${me}.`
-  if (s.pick === 'listed') return `Tap ${who} that was on ${me}'s tile, then a lit square within ${s.n ?? 1} tiles of ${me}.`
+  if (s.pick === 'listed') {
+    const what = state.heroes.some((h) => (move.tokens ?? []).includes(h.id)) ? 'a hero' : 'a monster'
+    return `Tap ${what} that was on ${me}'s tile, then a lit square ${(WHERE[s.to] ?? WHERE.tileWithin)(s, me)}.`
+  }
+  if (s.to === 'tileCloser') return `Tap ${who}, then a lit square: it moves 1 tile closer to ${me}.`
   return `Tap ${who}, then a lit square.`
 }

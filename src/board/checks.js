@@ -99,6 +99,14 @@ export function boardAnswer(state, question) {
     return { answer: false, why: `${who.name} didn't start on or move onto the ${marker.name} tile.` }
   }
 
+  // A Gap in the Armor: "Did Quinn move during this Hero Phase?" (any move: walking, a power, the carpet).
+  if ((m = ask.match(/^Did (.+?) move during this Hero Phase\?/i))) {
+    const who = figureNamed(state, m[1])
+    if (!who || who.id !== state.heroes[state.turn?.heroIndex]?.id) return null
+    const moved = (state.turn.heroesMoved ?? []).includes(who.id)
+    return moved ? { answer: true, why: `${who.name} moved this Hero Phase.` } : { answer: false, why: `${who.name} hasn't moved this Hero Phase.` }
+  }
+
   // Dragon Fear: "Did Quinn move onto a new tile this Hero Phase?"
   if ((m = ask.match(/^Did (.+?) move onto a new tile this Hero Phase\?/i))) {
     const who = figureNamed(state, m[1])

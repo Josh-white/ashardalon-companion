@@ -253,7 +253,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   const moving = effects.ask === 'moved-monster'
   // On the virtual board only the monsters the power can reach are offered.
   const [showAll, setShowAll] = useState(false)
-  const range = state.board && !item && !moving ? powerRange(power?.card?.text) : null
+  const range = state.board && !moving ? powerRange(item ? item.card.text : power?.card?.text) : null
   const everyTarget = foes(state).filter((m) => !moving || m.id !== answers.movedId)
   const reachable = foesInRange(state, hero.id, range, everyTarget)
   const targets = showAll ? everyTarget : reachable

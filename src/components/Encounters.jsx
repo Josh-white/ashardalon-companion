@@ -2,12 +2,13 @@ import { useState } from 'react'
 import { HERO_COLORS, XP_TO_CANCEL_ENCOUNTER } from '../data/heroes.js'
 import { heroItems, itemTrapBonus, tileAcBonus } from '../data/items.js'
 import { heroAc, reactionsFor } from '../data/powerEffects.js'
-import { ENCOUNTER_LABELS, canSpendAttack, encounterCount, phaseChecks, villainInPlay } from '../state/game.js'
+import { ENCOUNTER_LABELS, canSpendAttack, encounterCount, isWrathCheck, phaseChecks, villainInPlay } from '../state/game.js'
 import { rollD20, shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { boardAnswer } from '../board/checks.js'
 import { encounterTargetIds, foeOnHeroTile } from '../board/encounters.js'
-import { trapsToDisable } from '../board/markers.js'
+import { wrathPull } from '../board/monsters.js'
+import { markerOnHeroTile, trapsToDisable } from '../board/markers.js'
 import { DrawMonsterButton, HeroPicker } from './MonsterTurns.jsx'
 import { TileGuardQuestion } from './Treasure.jsx'
 import { DrawTileButton } from './Tiles.jsx'
@@ -319,7 +320,9 @@ const RESOLVE_LABELS = {
 function EncounterCard({ state, hero, dispatch }) {
   const { monsters: monsterCards, villains } = useCards()
   const { card, attacked } = state.encounter
-  const [markerChecked, setMarkerChecked] = useState(false)
+  // A trap or hazard: the board knows whether the hero's tile already has a marker (null when it can't tell).
+  const boardMarker = (card.type === 'hazard' || card.type === 'trap') && !attacked ? markerOnHeroTile(state, hero) : null
+  const [markerChecked, setMarkerChecked] = useState(() => boardMarker === false)
   // Frenzied Leap: null until the table says whether a monster is on the active hero's tile.
   // On the virtual board the board answers it.
   const [monsterOnTile, setMonsterOnTile] = useState(() => (card.damageIfMonsterOnTile > 0 ? foeOnHeroTile(state, hero) : null))
@@ -369,6 +372,11 @@ function EncounterCard({ state, hero, dispatch }) {
       {placesMarker && !markerChecked && !attacked ? (
         <div>
           <p className="text-xl font-semibold text-zinc-100">Does {hero.name}'s tile already have a trap or hazard marker?</p>
+          {boardMarker && (
+            <p className="mt-2 rounded-lg bg-emerald-950/60 p-3 text-lg text-emerald-200">
+              📍 The board says yes: the {boardMarker.name} marker is on {hero.name}'s tile, so {card.name} is discarded and you draw a new card.
+            </p>
+          )}
           <div className="mt-3 grid grid-cols-2 gap-3">
             <Button className="py-3 text-xl" onClick={() => dispatch({ type: 'REDRAW_ENCOUNTER' })}>
               Yes
@@ -380,9 +388,12 @@ function EncounterCard({ state, hero, dispatch }) {
         </div>
       ) : (
         <>
+          {placesMarker && markerChecked && !attacked && boardMarker === false && (
+            <p className="rounded-lg bg-emerald-950/60 p-3 text-lg text-emerald-200">📍 The board says {hero.name}'s tile has no marker yet, so the {card.name} marker goes there.</p>
+          )}
           {placesMarker && markerChecked && !attacked && (
             <Button variant="ghost" className="w-full" onClick={() => setMarkerChecked(false)}>
-              ↶ Oops, {hero.name}'s tile does have a marker
+              ↶ {boardMarker === false ? 'The board got it wrong: ' : 'Oops, '}{hero.name}'s tile does have a marker
             </Button>
           )}
           {card.attack && villainHere && (
@@ -770,6 +781,7 @@ export function PhaseChecks({ state, hero, phaseKey, dispatch }) {
   const fill = (text) => text.replaceAll('{hero}', hero.name)
   const answer = (yes) => dispatch({ type: 'ANSWER_CHECK', key: check.key, answer: yes, cards, random: shuffleNumbers() })
   const board = check.ask && manualKey !== check.key ? boardAnswer(state, fill(check.ask)) : null
+  const wrath = isWrathCheck(state, check) ? wrathPull(state, hero.id) : null
   return (
     <div className="mt-4 rounded-2xl border-2 border-purple-700 bg-purple-950/60 p-4">
       <p className="text-sm font-bold uppercase tracking-widest text-purple-300">
@@ -806,6 +818,11 @@ export function PhaseChecks({ state, hero, phaseKey, dispatch }) {
       ) : (
         <>
           <p className="mt-1 text-xl text-zinc-100">{fill(check.note)}</p>
+          {wrath && (
+            <p className="mt-2 rounded-lg bg-emerald-950/60 p-3 text-lg text-emerald-200">
+              📍 The board puts the {wrath.name} next to {hero.name} when you tap Done.
+            </p>
+          )}
           <Button variant="gold" className="mt-3 w-full py-3 text-lg" onClick={() => dispatch({ type: 'ANSWER_CHECK', key: check.key, answer: true })}>
             Done
           </Button>
