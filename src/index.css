@@ -197,3 +197,20 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .lobby-title { animation: none; }
 }
+
+/* Hazards on the virtual board's floor: Lava Flow glows, Volcanic Vapors' fog drifts. */
+@keyframes hazard-glow {
+  0%, 100% { opacity: 0.06; }
+  50% { opacity: 0.24; }
+}
+@keyframes hazard-fog {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(14px, -8px); }
+}
+.hazard-glow { animation: hazard-glow 2.4s ease-in-out infinite; }
+.hazard-fog { animation: hazard-fog 7s ease-in-out infinite; transform-box: fill-box; }
+.hazard-fog-back { animation-duration: 9s; animation-direction: reverse; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hazard-glow, .hazard-fog { animation: none; }
+}
