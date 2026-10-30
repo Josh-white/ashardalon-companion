@@ -88,6 +88,29 @@ Card files (`cards/cards.json`, art and sounds) aren't in git, so changes to tho
 
 The tests run inside the Docker build, so a version that fails them never starts: the build stops and the Pi stays on the version that worked.
 
+### Keep Claude Remote Control running
+
+`scripts/claude-rc/install.sh` turns `claude remote-control` into a service, so it keeps running after you close your SSH window and starts again when the Pi boots or if it stops. Sign in to Claude Code on the Pi first (run `claude` once in this folder), stop any `claude remote-control` you started by hand, then:
+
+```sh
+sudo ~/ashardalon-companion/scripts/claude-rc/install.sh
+```
+
+What it sets up:
+
+- **Runs as you, never root**, and can't use `sudo` at all (`NoNewPrivileges`). It can still use Docker, which is how it deploys, so keep your Claude account secure (strong password, two-step sign-in).
+- **The game comes first**: low CPU priority, slowed down past a quarter of the Pi's memory and stopped past half, and at most 4 sessions at once.
+- **Updates once a night, at 4:30.** Claude Code's own self-updating is off for the service; a timer runs `claude update` and restarts Remote Control, so an update never lands in the middle of a session. To skip updates: `sudo systemctl disable --now claude-rc-update.timer`.
+- **A lapsed sign-in shows up in the log** instead of restarting every 30 seconds: it waits 15 minutes (signed out) or 10 (stopped right after starting) between tries.
+
+To see how it's doing, no `sudo` needed:
+
+```sh
+~/ashardalon-companion/scripts/claude-rc/status.sh
+```
+
+If it says **SIGNED OUT** (or Remote Control keeps stopping right after it starts), sign in again: run `claude` in `~/ashardalon-companion`, type `/login`, open the link on your phone, paste the code back, then `sudo systemctl restart claude-rc`. The log is `~/ashardalon-backups/claude-rc.log` (`journalctl -u claude-rc` has everything Remote Control printed). To stop it for now: `sudo systemctl stop claude-rc`; to remove it: `sudo ~/ashardalon-companion/scripts/claude-rc/install.sh uninstall`.
+
 ## Back up the saved game
 
 `scripts/backup-game.sh` copies the saved games out of the app into `~/ashardalon-backups` and keeps the newest 14 copies of each. The family game's copies go straight in that folder; every other game (a solo game, say) gets its own folder, `~/ashardalon-backups/games/<game>/`. It skips a copy when nothing changed, so a quiet week doesn't push out older saves. It also backs up your card files, which live only on the Pi: a dated copy of `cards/cards.json` in `~/ashardalon-backups/cards` whenever it changes (newest 14 kept), plus one up-to-date copy of `cards/art` and `cards/sounds`. To run it every night at 3:15, add it to cron on the Pi:
