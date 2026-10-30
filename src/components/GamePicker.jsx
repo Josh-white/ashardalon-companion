@@ -215,8 +215,15 @@ export default function GamePicker({ current, onPick, onClose, startGame, change
           </ul>
         </details>
       )}
+      <p className="text-center text-xs text-zinc-600">{versionLine()}</p>
     </div>
   )
+}
+
+// Which version of the app this screen runs: the commit (as on GitHub) and when it was built.
+export function versionLine(version = import.meta.env.VITE_APP_VERSION, builtAt = import.meta.env.VITE_BUILT_AT) {
+  const built = builtAt ? new Date(builtAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : null
+  return [version ? `Version ${version}` : 'Version unknown', built && `built ${built}`].filter(Boolean).join(' · ')
 }
 
 // The game this screen is in, with a way to switch, along the top of every screen. From the
