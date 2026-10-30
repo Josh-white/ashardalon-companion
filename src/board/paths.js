@@ -70,7 +70,7 @@ export function stepsBetween(grid, a, b, options) {
 }
 
 // The tiles (areas: the Start tile is two) that join each other through an opening.
-function tileLinks(grid) {
+export function tileLinks(grid) {
   const links = new Map()
   for (const sq of grid.values()) {
     if (!links.has(sq.area)) links.set(sq.area, new Set())

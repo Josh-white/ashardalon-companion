@@ -1,4 +1,5 @@
 import { boardGrid } from './play.js'
+import { isMovingTrap, markerTiles } from './traps.js'
 
 // Trap and hazard markers on the virtual board. Each marker saved its tile when it went
 // down (RESOLVE_ENCOUNTER), so the board can tint that tile and put a badge on it.
@@ -18,23 +19,23 @@ export function markerLook(marker) {
   return LOOKS[marker.cardId] ?? BY_TYPE[marker.type] ?? BY_TYPE.hazard
 }
 
-// Rolling Boulder and Whirling Blades move each Villain Phase; the board doesn't follow them yet.
-export function markerMoves(marker) {
-  return /move the .* marker/i.test(marker.card?.text ?? '')
-}
+// Rolling Boulder and Whirling Blades move each Villain Phase (src/board/traps.js).
+export const markerMoves = isMovingTrap
 
-// Every marker in play, with the squares of its tile when the board knows where it is:
-// [{ marker, look, moves, tile, squares }]. `squares` is empty for an older marker with no
-// saved tile, a tile no longer on the board, or a trap that moves. The saved tile is the
-// rules' tile (a square's `area`), so a marker on the Start tile's far half tints only that half.
+// Every marker in play, with the squares of its tiles when the board knows where it is:
+// [{ marker, look, moves, tile, tiles, squares }]. `squares` is empty for an older marker with
+// no saved tile, a tile no longer on the board, or a moving trap placed before the board
+// followed them. The saved tile is the rules' tile (a square's `area`), so a marker on the
+// Start tile's far half tints only that half. Lava Flow can cover several tiles (`tiles`).
 export function boardMarkers(state) {
   const traps = state.traps ?? []
   if (!state.board || traps.length === 0) return []
   const grid = boardGrid(state.board)
   return traps.map((marker) => {
-    const moves = markerMoves(marker)
-    const squares = moves || marker.tile === undefined ? [] : [...grid.values()].filter((sq) => sq.area === marker.tile)
-    return { marker, look: markerLook(marker), moves, tile: squares.length > 0 ? marker.tile : undefined, squares }
+    const wanted = new Set(markerTiles(marker))
+    const squares = [...grid.values()].filter((sq) => wanted.has(sq.area))
+    const tiles = [...wanted].filter((t) => squares.some((sq) => sq.area === t))
+    return { marker, look: markerLook(marker), moves: markerMoves(marker), tile: tiles[0], tiles, squares }
   })
 }
 
@@ -48,20 +49,20 @@ export function trapsToDisable(state, hero) {
   if (!at) return { here: traps, away: [] }
   const tile = boardGrid(state.board).get(`${at[0]},${at[1]}`)?.area
   const placed = new Set(boardMarkers(state).filter((m) => m.squares.length > 0).map((m) => m.marker.id))
-  const away = traps.filter((t) => placed.has(t.id) && t.tile !== tile)
+  const away = traps.filter((t) => placed.has(t.id) && !markerTiles(t).includes(tile))
   return { here: traps.filter((t) => !away.includes(t)), away }
 }
 
 // A new trap or hazard: does the hero's tile already have a marker? The marker found, false
 // when the board is sure there's none, or null when it can't tell (no board, the hero isn't
-// on it, or a marker it can't place could be anywhere: one that moves, or Lava Flow, whose
-// spread isn't followed yet), so the screen asks.
+// on it, or a marker it can't place could be anywhere, like a moving trap from before the
+// board followed them), so the screen asks.
 export function markerOnHeroTile(state, hero) {
   const at = state.board && !hero.tokens?.refuge ? state.board.tokens[hero.id] : null
   if (!at) return null
   const tile = boardGrid(state.board).get(`${at[0]},${at[1]}`)?.area
   const markers = boardMarkers(state)
-  const here = markers.find((m) => m.squares.length > 0 && m.tile === tile)
+  const here = markers.find((m) => m.tiles.includes(tile))
   if (here) return here.marker
-  return markers.some((m) => m.squares.length === 0 || m.marker.cardId === 'lava-flow') ? null : false
+  return markers.some((m) => m.squares.length === 0) ? null : false
 }

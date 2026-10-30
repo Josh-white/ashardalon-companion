@@ -5,6 +5,7 @@
 import { key } from './grid.js'
 import { tilesBetween } from './paths.js'
 import { boardGrid } from './play.js'
+import { isMovingTrap, markerTiles, trapStepped } from './traps.js'
 
 const baseId = (tokenId) => tokenId.split('#')[0]
 
@@ -30,9 +31,10 @@ export function encounterTargetIds(state, targets, hero, { trap } = {}) {
   }
   if (targets === 'trapTile') {
     // The marker's tile was saved when it went down (older markers don't have one). A
-    // trap that moves first (Whirling Blades) is asked instead.
-    if (trap?.tile === undefined || /move the .* marker/i.test(trap.card?.text ?? '')) return null
-    return heroes.filter((h) => tileAt(grid, h.at) === trap.tile).map((h) => h.id)
+    // trap that moves first (Whirling Blades) is followed once it has moved this turn.
+    const tiles = trap ? markerTiles(trap) : []
+    if (tiles.length === 0 || (isMovingTrap(trap) && !trapStepped(state, trap))) return null
+    return heroes.filter((h) => tiles.includes(tileAt(grid, h.at))).map((h) => h.id)
   }
   if (targets === 'villainWithin1') {
     const villains = (state.villains ?? []).filter((v) => !v.defeated && state.board.tokens[v.id])

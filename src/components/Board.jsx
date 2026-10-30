@@ -320,9 +320,15 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   // hero standing on it can fly it instead of moving (FLY_CARPET).
   const carpet = items.find((i) => i.kind === 'carpet')
   const flying = picked === 'fly-carpet'
-  const markerAreas = new Set(placedMarkers.map((m) => m.tile))
+  const markerAreas = new Set(placedMarkers.flatMap((m) => m.tiles))
   const heroSquares = new Set(state.heroes.map((h) => board.tokens[h.id] && key(board.tokens[h.id])))
-  if (flying) {
+  // A trap that can move or spread more than one way (Rolling Boulder, Lava Flow) lights the
+  // tiles it can go to, and a tap anywhere on one picks it.
+  const trapPick = !readOnly && !byHand && !powerMove && state.turn.trapPick
+  const trapPicking = trapPick ? (state.traps ?? []).find((t) => t.id === trapPick.trapId) : null
+  if (trapPicking) {
+    targets = [...grid.values()].filter((sq) => sq.floor && trapPick.tiles.includes(sq.area)).map((sq) => key([sq.x, sq.y]))
+  } else if (flying) {
     targets = carpetTargets(state)
   } else if (tools && pickedItem?.kind === 'carpet') {
     targets = [...grid.values()].filter((sq) => sq.floor && !markerAreas.has(sq.area) && (!taken.has(key([sq.x, sq.y])) || heroSquares.has(key([sq.x, sq.y]))) && !itemSquares.has(key([sq.x, sq.y]))).map((sq) => key([sq.x, sq.y]))
@@ -334,6 +340,10 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
     else if (picked === active?.id) targets = heroReach(state, active)
   }
   const tapSquare = (sq) => {
+    if (trapPicking && targets.includes(key(sq))) {
+      dispatch({ type: 'TRAP_STEP', trapId: trapPicking.id, tile: grid.get(key(sq)).area })
+      return
+    }
     if (!picked || !targets.includes(key(sq))) return
     if (flying) {
       dispatch({ type: 'FLY_CARPET', to: sq })
@@ -350,6 +360,10 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   }
   const tapFigure = (id) => {
     if (watching) return
+    if (trapPicking) {
+      tapSquare(board.tokens[id])
+      return
+    }
     // The carpet can go down under a hero: their token covers the lit square.
     if (pickedItem?.kind === 'carpet' && board.tokens[id] && targets.includes(key(board.tokens[id]))) {
       tapSquare(board.tokens[id])
@@ -439,6 +453,11 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
             Skip
           </Button>
         </div>
+      )}
+      {trapPicking && (
+        <p className="mb-2 rounded-xl bg-amber-950/60 p-2 text-amber-200">
+          <b>{trapPicking.name}:</b> {trapPicking.cardId === 'lava-flow' ? 'tap a lit tile for the lava to spread to.' : 'two ways are just as close. Tap the lit tile it moves to.'}
+        </p>
       )}
       {tools && offBoard.length > 0 && (
         <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
@@ -541,7 +560,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
             </Button>
           </div>
           {open.marker.card?.text && <p className="mt-1 whitespace-pre-line text-zinc-200">{open.marker.card.text}</p>}
-          {open.moves && <p className="mt-1 text-sm text-amber-300">This marker moves when the trap goes off, so the board can't show where it is yet.</p>}
+          {open.moves && open.squares.length === 0 && <p className="mt-1 text-sm text-amber-300">This marker went down before the board followed moving traps, so the board can't show where it is.</p>}
         </div>
       )}
       <div ref={boxRef} className={fill ? 'min-h-0 flex-1 touch-pan-x touch-pan-y overflow-auto' : readOnly ? '' : 'max-h-[70vh] overflow-auto'}>
