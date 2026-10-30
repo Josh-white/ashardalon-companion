@@ -37,3 +37,17 @@ export function boardMarkers(state) {
     return { marker, look: markerLook(marker), moves, tile: squares.length > 0 ? marker.tile : undefined, squares }
   })
 }
+
+// Hero Phase: which traps the hero can try to disable. The rules allow it only from the
+// trap's tile, so on the virtual board a trap whose tile is known and isn't the hero's goes
+// in `away`. A trap the board can't place (an older marker, one that moves, no board, or a
+// hero not on the board) stays in `here`, so the button is still offered.
+export function trapsToDisable(state, hero) {
+  const traps = (state.traps ?? []).filter((t) => t.type === 'trap')
+  const at = state.board && !hero.tokens?.refuge ? state.board.tokens[hero.id] : null
+  if (!at) return { here: traps, away: [] }
+  const tile = boardGrid(state.board).get(`${at[0]},${at[1]}`)?.area
+  const placed = new Set(boardMarkers(state).filter((m) => m.squares.length > 0).map((m) => m.marker.id))
+  const away = traps.filter((t) => placed.has(t.id) && t.tile !== tile)
+  return { here: traps.filter((t) => !away.includes(t)), away }
+}

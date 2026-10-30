@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
-import { boardMarkers } from './markers.js'
+import { boardMarkers, trapsToDisable } from './markers.js'
 import { normalizeTiles } from './tileDefs.js'
 
 // A made-up start tile with a room north of it.
@@ -68,5 +68,33 @@ describe('markers on the Start tile', () => {
     expect(near.squares).toHaveLength(16)
     expect(far.squares).toHaveLength(16)
     expect(near.squares.every((sq) => sq.y < 4)).toBe(true)
+  })
+})
+
+describe('which traps a hero can try to disable', () => {
+  const dart = (tile) => ({ id: `dart-${tile}`, cardId: 'poisoned-dart-trap', name: 'Poisoned Dart Trap', type: 'trap', tile, card: { text: 'Trigger the trap during your Villain Phase: Attack each Hero on this tile.' } })
+  const boulder = { id: 'boulder', cardId: 'rolling-boulder', name: 'Rolling Boulder', type: 'trap', tile: 't1', card: { text: 'Move the Rolling Boulder marker one tile toward the closest Hero.' } }
+  const withHero = (traps, at) => {
+    const state = game(traps)
+    return { state: { ...state, board: { ...state.board, tokens: { ...state.board.tokens, [state.heroes[0].id]: at } } }, hero: state.heroes[0] }
+  }
+
+  it('offers only the trap on the hero’s tile', () => {
+    const { state, hero } = withHero([dart('t1'), dart('start')], [1, -2])
+    const { here, away } = trapsToDisable(state, hero)
+    expect(here.map((t) => t.id)).toEqual(['dart-t1'])
+    expect(away.map((t) => t.id)).toEqual(['dart-start'])
+  })
+
+  it('still offers traps the board can’t place: no saved tile, or one that moves', () => {
+    const { state, hero } = withHero([dart(undefined), boulder], [1, 2])
+    expect(trapsToDisable(state, hero).here).toHaveLength(2)
+  })
+
+  it('offers every trap without a board, and leaves hazards out', () => {
+    const { state, hero } = withHero([dart('t1'), vapors], [1, 2])
+    const { here, away } = trapsToDisable({ ...state, board: null }, hero)
+    expect(here.map((t) => t.id)).toEqual(['dart-t1'])
+    expect(away).toEqual([])
   })
 })
