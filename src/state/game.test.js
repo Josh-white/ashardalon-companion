@@ -3,7 +3,7 @@ import { HERO_TEMPLATES } from '../data/heroes.js'
 import { normalizeCardFile } from '../data/cards.js'
 import { itemAc, itemAttackBonus } from '../data/items.js'
 import { heroAc, heroAttackPenalty } from '../data/powerEffects.js'
-import { checksFor, createHero, encounterCardsOutdated, gameReducer, initialState, phaseChecks, phaseTodo } from './game.js'
+import { attackGone, checksFor, createHero, encounterCardsOutdated, gameReducer, initialState, phaseChecks, phaseTodo } from './game.js'
 
 const startGame = (count = 2) =>
   gameReducer(initialState, { type: 'START_GAME', heroes: HERO_TEMPLATES.slice(0, count).map((t) => createHero(t)) })
@@ -978,6 +978,30 @@ describe('treasure deck', () => {
     state = gameReducer(state, { type: 'USE_ITEM', heroId: state.heroes[0].id, itemId: item(state, 'Pearl').id, targetId: item(state, 'Ring').id })
     expect(item(state, 'Ring').used).toBe(false)
     expect(item(state, 'Pearl').used).toBe(true)
+  })
+
+  it("knows which item attacks and wands use up the hero's attack", () => {
+    const extra = normalizeCardFile({
+      powers: [],
+      treasures: [
+        { id: 'throw', name: 'Throw', inPlay: true, acBonus: 2, attack: { bonus: 6, damage: 1 }, text: 'Attack 1 Monster within 2 tiles of you. This action does not count as an attack action.' },
+        { id: 'crossbow', name: 'Crossbow', attack: { bonus: 4, damage: 1 }, text: 'Instead of moving, you can attack a Monster within 1 tile.' },
+        { id: 'fear', name: 'Fear', use: 'note', after: 'flip', text: 'Use instead of an attack.' },
+      ],
+    }).treasures
+    let state = setup()
+    state = { ...state, heroes: state.heroes.map((h, i) => (i === 0 ? { ...h, items: extra.map((card) => ({ id: card.id, cardId: card.id, name: card.name, used: false, card })) } : h)) }
+    const quinn = () => state.heroes[0]
+    const shoot = (name) => gameReducer(state, { type: 'HERO_ATTACK', heroId: quinn().id, itemId: item(state, name).id, targets: [{ monsterId: state.monsters[0].id, roll: 2 }] })
+    // The Throwing Shield says it isn't an attack action; the Crossbow fires instead of moving.
+    expect(attackGone(shoot('Throw'), quinn())).toBeNull()
+    state = { ...state, board: { tiles: [], tokens: {}, defs: {} } }
+    const fired = shoot('Crossbow')
+    expect(attackGone(fired, quinn())).toBeNull()
+    expect(fired.turn.boardMoves).toBe(1)
+    // A wand used instead of an attack is the attack.
+    state = gameReducer(state, { type: 'USE_ITEM', heroId: quinn().id, itemId: item(state, 'Fear').id })
+    expect(attackGone(state, quinn())).toBe("Quinn used this turn's attack on the Fear.")
   })
 
   it('rerolls a missed attack with a lucky charm', () => {

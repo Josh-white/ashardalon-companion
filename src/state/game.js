@@ -512,6 +512,10 @@ function heroAttack(state, action) {
   const power = item ? null : hero?.powers.find((p) => p.id === action.powerId)
   const source = item ?? power
   const effects = effectsOf(power)
+  // Items whose own attack isn't the hero's attack: the Throwing Shield and Ring of Shooting
+  // Stars say so, and the Crossbow of Speed fires instead of moving.
+  const itemMove = Boolean(item) && itemAttackIsMove(item.card)
+  const freeAttack = Boolean(effects.free || item?.card.freeAttack || itemMove || /not count as an attack action/i.test(item?.card.text ?? ''))
   // Cause Fear and Acrobatic Onslaught hand out an extra at-will attack.
   const bonusAttacks = state.turn.bonusAttacks ?? []
   const extraAttack = action.bonusAttack ? bonusAttacks.find((b) => b.heroId === hero?.id) : null
@@ -577,9 +581,11 @@ function heroAttack(state, action) {
       ...next.turn,
       bonusAttacks: extras,
       // Remembered for Inspiring Advice, Furious Assault and the power's own follow-up question.
-      lastAttack: { heroId: hero.id, powerId: power?.id ?? null, itemId: item?.id ?? null, attack, rolls, followUpDone: false, bonus: Boolean(extraAttack), free: Boolean(effects.free) },
+      lastAttack: { heroId: hero.id, powerId: power?.id ?? null, itemId: item?.id ?? null, attack, rolls, followUpDone: false, bonus: Boolean(extraAttack), free: freeAttack },
     },
   }
+
+  if (itemMove && state.board && inHeroPhase(state, hero)) next = { ...next, turn: { ...next.turn, boardMoves: (next.turn.boardMoves ?? 0) + 1 } }
 
   // On the virtual board a power that moves a hero waits for the player to pick the square.
   if (effects.board?.after) next = queueMoves(next, hero, power, effects.board.after, { attacked: targets.map((t) => t.monsterId), hit: anyHit })
@@ -1015,6 +1021,11 @@ function startDamage(state, hero) {
   })
 }
 
+// What an item's card says about the hero's actions: "This attack does not count as an
+// attack action", "Instead of moving, you can attack", or "Use instead of an attack".
+const itemAttackIsMove = (card) => /instead of moving/i.test(card?.text ?? '')
+const itemReplacesAttack = (card) => /instead of an attack/i.test(card?.text ?? '')
+
 const inHeroPhase = (state, hero) => Boolean(hero) && PHASES[state.turn.phase]?.key === 'hero' && state.heroes[state.turn.heroIndex]?.id === hero.id
 
 // Why the active hero has no attack left this Hero Phase, or null while they still have one.
@@ -1170,6 +1181,8 @@ function useItem(state, action) {
       // A Lucky Charm used on another roll, Potion of Speed, Wand of Fear: the table does the rest.
       break
   }
+  // Wands "used instead of an attack" take the place of the hero's attack.
+  if (itemReplacesAttack(card) && inHeroPhase(state, hero)) next = spendAttack(next, hero, `the ${card.name}`)
   return spendItem(next, hero.id, item.id)
 }
 
