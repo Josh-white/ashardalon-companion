@@ -23,7 +23,7 @@ import { layChamber, layExit, layTile, moveHero, placeNear, moveToken, newBoard,
 import { boardMove, queueFearMove, queueMoves, skipBoardMove } from '../board/powerMoves.js'
 import { heroTile } from '../board/encounters.js'
 import { guardsOnTile } from '../board/checks.js'
-import { addTreasureToken, pickUpTreasure, placeItem, removeItem } from '../board/items.js'
+import { addCarpet, addTreasureToken, flyCarpet, pickUpTreasure, placeItem, removeItem } from '../board/items.js'
 import { activeVillains, buildDeck, clamp, findFoe, foes, heroLabel, markUsed, newId, pick, sameName, shuffle, toggle, updateHero, updateMonster, validRoll, withCast, withLog, withMoment } from './gameHelpers.js'
 import { discardMonsterCard, drawMonster, drawMonsterOfType, filterMonsterDeck, monsterFromCard, villainInPlay } from './monsterDeck.js'
 import { discardEncounterCard, drawEncounter, intoTopThree, oweEncounter } from './encounterDeck.js'
@@ -1165,6 +1165,8 @@ function useItem(state, action) {
       next = updateHero(next, hero.id, (h) => ({ tokens: { ...h.tokens, caltrops: (h.tokens?.caltrops ?? 0) + card.tokens } }))
       break
     default:
+      // The Flying Carpet's marker goes on the virtual board, waiting for its square.
+      if (item.cardId === 'flying-carpet') next = addCarpet(next)
       // A Lucky Charm used on another roll, Potion of Speed, Wand of Fear: the table does the rest.
       break
   }
@@ -1747,6 +1749,8 @@ function reduce(state, action) {
       return removeItem(state, action)
     case 'PICK_UP_TREASURE':
       return pickUpTreasure(state, action)
+    case 'FLY_CARPET':
+      return flyCarpet(state, action)
 
     case 'CHOOSE_ADVENTURE': {
       // Only before the game, and only an adventure the app can run.

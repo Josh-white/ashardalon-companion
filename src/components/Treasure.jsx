@@ -264,6 +264,16 @@ function ItemPanel({ state, hero, item, dispatch, onClose }) {
         Roll that die again. A missed attack offers the charm right in the attack box. For any other roll, tap Undo first, then use the charm and roll again.
       </p>
     )
+  } else if (item.cardId === 'flying-carpet' && state.board) {
+    const down = (state.board.items ?? []).some((i) => i.kind === 'carpet')
+    ready = !down
+    body = (
+      <p className="text-zinc-200">
+        {down
+          ? `The Flying Carpet is already on the board. When ${hero.name} stands on it in their Hero Phase, tap 🧞 Fly the carpet on the board instead of moving.`
+          : 'Tap Use it, then 🧞 Put the Flying Carpet down on the board and tap a square on a tile with no marker. A hero standing on it can fly it up to 1 tile instead of moving, and rides along.'}
+      </p>
+    )
   } else {
     body = <p className="text-zinc-200">{card.note || 'Do what the card says.'}</p>
   }
