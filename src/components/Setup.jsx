@@ -413,7 +413,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
       </header>
 
       {watchOnly && <Chronicle campaign={state.campaign} />}
-      {watchOnly && <HeroHall heroes={heroChoices} lobby={lobby} records={records} />}
+      {watchOnly && <HeroHall heroes={heroChoices} lobby={lobby} records={records} onFree={(c) => dispatch({ type: 'RELEASE_HERO', deviceId: c.deviceId })} />}
 
       {/* Where the dungeon is: one choice for the whole table, so the big screen makes it.
           Without one in the game, any iPad can. */}

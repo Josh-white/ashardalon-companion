@@ -3,6 +3,7 @@ import { unlockAudio } from '../audio/soundSetting.js'
 import { HERO_COLORS } from '../data/heroes.js'
 import { HeroPortrait } from './HeroGallery.jsx'
 import { PlayerTitle } from './Records.jsx'
+import { useConfirm } from './ui.jsx'
 
 // How long a player holds their hero to light the torch.
 export const HOLD_MS = 800
@@ -27,9 +28,22 @@ function Torch({ lit }) {
 // "Heroes Assemble", on the projector: an alcove for each hero, dark until an iPad
 // picks that hero, then the torch lights with the player's name. The card art stays in
 // shadow while they choose powers and blazes up when they tap Ready.
-export function HeroHall({ heroes, lobby, records = null }) {
+// `onFree(claim)`: frees a hero whose iPad has gone away (closed, or put down for the night),
+// so another iPad can pick them.
+export function HeroHall({ heroes, lobby, records = null, onFree = null }) {
+  const [ask, dialog] = useConfirm()
+  const free = (claim, template) =>
+    ask(
+      {
+        title: `Free ${template.name}?`,
+        body: `${claim.player || 'The iPad holding ' + template.name} will need to pick a hero again. Any iPad can then pick ${template.name}.`,
+        yes: `Free ${template.name}`,
+      },
+      () => onFree(claim),
+    )
   return (
     <section className="grid grid-cols-5 gap-[2vw]">
+      {dialog}
       {heroes.map((template) => {
         const claim = lobby.find((c) => c.heroKey === template.key)
         const ready = Boolean(claim?.ready)
@@ -65,6 +79,11 @@ export function HeroHall({ heroes, lobby, records = null }) {
                   {claim.player || template.className}
                   <PlayerTitle records={records} name={claim.player} className="mx-auto mt-[0.3vw] block w-fit text-[1vw]" />
                   {!ready && <span className="block text-amber-400">Choosing powers…</span>}
+                  {onFree && (
+                    <button type="button" className="mt-[0.4vw] block w-full text-[0.9vw] text-zinc-500 underline" onClick={() => free(claim, template)}>
+                      Free this hero
+                    </button>
+                  )}
                 </>
               ) : (
                 'Waiting…'
