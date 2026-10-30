@@ -21,7 +21,7 @@ import { FIRST_ROLL_MAX_MS, newFirstRoll, rollFirst } from './firstRoll.js'
 import { finishOpening, openingNarrating, startOpening } from './opening.js'
 import { layChamber, layExit, layTile, moveHero, placeNear, placeToken, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
 import { wrathPull } from '../board/monsters.js'
-import { boardMove, queueFearMove, queueMoves, skipBoardMove } from '../board/powerMoves.js'
+import { boardMove, queueEncounterMoves, queueFearMove, queueMoves, skipBoardMove } from '../board/powerMoves.js'
 import { heroTile } from '../board/encounters.js'
 import { guardsOnTile } from '../board/checks.js'
 import { addCarpet, addTreasureToken, flyCarpet, pickUpTreasure, placeItem, removeItem } from '../board/items.js'
@@ -339,6 +339,8 @@ function resolveEncounter(state, action) {
     next = besideGate(next, before)
   }
   if (card.timeToken) next = removeTimeToken(next, card.name)
+  // Concussive Blast, Quick Advance: the virtual board asks for the moves.
+  next = queueEncounterMoves(next, hero, card)
   // Hidden Treasure, Occupied Lair: on the virtual board, a Treasure token waits for a player to tap its square.
   if ((card.placeTreasure || card.id === 'hidden-treasure' || card.id === 'occupied-lair') && next.board) next = addTreasureToken(next)
 
@@ -1200,7 +1202,9 @@ function useItem(state, action) {
     default:
       // The Flying Carpet's marker goes on the virtual board, waiting for its square.
       if (item.cardId === 'flying-carpet') next = addCarpet(next)
-      // A Lucky Charm used on another roll, Potion of Speed, Wand of Fear: the table does the rest.
+      // Potion of Speed: on the virtual board the hero walks their speed.
+      if (item.cardId === 'potion-of-speed') next = queueMoves(next, hero, card, [{ pick: 'self', to: 'squares', n: 'speed' }])
+      // A Lucky Charm used on another roll, Wand of Fear: the table does the rest.
       break
   }
   // Wands "used instead of an attack" take the place of the hero's attack.

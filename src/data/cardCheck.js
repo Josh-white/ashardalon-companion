@@ -15,6 +15,8 @@ export const ENCOUNTER_IDS = {
   lost: 'Lost: puts the bottom tile on top of the stack',
   'thief-in-the-dark': 'Thief in the Dark: picks the treasure to lose',
   'wrath-of-the-enemy': 'Wrath of the Enemy: the virtual board pulls the monster next to the hero',
+  'concussive-blast': 'Concussive Blast: the virtual board asks where each hero is pushed',
+  'quick-advance': 'Quick Advance: the virtual board asks which monster moves closer',
   'hidden-treasure': 'Hidden Treasure: puts a Treasure token on the virtual board',
 }
 

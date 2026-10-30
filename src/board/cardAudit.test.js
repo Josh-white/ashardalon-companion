@@ -4,7 +4,10 @@ import { normalizeCardFile } from '../data/cards.js'
 import { createHero, gameReducer, initialState, phaseChecks } from '../state/game.js'
 import { boardAnswer } from './checks.js'
 import { markerOnHeroTile } from './markers.js'
-import { wrathPull } from './monsters.js'
+import { foesInRange, powerRange, wrathPull } from './monsters.js'
+import { moveChoices, movePrompt, moveTargets } from './powerMoves.js'
+import { tilesBetween } from './paths.js'
+import { boardGrid } from './play.js'
 import { heroReach, movesLeft } from './play.js'
 import { normalizeTiles } from './tileDefs.js'
 
@@ -45,6 +48,8 @@ const file = normalizeCardFile({
     { id: 'arrives', name: 'Arrives', type: 'event', adventure: true, noCancel: true, placeVillain: 'dragon', text: 'Place the dragon.' },
     { id: 'flares', name: 'Flares', type: 'event', adventure: true, noCancel: true, objective: 'Gate', drawMonsterType: 'Aberrant', text: 'An Aberrant comes out.' },
     { id: 'occupied-lair', name: 'Occupied Lair', type: 'event', drawMonster: true, text: 'A lair.' },
+    { id: 'concussive-blast', name: 'Concussive Blast', type: 'event', text: 'Attack each Hero on the active Hero\'s tile.' },
+    { id: 'quick-advance', name: 'Quick Advance', type: 'event', text: 'A monster moves closer.' },
   ],
 })
 const card = (id) => file.encounters.find((c) => c.id === id)
@@ -176,5 +181,84 @@ describe('Occupied Lair', () => {
     const { state } = game()
     const after = resolve({ ...encounter(state, 'occupied-lair'), encounter: { ...encounter(state, 'occupied-lair').encounter, monsterDrawn: true } })
     expect(after.board.items).toEqual([expect.objectContaining({ kind: 'treasure', at: null })])
+  })
+})
+
+const rat = (state, at) => ({
+  ...state,
+  monsters: [{ id: 'm1', cardId: 'rat', name: 'Rat', hp: 1, maxHp: 1, ac: 12, conditions: [], ownerId: state.heroes[0].id, card: { hp: 1, figures: 1 } }],
+  board: { ...state.board, tokens: { ...state.board.tokens, m1: at } },
+})
+
+describe('Concussive Blast', () => {
+  it('after the attack, each hero on the tile is moved to an adjacent tile', () => {
+    let { state, heroes } = game()
+    state = resolve(encounter(state, 'concussive-blast'))
+    expect(moveChoices(state).sort()).toEqual(heroes.map((h) => h.id).sort())
+    expect(movePrompt(state)).toMatch(/a hero .* on a tile next to its own/)
+    const grid = boardGrid(state.board)
+    for (const h of heroes) {
+      const spot = moveTargets(state, h.id)[0]
+      expect(tilesBetween(grid, state.board.tokens[h.id], spot.split(',').map(Number))).toBe(1)
+      state = gameReducer(state, { type: 'BOARD_MOVE', id: h.id, to: spot.split(',').map(Number) })
+    }
+    expect(state.turn.boardMove).toBeNull()
+    expect(heroes.every((h) => boardGrid(state.board).get(state.board.tokens[h.id].join(','))?.area !== 'start')).toBe(true)
+  })
+})
+
+describe('Quick Advance', () => {
+  it('a monster off the heroes\' tiles moves 1 tile closer to the active hero', () => {
+    let { state, heroes } = game()
+    state = resolve(encounter(rat(state, [1, -6]), 'quick-advance'))
+    expect(moveChoices(state)).toEqual(['m1'])
+    const grid = boardGrid(state.board)
+    const targets = moveTargets(state, 'm1')
+    expect(targets.length).toBeGreaterThan(0)
+    expect(targets.every((k) => tilesBetween(grid, k.split(',').map(Number), state.board.tokens[heroes[0].id]) === 1)).toBe(true)
+  })
+
+  it('a monster on a hero\'s tile can\'t be chosen', () => {
+    const { state } = game()
+    const after = resolve(encounter(rat(state, [2, 0]), 'quick-advance'))
+    expect(after.turn.boardMove).toBeFalsy()
+  })
+})
+
+describe('item attacks only reach monsters in range', () => {
+  it('Crossbow of Speed within 1 tile, Ring of Shooting Stars within 2', () => {
+    const crossbow = 'Use during your Hero Phase.\nInstead of moving, you can attack a Monster within 1 tile with a rapidly fired bolt.\nAttack: +4\nDamage: 1'
+    const ring = 'Use during your Hero Phase.\nAttack 1 Monster within 2 tiles of you. This attack does not count as an attack action.'
+    expect(powerRange(crossbow)).toBe('within1')
+    expect(powerRange(ring)).toBe('within2')
+    const { state, heroes } = game()
+    const far = rat(state, [1, -6])
+    expect(foesInRange(far, heroes[0].id, powerRange(crossbow), far.monsters)).toEqual([])
+    expect(foesInRange(far, heroes[0].id, powerRange(ring), far.monsters)).toHaveLength(1)
+  })
+})
+
+describe('To Arms! and Potion of Speed', () => {
+  it('To Arms! moves another hero on the tile, then the hero', () => {
+    let { state, heroes } = game()
+    const power = { id: 'ta', name: 'To Arms!', type: 'utility', used: false, card: { name: 'To Arms!' } }
+    state = { ...state, heroes: state.heroes.map((h, i) => (i === 0 ? { ...h, powers: [power] } : h)) }
+    state = gameReducer(state, { type: 'USE_POWER', heroId: heroes[0].id, powerId: 'ta' })
+    expect(moveChoices(state)).toEqual([heroes[1].id])
+    state = gameReducer(state, { type: 'BOARD_MOVE', id: heroes[1].id, to: [1, 5] })
+    expect(moveChoices(state)).toEqual([heroes[0].id])
+    state = gameReducer(state, { type: 'BOARD_MOVE', id: heroes[0].id, to: [0, 6] })
+    expect(state.board.tokens[heroes[0].id]).toEqual([0, 6])
+    expect(state.turn.boardMove).toBeNull()
+  })
+
+  it('Potion of Speed lets the hero walk their speed', () => {
+    let { state, heroes } = game()
+    const potion = { id: 'potion-of-speed', name: 'Potion of Speed', type: 'item', text: 'Move up to your speed.', use: 'note', after: 'discard' }
+    const item = { id: 'i1', cardId: potion.id, name: potion.name, used: false, card: potion }
+    state = { ...state, heroes: state.heroes.map((h, i) => (i === 0 ? { ...h, items: [item] } : h)) }
+    state = gameReducer(state, { type: 'USE_ITEM', heroId: heroes[0].id, itemId: 'i1' })
+    expect(moveChoices(state)).toEqual([heroes[0].id])
+    expect(moveTargets(state, heroes[0].id)).toContain('0,7')
   })
 })
