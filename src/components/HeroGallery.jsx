@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { heroArt, heroCardArt } from '../data/art.js'
 import { cardStats } from '../data/cards.js'
-import { HERO_COLORS } from '../data/heroes.js'
+import { HERO_COLORS, heroAbilities } from '../data/heroes.js'
 import { artUrl, useArt } from '../state/useArt.js'
+import { useCards } from '../state/useCards.js'
 import Art from './Art.jsx'
 
 // The hero's tall card art, or their round token on a warm glow when the Pi has no card
@@ -18,6 +19,22 @@ export function HeroPortrait({ heroKey, dim = false, className = '' }) {
           <Art name={heroArt(heroKey)} className={`w-2/3 max-w-40 ${dim ? 'brightness-[0.35] grayscale' : ''}`} />
         </span>
       )}
+    </span>
+  )
+}
+
+// What the hero's card ability does, in a few words, so a player sees it before picking.
+// `className` sets the size (the projector's alcoves scale with the screen).
+export function HeroAbilities({ template, level = 1, dim = false, className = 'text-sm' }) {
+  const abilities = heroAbilities(template, useCards().abilities, level)
+  if (abilities.length === 0) return null
+  return (
+    <span className={`block space-y-1 text-left ${dim ? 'text-zinc-500' : 'text-zinc-200'} ${className}`}>
+      {abilities.map((ability) => (
+        <span key={ability.name} className="block">
+          <span className={`font-semibold ${dim ? 'text-zinc-400' : 'text-amber-300'}`}>✨ {ability.name}:</span> {ability.hint}
+        </span>
+      ))}
     </span>
   )
 }

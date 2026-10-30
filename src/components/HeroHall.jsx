@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { unlockAudio } from '../audio/soundSetting.js'
 import { HERO_COLORS } from '../data/heroes.js'
-import { HeroPortrait } from './HeroGallery.jsx'
+import { HeroAbilities, HeroPortrait } from './HeroGallery.jsx'
 import { PlayerTitle } from './Records.jsx'
 import { useConfirm } from './ui.jsx'
 
@@ -29,8 +29,8 @@ function Torch({ lit }) {
 // picks that hero, then the torch lights with the player's name. The card art stays in
 // shadow while they choose powers and blazes up when they tap Ready.
 // `onFree(claim)`: frees a hero whose iPad has gone away (closed, or put down for the night),
-// so another iPad can pick them.
-export function HeroHall({ heroes, lobby, records = null, onFree = null }) {
+// so another iPad can pick them. `levelOf(heroKey)`: a campaign hero's level, for their abilities.
+export function HeroHall({ heroes, lobby, records = null, onFree = null, levelOf = () => 1 }) {
   const [ask, dialog] = useConfirm()
   const free = (claim, template) =>
     ask(
@@ -89,6 +89,7 @@ export function HeroHall({ heroes, lobby, records = null, onFree = null }) {
                 'Waiting…'
               )}
             </span>
+            <HeroAbilities template={template} level={levelOf(template.key)} dim={!claim} className="mt-[0.3vw] text-[1.05vw] leading-snug" />
           </div>
         )
       })}
