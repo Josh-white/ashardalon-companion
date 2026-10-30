@@ -24,7 +24,7 @@ import { boardMove, queueFearMove, queueMoves, skipBoardMove } from '../board/po
 import { heroTile } from '../board/encounters.js'
 import { guardsOnTile } from '../board/checks.js'
 import { addCarpet, addTreasureToken, flyCarpet, pickUpTreasure, placeItem, removeItem } from '../board/items.js'
-import { activeVillains, buildDeck, clamp, findFoe, foes, heroLabel, markUsed, newId, pick, sameName, shuffle, toggle, updateHero, updateMonster, validRoll, withCast, withLog, withMoment } from './gameHelpers.js'
+import { activeVillains, buildDeck, clamp, findFoe, foes, heroLabel, markUsed, newId, pick, sameName, shuffle, toggle, updateHero, updateMonster, validRoll, withCast, withLog, withMoment, withVillainCall } from './gameHelpers.js'
 import { discardMonsterCard, drawMonster, drawMonsterOfType, filterMonsterDeck, monsterFromCard, villainInPlay } from './monsterDeck.js'
 import { discardEncounterCard, drawEncounter, intoTopThree, oweEncounter } from './encounterDeck.js'
 import { dealStartingTreasure, drawTreasure, keepTreasure, oweTreasure, spendItem, treasureWords } from './treasureDeck.js'
@@ -413,7 +413,7 @@ function defeatVillain(state, villain) {
   const rage = villain.card.enraged
   if (rage) {
     const card = { ...villain.card, hp: rage.hp, attacks: rage.attacks, tactics: rage.tactics, enraged: null }
-    const next = updateMonster(state, villain.id, () => ({ hp: rage.hp, maxHp: rage.hp, ac: rage.ac, enraged: true, card }))
+    const next = withVillainCall(updateMonster(state, villain.id, () => ({ hp: rage.hp, maxHp: rage.hp, ac: rage.ac, enraged: true, card })), villain, 'enraged')
     return {
       state: withMoment(withLog(next, `The ${villain.name} is enraged! It's back up with ${rage.hp} HP and AC ${rage.ac}.`), {
         kind: 'spawn',
@@ -424,7 +424,7 @@ function defeatVillain(state, villain) {
       defeated: false,
     }
   }
-  const next = updateMonster(state, villain.id, () => ({ hp: 0, defeated: true }))
+  const next = withVillainCall(updateMonster(state, villain.id, () => ({ hp: 0, defeated: true })), villain, 'fall')
   return { state: withLog(next, `The villain ${villain.name} was defeated!`), defeated: true }
 }
 
@@ -1383,6 +1383,7 @@ function placeVillain(state, action) {
   let next = { ...state, villains: [...(state.villains ?? []), villain] }
   // Ashardalon brings his breath card: it goes into the top of the encounter deck before the next draw.
   if (card.addEncounter) next = { ...next, encounterAdds: [...(next.encounterAdds ?? []).filter((id) => id !== card.addEncounter), card.addEncounter] }
+  next = withVillainCall(next, villain, 'arrive')
   return withMoment(withLog(next, `The villain ${villain.fullName} appears!`), {
     kind: 'spawn',
     art: monsterArt(villain),

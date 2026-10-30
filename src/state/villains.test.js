@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { narrationFor } from '../audio/narration.js'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { normalizeCardFile } from '../data/cards.js'
 import { createHero, foes, gameReducer, initialState } from './game.js'
@@ -67,6 +68,23 @@ describe('villains', () => {
     expect(foes(state)).toHaveLength(0)
     // A defeated villain can be placed again later, as a new one.
     expect(place(state, 'boss').villains).toHaveLength(2)
+  })
+
+  it("speaks when it flips and when it falls to a hero's attack, though the attack takes the screen", () => {
+    const said = (before, after) => narrationFor(before, after, after.moment.at).map((l) => l.text)
+    let state = place(start(), 'drake')
+    const flipped = hit(state, state.villains[0])
+    expect(flipped.moment.title).not.toMatch(/enraged/)
+    expect(said(state, flipped)).toContain('[shouting] Enough! Now you will see my true power!')
+    state = hit(flipped, flipped.villains[0])
+    const beaten = hit(state, state.villains[0])
+    expect(beaten.villains[0].defeated).toBe(true)
+    const lines = said(state, beaten)
+    expect(lines).toContain('[gasping, defeated] This… cannot be…')
+    expect(lines.filter((t) => /cannot be/.test(t))).toHaveLength(1)
+    // Placing it from the villain button says it once, not twice.
+    const placed = place(start(), 'boss')
+    expect(said(start(), placed).filter((t) => /my domain/.test(t))).toHaveLength(1)
   })
 
   it('flips to its enraged side the first time it drops to 0 HP', () => {

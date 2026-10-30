@@ -17,6 +17,13 @@ export const withMoment = (state, moment) => ({
   moment: { id: newId('moment'), at: Date.now(), ...moment },
 })
 
+// A villain arriving, flipping to its enraged side or falling, so the narrator gives it
+// its line even when a later moment (the chamber, the hero's attack) takes the screen.
+export const withVillainCall = (state, villain, when) => ({
+  ...state,
+  villainCalls: [...(state.villainCalls ?? []), { id: newId('call'), at: Date.now(), villainId: villain.id, when }].slice(-4),
+})
+
 // A power used outside an attack (healing, a token, a dodge), so screens can play its sound.
 export const withCast = (state, power) => ({ ...state, cast: { id: newId('cast'), at: Date.now(), power: power.name } })
 
