@@ -8,8 +8,10 @@ import { HERO_TEMPLATES } from '../data/heroes.js'
 import { powerSlotsFor } from '../state/heroSetup.js'
 import { ROBOT_CARD_FILE } from './robotCards.js'
 
-// The robot: plays whole solo games on the virtual board by itself, tapping a random button
-// on the real screens again and again, with every tap going through the real game rules.
+// The robot: plays whole games by itself, tapping a random button on the real screens again
+// and again, with every tap going through the real game rules. Most games are solo games on
+// the virtual board; every 4th is a party game on the shared table screen, every other one of
+// those on the party's virtual board and the rest with real tiles on the table.
 // It doesn't try to win; it looks for a screen that goes blank or a tap the rules can't take
 // (like the monster-move crash in PR 131), so those are caught before a merge goes live.
 //
@@ -20,7 +22,7 @@ import { ROBOT_CARD_FILE } from './robotCards.js'
 // Your own card file (the real cards.json on the Pi, say) instead of the made-up one:
 //   ROBOT_CARDS=cards/cards.json npm run robot
 
-const GAMES = Number(process.env.ROBOT_GAMES) || 12
+const GAMES = Number(process.env.ROBOT_GAMES) || 16
 const TAPS = Number(process.env.ROBOT_TAPS) || 300
 const FIRST_SEED = Number(process.env.ROBOT_SEED) || 1
 const CARD_FILE = process.env.ROBOT_CARDS ? JSON.parse(readFileSync(process.env.ROBOT_CARDS, 'utf8')) : ROBOT_CARD_FILE
@@ -182,6 +184,11 @@ function pickWeighted(options) {
   return options.find((o) => (roll -= o.weight) < 0) ?? options.at(-1)
 }
 
+// Which kind of game a seed plays: 'solo', or a party game ('party-board' on the party's
+// virtual board, 'party-tiles' with real tiles). Picked from the seed, not the dice, so the
+// solo seeds play the same games as before party games came along.
+const kindOf = (seed) => (seed % 4 !== 0 ? 'solo' : seed % 8 === 0 ? 'party-board' : 'party-tiles')
+
 // The lobby, filled in the way the solo screen does: an adventure, 1 to 5 heroes, their powers.
 function lobbyFor(game) {
   const { gameReducer, initialState } = app
@@ -190,19 +197,34 @@ function lobbyFor(game) {
   const heroCount = 1 + Math.floor(random() * 3)
   const heroes = [...HERO_TEMPLATES].sort(() => random() - 0.5).slice(0, heroCount)
   let state = gameReducer(initialState, { type: 'CHOOSE_ADVENTURE', adventure })
+  const party = game.kind !== 'solo'
+  if (party) state = gameReducer(state, { type: 'SET_LOBBY_BOARD', on: game.kind === 'party-board' })
   heroes.forEach((template, i) => {
-    const deviceId = `robot~solo-${i + 1}`
+    const deviceId = party ? `robot-ipad-${i + 1}` : `robot~solo-${i + 1}`
     const used = new Set()
     const picks = powerSlotsFor(template).map((type) => {
       const card = pick(CARDS.powers.filter((c) => c.hero === template.key && c.type === type && !used.has(c.id)))
       if (card) used.add(card.id)
       return card ?? null
     })
-    state = gameReducer(state, { type: 'CLAIM_HERO', deviceId, heroKey: template.key, picks })
+    state = gameReducer(state, { type: 'CLAIM_HERO', deviceId, heroKey: template.key, picks, player: `Player ${i + 1}` })
+    if (party) state = gameReducer(state, { type: 'SET_LOBBY_READY', deviceId, ready: true })
   })
   game.adventure = adventure?.title ?? 'free play'
   game.heroes = heroes.map((t) => t.name)
-  return state
+  if (!party) return state
+  // A party game starts from the big screen's Enter the dungeon (Setup.jsx) once every iPad
+  // is ready, sending the same cards and dice.
+  const numbers = (n) => Array.from({ length: n }, () => random())
+  return gameReducer(state, {
+    type: 'START_GAME',
+    treasureCards: CARDS.treasures,
+    chambers: CARDS.chambers,
+    tokens: CARDS.treasureTokens,
+    random: numbers(128),
+    tileRandom: numbers(8),
+    ...(game.kind === 'party-board' ? { boardTiles: CARDS.tiles, boardRandom: numbers(64) } : {}),
+  })
 }
 
 async function playGame(seed) {
@@ -214,16 +236,19 @@ async function playGame(seed) {
   random = seeded(seed)
   dice = seeded(seed + 1_000_003)
   other = seeded(seed + 2_000_003)
-  const game = { seed, taps: [] }
+  const game = { seed, kind: kindOf(seed), taps: [] }
   store.crash = null
   store.history = []
   store.state = lobbyFor(game)
+  if (game.kind !== 'solo' && store.state.status !== 'playing') return { ...game, problem: "the party game didn't start" }
   localStorage.clear()
   sessionStorage.clear()
   sessionStorage.setItem('ashardalon-companion/intro-seen', 'yes')
   localStorage.setItem('ashardalon-companion/device', 'robot')
   localStorage.setItem('ashardalon-companion/game', 'family')
-  localStorage.setItem('ashardalon-companion/screen', 'solo')
+  localStorage.setItem('ashardalon-companion/screen', game.kind === 'solo' ? 'solo' : 'hero')
+  // The party plays on the shared table screen, with every hero's turn on it.
+  if (game.kind !== 'solo') localStorage.setItem('ashardalon-companion/seat', 'table')
 
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'cancelAnimationFrame', 'Date'] })
   vi.setSystemTime(new Date('2026-10-30T19:00:00'))
@@ -236,10 +261,12 @@ async function playGame(seed) {
   const wait = () => act(async () => vi.advanceTimersByTimeAsync(4000))
   await wait()
 
-  const enter = [...document.querySelectorAll('button')].find((b) => /Enter the dungeon/.test(b.textContent))
-  if (!enter || enter.disabled) return { ...game, problem: `the solo lobby wouldn't let the robot in (${document.body.textContent.slice(0, 200)})` }
-  fireEvent.click(enter)
-  await wait()
+  if (game.kind === 'solo') {
+    const enter = [...document.querySelectorAll('button')].find((b) => /Enter the dungeon/.test(b.textContent))
+    if (!enter || enter.disabled) return { ...game, problem: `the solo lobby wouldn't let the robot in (${document.body.textContent.slice(0, 200)})` }
+    fireEvent.click(enter)
+    await wait()
+  }
 
   for (let n = 0; n < TAPS && !store.crash; n++) {
     if (store.state.status === 'won' || store.state.status === 'lost') break
@@ -270,7 +297,7 @@ async function playGame(seed) {
 
 function report(game) {
   return [
-    `Robot game with seed ${game.seed} (${game.adventure}; ${game.heroes.join(', ')}) ${game.problem}`,
+    `Robot ${game.kind} game with seed ${game.seed} (${game.adventure}; ${game.heroes.join(', ')}) ${game.problem}`,
     `Play it again: ROBOT_SEED=${game.seed} ROBOT_GAMES=1 npm run robot`,
     'Its last taps:',
     ...game.taps.slice(-25).map((t, i, all) => `  ${game.taps.length - all.length + i + 1}. ${t}`),
@@ -282,7 +309,7 @@ describe('the robot', () => {
     const seed = FIRST_SEED + i
     it(`plays a whole game without crashing (seed ${seed})`, async () => {
       const game = await playGame(seed)
-      process.stderr.write(`Robot game ${seed}: ${game.adventure} with ${game.heroes?.join(', ')}, ${game.taps.length} taps, reached round ${game.round} with ${game.tiles} tiles out\n`)
+      process.stderr.write(`Robot ${game.kind} game ${seed}: ${game.adventure} with ${game.heroes?.join(', ')}, ${game.taps.length} taps, reached round ${game.round} with ${game.tiles} tiles out\n`)
       expect(game.problem, game.problem && report(game)).toBeUndefined()
     }, 120_000)
   }
