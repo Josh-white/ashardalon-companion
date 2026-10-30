@@ -414,8 +414,6 @@ const SCENES = {
   ),
 }
 
-export const SCENE_KEYS = Object.keys(SCENES)
-
 export default function DungeonScene({ area, className = '' }) {
   const Scene = SCENES[area]
   if (!Scene) return null

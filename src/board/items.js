@@ -1,4 +1,4 @@
-import { key } from './grid.js'
+import { baseId, key } from './grid.js'
 import { adjacent, tilesBetween } from './paths.js'
 import { boardGrid, movesLeft, occupied, placeToken } from './play.js'
 import { newId, withLog } from '../state/gameHelpers.js'
@@ -38,7 +38,7 @@ export function treasureInReach(state, hero) {
   const grid = boardGrid(state.board)
   const areaOf = (sq) => grid.get(key(sq))?.area
   const foes = new Set([...state.monsters, ...(state.villains ?? []).filter((v) => !v.defeated)].filter((m) => !m.objective).map((m) => m.id))
-  const foeAreas = new Set(Object.entries(state.board.tokens).filter(([id]) => foes.has(id.split('#')[0])).map(([, sq]) => areaOf(sq)))
+  const foeAreas = new Set(Object.entries(state.board.tokens).filter(([id]) => foes.has(baseId(id))).map(([, sq]) => areaOf(sq)))
   return items(state).find((i) => i.kind === 'treasure' && i.at && (key(i.at) === key(at) || adjacent(grid, at, i.at)) && !foeAreas.has(areaOf(i.at))) ?? null
 }
 

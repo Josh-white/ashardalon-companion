@@ -3,11 +3,10 @@
 // in cards.json, so they're recognised by their wording. Null means the board can't tell
 // (no board, a question it doesn't know, or a figure that isn't on it), so the screen asks.
 
-import { OPPOSITE, STEP, key, unexploredEdges } from './grid.js'
+import { OPPOSITE, STEP, baseId, key, unexploredEdges } from './grid.js'
 import { adjacent, tilesBetween } from './paths.js'
 import { boardGrid, heroTrail } from './play.js'
 
-const baseId = (tokenId) => tokenId.split('#')[0]
 const squeeze = (text) => text.toLowerCase().replace(/[^a-z0-9]/g, '')
 const listNames = (names) => (names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`)
 

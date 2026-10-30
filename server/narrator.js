@@ -21,7 +21,6 @@ export const DEFAULT_VOICES = {
   ashardalon: 'd5zuFgodxfQobkK5AfKH', // the red dragon
   bellax: 'mLw8kuDeVGqVstOYjRII', // the gauth's whisper of madness
 }
-export const DEFAULT_VOICE = DEFAULT_VOICES.narrator
 
 const castFromEnv = (env) =>
   Object.fromEntries(

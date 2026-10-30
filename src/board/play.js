@@ -12,7 +12,7 @@
 // laid this turn in state.turn.boardTiles ([{ uid, side, filled }]), so a new turn starts
 // with none.
 
-import { buildGrid, key, placeTile, scorchSquare, unexploredEdges } from './grid.js'
+import { baseId, buildGrid, key, placeTile, scorchSquare, unexploredEdges } from './grid.js'
 import { distances, reachable } from './paths.js'
 import { DOOR_TOKENS, doorTokensLeft, placeDoors } from './doors.js'
 import { itemSpeed } from '../data/items.js'
@@ -360,7 +360,6 @@ export function placeNear(state, monster, at) {
 // A monster card with several figures (the Legion Devil's 3) has a token for each figure
 // still standing: the monster's id, then id#2, id#3.
 export const figureToken = (monsterId, n) => (n <= 1 ? monsterId : `${monsterId}#${n}`)
-const baseId = (tokenId) => tokenId.split('#')[0]
 export const figuresLeft = (monster) => (monster.card?.figures > 1 && !monster.villain ? Math.max(0, Math.ceil(monster.hp / monster.card.hp)) : 1)
 
 const has = (hero, condition) => (hero.conditions ?? []).includes(condition)

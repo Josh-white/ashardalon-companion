@@ -40,8 +40,6 @@ export function buildTileStack(count, card, random = []) {
   return { stack, drawn: 0 }
 }
 
-export const tilesLeft = (state) => (state.tileStack ? state.tileStack.stack.length : null)
-
 // Takes the top (or bottom) tile. Returns the new state and the tile: '' for an
 // ordinary one, the special tile's name, or null when the stack is empty.
 export function takeTile(state, from = 'top') {

@@ -2,12 +2,11 @@
 // worked out from where the figures stand instead of asked as a question. Null means the
 // board can't tell (no board, or a figure isn't on it), so the screen asks instead.
 
-import { key } from './grid.js'
+import { baseId, key } from './grid.js'
 import { adjacent, tilesBetween } from './paths.js'
 import { boardGrid } from './play.js'
 import { isMovingTrap, markerTiles, trapStepped } from './traps.js'
 
-const baseId = (tokenId) => tokenId.split('#')[0]
 
 // The tile a square is on (half of the Start tile counts as a tile).
 const tileAt = (grid, at) => (at ? grid.get(key(at))?.area : undefined)
