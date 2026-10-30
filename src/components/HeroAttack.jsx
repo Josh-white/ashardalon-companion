@@ -4,7 +4,7 @@ import { foeDistance, foesInRange, powerRange } from '../board/monsters.js'
 import { asksIfStayed, attackItems, distanceChoices, heroItems, itemsWithUse } from '../data/items.js'
 import { effectsOf, maxRolls, reactionsFor } from '../data/powerEffects.js'
 import { rollD20 } from '../state/random.js'
-import { attackGone, foes, powerNumber } from '../state/game.js'
+import { attackGone, attackNumbers, foes, powerNumber } from '../state/game.js'
 import { HeroChoice, InReach, MonsterChoice, monsterName } from './Pickers.jsx'
 import { heroesInReach } from '../board/encounters.js'
 import { Button } from './ui.jsx'
@@ -64,6 +64,89 @@ function FollowUp({ state, hero, power, last, dispatch }) {
   )
 }
 
+// One piece of an attack's sum: " + 2 Vorpal Sword", blue when an item or another hero adds it.
+function SumPart({ part, first = false, plain = first }) {
+  const tone = part.value < 0 ? 'text-orange-300' : plain ? '' : 'text-sky-300'
+  return (
+    <>
+      {first ? '' : part.value < 0 ? ' − ' : ' + '}
+      <span className={tone}>
+        {Math.abs(part.value)} {part.label}
+      </span>
+    </>
+  )
+}
+
+// After a hit, where its damage came from, when more than the power's own number went in.
+function DamageLine({ row }) {
+  const parts = row.attack?.parts
+  if (!row.hit || !parts) return null
+  const extra = [
+    ...(row.attack.evenBonus && row.value % 2 === 0 ? [{ label: 'even roll', value: row.attack.evenBonus }] : []),
+    ...parts.crits.filter((c) => row.value >= c.from).map((c) => ({ label: `${c.label} (rolled ${c.from}+)`, value: 1 })),
+  ]
+  const all = [...parts.damage, ...extra]
+  if (all.length < 2) return null
+  return (
+    <span className="mt-1 block text-base text-zinc-300">
+      Damage:{' '}
+      {all.map((p, i) => (
+        <SumPart key={p.label} part={p} first={i === 0} />
+      ))}{' '}
+      = <b>{all.reduce((n, p) => n + p.value, 0)}</b>
+    </span>
+  )
+}
+
+// Before the roll: what the hero needs on the d20 and how much a hit deals, piece by piece,
+// so the players can see what their items and powers are adding.
+function AttackMath({ numbers, monster, name }) {
+  const need = monster.ac - numbers.bonus
+  const needText = need <= 1 ? 'any roll hits' : need > 20 ? "can't hit, even with a 20" : `roll ${need} or more`
+  const chip = (part, i) => (
+    <span
+      key={`${part.label}-${i}`}
+      className={`rounded-lg px-2 py-1 ${i === 0 ? 'bg-zinc-800' : part.value < 0 ? 'border border-orange-700 bg-orange-950/70' : 'border border-sky-700 bg-sky-950/70'}`}
+    >
+      <b className={i === 0 ? '' : part.value < 0 ? 'text-orange-300' : 'text-sky-300'}>{i === 0 ? part.value : Math.abs(part.value)}</b>{' '}
+      <span className="text-sm text-zinc-300">{part.label}</span>
+    </span>
+  )
+  const sign = (part, i) => (i === 0 ? null : <span className="text-zinc-500">{part.value < 0 ? '−' : '+'}</span>)
+  const row = (parts) => parts.flatMap((p, i) => [sign(p, i), chip(p, i)]).filter(Boolean)
+  return (
+    <div className="space-y-2 rounded-xl bg-zinc-900 p-3">
+      <p className="text-xs tracking-wide text-zinc-400 uppercase">
+        To hit the {name} (AC {monster.ac})
+      </p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="rounded-lg bg-zinc-800 px-2 py-1 font-semibold">d20</span>
+        <span className="text-zinc-500">+</span>
+        {row(numbers.parts.bonus)}
+        <span className="text-zinc-500">=</span>
+        <span className="rounded-lg bg-amber-500 px-2 py-1 font-bold text-zinc-950">{needText}</span>
+      </div>
+      <p className="text-xs tracking-wide text-zinc-400 uppercase">Damage if you hit</p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {row(numbers.parts.damage)}
+        {numbers.parts.damage.length > 1 && (
+          <>
+            <span className="text-zinc-500">=</span>
+            <span className="rounded-lg bg-amber-500 px-2 py-1 font-bold text-zinc-950">{numbers.damage} damage</span>
+          </>
+        )}
+      </div>
+      {numbers.parts.crits.map((c) => (
+        <p key={c.label} className="text-sm text-sky-200">
+          Roll {c.from === 20 ? 'a 20' : `${c.from} or more`}: +1 more damage from {c.label}.
+        </p>
+      ))}
+      {numbers.evenBonus > 0 && <p className="text-sm text-sky-200">Roll an even number: +{numbers.evenBonus} more damage.</p>}
+      {numbers.miss > 0 && <p className="text-sm text-zinc-400">Even on a miss: {numbers.miss} damage.</p>}
+    </div>
+  )
+}
+
 // What just happened in an attack, plus whatever can still change it: Inspiring Advice on
 // a miss, Furious Assault on a hit, and the power's own follow-up question.
 export function AttackAftermath({ state, last, dispatch }) {
@@ -87,8 +170,10 @@ export function AttackAftermath({ state, last, dispatch }) {
       <ul className="space-y-2">
         {last.rolls.map((r, i) => (
           <li key={i} className={`rounded-xl p-3 text-lg ${r.hit ? 'bg-emerald-950' : 'bg-zinc-900'}`}>
-            {hero.name} {r.rerolled ? 'rolled again:' : 'rolled'} {r.value} + {r.attack?.bonus ?? last.attack.bonus} = {r.total} against the {r.label}'s AC {r.ac}.{' '}
-            <b className={r.hit ? 'text-emerald-300' : 'text-zinc-300'}>{r.outcome}</b>
+            {hero.name} {r.rerolled ? 'rolled again:' : 'rolled'} {r.value}
+            {r.attack?.parts ? r.attack.parts.bonus.map((p, i) => <SumPart key={p.label} part={p} plain={i === 0} />) : ` + ${r.attack?.bonus ?? last.attack.bonus}`} = {r.total} against the{' '}
+            {r.label}'s AC {r.ac}. <b className={r.hit ? 'text-emerald-300' : 'text-zinc-300'}>{r.outcome}</b>
+            <DamageLine row={r} />
           </li>
         ))}
       </ul>
@@ -477,6 +562,27 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
                 />
               )}
               {item?.card.note && <p className="rounded-lg bg-amber-950/60 p-3 text-amber-200">{item.card.note}</p>}
+              {!needsAnswer &&
+                chosen
+                  .filter((id, i) => chosen.indexOf(id) === i)
+                  .map((id) => foes(state).find((m) => m.id === id))
+                  .filter((m) => m?.ac)
+                  .map((monster) => (
+                    <AttackMath
+                      key={monster.id}
+                      monster={monster}
+                      name={monsterName(state, monster)}
+                      numbers={attackNumbers(hero, {
+                        item,
+                        power: item ? null : power,
+                        extraAttack: extra,
+                        adjacentCount: answers.adjacentCount,
+                        startedAdjacent: answers.startedAdjacent,
+                        distance: allDistances[monster.id],
+                        stayed,
+                      })}
+                    />
+                  ))}
               {unknownAc && (
                 <p className="text-amber-300">
                   The app doesn't know the {monsterName(state, unknownAc)}'s AC. Roll the die yourself and use its card.

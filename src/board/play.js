@@ -15,6 +15,7 @@
 import { buildGrid, key, placeTile, scorchSquare, unexploredEdges } from './grid.js'
 import { distances, reachable } from './paths.js'
 import { DOOR_TOKENS, doorTokensLeft, placeDoors } from './doors.js'
+import { itemSpeed } from '../data/items.js'
 
 // The board's grid, worked out once per board (the board object changes on every move).
 const grids = new WeakMap()
@@ -358,8 +359,11 @@ const has = (hero, condition) => (hero.conditions ?? []).includes(condition)
 // The Cage curse: the hero can't move until the cage is opened.
 export const caged = (hero) => (hero.curses ?? []).some((c) => c.cardId === 'cage')
 
-// How far the hero walks in one move: Slowed heroes only 2 squares.
-export const moveSpeed = (hero) => (has(hero, 'Slowed') ? Math.min(2, hero.speed ?? 6) : hero.speed ?? 6)
+// How far the hero walks in one move, Boots of Striding included: Slowed heroes only 2 squares.
+export function moveSpeed(hero) {
+  const speed = (hero.speed ?? 6) + itemSpeed(hero)
+  return has(hero, 'Slowed') ? Math.min(2, speed) : speed
+}
 
 // Whether the active hero can still move this Hero Phase: move twice, or move and attack
 // (in either order). A Dazed hero gets one action; an Immobilized or caged hero can't move.

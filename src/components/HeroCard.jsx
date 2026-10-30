@@ -1,13 +1,12 @@
 import { useState } from 'react'
 import { heroArt, heroCardArt } from '../data/art.js'
 import { CONDITIONS, HERO_COLORS, MAX_LEVEL, XP_TO_LEVEL_UP, hasAbility } from '../data/heroes.js'
-import { itemSpeed } from '../data/items.js'
-import { heroAc } from '../data/powerEffects.js'
 import { artUrl, useArt } from '../state/useArt.js'
 import { useCards } from '../state/useCards.js'
 import Art from './Art.jsx'
 import { MonsterChoice } from './Pickers.jsx'
 import PowerList from './PowerList.jsx'
+import { StatTiles } from './StatBoosts.jsx'
 import { ItemList } from './Treasure.jsx'
 import { Button, Chip, HpBar } from './ui.jsx'
 
@@ -185,12 +184,10 @@ export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, 
             {hero.player && ` · ${hero.player}`}
           </p>
         </div>
-        <div className="text-right text-sm text-zinc-400">
-          <div>AC {heroAc(hero)}{(hero.curses ?? []).some((c) => c.card?.acPenalty) && <span className="text-red-400"> (cursed)</span>}</div>
-          <div>Speed {hero.speed + itemSpeed(hero)}</div>
-          {hero.gold != null && <div className="text-amber-300">💰 {hero.gold.toLocaleString()} gold</div>}
-        </div>
+        {hero.gold != null && <div className="text-right text-sm text-amber-300">💰 {hero.gold.toLocaleString()} gold</div>}
       </div>
+
+      <StatTiles state={state} hero={hero} />
 
       {abilities.length > 0 && (
         <ul className="mt-2 space-y-1 text-sm text-zinc-300">

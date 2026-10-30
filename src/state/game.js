@@ -10,8 +10,8 @@ import {
 } from '../data/heroes.js'
 import { monsterArt } from '../data/art.js'
 import { PHASES } from '../data/phases.js'
-import { heroItems, itemAttackBonus, itemTrapBonus, tileAcBonus, tileGuards } from '../data/items.js'
-import { effectsOf, heroAc, heroAttackPenalty, maxRolls } from '../data/powerEffects.js'
+import { heroItems, itemAttackParts, itemTrapBonus, tileAcBonus, tileGuards } from '../data/items.js'
+import { effectsOf, heroAc, maxRolls } from '../data/powerEffects.js'
 import { STARTING_TILES, MAX_TILES, MIN_TILES, adjustTiles, bottomToTop, buildTileStack, takeTile } from './tiles.js'
 import { DOOR_KINDS, DOOR_UNLOCK_ROLL, MAX_SURGES, MIN_SURGES, aliveVillagers, checkVictory, countDefeat, escapeBlockers, isPlayable, newAdventure, objectiveInPlay, playableChambers, revealsReady, showStory, takeToken, villagerForRoll } from './adventure.js'
 import { trackStats } from './stats.js'
@@ -525,6 +525,35 @@ function rollAgainst(monster, roll, attack) {
   return { total, hit, dealt, outcome }
 }
 
+// One attack's numbers against a monster at this distance, with where each comes from so the
+// attack box can show the sum: { bonus, damage, miss, evenBonus, crits, parts }. parts.bonus and
+// parts.damage are [{ label, value }]; parts.crits are [{ label, from }] (+1 damage on a high roll).
+export function attackNumbers(hero, { item = null, power = null, extraAttack = null, adjacentCount = 0, startedAdjacent = false, distance, stayed = false } = {}) {
+  const effects = effectsOf(power)
+  const source = item ?? power
+  const bonusParts = [{ label: source.name, value: item ? item.card.attack.bonus : powerNumber(power.card?.attack) ?? 0 }]
+  if (extraAttack?.bonus) bonusParts.push({ label: extraAttack.source, value: extraAttack.bonus })
+  const adjacent = effects.ask === 'adjacent-count' ? clamp(Number(adjacentCount) || 0, 0, 8) : 0
+  if (adjacent) bonusParts.push({ label: adjacent === 1 ? '1 monster next to you' : `${adjacent} monsters next to you`, value: adjacent })
+  for (const curse of hero.curses ?? []) if (curse.card?.attackPenalty) bonusParts.push({ label: curse.name, value: -curse.card.attackPenalty })
+  const damageParts = [{ label: source.name, value: item ? item.card.attack.damage : powerNumber(power.card?.damage) ?? 0 }]
+  if (effects.ask === 'started-adjacent' && startedAdjacent) damageParts.push({ label: 'Started next to it', value: 1 })
+  const items = itemAttackParts(hero, distance, stayed)
+  if (items.attack) bonusParts.push(items.attack)
+  damageParts.push(...items.damage)
+  const total = (parts) => parts.reduce((n, p) => n + p.value, 0)
+  return {
+    bonus: total(bonusParts),
+    damage: total(damageParts),
+    // "3 (Miss: 1)": some powers still hurt on a miss.
+    miss: item ? 0 : powerNumber(/miss\D*(\d+)/i.exec(power.card?.damage ?? '')?.[1]) ?? 0,
+    evenBonus: effects.evenBonus ?? 0,
+    // Dragontooth Pick and Vorpal Sword.
+    crits: items.crits.map((c) => c.from),
+    parts: { bonus: bonusParts, damage: damageParts, crits: items.crits },
+  }
+}
+
 // A hero attacks one or more monsters with a power or an item (Crossbow of Speed). Each
 // target comes with the d20 the device rolled. Monsters brought to 0 HP are defeated, and
 // a daily power is used up. The power's own effects (powerEffects.js) and the hero's
@@ -551,22 +580,19 @@ function heroAttack(state, action) {
     .slice(0, item ? 1 : maxRolls(power))
   if (!source || baseBonus === null || power?.used || targets.length === 0) return state
 
-  const adjacent = effects.ask === 'adjacent-count' ? clamp(Number(action.adjacentCount) || 0, 0, 8) : 0
-  const attack = {
-    bonus: baseBonus + (extraAttack?.bonus ?? 0) + adjacent - heroAttackPenalty(hero),
-    damage: item
-      ? item.card.attack.damage
-      : (powerNumber(power.card.damage) ?? 0) + (effects.ask === 'started-adjacent' && action.startedAdjacent ? 1 : 0),
-    // "3 (Miss: 1)": some powers still hurt on a miss.
-    miss: item ? 0 : powerNumber(/miss\D*(\d+)/i.exec(power.card.damage ?? '')?.[1]) ?? 0,
-    evenBonus: effects.evenBonus ?? 0,
-  }
   // Magic weapons add to rolls against monsters close enough, so each target can differ.
   const distances = action.distances && typeof action.distances === 'object' ? action.distances : {}
-  const attackOn = (monsterId) => {
-    const extra = itemAttackBonus(hero, distances[monsterId], action.stayed === true)
-    return { ...attack, bonus: attack.bonus + extra.bonus, damage: attack.damage + extra.damage, crits: extra.crits }
-  }
+  const numbers = (monsterId) =>
+    attackNumbers(hero, {
+      item,
+      power,
+      extraAttack,
+      adjacentCount: action.adjacentCount,
+      startedAdjacent: action.startedAdjacent,
+      distance: distances[monsterId],
+      stayed: action.stayed === true,
+    })
+  const attack = numbers(null)
 
   let next = state
   const rolls = []
@@ -578,7 +604,7 @@ function heroAttack(state, action) {
       next = withLog(next, `${hero.name}'s ${source.name}: that monster was already defeated.`)
       continue
     }
-    const rowAttack = attackOn(monsterId)
+    const rowAttack = numbers(monsterId)
     const result = rollAgainst(monster, roll, rowAttack)
     rolls.push({ monsterId, label: monster.name, value: roll, total: result.total, ac: monster.ac, hit: result.hit, outcome: result.outcome, dealt: result.dealt, attack: rowAttack })
     next = withLog(
