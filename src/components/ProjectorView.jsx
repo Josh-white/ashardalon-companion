@@ -4,7 +4,9 @@ import { PHASES } from '../data/phases.js'
 import { EnvironmentBanner } from './Encounters.jsx'
 import { ProjectorTreasure } from './Treasure.jsx'
 import { heroItems } from '../data/items.js'
+import { BoostBadges } from './StatBoosts.jsx'
 import { heroAc } from '../data/powerEffects.js'
+import { moveSpeed } from '../board/play.js'
 import { activeVillains } from '../state/game.js'
 import { ProjectorAdventure } from './Adventure.jsx'
 import { TilesLeft } from './Tiles.jsx'
@@ -115,11 +117,11 @@ function ProjectorScreen({ state, dispatch, onSwitchSeat, sound }) {
               {down ? 'DOWN!' : `${hero.hp} / ${hero.maxHp}`}
             </div>
             <HpBar hp={hero.hp} maxHp={hero.maxHp} />
-            {hero.conditions.length > 0 && <p className="mt-[0.5vh] text-amber-400">{hero.conditions.join(', ')}</p>}
-            {(hero.curses ?? []).length > 0 && (
-              <p className="mt-[0.5vh] text-purple-300">🕯️ {hero.curses.map((c) => c.name).join(', ')}</p>
-            )}
-            {heroAc(hero) !== hero.ac && <p className={heroAc(hero) > hero.ac ? 'text-sky-300' : 'text-red-300'}>AC {heroAc(hero)}</p>}
+            <p className="mt-[0.5vh] text-zinc-300">
+              AC {heroAc(hero)} · Speed {moveSpeed(hero)}
+            </p>
+            {/* What's helping (blue) and hurting (orange): items, powers, conditions, curses. */}
+            <BoostBadges hero={hero} heroes={state.heroes} className="mt-[0.8vh] gap-[0.3em]" badgeClass="px-[0.5em] py-[0.1em] text-[0.9em] leading-snug" />
             {heroItems(hero).length > 0 && (
               <p className="mt-[0.5vh] text-yellow-300">💰 {heroItems(hero).map((i) => i.name).join(', ')}</p>
             )}

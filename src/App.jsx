@@ -16,6 +16,7 @@ import Recap, { LOST_QUESTION, newGameQuestion } from './components/Recap.jsx'
 import Board from './components/Board.jsx'
 import SeatPicker from './components/SeatPicker.jsx'
 import SinceLastTurn from './components/SinceLastTurn.jsx'
+import { BoostBadges } from './components/StatBoosts.jsx'
 import Setup from './components/Setup.jsx'
 import { TreasureStep } from './components/Treasure.jsx'
 import { TilesLeft } from './components/Tiles.jsx'
@@ -30,6 +31,8 @@ import { useNarrator } from './audio/useNarrator.js'
 import { useMusic } from './audio/music.js'
 import { useAudioLocked, useMusicSetting, useSoundSetting } from './audio/soundSetting.js'
 import { HERO_COLORS } from './data/heroes.js'
+import { heroAc } from './data/powerEffects.js'
+import { moveSpeed } from './board/play.js'
 import { PHASES } from './data/phases.js'
 import { activeVillains, encounterCardsOutdated } from './state/game.js'
 import { shuffleNumbers } from './state/random.js'
@@ -165,7 +168,10 @@ function PartyStrip({ heroes, meId, activeId }) {
                 <HpBar hp={hero.hp} maxHp={hero.maxHp} />
               </div>
             </div>
-            {hero.conditions.length > 0 && <p className="mt-1 text-sm text-amber-400">{hero.conditions.join(', ')}</p>}
+            <p className="mt-1 text-sm text-zinc-300">
+              AC {heroAc(hero)} · Speed {moveSpeed(hero)}
+            </p>
+            <BoostBadges hero={hero} heroes={heroes} className="mt-1.5" />
             {(hero.items ?? []).length > 0 && (
               <p className="mt-1 text-sm text-yellow-300">💰 {hero.items.map((i) => (i.used ? `${i.name} (used)` : i.name)).join(', ')}</p>
             )}

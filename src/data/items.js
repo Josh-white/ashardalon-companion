@@ -34,22 +34,35 @@ export const tileAcBonus = (heroes, target) => Math.max(0, ...tileGuards(heroes,
 // distance: 'adjacent', 'within1' (on the tile or one next to it) or 'far'.
 const inRange = (range, distance) => !range || (range === 'adjacent' ? distance === 'adjacent' : distance === 'adjacent' || distance === 'within1')
 
-// What a hero's items add to one attack roll against a monster at this distance.
+// What a hero's items add to one attack roll against a monster at this distance, item by
+// item: the one attack bonus that counts, the damage bonuses (they add up), the high-roll
+// damage, and the attack bonuses that don't count here (too far, or not the best).
 // stayed: the hero chose not to move this Hero Phase (Dwarven Hammer).
-export function itemAttackBonus(hero, distance, stayed = false) {
-  let bonus = 0
-  let damage = 0
-  const crits = []
-  for (const item of heroItems(hero)) {
-    const card = item.card
-    if (!card?.inPlay) continue
-    // Only the best attack bonus counts; damage bonuses still add up.
-    if (card.attackBonus && inRange(card.attackRange, distance)) bonus = Math.max(bonus, card.attackBonus + (stayed ? card.stillBonus ?? 0 : 0))
-    if (card.damageBonus && inRange(card.damageRange, distance)) damage += card.damageBonus
+export function itemAttackParts(hero, distance, stayed = false) {
+  const held = heroItems(hero).filter((item) => item.card?.inPlay)
+  const value = (item) => item.card.attackBonus + (stayed ? item.card.stillBonus ?? 0 : 0)
+  const reaching = held.filter((item) => item.card.attackBonus && inRange(item.card.attackRange, distance))
+  // Only the best attack bonus counts.
+  const best = reaching.reduce((top, item) => (!top || value(item) > value(top) ? item : top), null)
+  return {
+    attack: best ? { label: best.name, value: value(best) } : null,
+    unused: held
+      .filter((item) => item.card.attackBonus && item !== best)
+      .map((item) => ({ label: item.name, why: reaching.includes(item) ? 'best' : 'range', range: item.card.attackRange })),
+    damage: held.filter((item) => item.card.damageBonus && inRange(item.card.damageRange, distance)).map((item) => ({ label: item.name, value: item.card.damageBonus })),
     // "A natural 19 or 20 deals +1 damage" works at any range.
-    if (card.critFrom) crits.push(card.critFrom)
+    crits: held.filter((item) => item.card.critFrom).map((item) => ({ label: item.name, from: item.card.critFrom })),
   }
-  return { bonus, damage, crits }
+}
+
+// The same, added up: { bonus, damage, crits }.
+export function itemAttackBonus(hero, distance, stayed = false) {
+  const parts = itemAttackParts(hero, distance, stayed)
+  return {
+    bonus: parts.attack?.value ?? 0,
+    damage: parts.damage.reduce((sum, part) => sum + part.value, 0),
+    crits: parts.crits.map((part) => part.from),
+  }
 }
 
 // The questions a hero's attack needs answered for its items: how far each monster is,
