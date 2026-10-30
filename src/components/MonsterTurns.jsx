@@ -251,7 +251,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
     finish()
   }
   // A hit that moves the hero ("1 tile away from the duergar"): the board asks where they go.
-  const pushes = byBoard && Boolean(hitMoveStep(used.effect)) && rows.some((r) => r.hit && !r.dodged && !r.villager)
+  const pushes = byBoard && Boolean(hitMoveStep(used?.effect)) && rows.some((r) => r.hit && !r.dodged && !r.villager)
   const finishAttack = () => {
     if (pushes) dispatch({ type: 'HIT_MOVES', tokenId: token })
     if (byBoard && step.then === 'adjacent' && movedTo) moveTo(squareNextTo(state, token, state.board.tokens[movedTo.id]))
