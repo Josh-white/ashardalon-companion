@@ -13,7 +13,7 @@ import { AreaName } from './AreaBackdrop.jsx'
 import { MusicToggle, SoundToggle } from './SoundToggle.jsx'
 import { BoardSwitch } from './SoundBoard.jsx'
 import { HpBar } from './ui.jsx'
-import Board from './Board.jsx'
+import Board, { boardBounds } from './Board.jsx'
 import { useLayoutEffect, useRef, useState } from 'react'
 
 // A read-only screen for the projector: big enough to read across the room,
@@ -201,6 +201,41 @@ function ProjectorScreen({ state, dispatch, onSwitchSeat, sound }) {
       </span>
     </footer>
   )
+
+  // A long, thin dungeon gets the whole width of the screen (turned on its side if it runs
+  // up and down), with everything else in three columns underneath.
+  const bounds = side && boardBounds(state.board)
+  if (side && Math.max(bounds.w, bounds.h) >= 2 * Math.min(bounds.w, bounds.h)) {
+    return (
+      <div className="flex h-screen flex-col gap-[1.5vh] p-[1.2vw] text-[1.6vw]">
+        <div className="min-h-0 flex-[3]">
+          <Board state={state} readOnly fill />
+        </div>
+        <div className="flex min-h-0 flex-[2] gap-[1.5vw]">
+          <FitToBox className="min-w-0 flex-1">
+            <div className="flex flex-col gap-[2vh]">
+              {turn}
+              <ProjectorAdventure state={state} />
+              {footer}
+            </div>
+          </FitToBox>
+          <FitToBox className="min-w-0 flex-1">
+            <div className="flex flex-col gap-[2vh]">
+              {heroes}
+              {villains}
+            </div>
+          </FitToBox>
+          <FitToBox className="min-w-0 flex-1">
+            <div className="flex flex-col gap-[2vh]">
+              {cards}
+              {monsters}
+              {traps}
+            </div>
+          </FitToBox>
+        </div>
+      </div>
+    )
+  }
 
   // The party's game on the virtual board: the dungeon fills the left of the screen and
   // everything else shrinks to fit the column beside it.
