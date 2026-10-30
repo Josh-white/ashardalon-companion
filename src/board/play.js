@@ -385,6 +385,15 @@ export function heroTrail(state, heroId) {
   return start === undefined ? null : { start, entered: [] }
 }
 
+// Whether the hero whose Hero Phase it is hasn't moved yet (Dwarven Hammer hits harder
+// then): no move used on the board and no new tile entered. Null off the board or when
+// it isn't that hero's Hero Phase, so the players answer it themselves.
+export function stayedOnBoard(state, hero) {
+  if (!state.board || !hero || state.turn?.phase !== 0 || state.heroes[state.turn.heroIndex]?.id !== hero.id) return null
+  if (!state.board.tokens[hero.id]) return null
+  return (state.turn.boardMoves ?? 0) === 0 && (state.turn.heroTiles?.[hero.id]?.entered.length ?? 0) === 0
+}
+
 // A hero's move in their Hero Phase: only to a square they can reach, and it uses up a move.
 export function moveHero(state, action) {
   const hero = state.heroes.find((h) => h.id === action.heroId)
