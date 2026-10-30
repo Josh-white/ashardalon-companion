@@ -3,6 +3,7 @@ import { heroArt, monsterArt } from '../data/art.js'
 import { boardGrid, figureToken, figuresLeft, heroReach, moveSpeed, movesLeft, timeLeapt } from '../board/play.js'
 import { moveChoices, movePrompt, moveTargets } from '../board/powerMoves.js'
 import { key, STEP, unexploredEdges } from '../board/grid.js'
+import { canFlyCarpet, carpetTargets } from '../board/items.js'
 import { boardMarkers } from '../board/markers.js'
 import { activeVillains } from '../state/game.js'
 import { artUrl, useArt } from '../state/useArt.js'
@@ -130,6 +131,17 @@ function Coin({ item, selected, spin, onTap }) {
       <text x={cx} y={cy + 6} textAnchor="middle" fontSize="17" transform={spin ? `rotate(${-spin} ${cx} ${cy})` : undefined}>
         💰
       </text>
+    </g>
+  )
+}
+
+// The Flying Carpet: a purple rug under the square's figure. Tap it to move it by hand.
+function Carpet({ item, selected, onTap }) {
+  const [x, y] = [item.at[0] * SQUARE, item.at[1] * SQUARE]
+  return (
+    <g data-item={item.id} onClick={onTap} className={onTap ? 'cursor-pointer' : undefined}>
+      <rect x={x + 1} y={y + 1} width={SQUARE - 2} height={SQUARE - 2} rx="4" fill="#7c3aed" stroke={selected ? '#fde047' : '#fbbf24'} strokeWidth={selected ? 5 : 3} strokeDasharray="6 3" />
+      <rect x={x + 7} y={y + 7} width={SQUARE - 14} height={SQUARE - 14} rx="2" fill="none" stroke="#c4b5fd" strokeWidth="2" />
     </g>
   )
 }
@@ -295,7 +307,17 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   // A Treasure token goes on a free square of a tile with no hero on it (Hidden Treasure).
   const heroAreas = new Set(state.heroes.map((h) => board.tokens[h.id] && grid.get(key(board.tokens[h.id]))?.area))
   const itemSquares = new Set(items.filter((i) => i.at && i.id !== picked).map((i) => key(i.at)))
-  if (tools && pickedItem) {
+  // The Flying Carpet goes on any tile without a marker, under a hero if they like. The
+  // hero standing on it can fly it instead of moving (FLY_CARPET).
+  const carpet = items.find((i) => i.kind === 'carpet')
+  const flying = picked === 'fly-carpet'
+  const markerAreas = new Set(placedMarkers.map((m) => m.tile))
+  const heroSquares = new Set(state.heroes.map((h) => board.tokens[h.id] && key(board.tokens[h.id])))
+  if (flying) {
+    targets = carpetTargets(state)
+  } else if (tools && pickedItem?.kind === 'carpet') {
+    targets = [...grid.values()].filter((sq) => sq.floor && !markerAreas.has(sq.area) && (!taken.has(key([sq.x, sq.y])) || heroSquares.has(key([sq.x, sq.y]))) && !itemSquares.has(key([sq.x, sq.y]))).map((sq) => key([sq.x, sq.y]))
+  } else if (tools && pickedItem) {
     targets = [...grid.values()].filter((sq) => sq.floor && !heroAreas.has(sq.area) && !taken.has(key([sq.x, sq.y])) && !itemSquares.has(key([sq.x, sq.y]))).map((sq) => key([sq.x, sq.y]))
   } else if (!watching && picked) {
     if (powerMove) targets = moveTargets(state, picked)
@@ -304,6 +326,11 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   }
   const tapSquare = (sq) => {
     if (!picked || !targets.includes(key(sq))) return
+    if (flying) {
+      dispatch({ type: 'FLY_CARPET', to: sq })
+      setPicked(null)
+      return
+    }
     if (pickedItem) {
       dispatch({ type: 'PLACE_ITEM', id: picked, to: sq })
       setPicked(null)
@@ -314,6 +341,11 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   }
   const tapFigure = (id) => {
     if (watching) return
+    // The carpet can go down under a hero: their token covers the lit square.
+    if (pickedItem?.kind === 'carpet' && board.tokens[id] && targets.includes(key(board.tokens[id]))) {
+      tapSquare(board.tokens[id])
+      return
+    }
     if (powerMove ? !movable.includes(id) : !byHand && id !== active?.id) return
     if (swap) {
       dispatch({ type: 'BOARD_MOVE', id })
@@ -355,8 +387,10 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
       {tools && (
         <div className={`mb-2 flex items-center gap-2 ${fill ? '' : 'flex-wrap'}`}>
           <p className={`flex-1 text-zinc-300 ${fill ? 'text-xs leading-snug sm:text-sm' : 'text-sm'}`}>
-            {pickedItem
-              ? 'Tap a lit square to put the Treasure token there.'
+            {flying
+              ? `Tap a lit square: the carpet flies ${active.name} up to 1 tile.`
+              : pickedItem
+              ? `Tap a lit square to put the ${pickedItem.kind === 'carpet' ? 'Flying Carpet' : 'Treasure token'} there.`
               : watching
               ? `${active?.name ?? 'Someone'}'s turn. ✋ moves a figure by hand.`
               : byHand
@@ -424,10 +458,32 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
               className={`rounded-full px-3 py-1 font-semibold ${picked === i.id ? 'bg-amber-500 text-zinc-950' : 'bg-amber-900 text-amber-100 motion-safe:animate-pulse'}`}
               onClick={() => setPicked(picked === i.id ? null : i.id)}
             >
-              💰 {picked === i.id ? 'Tap a lit square (a tile with no hero)' : 'Put the Treasure token down'}
+              {i.kind === 'carpet'
+                ? `🧞 ${picked === i.id ? 'Tap a lit square (a tile with no marker)' : 'Put the Flying Carpet down'}`
+                : `💰 ${picked === i.id ? 'Tap a lit square (a tile with no hero)' : 'Put the Treasure token down'}`}
             </button>
           ))}
-          {pickedItem?.at && (
+          {!readOnly && carpet?.at && canFlyCarpet(state, active) && (
+            <button
+              type="button"
+              className={`rounded-full px-3 py-1 font-semibold ${flying ? 'bg-amber-500 text-zinc-950' : 'bg-violet-800 text-violet-100'}`}
+              onClick={() => {
+                setByHand(false)
+                setPicked(flying ? null : 'fly-carpet')
+              }}
+            >
+              🧞 {flying ? 'Tap a lit square (up to 1 tile away)' : 'Fly the carpet instead of moving'}
+            </button>
+          )}
+          {pickedItem?.kind === 'carpet' && pickedItem.at && (
+            <>
+              <span className="text-amber-200">🧞 Flying Carpet: tap a lit square to move it by hand, or</span>
+              <Button variant="ghost" className="!py-1 text-sm" onClick={() => { setPicked(null); dispatch({ type: 'REMOVE_ITEM', id: pickedItem.id }) }}>
+                Remove it
+              </Button>
+            </>
+          )}
+          {pickedItem?.kind !== 'carpet' && pickedItem?.at && (
             <>
               <span className="text-amber-200">💰 Treasure token: tap a lit square to move it, or</span>
               {active && (
@@ -517,7 +573,10 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
                 />
               )
             })}
-            {items.filter((i) => i.at).map((i) => (
+            {items.filter((i) => i.at && i.kind === 'carpet').map((i) => (
+              <Carpet key={i.id} item={i} selected={picked === i.id} onTap={tools ? () => setPicked(picked === i.id ? null : i.id) : undefined} />
+            ))}
+            {items.filter((i) => i.at && i.kind !== 'carpet').map((i) => (
               <Coin key={i.id} item={i} spin={spin} selected={picked === i.id} onTap={tools ? () => setPicked(picked === i.id ? null : i.id) : undefined} />
             ))}
             {/* The active hero is drawn last so its glow sits on top of its neighbours. */}

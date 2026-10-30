@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
-import { treasureInReach } from './items.js'
+import { canFlyCarpet, carpetTargets, treasureInReach } from './items.js'
 import { normalizeTiles } from './tileDefs.js'
 
 // A made-up start tile with a room north of it.
@@ -74,5 +74,43 @@ describe('Treasure tokens on the virtual board', () => {
     const { state: placed, id } = withToken(state, [0, -1])
     const busy = { ...placed, turn: { ...placed.turn, treasureOwed: hero.id } }
     expect(gameReducer(busy, { type: 'PICK_UP_TREASURE', id, heroId: hero.id }).board.items).toHaveLength(1)
+  })
+})
+
+describe('Flying Carpet on the virtual board', () => {
+  const CARPET = { id: 'flying-carpet', name: 'Flying Carpet', type: 'item', text: '', use: 'note' }
+  const withCarpet = () => {
+    const { state, hero } = game()
+    const item = { id: 'i1', cardId: CARPET.id, name: CARPET.name, used: false, card: CARPET }
+    const held = { ...state, heroes: state.heroes.map((h) => (h.id === hero.id ? { ...h, items: [item] } : h)) }
+    const used = gameReducer(held, { type: 'USE_ITEM', heroId: hero.id, itemId: item.id })
+    return { state: used, hero, carpetId: used.board.items[0]?.id }
+  }
+
+  it('using it puts the carpet in hand, once, and the card stays face up', () => {
+    const { state, hero } = withCarpet()
+    expect(state.board.items).toEqual([expect.objectContaining({ kind: 'carpet', at: null })])
+    expect(state.heroes.find((h) => h.id === hero.id).items[0].used).toBe(false)
+    const again = gameReducer(state, { type: 'USE_ITEM', heroId: hero.id, itemId: 'i1' })
+    expect(again.board.items).toHaveLength(1)
+  })
+
+  it('the hero standing on it flies it up to 1 tile instead of moving', () => {
+    const { state, hero, carpetId } = withCarpet()
+    const placed = gameReducer(state, { type: 'PLACE_ITEM', id: carpetId, to: [0, 1] })
+    expect(canFlyCarpet(placed, hero)).toBe(true)
+    // The room north of the start tile is 1 tile away.
+    expect(carpetTargets(placed)).toContain('1,-3')
+    const flown = gameReducer(placed, { type: 'FLY_CARPET', to: [1, -3] })
+    expect(flown.board.tokens[hero.id]).toEqual([1, -3])
+    expect(flown.board.items[0].at).toEqual([1, -3])
+    expect(flown.turn.boardMoves).toBe(1)
+  })
+
+  it('only a hero on the carpet can fly it', () => {
+    const { state, hero, carpetId } = withCarpet()
+    const placed = gameReducer(state, { type: 'PLACE_ITEM', id: carpetId, to: [2, 1] })
+    expect(canFlyCarpet(placed, hero)).toBe(false)
+    expect(gameReducer(placed, { type: 'FLY_CARPET', to: [1, -3] })).toBe(placed)
   })
 })
