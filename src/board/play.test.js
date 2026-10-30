@@ -20,8 +20,9 @@ const TILES = normalizeTiles(
   ],
   [],
 )
-const { monsters } = normalizeCardFile({
+const { monsters, encounters } = normalizeCardFile({
   powers: [],
+  encounters: [{ id: 'leap', name: 'Time Leap', type: 'curse', drawMonster: true, curse: { removeAtTurnStart: true } }],
   monsters: [{ id: 'rat', name: 'Rat', copies: 3, ac: 12, hp: 1, xp: 1, figures: 2, attacks: [{ id: 'bite', name: 'Bite', bonus: 5, damage: 1 }], tactics: [{ move: 'toward' }] }],
 })
 
@@ -119,6 +120,28 @@ describe('solo game on the virtual board', () => {
     // A monster that turns up later this turn, with no new tile for it, still goes on the board.
     state = gameReducer(state, { type: 'DRAW_MONSTER', heroId: hero(state, 1).id, cards: monsters, random: [] })
     expect(state.board.tokens[state.monsters[1].id]).toBeTruthy()
+  })
+
+  it('takes a hero off the board in a Time Leap, with the monster on their square, until their next turn', () => {
+    let state = start()
+    const h = hero(state)
+    const was = at(state, h.id)
+    state = { ...state, turn: { ...state.turn, phase: PHASES.findIndex((p) => p.key === 'villain') } }
+    state = gameReducer(state, { type: 'DRAW_ENCOUNTER', heroId: h.id, cards: encounters, random: [] })
+    state = gameReducer(state, { type: 'DRAW_MONSTER', heroId: h.id, cards: monsters, random: [] })
+    const rat = state.monsters[0]
+    expect(at(state, rat.id)).toEqual(was)
+    expect(at(state, h.id)).toBeUndefined()
+    state = gameReducer(state, { type: 'RESOLVE_ENCOUNTER', random: [], monsterCards: monsters })
+    expect(at(state, h.id)).toBeUndefined()
+    // Placing the hero by hand before the curse ends doesn't stick.
+    expect(at(gameReducer(state, { type: 'MOVE_TOKEN', id: h.id, to: [2, 7] }), h.id)).toBeUndefined()
+    while (state.turn.heroIndex === 0) state = gameReducer(state, { type: 'NEXT_PHASE' })
+    expect(at(state, h.id)).toBeUndefined()
+    while (state.turn.heroIndex !== 0) state = gameReducer(state, { type: 'NEXT_PHASE' })
+    expect(hero(state).curses).toHaveLength(0)
+    state = gameReducer(state, { type: 'MOVE_TOKEN', id: h.id, to: [2, 7] })
+    expect(at(state, h.id)).toEqual([2, 7])
   })
 
   it('turns a tile laid on a west edge so its triangle faces the hero', () => {

@@ -292,6 +292,12 @@ function placeDrawnMonsters(state) {
     .filter((m) => !m.objective && !board.tokens[m.id])
     .flatMap((m) => Array.from({ length: figuresLeft(m) }, (_, i) => figureToken(m.id, i + 1)))
   if (fresh.length === 0) return state
+  // Time Leap: the hero vanishes and the monster takes the very square the hero stood on.
+  const hero = state.heroes[state.turn.heroIndex]
+  if (state.encounter?.card?.curse?.removeAtTurnStart && activeAt(state)) {
+    const { [hero.id]: at, ...tokens } = board.tokens
+    return placeDrawnMonsters({ ...state, board: { ...board, tokens: { ...tokens, [fresh[0]]: at } } })
+  }
   const grid = boardGrid(board)
   const tile = tileForDrawnMonster(state, grid)
   if (tile === null || tile === undefined) return state
@@ -403,14 +409,17 @@ export function moveToken(state, action) {
   return placeToken(state, action.id, action.to)
 }
 
-// Figures that left play take their token with them. When one figure of a monster card
+// A hero lost in a Time Leap is off the board until the curse ends at the start of their turn.
+export const timeLeapt = (hero) => (hero.curses ?? []).some((c) => c.card?.removeAtTurnStart)
+
+// Figures that left play take their token with them (a Time Leap takes the hero's). When one figure of a monster card
 // falls, its token nearest the active hero (the one most likely just attacked) goes, and
 // the rest are numbered again.
 export function pruneTokens(state) {
   const board = state.board
   if (!board) return state
   const live = new Set(
-    [...state.heroes, ...state.monsters, ...(state.villains ?? []).filter((v) => !v.defeated), ...(state.villagers ?? []).filter((v) => !v.removed)].map((f) => f.id),
+    [...state.heroes.filter((h) => !timeLeapt(h)), ...state.monsters, ...(state.villains ?? []).filter((v) => !v.defeated), ...(state.villagers ?? []).filter((v) => !v.removed)].map((f) => f.id),
   )
   let tokens = Object.fromEntries(Object.entries(board.tokens).filter(([id]) => live.has(baseId(id))))
   const hero = tokens[state.heroes[state.turn.heroIndex]?.id]

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { heroArt, monsterArt } from '../data/art.js'
-import { boardGrid, figureToken, figuresLeft, heroReach, moveSpeed, movesLeft } from '../board/play.js'
+import { boardGrid, figureToken, figuresLeft, heroReach, moveSpeed, movesLeft, timeLeapt } from '../board/play.js'
 import { moveChoices, movePrompt, moveTargets } from '../board/powerMoves.js'
 import { key, STEP, unexploredEdges } from '../board/grid.js'
 import { boardMarkers } from '../board/markers.js'
@@ -190,7 +190,8 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   const markers = boardMarkers(state)
   const placedMarkers = markers.filter((m) => m.squares.length > 0)
   const open = markers.find((m) => m.marker.id === reading)
-  const offBoard = figures.filter((f) => !board.tokens[f.id])
+  // A hero lost in a Time Leap waits for their turn before coming back.
+  const offBoard = figures.filter((f) => !board.tokens[f.id] && !state.heroes.some((h) => h.id === f.id && timeLeapt(h)))
 
   // Squares to light up: where the active hero can move, or every free floor square by hand.
   const taken = new Set(Object.values(board.tokens).map(key))
