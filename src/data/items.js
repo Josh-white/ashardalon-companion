@@ -91,3 +91,26 @@ export function betterItem(hero, card) {
   if (!attackCover || !acCover) return null
   return [attackCover, acCover].find((cover) => cover !== true) ?? null
 }
+
+// Items a hero holds that add nothing right now, because another of their items already
+// gives as good an attack or AC bonus: [{ item, cover }]. With two equal items, the newer
+// one is the spare.
+export function spareItems(hero) {
+  let alive = heroItems(hero)
+  const spare = []
+  for (const item of [...alive].reverse()) {
+    const cover = betterItem({ ...hero, items: alive.filter((i) => i.id !== item.id) }, item.card)
+    if (cover) {
+      spare.push({ item, cover })
+      alive = alive.filter((i) => i.id !== item.id)
+    }
+  }
+  return spare.reverse()
+}
+
+// Items a hero already holds that a new treasure card would leave adding nothing.
+export function itemsOutdone(hero, card) {
+  const before = new Set(spareItems(hero).map((s) => s.item.id))
+  const added = { id: '__new', name: card?.name, card }
+  return spareItems({ ...hero, items: [...heroItems(hero), added] }).filter((s) => s.item.id !== '__new' && !before.has(s.item.id))
+}

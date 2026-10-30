@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { CONDITIONS, HERO_COLORS } from '../data/heroes.js'
-import { betterItem, heroItems, tileGuards } from '../data/items.js'
+import { betterItem, heroItems, itemsOutdone, spareItems, tileGuards } from '../data/items.js'
 import { guardsOnTile } from '../board/checks.js'
 import { foes } from '../state/game.js'
 import { rollD20, shuffleNumbers } from '../state/random.js'
@@ -57,6 +57,8 @@ function TreasureCard({ state, dispatch }) {
   const owner = state.heroes.find((h) => h.id === ownerId) ?? finder
   const wasted = state.heroes.filter((h) => covered.get(h.id))
   const helped = state.heroes.filter((h) => !covered.get(h.id))
+  // A better card leaves the owner's old item adding nothing, so it could go to someone else.
+  const outdone = covered.get(owner.id) ? [] : itemsOutdone(owner, treasure.card)
   return (
     <div className="space-y-4 rounded-2xl border-2 border-amber-500 bg-amber-950/40 p-4">
       <TreasureCardFace card={treasure.card} />
@@ -76,6 +78,16 @@ function TreasureCard({ state, dispatch }) {
               ? `💡 It would help ${helped.map((h) => h.name).join(', ')}. A hero only gets their best item bonus for attack and for AC.`
               : 'Nobody would gain from it, since a hero only gets their best item bonus for attack and for AC.'}
           </p>
+        </div>
+      )}
+      {outdone.length > 0 && (
+        <div className="space-y-1 rounded-xl bg-zinc-950/60 p-3 text-zinc-200">
+          {outdone.map(({ item }) => (
+            <p key={item.id}>
+              ⚠️ With this, {owner.name}&apos;s {item.name} won&apos;t add anything, since a hero only gets their best item bonus for attack and for AC.
+            </p>
+          ))}
+          <p className="text-amber-200">💡 After you put it in play, tap the {outdone.map((o) => o.item.name).join(' and ')} on {owner.name}&apos;s card to give it to another hero.</p>
         </div>
       )}
       <Button variant="gold" className="w-full py-3 text-lg" onClick={() => dispatch({ type: 'KEEP_TREASURE', heroId: owner.id })}>
@@ -278,7 +290,7 @@ function ItemPanel({ state, hero, item, dispatch, onClose }) {
   )
 }
 
-function ItemTile({ item, selected, onTap }) {
+function ItemTile({ item, spare, selected, onTap }) {
   const [open, setOpen] = useState(false)
   const { card } = item
   const bonuses = itemBonuses(card)
@@ -314,6 +326,7 @@ function ItemTile({ item, selected, onTap }) {
       {card.attack && <div className="text-xs text-zinc-400">Attack +{card.attack.bonus} · Damage {card.attack.damage} (in the attack box)</div>}
       {card.use === 'monsterControl' && !item.used && <div className="mt-1 text-xs text-amber-400">Use it on a monster's turn</div>}
       {usable && <div className="mt-1 text-xs text-amber-400">Tap to use</div>}
+      {spare && <div className="mt-1 text-xs text-orange-300">⚠️ Adds nothing: the {spare.cover.name} is as good or better. Tap to give it away.</div>}
       {open && <p className="mt-2 whitespace-pre-line text-zinc-300">{card.text}</p>}
     </div>
   )
@@ -325,15 +338,35 @@ export function ItemList({ state, hero, dispatch }) {
   const items = heroItems(hero)
   if (items.length === 0) return null
   const open = items.find((i) => i.id === openId)
+  const spares = new Map(spareItems(hero).map((s) => [s.item.id, s]))
+  const others = state?.heroes.filter((h) => h.id !== hero.id) ?? []
   return (
     <div className="mt-3 grid grid-cols-2 gap-2">
       {items.map((item) => (
-        <ItemTile key={item.id} item={item} selected={item.id === openId} onTap={() => setOpenId(item.id === openId ? null : item.id)} />
+        <ItemTile key={item.id} item={item} spare={spares.get(item.id)} selected={item.id === openId} onTap={() => setOpenId(item.id === openId ? null : item.id)} />
       ))}
       {open && state && (
         <div className="col-span-2 space-y-2">
           {!open.used && open.card.use && open.card.use !== 'monsterControl' && (
             <ItemPanel key={open.id} state={state} hero={hero} item={open} dispatch={dispatch} onClose={() => setOpenId(null)} />
+          )}
+          {others.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-zinc-400">Give it to</span>
+              {others.map((h) => (
+                <Button
+                  key={h.id}
+                  className="text-sm"
+                  onClick={() => {
+                    dispatch({ type: 'GIVE_ITEM', heroId: hero.id, itemId: open.id, toHeroId: h.id })
+                    setOpenId(null)
+                  }}
+                >
+                  <span className={HERO_COLORS[h.color]?.text}>{h.name}</span>
+                  {betterItem(h, open.card) && <span className="text-xs text-zinc-500"> (adds nothing)</span>}
+                </Button>
+              ))}
+            </div>
           )}
           <div className="flex flex-wrap gap-2">
             {(open.used || open.card.after === 'flip') && (

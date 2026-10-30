@@ -95,6 +95,7 @@ export function describeAction(state, action) {
     case 'USE_ITEM':
     case 'TOGGLE_ITEM':
     case 'DISCARD_ITEM':
+    case 'GIVE_ITEM':
     case 'MONSTER_CONTROL': {
       const item = hero?.items?.find((i) => i.id === action.itemId)
       return item ? `${hero.name}'s ${item.name}` : 'Item'
