@@ -104,7 +104,11 @@ const EFFECTS = {
   'Hurled Breath': { targets: 'any', free: true, note: "This doesn't count as your attack this turn." },
   'Arc Lightning': { targets: 2 },
   // The monster Heskan moves isn't hurt: the attack is against a monster it ends up next to.
-  Hypnotism: { ask: 'moved-monster' },
+  Hypnotism: {
+    ask: 'moved-monster',
+    before: 'First move a monster within 1 tile of you 1 tile. It attacks a monster it ends up next to.',
+    board: { before: [{ pick: 'monsterWithin1', to: 'adjacentTile' }] },
+  },
   'Ray of Frost': {},
   'Flaming Sphere': {
     use: { tokens: { flamingSphere: 3 }, note: 'Put the 3 Flaming Sphere tokens on a square within 1 tile of you.' },

@@ -265,11 +265,23 @@ export function boardMove(state, action) {
   }
   const to = Array.isArray(action.to) ? action.to : null
   if (!to || !moveTargets(state, id).includes(key(to))) return state
-  const moved = placeToken(state, id, to)
+  const placed = placeToken(state, id, to)
+  // The last figure a power moved (Hypnotism attacks a monster next to it).
+  const moved = { ...placed, turn: { ...placed.turn, powerMoved: { source: placed.turn.boardMove.source, id } } }
   const move = moved.turn.boardMove
   // A listed figure is moved once, so it isn't offered again for the next step.
   const tokens = move.tokens?.filter((t) => t !== id)
   return nextStep(tokens ? { ...moved, turn: { ...moved.turn, boardMove: { ...move, tokens } } } : moved)
+}
+
+// Hypnotism: the monster the power moved, and the monsters (ids) it ended up next to.
+export function hypnotized(state, powerName) {
+  const moved = state.board && state.turn.powerMoved?.source === powerName ? state.turn.powerMoved.id : null
+  const at = moved && state.board.tokens[moved]
+  if (!at) return null
+  const grid = boardGrid(state.board)
+  const next = foeTokens(state).filter((f) => baseId(f.id) !== baseId(moved) && distances(grid, at, { limit: 1 }).has(key(f.at)))
+  return { id: baseId(moved), nextTo: [...new Set(next.map((f) => baseId(f.id)))] }
 }
 
 export const skipBoardMove = (state) => (state.turn.boardMove ? nextStep(state) : state)
