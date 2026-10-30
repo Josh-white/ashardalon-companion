@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { HERO_COLORS, hasAbility } from '../data/heroes.js'
+import { escapeHold, escapeToken, everyoneEscapes, exitName, exitSquares } from '../board/exits.js'
 import { DOOR_UNLOCK_ROLL, FEATURE_LABELS, MAX_SURGES, MIN_SURGES, escapeBlockers, goalParts, missingFeatures, playableChambers, revealsReady, tilesToCome, usesDoors } from '../state/adventure.js'
 import { randomNumbers, rollD20, shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
@@ -197,13 +198,30 @@ export function EscapeNote({ state, hero, dispatch }) {
   if (!adventure || adventure.escaped) return null
   if (!(adventure.card.win.escape || adventure.chamber?.card.win.escape) || escapeBlockers(state).length > 0) return null
   const rule = adventure.card.rules.find((r) => /victory/i.test(r.name))
+  // On the virtual board the stairs glow, and ending the Hero Phase on them gets the hero out.
+  const board = state.board && exitSquares(state).size > 0
+  const hold = board ? escapeHold(state, hero) : ''
+  const token = escapeToken(state)
+  const headline = !board
+    ? `🚪 The way out is open! Get ${hero.name} to the exit.`
+    : hold === 'token'
+      ? `🚪 The way out is open, but only the hero carrying the ${token} can escape with it.`
+      : hold === 'not-on-exit'
+        ? `🚪 The way out is open! Get ${hero.name} onto the glowing ${exitName(state)} and end the Hero Phase there.`
+        : `🚪 ${hero.name} is on the ${exitName(state)}! End the Hero Phase to escape${everyoneEscapes(state) ? '' : ' and win'}.`
   return (
     <div className="mt-4 rounded-xl border border-emerald-700 bg-emerald-950/60 p-3 text-lg text-emerald-100">
-      <p className="font-semibold">🚪 The way out is open! Get {hero.name} to the exit.</p>
+      <p className="font-semibold">{headline}</p>
       {rule && <p className="mt-1 text-base text-emerald-200">{rule.text}</p>}
-      <Button variant="gold" className="mt-2 w-full" onClick={() => dispatch({ type: 'ADVENTURE_ESCAPED', escaped: true })}>
-        We escaped the dungeon!
-      </Button>
+      {board ? (
+        <Button variant="ghost" className="mt-2 w-full !py-1 text-sm" onClick={() => dispatch({ type: 'ADVENTURE_ESCAPED', escaped: true })}>
+          We escaped (mark it by hand)
+        </Button>
+      ) : (
+        <Button variant="gold" className="mt-2 w-full" onClick={() => dispatch({ type: 'ADVENTURE_ESCAPED', escaped: true })}>
+          We escaped the dungeon!
+        </Button>
+      )}
     </div>
   )
 }

@@ -5,6 +5,8 @@ import { moveChoices, movePrompt, moveTargets } from '../board/powerMoves.js'
 import { key, STEP, unexploredEdges } from '../board/grid.js'
 import { canFlyCarpet, carpetTargets } from '../board/items.js'
 import { boardMarkers } from '../board/markers.js'
+import { exitSquares } from '../board/exits.js'
+import { escapeBlockers } from '../state/adventure.js'
 import { activeVillains } from '../state/game.js'
 import { artUrl, useArt } from '../state/useArt.js'
 import HazardFloor, { hasHazardFloor } from './HazardFloor.jsx'
@@ -83,6 +85,24 @@ function OpenEdges({ grid }) {
 // Trap and hazard markers on their tile. Lava Flow, Volcanic Vapors, Cave-in and Pit change the
 // floor itself (HazardFloor); any other marker's tile gets a colour wash and a dashed outline.
 // The badges are drawn separately, on top of the figures.
+// The way out (the exit's stairs or ladder) in adventures that end with an escape: a faint
+// outline while there's still work to do, a bright glow once the heroes can leave.
+function ExitSquares({ squares, open }) {
+  if (squares.length === 0) return null
+  return (
+    <g pointerEvents="none" data-exit={open ? 'open' : 'closed'}>
+      {squares.map((k) => {
+        const [x, y] = k.split(',').map(Number)
+        return (
+          <rect key={k} x={x * SQUARE + 3} y={y * SQUARE + 3} width={SQUARE - 6} height={SQUARE - 6} rx="6" fill="#10b981" fillOpacity={open ? 0.35 : 0.08} stroke="#34d399" strokeWidth={open ? 4 : 2} strokeDasharray={open ? undefined : '6 6'}>
+            {open && <animate attributeName="fill-opacity" values="0.2;0.5;0.2" dur="2s" repeatCount="indefinite" />}
+          </rect>
+        )
+      })}
+    </g>
+  )
+}
+
 function MarkerTiles({ markers }) {
   return (
     <g pointerEvents="none">
@@ -297,8 +317,10 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   const markers = boardMarkers(state)
   const placedMarkers = markers.filter((m) => m.squares.length > 0)
   const open = markers.find((m) => m.marker.id === reading)
-  // A hero lost in a Time Leap waits for their turn before coming back.
-  const offBoard = figures.filter((f) => !board.tokens[f.id] && !state.heroes.some((h) => h.id === f.id && timeLeapt(h)))
+  // A hero lost in a Time Leap waits for their turn before coming back; one who escaped is gone.
+  const exits = [...exitSquares(state)]
+  const exitOpen = exits.length > 0 && !state.adventure?.escaped && escapeBlockers(state).length === 0
+  const offBoard = figures.filter((f) => !board.tokens[f.id] && !state.heroes.some((h) => h.id === f.id && (timeLeapt(h) || h.escaped)))
 
   // Squares to light up: where the active hero can move, or every free floor square by hand.
   const taken = new Set(Object.values(board.tokens).map(key))
@@ -586,6 +608,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
               <ClosedDoor key={door.id} squares={door.squares} kind={door.kind} special={Boolean(door.reveal)} spin={spin} />
             ))}
             <OpenEdges grid={grid} />
+            <ExitSquares squares={exits} open={exitOpen} />
             {targets.map((k) => {
               const [x, y] = k.split(',').map(Number)
               return (

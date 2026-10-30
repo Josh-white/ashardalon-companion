@@ -458,6 +458,7 @@ export function moveToken(state, action) {
 }
 
 // A hero lost in a Time Leap is off the board until the curse ends at the start of their turn.
+// (A hero who escaped the dungeon leaves for good: hero.escaped, board/exits.js.)
 export const timeLeapt = (hero) => (hero.curses ?? []).some((c) => c.card?.removeAtTurnStart)
 
 // Figures that left play take their token with them (a Time Leap takes the hero's). When one figure of a monster card
@@ -467,7 +468,7 @@ export function pruneTokens(state) {
   const board = state.board
   if (!board) return state
   const live = new Set(
-    [...state.heroes.filter((h) => !timeLeapt(h)), ...state.monsters, ...(state.villains ?? []).filter((v) => !v.defeated), ...(state.villagers ?? []).filter((v) => !v.removed)].map((f) => f.id),
+    [...state.heroes.filter((h) => !timeLeapt(h) && !h.escaped), ...state.monsters, ...(state.villains ?? []).filter((v) => !v.defeated), ...(state.villagers ?? []).filter((v) => !v.removed)].map((f) => f.id),
   )
   let tokens = Object.fromEntries(Object.entries(board.tokens).filter(([id]) => live.has(baseId(id))))
   const hero = tokens[state.heroes[state.turn.heroIndex]?.id]
