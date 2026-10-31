@@ -379,7 +379,13 @@ export default function TurnGuide({ state, dispatch }) {
           narrow ? '-mx-4 -mb-4 px-4' : '-mx-4 -mb-4 px-4 sm:-mx-6 sm:-mb-6 sm:px-6'
         }`}
       >
-        <Button variant="ghost" className="shrink-0 !px-3 py-2.5 whitespace-nowrap" onClick={() => dispatch({ type: 'PREVIOUS_PHASE' })}>
+        <Button
+          variant="ghost"
+          className="shrink-0 !px-3 py-2.5 whitespace-nowrap"
+          disabled={Boolean(state.encounter)}
+          title={state.encounter ? 'Finish the encounter card first' : undefined}
+          onClick={() => dispatch({ type: 'PREVIOUS_PHASE' })}
+        >
           ← Back
         </Button>
         {waiting ? (

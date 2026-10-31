@@ -936,6 +936,9 @@ function reduce(state, action) {
 
     case 'PREVIOUS_PHASE': {
       const { heroIndex, phase, round } = state.turn
+      // An open encounter card is only shown in the Villain Phase; stepping back would leave
+      // it holding up a phase that can't show it, with no way on but Undo.
+      if (state.encounter) return state
       if (phase > 0) return { ...state, turn: { ...state.turn, phase: phase - 1 } }
       if (heroIndex === 0 && round === 1) return state
       const prevIndex = (heroIndex - 1 + state.heroes.length) % state.heroes.length

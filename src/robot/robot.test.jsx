@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { Component, useSyncExternalStore } from 'react'
-import { readFileSync } from 'node:fs'
+import { appendFileSync, readFileSync } from 'node:fs'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { normalizeCardFile } from '../data/cards.js'
 import { HERO_TEMPLATES } from '../data/heroes.js'
@@ -13,8 +13,10 @@ import { ROBOT_CARD_FILE } from './robotCards.js'
 // the virtual board; every 4th is a party game on the shared table screen (every other one of
 // those on the party's virtual board, the rest with real tiles on the table), and every 4th
 // after seed 2 is a solo game of a made-up campaign (robotCards.js).
-// It doesn't try to win; it looks for a screen that goes blank or a tap the rules can't take
-// (like the monster-move crash in PR 131), so those are caught before a merge goes live.
+// Every 3rd solo game starts from the empty solo lobby and picks its heroes and powers there.
+// It doesn't try to win; it looks for a screen that goes blank, a tap the rules can't take
+// (like the monster-move crash in PR 131), or a game that stops moving on (the turn stays put
+// for 600 taps), so those are caught before a merge goes live.
 //
 // Every game is seeded, so a failure can be played again exactly:
 //   ROBOT_SEED=1234 ROBOT_GAMES=1 npm run robot
@@ -22,15 +24,28 @@ import { ROBOT_CARD_FILE } from './robotCards.js'
 //   ROBOT_GAMES=40 ROBOT_TAPS=600 npm run robot
 // Your own card file (the real cards.json on the Pi, say) instead of the made-up one:
 //   ROBOT_CARDS=cards/cards.json npm run robot
+// A game-night checkup: every adventure in the card file in turn (or the ones listed, by id),
+// each played as a party game (solo for a one-hero adventure), board and real tiles in turn:
+//   ROBOT_CARDS=cards/cards.json ROBOT_ADVENTURES=all ROBOT_GAMES=52 npm run robot
+//   ROBOT_CARDS=cards/cards.json ROBOT_ADVENTURES=adventure-4,adventure-6 npm run robot
+// Every tap of every game written to a file, to see what the robot did:
+//   ROBOT_TAPLOG=robot-taps.txt npm run robot
 
 const GAMES = Number(process.env.ROBOT_GAMES) || 16
 const TAPS = Number(process.env.ROBOT_TAPS) || 300
+// Taps a solo game that starts from the empty lobby gets to pick its heroes and enter.
+const LOBBY_TAPS = 120
+// Taps with the turn going nowhere before the robot calls the game stuck.
+const STUCK_TAPS = Number(process.env.ROBOT_STUCK) || 600
 const FIRST_SEED = Number(process.env.ROBOT_SEED) || 1
 const CARD_FILE = process.env.ROBOT_CARDS ? JSON.parse(readFileSync(process.env.ROBOT_CARDS, 'utf8')) : ROBOT_CARD_FILE
 const CARDS = normalizeCardFile(CARD_FILE)
+const CHECKUP = process.env.ROBOT_ADVENTURES
+  ? CARDS.adventures.filter((a) => process.env.ROBOT_ADVENTURES === 'all' || process.env.ROBOT_ADVENTURES.split(',').includes(a.id))
+  : null
 
 // Taps the robot never makes: ones that end or leave the game, and sound switches.
-const SKIP = [/New game/i, /We won/i, /We lost/i, /switch$/i, /Sound/i, /Music/i, /🔊|🔇|🎵/, /Finish and archive/i, /Back to the normal lobby/i, /Which game/i, /Switch game/i, /Card pictures/i]
+const SKIP = [/New game/i, /We won/i, /We lost/i, /switch$/i, /Sound/i, /Music/i, /🔊|🔇|🎵/, /Finish and archive/i, /Back to the normal lobby/i, /Which game/i, /Switch game/i, /Card pictures/i, /^🔥$/]
 
 // --- Seeded dice ---------------------------------------------------------------------------
 
@@ -161,8 +176,10 @@ const label = (el) => (el.getAttribute('aria-label') || el.textContent || '').re
 
 // Taps a player makes now and then, not every turn: fixing numbers by hand, looking at
 // things, tabs. The robot makes them less often, so its games get somewhere.
-const NOW_AND_THEN = [/^[−+]$/, /Zoom/i, /board$/i, /[LG][oa][si][en] 1 HP/i, /Tap to see why/i, /Menu/i, /^\W*(Log|Monsters|Party|Quest)/, /✋/, /(gains|loses) 1 HP/, /Read the card/i, /Hide the card/i, /conditions/i, /^(Weakened|Dazed|Poisoned|Immobilized|Slowed)$/, /Treasure token/i, /Put a villain/i, /^← Back$/, /^Close$/, /^Cancel$/]
-const weightOf = (text) => (/Undo/.test(text) ? 0.03 : NOW_AND_THEN.some((re) => re.test(text)) ? 0.1 : 1)
+const NOW_AND_THEN = [/^[−+]$/, /Zoom/i, /board$/i, /[LG][oa][si][en] 1 HP/i, /Tap to see why/i, /Menu/i, /^\W*(Log|Monsters|Party|Quest)/, /✋/, /(gains|loses) 1 HP/, /Read the card/i, /Hide the card/i, /conditions/i, /^(Weakened|Dazed|Poisoned|Immobilized|Slowed)$/, /Treasure token/i, /Put a villain/i, /^← Back$/, /^Close$/, /^Cancel$/, /^\W*Turn$/, /^(Attack bonus|AC|Speed) ?[+−\d]/, /^↓ /, /[▾▴]$/, /HP · AC \d/, /Pick a different hero/, /Change powers/, /^Change$/, /tips/, /We escaped/]
+// In the lobby the robot leans toward getting in, or it would pick and unpick powers all night.
+const LEANS = [/Enter the dungeon/, /Done choosing powers/, /^Tap to pick/]
+const weightOf = (text) => (/Undo/.test(text) ? 0.03 : NOW_AND_THEN.some((re) => re.test(text)) ? 0.1 : LEANS.some((re) => re.test(text)) ? 4 : 1)
 
 // Everything on the screen the robot could tap or choose right now, each with how likely
 // the robot is to pick it.
@@ -172,12 +189,22 @@ function choices() {
   // On the virtual board: the lit squares a figure can go to, and the figures themselves.
   const squares = [...document.querySelectorAll('svg rect.cursor-pointer')]
   const figures = [...document.querySelectorAll('svg g.cursor-pointer')]
+  const taps = buttons.map((el) => ({ el, kind: 'tap', weight: weightOf(label(el)) }))
   return [
-    ...buttons.map((el) => ({ el, kind: 'tap', weight: weightOf(label(el)) })),
+    ...taps.filter((o) => o.weight >= 1),
+    // However many of them a screen shows (a power card each has Read the card), the
+    // now-and-then taps and the figures together only get a share, so the game moves on.
+    ...shareOf(taps.filter((o) => o.weight < 1), 0.6),
     ...selects.map((el) => ({ el, kind: 'choose', weight: 0.3 })),
     ...squares.map((el) => ({ el, kind: 'square', weight: 4 / squares.length })),
-    ...figures.map((el) => ({ el, kind: 'figure', weight: el.dataset.token ? 1 : 0.1 })),
+    ...shareOf(figures.map((el) => ({ el, kind: 'figure', weight: el.dataset.token ? 1 : 0.1 })), 1.5),
   ]
+}
+
+// Shrinks a group's weights so they add up to at most `most`.
+function shareOf(options, most) {
+  const total = options.reduce((sum, o) => sum + o.weight, 0)
+  return total <= most ? options : options.map((o) => ({ ...o, weight: (o.weight * most) / total }))
 }
 
 function pickWeighted(options) {
@@ -188,30 +215,54 @@ function pickWeighted(options) {
 // Which kind of game a seed plays: 'solo', 'campaign' (solo, on the made-up campaign), or a
 // party game ('party-board' on the party's virtual board, 'party-tiles' with real tiles).
 // Picked from the seed, not the dice.
-const kindOf = (seed) => (seed % 4 === 2 ? 'campaign' : seed % 4 !== 0 ? 'solo' : seed % 8 === 0 ? 'party-board' : 'party-tiles')
+// In a checkup, the adventure comes from the game's place in the list, and so does the kind.
+const checkupAdventure = (seed) => CHECKUP[(seed - FIRST_SEED) % CHECKUP.length]
+function checkupKind(seed) {
+  const adventure = checkupAdventure(seed)
+  if (adventure.campaign) return 'campaign'
+  if (playerRange(adventure)[1] < 2) return 'solo'
+  return Math.floor((seed - FIRST_SEED) / CHECKUP.length) % 2 === 0 ? 'party-board' : 'party-tiles'
+}
+// "2-5" or "1" on the adventure, as [fewest, most] heroes.
+const playerRange = (adventure) => {
+  const [low, high = low] = String(adventure?.players ?? '1-5').split('-').map(Number)
+  return [low || 1, high || 5]
+}
+const kindOf = (seed) => CHECKUP ? checkupKind(seed) : (seed % 4 === 2 ? 'campaign' : seed % 4 !== 0 ? 'solo' : seed % 8 === 0 ? 'party-board' : 'party-tiles')
+
+// A random power card for each of the hero's slots.
+function randomPicks(template) {
+  const used = new Set()
+  return powerSlotsFor(template).map((type) => {
+    const card = pick(CARDS.powers.filter((c) => c.hero === template.key && c.type === type && !used.has(c.id)))
+    if (card) used.add(card.id)
+    return card ?? null
+  })
+}
 
 // The lobby, filled in the way the solo screen does: an adventure, 1 to 5 heroes, their powers.
 function lobbyFor(game) {
   const { gameReducer, initialState } = app
   const adventures = CARDS.adventures.filter((a) => !a.campaign && gameReducer(initialState, { type: 'CHOOSE_ADVENTURE', adventure: a }).lobbyAdventure)
-  const adventure = game.kind === 'campaign' ? CARDS.adventures.find((a) => a.campaign) : adventures.length > 0 && random() < 0.8 ? pick(adventures) : null
-  const heroCount = 1 + Math.floor(random() * 3)
+  const adventure = CHECKUP
+    ? checkupAdventure(game.seed)
+    : game.kind === 'campaign' ? CARDS.adventures.find((a) => a.campaign) : adventures.length > 0 && random() < 0.8 ? pick(adventures) : null
+  // A checkup brings the party the adventure asks for (2 to 4 heroes); otherwise 1 to 3.
+  const [fewest, most] = CHECKUP ? playerRange(adventure).map((n, i) => (i ? Math.min(n, 4) : Math.max(n, 2))) : [1, 3]
+  const heroCount = Math.min(fewest, most) + Math.floor(random() * (Math.max(most - fewest, 0) + 1))
   const heroes = [...HERO_TEMPLATES].sort(() => random() - 0.5).slice(0, heroCount)
   let state = gameReducer(initialState, { type: 'CHOOSE_ADVENTURE', adventure })
+  if (adventure && !state.lobbyAdventure) game.problem = `the lobby wouldn't take ${adventure.title}`
+  game.adventure = adventure?.title ?? 'free play'
+  // Some solo games start from the empty lobby, and the robot picks its heroes and powers there.
+  if (game.lobby) return state
   const party = game.kind.startsWith('party')
   if (party) state = gameReducer(state, { type: 'SET_LOBBY_BOARD', on: game.kind === 'party-board' })
   heroes.forEach((template, i) => {
     const deviceId = party ? `robot-ipad-${i + 1}` : `robot~solo-${i + 1}`
-    const used = new Set()
-    const picks = powerSlotsFor(template).map((type) => {
-      const card = pick(CARDS.powers.filter((c) => c.hero === template.key && c.type === type && !used.has(c.id)))
-      if (card) used.add(card.id)
-      return card ?? null
-    })
-    state = gameReducer(state, { type: 'CLAIM_HERO', deviceId, heroKey: template.key, picks, player: `Player ${i + 1}` })
+    state = gameReducer(state, { type: 'CLAIM_HERO', deviceId, heroKey: template.key, picks: randomPicks(template), player: `Player ${i + 1}` })
     if (party) state = gameReducer(state, { type: 'SET_LOBBY_READY', deviceId, ready: true })
   })
-  game.adventure = adventure?.title ?? 'free play'
   game.heroes = heroes.map((t) => t.name)
   if (!party) return state
   // A party game starts from the big screen's Enter the dungeon (Setup.jsx) once every iPad
@@ -228,6 +279,31 @@ function lobbyFor(game) {
   })
 }
 
+// Let the cards load, then a player-sized pause after every tap, so moments and dice finish.
+const wait = () => act(async () => vi.advanceTimersByTimeAsync(4000))
+
+// One tap (or choice) on whatever the screen shows; false when there's nothing to tap.
+async function tapSomething(game) {
+  const options = choices()
+  if (options.length === 0) return false
+  const { el, kind } = pickWeighted(options)
+  if (kind === 'square' || kind === 'figure') {
+    const what = el.dataset.token ?? el.dataset.item ?? el.dataset.marker ?? `square ${el.getAttribute('x')},${el.getAttribute('y')}`
+    game.taps.push(`tap the board: ${what}`)
+    fireEvent.click(el)
+  } else if (kind === 'choose') {
+    const option = pick([...el.options].filter((o) => !o.disabled && o.value !== el.value))
+    if (!option) return true
+    game.taps.push(`choose "${option.textContent.trim()}" (${store.state.turn.round}/${store.state.turn.phase})`)
+    fireEvent.change(el, { target: { value: option.value } })
+  } else {
+    game.taps.push(`tap "${label(el)}"`)
+    fireEvent.click(el)
+  }
+  await wait()
+  return true
+}
+
 async function playGame(seed) {
   // Fresh modules, so nothing (a counter for new ids, the loaded cards) carries over from
   // the game before: a seed plays the same game whether it's played alone or after others.
@@ -238,9 +314,11 @@ async function playGame(seed) {
   dice = seeded(seed + 1_000_003)
   other = seeded(seed + 2_000_003)
   const game = { seed, kind: kindOf(seed), taps: [] }
+  game.lobby = !CHECKUP && game.kind === 'solo' && seed % 3 === 0
   store.crash = null
   store.history = []
   store.state = lobbyFor(game)
+  if (game.problem) return game
   if (game.kind.startsWith('party') && store.state.status !== 'playing') return { ...game, problem: "the party game didn't start" }
   localStorage.clear()
   sessionStorage.clear()
@@ -258,40 +336,50 @@ async function playGame(seed) {
       <App />
     </CrashCatcher>,
   )
-  // Let the cards load, then a player-sized pause after every tap, so moments and dice finish.
-  const wait = () => act(async () => vi.advanceTimersByTimeAsync(4000))
   await wait()
 
-  if (!game.kind.startsWith('party')) {
+  if (game.lobby) {
+    // Half the lobby taps at random: picking heroes, powers, tips, the adventure. Then any hero
+    // still short of powers gets random ones (picking them by chance takes all night) and in it goes.
+    for (let n = 0; n < LOBBY_TAPS && !store.crash && store.state.status === 'setup'; n++) await tapSomething(game)
+    if (!store.crash && store.state.status === 'setup') {
+      const claims = store.state.lobby.length > 0 ? store.state.lobby : [{ deviceId: 'robot~solo-1', heroKey: pick(HERO_TEMPLATES).key }]
+      for (const claim of claims) {
+        const template = HERO_TEMPLATES.find((t) => t.key === claim.heroKey)
+        robotDispatch({ type: 'CLAIM_HERO', deviceId: claim.deviceId, heroKey: claim.heroKey, picks: randomPicks(template) })
+      }
+      await wait()
+      const enter = [...document.querySelectorAll('button')].find((b) => /Enter the dungeon/.test(b.textContent))
+      if (enter && !enter.disabled) fireEvent.click(enter)
+      await wait()
+    }
+    game.heroes = store.state.heroes.map((h) => h.name)
+    if (store.crash) return { ...game, problem: `crashed in the lobby, in ${store.crash.where}: ${store.crash.error?.stack ?? store.crash.error}` }
+    if (store.state.status === 'setup') return { ...game, problem: `the robot couldn't get into the dungeon from the solo lobby (${document.body.textContent.slice(0, 200)})` }
+  } else if (!game.kind.startsWith('party')) {
     const enter = [...document.querySelectorAll('button')].find((b) => /Enter the dungeon/.test(b.textContent))
     if (!enter || enter.disabled) return { ...game, problem: `the solo lobby wouldn't let the robot in (${document.body.textContent.slice(0, 200)})` }
     fireEvent.click(enter)
     await wait()
   }
 
+  // Where the turn is; if it stays put for STUCK_TAPS taps, the game is stuck (PR 148: Back
+  // past an open encounter card left the turn with no way on but Undo).
+  const where = () => `${store.state.status} ${store.state.turn.round}/${store.state.turn.heroIndex}/${store.state.turn.phase}`
+  let lastMove = { where: where(), tap: 0 }
   for (let n = 0; n < TAPS && !store.crash; n++) {
     if (store.state.status === 'won' || store.state.status === 'lost') break
-    const options = choices()
-    if (options.length === 0) return { ...game, problem: 'nothing left on the screen to tap' }
-    const { el, kind } = pickWeighted(options)
-    if (kind === 'square' || kind === 'figure') {
-      const what = el.dataset.token ?? el.dataset.item ?? el.dataset.marker ?? `square ${el.getAttribute('x')},${el.getAttribute('y')}`
-      game.taps.push(`tap the board: ${what}`)
-      fireEvent.click(el)
-    } else if (kind === 'choose') {
-      const option = pick([...el.options].filter((o) => !o.disabled && o.value !== el.value))
-      if (!option) continue
-      game.taps.push(`choose "${option.textContent.trim()}" (${store.state.turn.round}/${store.state.turn.phase})`)
-      fireEvent.change(el, { target: { value: option.value } })
-    } else {
-      game.taps.push(`tap "${label(el)}"`)
-      fireEvent.click(el)
+    if (!(await tapSomething(game))) return { ...game, problem: 'nothing left on the screen to tap' }
+    if (where() !== lastMove.where) lastMove = { where: where(), tap: n }
+    else if (n - lastMove.tap >= STUCK_TAPS) {
+      game.problem = `got stuck: ${STUCK_TAPS} taps without the turn moving on (round/hero/phase ${lastMove.where})`
+      break
     }
-    await wait()
   }
   game.status = store.state.status
   game.round = store.state.turn.round
   game.tiles = store.state.board?.tiles.length ?? 0
+  if (game.problem) return game
   if (store.crash) game.problem = `crashed in ${store.crash.where}: ${store.crash.error?.stack ?? store.crash.error}`
   else if (game.kind === 'campaign' && !store.state.campaign) game.problem = "the campaign didn't start"
   return game
@@ -311,8 +399,9 @@ describe('the robot', () => {
     const seed = FIRST_SEED + i
     it(`plays a whole game without crashing (seed ${seed})`, async () => {
       const game = await playGame(seed)
-      process.stderr.write(`Robot ${game.kind} game ${seed}: ${game.adventure} with ${game.heroes?.join(', ')}, ${game.taps.length} taps, reached round ${game.round} with ${game.tiles} tiles out\n`)
+      process.stderr.write(`Robot ${game.kind} game ${seed}: ${game.adventure} with ${game.heroes?.join(', ')}, ${game.taps.length} taps, reached round ${game.round} with ${game.tiles} tiles out${game.status === 'playing' ? '' : `, ${game.status}`}\n`)
+      if (process.env.ROBOT_TAPLOG) appendFileSync(process.env.ROBOT_TAPLOG, `\n# game ${seed} ${game.kind} ${game.adventure} -> ${game.status}\n${game.taps.join('\n')}\n`)
       expect(game.problem, game.problem && report(game)).toBeUndefined()
-    }, 120_000)
+    }, 120_000 * Math.max(1, TAPS / 300))
   }
 })

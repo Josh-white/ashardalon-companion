@@ -157,6 +157,13 @@ describe('turns', () => {
     state = gameReducer(state, { type: 'PREVIOUS_PHASE' })
     expect(state.turn).toEqual({ heroIndex: 1, phase: 2, round: 1 })
   })
+
+  it("won't step back a phase while an encounter card is open", () => {
+    let state = startGame(2)
+    for (let i = 0; i < 2; i++) state = gameReducer(state, { type: 'NEXT_PHASE' })
+    state = { ...state, encounter: { id: 'e1', cardId: 'bloodlust', heroId: state.heroes[0].id, card: { id: 'bloodlust', name: 'Bloodlust', type: 'curse' } } }
+    expect(gameReducer(state, { type: 'PREVIOUS_PHASE' })).toBe(state)
+  })
 })
 
 describe('START_DEMO', () => {
