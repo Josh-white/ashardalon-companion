@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { heroArt, monsterArt } from '../data/art.js'
 import { boardGrid, figureToken, figuresLeft, moveSpeed, movesLeft, timeLeapt } from '../board/play.js'
 import { moveChoices, movePrompt } from '../board/powerMoves.js'
@@ -16,6 +16,7 @@ import { ClosedDoor, SQUARE } from './TileDrawing.jsx'
 import { useBoardZoom } from './useBoardZoom.js'
 import Torchlight, { lightSources, useTorchlight } from './Torchlight.jsx'
 import { Button } from './ui.jsx'
+import AttackFx, { quakeDelay, quakes, tokenFx, useAttackFx } from './AttackFx.jsx'
 
 // The virtual board (a solo game's, or the party's on the projector and iPads): the tiles laid so far and every figure on its square.
 // Tap your hero to see where it can go, then tap a square to move there. "Move by hand"
@@ -51,6 +52,9 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   const activeAt = board?.tokens[activeId]?.join(',')
   const bounds = board ? boardBounds(board) : null
   const { boxRef, spin, viewW, viewH, viewBox, fit, scale, zoomIn, zoomOut, zoomTo } = useBoardZoom({ fill, bounds, activeId, activeAt })
+  // An attack flying across the board (Colton's idea), once its die has been read.
+  const playing = useAttackFx(state.moment)
+  const anchorRef = useRef(null)
   if (!board) return null
 
   const grid = boardGrid(board)
@@ -341,7 +345,8 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
           viewBox={viewBox}
           width={small || fit ? '100%' : viewW * scale}
           height={small ? undefined : fit ? '100%' : viewH * scale}
-          className={small ? 'mx-auto max-h-[45vh]' : fit ? 'block' : 'mx-auto'}
+          className={`${small ? 'mx-auto max-h-[45vh]' : fit ? 'block' : 'mx-auto'} ${quakes(playing) ? 'fx-quake' : ''}`}
+          style={quakes(playing) ? { '--fx-delay': quakeDelay() } : undefined}
           role="img"
           aria-label="The dungeon board"
         >
@@ -351,6 +356,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
             </pattern>
           </defs>
           <g transform={spin ? `rotate(${spin})` : undefined}>
+            <g ref={anchorRef} />
             <rect x={bounds.x} y={bounds.y} width={bounds.w} height={bounds.h} fill="#0a0c10" />
             <rect x={bounds.x} y={bounds.y} width={bounds.w} height={bounds.h} fill="url(#board-dots)" opacity="0.6" />
             {board.tiles.map((placed) => board.defs[placed.tileId] && <PlacedTile key={placed.uid} placed={placed} def={board.defs[placed.tileId]} spin={spin} />)}
@@ -391,12 +397,16 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
             ))}
             {/* The active hero is drawn last so its glow sits on top of its neighbours. */}
             {[...onBoard.filter((f) => f.id !== activeId), ...onBoard.filter((f) => f.id === activeId)].map((f) => (
-              <Token key={f.id} {...f} spin={spin} at={board.tokens[f.id]} active={f.id === activeId} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)} onTap={watching ? undefined : () => tapFigure(f.id)} />
+              // An attack makes its target flinch or dodge, and a sword swing lunges in.
+              <g key={f.id} {...tokenFx(playing, board.tokens[f.id])}>
+                <Token {...f} spin={spin} at={board.tokens[f.id]} active={f.id === activeId} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)} onTap={watching ? undefined : () => tapFigure(f.id)} />
+              </g>
             ))}
             <MarkerBadges markers={placedMarkers} spin={spin} onTap={(id) => setReading(reading === id ? null : id)} />
           </g>
         </svg>
       </div>
+      <AttackFx playing={playing} anchorRef={anchorRef} artFor={(name) => artUrl(art, name)} />
     </section>
   )
 }

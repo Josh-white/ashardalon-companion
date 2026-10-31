@@ -1,11 +1,14 @@
 import { useEffect } from 'react'
 import { serverNow, useGameStates } from '../state/useSharedGame.js'
-import { heroTemplates } from '../data/heroes.js'
 import { audioContext } from './soundSetting.js'
 import { loadSamples, playSample, sampleMs } from './samples.js'
 import { layer } from './mixer.js'
 import { effectsOf } from '../data/powerEffects.js'
 import { newArrivals } from './narration.js'
+import { POWER_SPELLS, powerKey, spellKind } from './spellKind.js'
+import { FX_DELAY_MS, FX_IMPACT_MS } from '../board/attackFx.js'
+
+export { spellKind }
 
 // The 3D die lands this long after a roll's moment starts (ROLL_MS in Die3D.jsx).
 export const DIE_LANDS_MS = 900
@@ -134,45 +137,11 @@ const MONSTER_VOICES = {
   gauth: 'gauth',
 }
 
-// The sound a power makes as it's cast, from words in its name, or failing that from
-// the hero who used it (Heskan's powers are magic, Quinn's are holy). Null for a plain
-// weapon swing, which keeps the sword clang.
-const SPELL_WORDS = [
-  ['fire', /flam|fire|burn|scorch|breath|blaze/],
-  ['frost', /frost|ice\b|icy|cold|freez/],
-  ['zap', /lightning|shock|spark/],
-  ['boom', /thunder/],
-  ['psychic', /fear|hypno|daze|dread|mind/],
-  ['holy', /holy|sacred|smite|divine|radiant|righteous|hymn|bless/],
-  ['arcane', /missile|spectral|arcane|magic|force|ray\b/],
-  ['arrow', /shot|arrow|bow\b|sling/],
-]
-// Powers whose sound JJ picked by name, where the words alone would pick another.
-const POWER_SPELLS = {
-  'blade barrier': 'arcane',
-  'spectral ram': 'arcane',
-  'cause fear': 'psychic',
-  hypnotism: 'psychic',
-  'clerics shield': 'holy',
-  'divine challenge': 'holy',
-  'righteous advance': 'holy',
-}
 // Powers that heal, which shimmer when used (and after the hit, for an attack that heals).
 const HEALING_POWERS = new Set(['lay on hands', 'healing hymn', 'virtues touch', 'dwarven resilience', 'comeback strike'])
 // Powers with a healing effect that still sound like a trick.
 const UTILITY_POWERS = new Set(['bravery'])
-const powerKey = (name = '') => name.toLowerCase().replace(/[^a-z ]/g, '').trim()
 
-export function spellKind(title = '') {
-  // A hero attack's title is "Hero: Power name!".
-  const [heroName, power = ''] = title.split(': ')
-  const lower = power.toLowerCase()
-  if (POWER_SPELLS[powerKey(power)]) return POWER_SPELLS[powerKey(power)]
-  const match = SPELL_WORDS.find(([, words]) => words.test(lower))
-  if (match) return match[0]
-  // Otherwise the hero's own kind of magic (Heskan's arcane, Quinn's holy), from their template.
-  return heroTemplates().find((h) => h.name === heroName)?.spellSound ?? null
-}
 
 // The sound of a power used from its tile, or as a reaction (state.cast): its spell if
 // it has one, a warm shimmer if it heals, and a quick magic swoosh for the rest.
@@ -227,6 +196,8 @@ export function momentSounds(moment) {
     const voice = !moment.trap && knownVoice(moment.title)
     if (voice) sounds.push([voice, 0])
     if (moment.trap) then('trap')
+    // On the virtual board the hit lands when the animation reaches the hero.
+    if (moment.fx) next = Math.max(next, FX_DELAY_MS + FX_IMPACT_MS)
     then(rolls.some((r) => r.hit) ? 'thud' : 'whoosh')
     if (moment.kind === 'monster-down') then('down')
     return sounds
@@ -237,8 +208,12 @@ export function momentSounds(moment) {
     const attack = rolls.some((r) => r.hit != null)
     const spell = attack ? spellKind(moment.title) : null
     if (values.includes(20)) then('fanfare')
+    // On the virtual board the spell goes off as the animation starts, and a sword or
+    // a miss sounds when it reaches the monster.
+    if (moment.fx) next = Math.max(next, FX_DELAY_MS + (spell ? 0 : FX_IMPACT_MS))
     // A power cast at a monster makes its own sound once the die has landed.
     if (spell) then(spell)
+    if (moment.fx && spell) next = Math.max(next, FX_DELAY_MS + FX_IMPACT_MS)
     if (!values.includes(20)) {
       if (attack && anyHit) {
         if (!spell) then('weapon')
