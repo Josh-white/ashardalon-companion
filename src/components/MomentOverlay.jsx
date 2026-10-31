@@ -3,6 +3,7 @@ import { heroArt } from '../data/art.js'
 import { HERO_COLORS } from '../data/heroes.js'
 import { artUrl, useArt } from '../state/useArt.js'
 import Die from './Die3D.jsx'
+import { FX_DELAY_MS } from '../board/attackFx.js'
 
 const SHOW_MS = { roll: 2200, crit: 3500, fumble: 3000, defeat: 3000, level: 3500, down: 3500, poison: 3500, spawn: 3000, monster: 4500, 'monster-down': 5000, encounter: 4500, treasure: 4000 }
 // A device that reconnects shouldn't replay a moment that is long over.
@@ -32,7 +33,8 @@ export default function MomentOverlay({ moment, heroes, big = false }) {
   useEffect(() => {
     if (!moment || Date.now() - moment.at > STALE_MS) return
     setVisible(moment)
-    const hide = setTimeout(() => setVisible(null), SHOW_MS[moment.kind] ?? 2500)
+    // On the virtual board it steps aside once the die is read, for the attack's animation.
+    const hide = setTimeout(() => setVisible(null), moment.fx ? FX_DELAY_MS : SHOW_MS[moment.kind] ?? 2500)
     return () => clearTimeout(hide)
   }, [moment?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
