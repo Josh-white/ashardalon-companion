@@ -182,6 +182,8 @@ export function narrationFor(before, after, now = Date.now()) {
   // then the call into the dungeon.
   if (starting) {
     lines.splice(storyAt, 0, say('narrator', `${STORY} The adventure begins${after.adventure?.card?.title ? `: ${after.adventure.card.title}` : ''}!`))
+    const goal = after.adventure?.card?.goal
+    if (goal) lines.push(say('narrator', `${STORY} Your quest: ${goal}`))
     lines.push(say('narrator', `${STORY} Heroes, enter the dungeon!`))
   }
   // The lines that open a game are the opening story (state/opening.js): the roll for

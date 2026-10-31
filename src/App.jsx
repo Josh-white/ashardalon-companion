@@ -518,7 +518,7 @@ export default function App() {
   // others when it starts and ends, so they wait for it.
   const narrator = useNarrator(soundOn, {
     onHold: (hold, event) =>
-      dispatch({ type: hold === 'opening' ? (event === 'start' ? 'OPENING_NARRATING' : 'OPENING_DONE') : event === 'start' ? 'FIRST_ROLL_NARRATING' : 'FIRST_ROLL_QUIET' }),
+      dispatch({ type: hold === 'opening' ? (event === 'start' ? 'OPENING_NARRATING' : 'OPENING_QUIET') : event === 'start' ? 'FIRST_ROLL_NARRATING' : 'FIRST_ROLL_QUIET' }),
   })
   const soundLocked = useAudioLocked(soundOn) || narrator.blocked
   const doorsAt = useDoorsOpening()

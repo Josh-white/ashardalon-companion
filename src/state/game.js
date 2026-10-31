@@ -156,6 +156,10 @@ function reduce(state, action) {
     case 'OPENING_NARRATING':
       return openingNarrating(state)
 
+    // The narrator finished; the briefing stays up until its reading time is over.
+    case 'OPENING_QUIET':
+      return openingNarrating(state, false)
+
     case 'OPENING_DONE':
       return finishOpening(state)
 
