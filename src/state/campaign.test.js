@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { pickTownEvent, TOWN_EVENTS } from '../data/townEvents.js'
 import { normalizeCardFile } from '../data/cards.js'
 import { buildChamberDeck, campaignOutcome } from './campaign.js'
 import { encounterCount, gameReducer, initialState } from './game.js'
@@ -142,6 +143,24 @@ describe('Campaign Against the Clans', () => {
     // The campaign is over, so there's no next adventure, and New game clears it.
     expect(next(state)).toBe(state)
     expect(gameReducer(state, { type: 'NEW_GAME' }).campaign).toBe(null)
+  })
+
+  it('has a night in town between adventures: gold, shop cards, surges or XP for the next one', () => {
+    const won = beatChamber(reveal(startCampaign(clans)))
+    const withEvent = (id) => {
+      const list = TOWN_EVENTS
+      const at = (list.findIndex((e) => e.id === id) + 0.5) / list.length
+      return gameReducer(won, { type: 'CAMPAIGN_NEXT', treasureCards: cards.treasures, boons: cards.boons, random: [...random.slice(0, 127), at] })
+    }
+    const farmer = withEvent('farmer')
+    expect(farmer.campaign.event).toMatchObject({ id: 'farmer', effect: 'Each hero +100 gold' })
+    expect(farmer.campaign.heroes.map((h) => h.gold)).toEqual(won.heroes.map((h) => (h.gold ?? 0) + 100))
+    expect(withEvent('merchant').campaign.shop.length).toBeGreaterThan(withEvent('quiet').campaign.shop.length) // the test file only has a few treasures
+    expect(lobbyStart(withEvent('temple')).surges).toBe(3)
+    expect(lobbyStart(withEvent('omen')).surges).toBe(1)
+    expect(lobbyStart(withEvent('tavern')).xp).toBe(3)
+    // Never the same event twice in a row.
+    expect(pickTownEvent(0, 'farmer').id).not.toBe('farmer')
   })
 
   it('is lost with the first defeat', () => {

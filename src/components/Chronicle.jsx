@@ -36,6 +36,18 @@ export default function Chronicle({ campaign }) {
       <div className="flex flex-col gap-[1.4vh] rounded-r-md bg-gradient-to-r from-[#cdb88f] via-[#f3e6c8] to-[#e9d8b4] p-[2.2vw]">
         <p className="text-[1vw] font-bold uppercase tracking-[0.3em] text-[#7c2d12]">Previously</p>
         {campaign.last && <p className="font-display text-[1.6vw] italic leading-snug">“{spoken(previouslyLine(campaign.last)).replace(/^Previously…\s*/, '')}”</p>}
+        {campaign.event && (
+          <>
+            <p className="text-[1vw] font-bold uppercase tracking-[0.3em] text-[#7c2d12]">A night in town</p>
+            <div className="rounded-md border-2 border-[#7c2d12]/60 bg-[#f7ecd2] p-[1vw]">
+              <p className="font-display text-[1.6vw] font-black text-[#7c2d12]">
+                {campaign.event.icon} {campaign.event.title}
+              </p>
+              <p className="text-[1.2vw] leading-snug">{campaign.event.text}</p>
+              <p className="mt-[0.4vh] text-[1.1vw] font-bold text-[#991b1b]">{campaign.event.effect}</p>
+            </div>
+          </>
+        )}
         <p className="text-[1vw] font-bold uppercase tracking-[0.3em] text-[#7c2d12]">The party</p>
         <div className="grid grid-cols-5 gap-[1vw]">
           {campaign.heroes.map((h) => (

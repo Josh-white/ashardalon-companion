@@ -8,6 +8,7 @@ import { discardMonsterCard } from './monsterDeck.js'
 import { copyCard, levelSlots } from './heroSetup.js'
 import { initialState } from './initialState.js'
 import { drawDungeonTile } from './dungeon.js'
+import { pickTownEvent, townEventEffect } from '../data/townEvents.js'
 
 export const sameHeroes = (heroes, saved) => heroes.length === saved.length && saved.every((s) => heroes.some((h) => h.key === s.key))
 
@@ -70,8 +71,13 @@ export function nextCampaignAdventure(state, action) {
     // For the Chronicle in the next lobby: how the last adventure went.
     last: { won: outcome.won, chamber: outcome.chamber?.name ?? null },
   }
+  // A night in town: one event, with the last of the shuffle numbers (the shop uses the first ones).
+  const numbers = Array.isArray(action.random) ? action.random : []
+  const event = pickTownEvent(numbers[numbers.length - 1], state.campaign.event?.id)
+  if (event.gold) campaign.heroes = campaign.heroes.map((h) => ({ ...h, gold: Math.max(0, h.gold + event.gold) }))
+  campaign.event = { id: event.id, icon: event.icon, title: event.title, text: event.text, effect: townEventEffect(event), surges: event.surges ?? 0, xp: event.xp ?? 0 }
   const held = campaign.heroes.flatMap((h) => h.items.map((i) => i.cardId))
-  const shop = shopCards(action.treasureCards, held, shopSize({ campaign }, action.boons), action.random)
+  const shop = shopCards(action.treasureCards, held, shopSize({ campaign }, action.boons) + (event.shop ?? 0), action.random)
   return campaignLobby({ ...initialState, campaign: { ...campaign, shop }, lobbySurges: state.lobbySurges, lobbyTiles: state.lobbyTiles, lobbyBoard: state.lobbyBoard, lobbyDifficulty: state.lobbyDifficulty })
 }
 
