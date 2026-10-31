@@ -35,6 +35,9 @@ describe('end-of-game stats', () => {
     state = attack(state, 15)
     expect(heroStats(state, state.heroes[0].id)).toMatchObject({ damageDealt: 2, kills: 1, xpEarned: 2 })
     expect(heroStats(state, state.heroes[1].id).kills).toBe(0)
+    // The trophy book: the monster's picture name and how many.
+    expect(heroStats(state, state.heroes[0].id).trophies).toEqual({ 'monster-ogre': { name: 'Ogre', count: 1 } })
+    expect(heroStats(state, state.heroes[1].id).trophies).toBeUndefined()
   })
 
   it("doesn't count a monster's natural 20 as the hero's", () => {

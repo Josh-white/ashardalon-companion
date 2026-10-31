@@ -209,6 +209,7 @@ export default function Recap({ state, dispatch, big, onFinish }) {
 function PlayerTitles({ record, thisGame }) {
   if (!record) return null
   const fresh = record.titles.filter((t) => t.newIn === thisGame)
+  const freshTrophies = Object.values(record.trophies ?? {}).filter((t) => t.newIn === thisGame)
   const best = record.titles[0]
   return (
     <div className="mt-[0.4em] space-y-[0.3em]">
@@ -226,6 +227,12 @@ function PlayerTitles({ record, thisGame }) {
           <span className="block text-[0.85em] text-zinc-400">{t.how}</span>
         </p>
       ))}
+      {freshTrophies.length > 0 && (
+        <p className="rounded-[0.8em] border border-red-800/70 bg-red-950/50 px-[0.6em] py-[0.3em]">
+          <span className="block text-[0.75em] font-bold uppercase tracking-widest text-red-300">New in the trophy book!</span>
+          <span className="block font-bold text-zinc-100">📖 {freshTrophies.map((t) => t.name).join(', ')}</span>
+        </p>
+      )}
     </div>
   )
 }
