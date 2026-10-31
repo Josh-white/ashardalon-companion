@@ -1,5 +1,6 @@
 import { withAttackFx } from '../board/attackFx.js'
-import { hasAbility, HERO_TEMPLATES, MAX_LEVEL, STARTING_SURGES, templateFor, XP_TO_CANCEL_ENCOUNTER, XP_TO_LEVEL_UP } from '../data/heroes.js'
+import { difficultyOf, encounterCancelCost } from '../data/difficulty.js'
+import { hasAbility, HERO_TEMPLATES, MAX_LEVEL, STARTING_SURGES, templateFor, XP_TO_LEVEL_UP } from '../data/heroes.js'
 import { monsterArt } from '../data/art.js'
 import { PHASES } from '../data/phases.js'
 import { heroItems, itemTrapBonus } from '../data/items.js'
@@ -108,6 +109,7 @@ function tryAgain(state, action) {
     lobbyAdventure: state.adventure?.card ?? null,
     lobbySurges: state.retry?.surges ?? STARTING_SURGES,
     lobbyTiles: state.retry?.tiles ?? STARTING_TILES,
+    lobbyDifficulty: state.retry?.difficulty ?? 'normal',
   }
   const { boardTiles, boardRandom, ...rest } = action
   const board = state.board && Array.isArray(boardTiles) ? { boardTiles, boardRandom } : {}
@@ -121,7 +123,7 @@ function reduce(state, action) {
       // A campaign goes on until it's over (or someone ends it), so its heroes come back to the lobby.
       const outcome = campaignOutcome(state)
       if (!state.campaign || outcome?.over) return initialState
-      return campaignLobby({ ...initialState, campaign: state.campaign, lobbySurges: state.lobbySurges, lobbyTiles: state.lobbyTiles, lobbyBoard: state.lobbyBoard })
+      return campaignLobby({ ...initialState, campaign: state.campaign, lobbySurges: state.lobbySurges, lobbyTiles: state.lobbyTiles, lobbyBoard: state.lobbyBoard, lobbyDifficulty: state.lobbyDifficulty })
     }
 
     case 'CAMPAIGN_NEXT':
@@ -201,7 +203,8 @@ function reduce(state, action) {
       // A campaign's adventure needs every hero of the campaign, and only them.
       if (state.campaign && !sameHeroes(heroes, state.campaign.heroes)) return state
       const campaign = state.campaign ?? (isCampaign(card) ? newCampaign(card, action.chambers, action.random) : null)
-      const surges = campaignSurges(campaign, clamp(Number(state.lobbySurges) || STARTING_SURGES, MIN_SURGES, MAX_SURGES))
+      const difficulty = difficultyOf(state.lobbyDifficulty)
+      const surges = campaignSurges(campaign, clamp(Number(state.lobbySurges) || STARTING_SURGES, MIN_SURGES, MAX_SURGES)) + difficulty.extraSurges
       const lobbyTiles = clamp(Number(state.lobbyTiles) || STARTING_TILES, MIN_TILES, MAX_TILES)
       // On the virtual board the stack can't hold more regular tiles than there are layouts for.
       const regular = Array.isArray(action.boardTiles) ? action.boardTiles.filter((t) => t.kind === 'regular').length : 0
@@ -215,6 +218,7 @@ function reduce(state, action) {
         status: 'playing',
         heroes: entering,
         surges,
+        difficulty: difficulty.key,
         adventure: card ? { ...newAdventure(card), doubleEncounters: Boolean(campaign?.hard) } : null,
         tileStack: buildTileStack(tiles, card, action.tileRandom),
         // The campaign's record of its heroes keeps their gold and items too, so a New game
@@ -224,7 +228,7 @@ function reduce(state, action) {
         firstRoll: newFirstRoll(heroes),
         // A game on the virtual board (solo or the party's) starts with the adventure's start tile and the heroes on it.
         board: action.boardTiles ? newBoard(action.boardTiles, heroes, action.boardRandom, card, objectiveId) : null,
-        retry: { surges: clamp(Number(state.lobbySurges) || STARTING_SURGES, MIN_SURGES, MAX_SURGES), tiles: lobbyTiles },
+        retry: { surges: clamp(Number(state.lobbySurges) || STARTING_SURGES, MIN_SURGES, MAX_SURGES), tiles: lobbyTiles, difficulty: difficulty.key },
       }
       // The Vast Gate Opens: the gate is on the Start tile, and its Flares! card is in the top 3 encounters.
       if (objective) {
@@ -233,7 +237,8 @@ function reduce(state, action) {
       }
       if (card?.startEncounters?.length > 0) started = { ...started, encounterAdds: [...card.startEncounters] }
       const names = heroes.map((h) => h.name).join(', ')
-      const begun = withLog(started, card ? `${card.title} begins with ${names}.` : `The adventure begins with ${names}.`)
+      const level = difficulty.key === 'normal' ? '' : ` ${difficulty.icon} ${difficulty.label} game: ${difficulty.detail}.`
+      const begun = withLog(started, `${card ? `${card.title} begins with ${names}.` : `The adventure begins with ${names}.`}${level}`)
       // Later campaign adventures: the heroes still have their treasure, so those cards stay out
       // of the deck. Everyone still draws a starting card, as every adventure begins.
       if (state.campaign) {
@@ -289,6 +294,12 @@ function reduce(state, action) {
       const card = action.adventure ?? null
       if (card && !isPlayable(card)) return state
       return { ...state, lobbyAdventure: card }
+    }
+
+    case 'SET_LOBBY_DIFFICULTY': {
+      if (state.status !== 'setup') return state
+      const picked = difficultyOf(action.difficulty)
+      return { ...state, lobbyDifficulty: picked.key, lobbySurges: picked.surges }
     }
 
     case 'SET_LOBBY_SURGES':
@@ -716,7 +727,8 @@ function reduce(state, action) {
       const hero = p && state.heroes.find((h) => h.id === p.heroId)
       const power = hero?.powers.find((x) => x.id === p.powerId)
       const helps = power && !power.used && effectsOf(power).reaction === 'perseverance'
-      const cost = helps ? Math.max(0, XP_TO_CANCEL_ENCOUNTER - clamp(Number(p.heroesOnTile) || 0, 1, state.heroes.length)) : XP_TO_CANCEL_ENCOUNTER
+      const full = encounterCancelCost(state)
+      const cost = helps ? Math.max(0, full - clamp(Number(p.heroesOnTile) || 0, 1, state.heroes.length)) : full
       if (state.xp < cost || (p && !helps) || state.encounter?.attacked || state.encounter?.card.noCancel) return state
       let next = helps ? markUsed(state, hero.id, power.id) : state
       next = { ...next, xp: next.xp - cost }

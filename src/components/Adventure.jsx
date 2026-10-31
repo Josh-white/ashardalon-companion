@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { DIFFICULTIES, difficultyOf } from '../data/difficulty.js'
 import { HERO_COLORS, hasAbility } from '../data/heroes.js'
 import { escapeHold, escapeToken, everyoneEscapes, exitName, exitSquares } from '../board/exits.js'
 import { DOOR_UNLOCK_ROLL, FEATURE_LABELS, MAX_SURGES, MIN_SURGES, escapeBlockers, goalParts, missingFeatures, playableChambers, revealsReady, tilesToCome, usesDoors } from '../state/adventure.js'
@@ -25,6 +26,7 @@ export function AdventurePicker({ state, dispatch, board = false, compact = fals
   const { adventures } = useCards()
   const chosen = state.lobbyAdventure
   const surges = state.lobbySurges ?? 2
+  const difficulty = difficultyOf(state.lobbyDifficulty)
   // The practice warm-up first, then the book's adventures in order.
   const sorted = [...adventures].sort((a, b) => b.practice - a.practice || (a.number ?? 99) - (b.number ?? 99))
 
@@ -52,8 +54,27 @@ export function AdventurePicker({ state, dispatch, board = false, compact = fals
       </div>
       {adventures.length === 0 && <p className="mt-2 text-sm text-zinc-500">No adventures in the card file yet.</p>}
 
+      <div className="mt-4">
+        <span className="text-zinc-400">How hard?</span>
+        <div className="mt-1 grid gap-2 sm:grid-cols-3">
+          {DIFFICULTIES.map((d) => (
+            <button
+              key={d.key}
+              type="button"
+              onClick={() => dispatch({ type: 'SET_LOBBY_DIFFICULTY', difficulty: d.key })}
+              className={`rounded-xl border-2 px-3 py-2 text-left transition active:scale-95 ${d.key === difficulty.key ? 'border-amber-400 bg-amber-950/40' : 'border-zinc-800 bg-zinc-950'}`}
+            >
+              <span className="block font-display font-bold text-zinc-100">
+                {d.icon} {d.label}
+              </span>
+              <span className="block text-sm text-zinc-400">{d.detail}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <span className="text-zinc-400">Healing surges:</span>
+        <span className="text-zinc-400">Healing surges{difficulty.extraSurges ? ` (+${difficulty.extraSurges} on Easy)` : ''}:</span>
         {Array.from({ length: MAX_SURGES - MIN_SURGES + 1 }, (_, i) => MIN_SURGES + i).map((n) => (
           <Button key={n} variant={n === surges ? 'gold' : 'default'} onClick={() => dispatch({ type: 'SET_LOBBY_SURGES', surges: n })}>
             {'❤'.repeat(n)} {n === 1 ? 'harder' : n === 3 ? 'easier' : 'normal'}
@@ -76,8 +97,10 @@ export function QuestLine({ state, dispatch, boardChoice = null, onBoard = false
   const [open, setOpen] = useState(false)
   const chosen = state.lobbyAdventure
   const surges = state.lobbySurges ?? 2
+  const difficulty = difficultyOf(state.lobbyDifficulty)
   const facts = [
-    `${'❤'.repeat(surges)} ${surges === 1 ? 'harder' : surges === 3 ? 'easier' : 'normal'}`,
+    `${difficulty.icon} ${difficulty.label}`,
+    `${'❤'.repeat(surges + difficulty.extraSurges)} ${surges + difficulty.extraSurges} surge${surges + difficulty.extraSurges === 1 ? '' : 's'}`,
     onBoard ? '🗺️ virtual board' : `🧱 real tiles · ${state.lobbyTiles ?? STARTING_TILES} in the stack`,
   ]
   if (open) {

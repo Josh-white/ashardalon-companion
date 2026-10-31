@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { HERO_COLORS, XP_TO_CANCEL_ENCOUNTER } from '../data/heroes.js'
+import { HERO_COLORS } from '../data/heroes.js'
+import { encounterCancelCost } from '../data/difficulty.js'
 import { heroItems, itemTrapBonus } from '../data/items.js'
 import { reactionsFor } from '../data/powerEffects.js'
 import { ENCOUNTER_LABELS, encounterCount, isWrathCheck, phaseChecks, villainInPlay } from '../state/game.js'
@@ -275,7 +276,7 @@ export function Perseverance({ state, dispatch }) {
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
         {state.heroes.map((_, i) => {
-          const cost = Math.max(0, XP_TO_CANCEL_ENCOUNTER - (i + 1))
+          const cost = Math.max(0, encounterCancelCost(state) - (i + 1))
           return (
             <Button
               key={i}
@@ -338,10 +339,10 @@ function EncounterCard({ state, hero, dispatch }) {
       {!attacked && !card.noCancel && (
         <Button
           className="w-full"
-          disabled={state.xp < XP_TO_CANCEL_ENCOUNTER}
+          disabled={state.xp < encounterCancelCost(state)}
           onClick={() => dispatch({ type: 'CANCEL_ENCOUNTER' })}
         >
-          Spend {XP_TO_CANCEL_ENCOUNTER} XP to cancel it (party has {state.xp})
+          Spend {encounterCancelCost(state)} XP to cancel it (party has {state.xp})
         </Button>
       )}
       {!attacked && !card.noCancel && <Perseverance state={state} dispatch={dispatch} />}
@@ -484,8 +485,8 @@ export function EncounterStep({ state, hero, dispatch }) {
     return (
       <div className="mt-4 rounded-xl bg-zinc-950/50 p-3 text-lg text-zinc-100">
         <p>Draw an encounter card and do what it says.</p>
-        <Button className="mt-2" disabled={state.xp < XP_TO_CANCEL_ENCOUNTER} onClick={() => dispatch({ type: 'CANCEL_ENCOUNTER' })}>
-          Spend {XP_TO_CANCEL_ENCOUNTER} XP to cancel the encounter
+        <Button className="mt-2" disabled={state.xp < encounterCancelCost(state)} onClick={() => dispatch({ type: 'CANCEL_ENCOUNTER' })}>
+          Spend {encounterCancelCost(state)} XP to cancel the encounter
         </Button>
         <Perseverance state={state} dispatch={dispatch} />
       </div>
