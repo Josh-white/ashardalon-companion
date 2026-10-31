@@ -4,11 +4,12 @@ import { momentSoundMs } from './sfx.js'
 import { serverNow, useGameStates } from '../state/useSharedGame.js'
 import { TAP_EVENTS, audioContext } from './soundSetting.js'
 import { VOICE_DUCK, VOICE_HOLD_S, holdQuiet, layer, releaseQuiet } from './mixer.js'
+import { SWITCH_PAUSE_MS, pauseBetween, waitMs } from './pacing.js'
 
-// A short pause after the sound effects end, so the voice doesn't step on them.
-const DELAY_MS = 300
 // If the game moves faster than the narrator can talk, old lines are dropped.
-const MAX_QUEUE = 3
+const MAX_QUEUE = 5
+// The music stays down through the pause between two lines.
+const HOLD_S = SWITCH_PAUSE_MS / 1000 + VOICE_HOLD_S
 
 const lineUrl = (line) => `/narrate?voice=${line.voice}&text=${encodeURIComponent(line.text)}`
 
@@ -37,7 +38,18 @@ function fetchLine(ctx, line) {
 
 // What's being said right now on this page, if anything.
 let speaking = null // { source, stopped, line }
+// The last line said and when it ended, for the pause before the next one.
+let last = null // { line, at }
+// When the sound effects that are playing now (a roar, a fanfare) will be done.
+let sfxUntil = 0
+// The next line, waiting out a pause.
+let waiting = null
+function stopWaiting() {
+  clearTimeout(waiting)
+  waiting = null
+}
 function stopSpeaking(ctx) {
+  stopWaiting()
   if (!speaking) return
   speaking.stopped = true
   try {
@@ -46,6 +58,7 @@ function stopSpeaking(ctx) {
     // Not started yet, or already over.
   }
   speaking = null
+  last = null
   releaseQuiet(ctx, 'voice')
 }
 
@@ -60,7 +73,6 @@ export function useNarrator(on, { onHold } = {}) {
   const [available, setAvailable] = useState(false)
   const [blocked, setBlocked] = useState(false)
   const queue = useRef([])
-  const timers = useRef(new Set())
   const hold = useRef(onHold)
   useEffect(() => {
     hold.current = onHold
@@ -75,6 +87,17 @@ export function useNarrator(on, { onHold } = {}) {
 
   const playNext = useCallback(() => {
     if (speaking || queue.current.length === 0) return
+    // A breath after the last line (longer when someone else speaks next), and never
+    // over a sound effect that's still playing.
+    const restUntil = last ? last.at + pauseBetween(last.line, queue.current[0]) : 0
+    const wait = waitMs(Date.now(), { restUntil, sfxUntil })
+    if (wait > 0) {
+      if (!waiting) waiting = setTimeout(() => {
+        waiting = null
+        playNext()
+      }, wait)
+      return
+    }
     const ctx = audioContext()
     if (!ctx) return
     if (ctx.state !== 'running') {
@@ -90,12 +113,13 @@ export function useNarrator(on, { onHold } = {}) {
     const line = queue.current.shift()
     const turn = { source: null, stopped: false, line }
     speaking = turn
-    const done = () => {
+    const done = (said) => {
       if (speaking !== turn) return
       speaking = null
+      if (said) last = { line, at: Date.now() }
       if (line.hold && !queue.current.some((l) => l.hold === line.hold)) hold.current?.(line.hold, 'done')
       // The music waits a moment before coming back, in case another line follows.
-      releaseQuiet(ctx, 'voice', VOICE_HOLD_S)
+      releaseQuiet(ctx, 'voice', HOLD_S)
       playNext()
     }
     fetchLine(ctx, line).then(
@@ -104,13 +128,13 @@ export function useNarrator(on, { onHold } = {}) {
         const source = ctx.createBufferSource()
         source.buffer = buffer
         source.connect(layer(ctx, 'voice'))
-        source.onended = done
+        source.onended = () => done(true)
         turn.source = source
         // The music dips while the narrator talks, and comes back when it's done.
         holdQuiet(ctx, 'voice', VOICE_DUCK)
         source.start()
       },
-      done,
+      () => done(false),
     )
   }, [])
 
@@ -123,33 +147,24 @@ export function useNarrator(on, { onHold } = {}) {
         playNext()
       }
     }
+    // A new moment's sound effects (die landing, fanfare, roar): the next line waits
+    // for them, whether it's this moment's line or one already waiting.
+    const moment = after.moment?.id !== before?.moment?.id ? after.moment : null
+    if (moment) sfxUntil = Math.max(sfxUntil, Date.now() + momentSoundMs(moment))
     if (!available || !on) return
     const lines = narrationFor(before, after, serverNow())
     if (lines.length === 0) return
-    // Wait for this moment's sound effects (die landing, fanfare, roar) to finish.
-    const moment = after.moment?.id !== before?.moment?.id ? after.moment : null
-    // Not cancelled when the next change arrives: every line gets its turn.
-    const timer = setTimeout(() => {
-      timers.current.delete(timer)
-      queue.current = [...queue.current, ...lines].slice(-MAX_QUEUE)
-      // Whatever waits for these lines starts waiting now, before they're even said.
-      for (const name of new Set(lines.map((l) => l.hold).filter(Boolean))) hold.current?.(name, 'start')
-      // Ask for every waiting line now, so the Pi records the next one (a villain's
-      // reply, say) while the current one is still playing.
-      const ctx = audioContext()
-      if (ctx) for (const line of queue.current) fetchLine(ctx, line).catch(() => {})
-      playNext()
-    }, (moment ? momentSoundMs(moment) : 0) + DELAY_MS)
-    timers.current.add(timer)
+    queue.current = [...queue.current, ...lines].slice(-MAX_QUEUE)
+    // Whatever waits for these lines starts waiting now, before they're even said.
+    for (const name of new Set(lines.map((l) => l.hold).filter(Boolean))) hold.current?.(name, 'start')
+    // Ask for every waiting line now, so the Pi records the next one (a villain's
+    // reply, say) while the current one is still playing.
+    const ctx = audioContext()
+    if (ctx) for (const line of queue.current) fetchLine(ctx, line).catch(() => {})
+    playNext()
   })
 
-  useEffect(() => {
-    const pending = timers.current
-    return () => {
-      pending.forEach(clearTimeout)
-      stopSpeaking(audioContext())
-    }
-  }, [])
+  useEffect(() => () => stopSpeaking(audioContext()), [])
 
   // While a line waits on a tap, the next tap anywhere plays it (a tap is what lets
   // the browser play sound).
@@ -186,7 +201,7 @@ export function useNarrator(on, { onHold } = {}) {
   )
 
   // Nothing being said or waiting to be said.
-  const quiet = useCallback(() => !speaking && queue.current.length === 0 && timers.current.size === 0, [])
+  const quiet = useCallback(() => !speaking && queue.current.length === 0, [])
 
   return { available, blocked: available && on && blocked, say, quiet }
 }
