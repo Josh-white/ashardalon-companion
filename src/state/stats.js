@@ -1,3 +1,5 @@
+import { monsterArt } from '../data/art.js'
+
 // Bragging rights for the end-of-game recap. Every action's before and after are
 // compared, so no rule in game.js has to remember to count anything. Undo puts the
 // counts back with the rest of the game.
@@ -20,6 +22,17 @@ function heroRolls(before, after) {
   // A monster's rolls against heroes carry heroId; a hero's against monsters carry monsterId.
   if (Array.isArray(moment.rolls)) return moment.rolls.filter((r) => r.monsterId).map((r) => ({ value: r.value, dealt: r.dealt ?? 0 }))
   return Number.isInteger(moment.value) ? [{ value: moment.value, dealt: 0 }] : []
+}
+
+// Trophies are { [picture name]: { name, count } }. A hero's stats only get them once
+// something is defeated, so the other numbers stay plain counts.
+export function addTrophies(trophies = {}, more = []) {
+  const next = { ...trophies }
+  for (const { key, name, count = 1 } of Array.isArray(more) ? more : Object.entries(more).map(([key, t]) => ({ key, ...t }))) {
+    if (!key) continue
+    next[key] = { name: next[key]?.name ?? name, count: (next[key]?.count ?? 0) + count }
+  }
+  return next
 }
 
 export function trackStats(before, after, action) {
@@ -60,6 +73,8 @@ export function trackStats(before, after, action) {
   let dealt = 0
   let kills = 0
   let xp = 0
+  // The trophy book: which monsters and villains, by their picture's name (data/art.js).
+  const trophies = []
   for (const foe of foesOf(before)) {
     if (foe.defeated) continue
     const now = afterFoes.get(foe.id)
@@ -69,9 +84,10 @@ export function trackStats(before, after, action) {
     if (!now || (now.defeated && !foe.defeated)) {
       kills += 1
       xp += foe.villain ? 0 : foe.xp ?? 0
+      trophies.push({ key: monsterArt(foe), name: foe.name })
     }
   }
-  if (dealt > 0 || kills > 0) add(credit, (s) => ({ ...s, damageDealt: s.damageDealt + dealt, kills: s.kills + kills, xpEarned: s.xpEarned + xp }))
+  if (dealt > 0 || kills > 0) add(credit, (s) => ({ ...s, damageDealt: s.damageDealt + dealt, kills: s.kills + kills, xpEarned: s.xpEarned + xp, trophies: addTrophies(s.trophies, trophies) }))
 
   // Natural 20s and 1s, and the biggest single hit.
   const rolls = heroRolls(before, after)

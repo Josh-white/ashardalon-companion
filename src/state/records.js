@@ -3,7 +3,7 @@
 // are added up from those entries whenever they're asked for, so Undo after a game ended
 // (or a new title added later) never leaves a total wrong.
 import { TITLES } from '../data/titles.js'
-import { recap } from './stats.js'
+import { addTrophies, recap } from './stats.js'
 
 const ENDED = new Set(['won', 'lost'])
 
@@ -28,7 +28,8 @@ export function gameRecord(state) {
     const key = playerKey(hero.player)
     const player = players.get(key) ?? { name: hero.player.trim(), heroes: [], mvp: false, stats: {} }
     for (const [stat, value] of Object.entries(stats)) {
-      player.stats[stat] = stat === 'biggestHit' ? Math.max(player.stats[stat] ?? 0, value) : (player.stats[stat] ?? 0) + value
+      if (stat === 'trophies') player.stats.trophies = addTrophies(player.stats.trophies, value)
+      else player.stats[stat] = stat === 'biggestHit' ? Math.max(player.stats[stat] ?? 0, value) : (player.stats[stat] ?? 0) + value
     }
     if (!player.heroes.includes(hero.key)) player.heroes.push(hero.key)
     player.mvp ||= mvpIds.includes(hero.id)
@@ -61,6 +62,7 @@ const emptyRecord = (name) => ({
   flawlessWins: 0,
   heroes: [],
   villains: [],
+  trophies: {},
 })
 
 function addGame(record, game, player) {
@@ -83,6 +85,8 @@ function addGame(record, game, player) {
     mvps: record.mvps + (player.mvp ? 1 : 0),
     flawlessWins: record.flawlessWins + (won && !s.downs ? 1 : 0),
     heroes: [...new Set([...record.heroes, ...player.heroes])],
+    // The trophy book: every monster and villain this player has defeated, won or lost.
+    trophies: addTrophies(record.trophies, s.trophies ?? {}),
     // Only a won game's villains count as beaten.
     villains: won ? [...new Set([...record.villains, ...game.villains])] : record.villains,
   }
@@ -95,16 +99,20 @@ export function playerRecords(games) {
   for (const game of games) {
     for (const player of game.players ?? []) {
       const key = playerKey(player.name)
-      const before = players.get(key) ?? { record: emptyRecord(player.name), newIn: {} }
+      const before = players.get(key) ?? { record: emptyRecord(player.name), newIn: {}, trophyIn: {} }
       const record = addGame(before.record, game, player)
       const newIn = { ...before.newIn }
       for (const t of TITLES) if (!newIn[t.key] && t.earned(record)) newIn[t.key] = game.key
-      players.set(key, { record, newIn })
+      // The game each trophy was first won in, so the recap can call out a new one too.
+      const trophyIn = { ...before.trophyIn }
+      for (const k of Object.keys(record.trophies)) trophyIn[k] ??= game.key
+      players.set(key, { record, newIn, trophyIn })
     }
   }
   return [...players.values()]
-    .map(({ record, newIn }) => ({
+    .map(({ record, newIn, trophyIn }) => ({
       ...record,
+      trophies: Object.fromEntries(Object.entries(record.trophies).map(([k, t]) => [k, { ...t, newIn: trophyIn[k] }])),
       titles: TITLES.filter((t) => newIn[t.key]).map(({ key, emoji, title, how }) => ({ key, emoji, title, how, newIn: newIn[key] })),
     }))
     .sort((a, b) => b.games - a.games || b.wins - a.wins || a.name.localeCompare(b.name))

@@ -18,6 +18,23 @@ describe("players' records", () => {
     expect(game.players[0]).toMatchObject({ heroes: ['cleric', 'paladin'], mvp: true, stats: { kills: 5, biggestHit: 3, nat20s: 1 } })
   })
 
+  it('fills in the trophy book across games, and says which game won each trophy first', () => {
+    const one = start(['Colton', 'Colton'])
+    const [a, b] = one.heroes.map((h) => h.id)
+    const ogre = { name: 'Ogre', count: 1 }
+    const first = gameRecord(end(one, 'lost', { [a]: { kills: 1, trophies: { 'monster-ogre': ogre } }, [b]: { kills: 1, trophies: { 'monster-ogre': ogre } } }))
+    expect(first.players[0].stats.trophies).toEqual({ 'monster-ogre': { name: 'Ogre', count: 2 } })
+    const two = start(['Colton'])
+    const second = gameRecord(end(two, 'won', { [two.heroes[0].id]: { kills: 2, trophies: { 'monster-ogre': ogre, 'villain-gauth': { name: 'Gauth', count: 1 } } } }))
+    const [colton] = playerRecords([{ ...first, endedAt: 1 }, { ...second, endedAt: 2 }])
+    expect(colton.trophies).toEqual({
+      'monster-ogre': { name: 'Ogre', count: 3, newIn: first.key },
+      'villain-gauth': { name: 'Gauth', count: 1, newIn: second.key },
+    })
+    // Games from before the trophy book have none.
+    expect(playerRecords([{ ...gameRecord(end(start(['Dad']), 'won')), endedAt: 1 }])[0].trophies).toEqual({})
+  })
+
   it("leaves out games still going, the demo game's nameless heroes and solo's stand-in name", () => {
     expect(gameRecord(start(['Colton']))).toBeNull()
     expect(gameRecord(end(start(['', 'Solo']), 'won'))).toBeNull()
