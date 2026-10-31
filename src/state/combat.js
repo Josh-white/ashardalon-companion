@@ -364,8 +364,10 @@ export function defeatVillain(state, villain) {
       defeated: false,
     }
   }
-  const next = withVillainCall(updateMonster(state, villain.id, () => ({ hp: 0, defeated: true })), villain, 'fall')
-  return { state: withLog(next, `The villain ${villain.name} was defeated!`), defeated: true }
+  // Official FAQ: a villain is worth experience equal to its level.
+  const xp = Number(villain.card?.level) || 0
+  const next = withVillainCall(updateMonster({ ...state, xp: state.xp + xp }, villain.id, () => ({ hp: 0, defeated: true })), villain, 'fall')
+  return { state: withLog(next, `The villain ${villain.name} was defeated!${xp ? ` +${xp} XP` : ''}`), defeated: true }
 }
 
 // Figures still on the board for a monster card at this HP (three for a full group of Legion Devils).

@@ -326,7 +326,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
     (p) => !p.used && powerNumber(p.card?.attack) !== null && (!extra || p.type === 'at-will'),
   )
   // Items with their own attack (Crossbow of Speed) are picked like a power.
-  const items = extra ? [] : attackItems(hero)
+  const items = extra ? [] : attackItems(hero, state.turn)
   const [powerId, setPowerId] = useState(null)
   const [chosen, setChosen] = useState([])
   const [answers, setAnswers] = useState({})

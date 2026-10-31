@@ -78,7 +78,10 @@ export function distanceChoices(hero) {
 export const asksIfStayed = (hero) => heroItems(hero).some((item) => item.card?.inPlay && item.card.stillBonus > 0)
 
 // Items that can make their own attack roll (Crossbow of Speed, Ring of Shooting Stars).
-export const attackItems = (hero) => heroItems(hero).filter((item) => item.card?.attack && !item.used)
+// Each one attacks at most once a turn (official FAQ: the Throwing Shield works again every
+// Hero Phase, but only once in it).
+export const attackItems = (hero, turn) =>
+  heroItems(hero).filter((item) => item.card?.attack && !item.used && !(turn?.itemAttacks ?? []).includes(item.id))
 
 // Unused items with this use, on any hero: [{ hero, item }].
 export function itemsWithUse(heroes, use) {

@@ -1002,6 +1002,11 @@ describe('treasure deck', () => {
     const shoot = (name) => gameReducer(state, { type: 'HERO_ATTACK', heroId: quinn().id, itemId: item(state, name).id, targets: [{ monsterId: state.monsters[0].id, roll: 2 }] })
     // The Throwing Shield says it isn't an attack action; the Crossbow fires instead of moving.
     expect(attackGone(shoot('Throw'), quinn())).toBeNull()
+    // Official FAQ: the shield comes back every Hero Phase, but throws only once in it.
+    const thrown = shoot('Throw')
+    expect(thrown.turn.itemAttacks).toEqual([item(state, 'Throw').id])
+    const again = gameReducer(thrown, { type: 'HERO_ATTACK', heroId: quinn().id, itemId: item(state, 'Throw').id, targets: [{ monsterId: state.monsters[0].id, roll: 2 }] })
+    expect(again).toBe(thrown)
     state = { ...state, board: { tiles: [], tokens: {}, defs: {} } }
     const fired = shoot('Crossbow')
     expect(attackGone(fired, quinn())).toBeNull()

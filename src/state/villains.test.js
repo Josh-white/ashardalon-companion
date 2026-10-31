@@ -57,13 +57,13 @@ describe('villains', () => {
     expect(place(state, 'Nobody').villains).toHaveLength(1)
   })
 
-  it('stays in the villain list when defeated, with no XP and no treasure', () => {
+  it('stays in the villain list when defeated, worth XP equal to its level (official FAQ), with no treasure', () => {
     let state = place(start(), 'boss')
     state = hit(state, state.villains[0])
     expect(state.villains[0]).toMatchObject({ hp: 1 })
     state = hit(state, state.villains[0])
     expect(state.villains[0]).toMatchObject({ hp: 0, defeated: true })
-    expect(state.xp).toBe(0)
+    expect(state.xp).toBe(5)
     expect(state.turn.treasureDrawn).toBeFalsy()
     expect(foes(state)).toHaveLength(0)
     // A defeated villain can be placed again later, as a new one.

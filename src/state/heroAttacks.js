@@ -1,7 +1,7 @@
 // A hero attacking: the attack numbers, the roll against the monster's AC, rerolls,
 // follow-ups, power damage and the powers that dodge a hit. The reducer is in game.js.
 import { XP_TO_LEVEL_UP } from '../data/heroes.js'
-import { heroItems, itemAttackParts } from '../data/items.js'
+import { attackItems, heroItems, itemAttackParts } from '../data/items.js'
 import { effectsOf, maxRolls } from '../data/powerEffects.js'
 import { queueFearMove, queueMoves } from '../board/powerMoves.js'
 import { clamp, findFoe, foes, heroLabel, markUsed, updateHero, updateMonster, validRoll, withCast, withLog, withMoment } from './gameHelpers.js'
@@ -44,7 +44,7 @@ export function attackNumbers(hero, { item = null, power = null, extraAttack = n
 // items (items.js) are applied here too.
 export function heroAttack(state, action) {
   const hero = state.heroes.find((h) => h.id === action.heroId)
-  const item = action.itemId ? heroItems(hero).find((i) => i.id === action.itemId && !i.used && i.card?.attack) : null
+  const item = action.itemId ? attackItems(hero, state.turn).find((i) => i.id === action.itemId) : null
   const power = item ? null : hero?.powers.find((p) => p.id === action.powerId)
   const source = item ?? power
   const effects = effectsOf(power)
@@ -114,6 +114,7 @@ export function heroAttack(state, action) {
       ...next.turn,
       bonusAttacks: extras,
       // Remembered for Inspiring Advice, Furious Assault and the power's own follow-up question.
+      itemAttacks: item ? [...(next.turn.itemAttacks ?? []), item.id] : next.turn.itemAttacks,
       lastAttack: { heroId: hero.id, powerId: power?.id ?? null, itemId: item?.id ?? null, attack, rolls, followUpDone: false, bonus: Boolean(extraAttack), free: freeAttack },
     },
   }
