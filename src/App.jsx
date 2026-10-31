@@ -17,6 +17,7 @@ import Recap, { LOST_QUESTION, newGameQuestion } from './components/Recap.jsx'
 import Board from './components/Board.jsx'
 import SeatPicker from './components/SeatPicker.jsx'
 import SinceLastTurn from './components/SinceLastTurn.jsx'
+import HeroCheatCard from './components/HeroCheatCard.jsx'
 import { BoostBadges } from './components/StatBoosts.jsx'
 import { acParts, attackParts, speedParts } from './data/statParts.js'
 import Setup from './components/Setup.jsx'
@@ -346,11 +347,13 @@ function PlayView({ state, dispatch, hero = null, soundBoard = null }) {
         {/* Cause Fear gives other heroes an attack during someone else's turn. */}
         {!myTurn && <ExtraAttacks state={state} dispatch={dispatch} onlyHeroId={hero.id} />}
         {heroCard(hero, true)}
+        <HeroCheatCard hero={hero} />
       </>
     ) : (
       <>
         <TurnGuide state={state} dispatch={dispatch} />
         {active && heroCard(active)}
+        {active && <HeroCheatCard key={`cheat-${active.id}`} hero={active} />}
       </>
     ),
     monsters: (

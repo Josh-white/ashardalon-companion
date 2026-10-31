@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { DEFAULT_VOICES, MAX_TEXT } from '../../server/narrator.js'
 import { narrationScript } from '../audio/script.js'
 import { HERO_TEMPLATES } from './heroes.js'
-import { COACHES, coachLine } from './coaches.js'
+import { COACHES, coachLine, coachPowerHint } from './coaches.js'
 
 describe('hero coaches', () => {
   it('has a coach with a voice of their own for every hero in the box', () => {
@@ -20,5 +20,13 @@ describe('hero coaches', () => {
       expect(script).toContainEqual(line)
     }
     expect(coachLine('homebrew')).toBeNull()
+  })
+
+  it('gives the cheat card a tip for every hero and finds powers in the coach tips', () => {
+    for (const t of HERO_TEMPLATES) expect(COACHES[t.key].tip).toBeTruthy()
+    expect(coachPowerHint('fighter', 'Reaping Strike')).toMatch(/attacks twice/)
+    expect(coachPowerHint('cleric', "CLERIC'S SHIELD")).toMatch(/harder to hit/)
+    expect(coachPowerHint('cleric', 'Not a real power')).toBeNull()
+    expect(coachPowerHint('homebrew', 'Anything')).toBeNull()
   })
 })
