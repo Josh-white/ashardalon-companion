@@ -204,7 +204,9 @@ function reduce(state, action) {
       if (state.campaign && !sameHeroes(heroes, state.campaign.heroes)) return state
       const campaign = state.campaign ?? (isCampaign(card) ? newCampaign(card, action.chambers, action.random) : null)
       const difficulty = difficultyOf(state.lobbyDifficulty)
-      const surges = campaignSurges(campaign, clamp(Number(state.lobbySurges) || STARTING_SURGES, MIN_SURGES, MAX_SURGES)) + difficulty.extraSurges
+      // A campaign's night in town (data/townEvents.js) can add or take a surge, or give XP.
+      const town = state.campaign?.event ?? null
+      const surges = Math.max(1, campaignSurges(campaign, clamp(Number(state.lobbySurges) || STARTING_SURGES, MIN_SURGES, MAX_SURGES)) + difficulty.extraSurges + (town?.surges ?? 0))
       const lobbyTiles = clamp(Number(state.lobbyTiles) || STARTING_TILES, MIN_TILES, MAX_TILES)
       // On the virtual board the stack can't hold more regular tiles than there are layouts for.
       const regular = Array.isArray(action.boardTiles) ? action.boardTiles.filter((t) => t.kind === 'regular').length : 0
@@ -218,6 +220,7 @@ function reduce(state, action) {
         status: 'playing',
         heroes: entering,
         surges,
+        xp: town?.xp ?? 0,
         difficulty: difficulty.key,
         adventure: card ? { ...newAdventure(card), doubleEncounters: Boolean(campaign?.hard) } : null,
         tileStack: buildTileStack(tiles, card, action.tileRandom),

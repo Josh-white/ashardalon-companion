@@ -102,6 +102,11 @@ export function CampaignLobby({ state, dispatch }) {
         </li>
         {campaign.hard && <li>⚔️ The Elite Regiment was found: every encounter card is two.</li>}
         {campaign.defeats > 0 && rules.secondChance && <li>💀 One defeat so far: every adventure starts with one fewer healing surge. Another loses the campaign.</li>}
+        {campaign.event && (
+          <li>
+            {campaign.event.icon} A night in town: <b>{campaign.event.title}</b>. {campaign.event.text} <span className="text-amber-300">{campaign.event.effect}.</span>
+          </li>
+        )}
         <li>🎁 Boons: {boons.length > 0 ? boons.map((b) => b.name).join(', ') : 'none yet'}</li>
       </ul>
       <h3 className="mt-4 font-semibold text-amber-400">The heroes</h3>
@@ -144,6 +149,11 @@ export function HeroCampaign({ state, heroKey, dispatch }) {
   const shop = state.campaign.shop
   return (
     <div className="mt-4 rounded-xl bg-zinc-950/60 p-3">
+      {state.campaign.event && (
+        <p className="mb-2 text-zinc-300">
+          {state.campaign.event.icon} <b className="text-zinc-100">{state.campaign.event.title}</b>: {state.campaign.event.effect}.
+        </p>
+      )}
       <p className="text-lg text-zinc-100">
         Level {hero.level} · 💰 {gold(hero.gold)}
       </p>
