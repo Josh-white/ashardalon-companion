@@ -4,6 +4,8 @@
 // and the whole speech is one recorded line, so it plays without ElevenLabs once recorded.
 export const COACHES = {
   cleric: {
+    // The one tip on the hero cheat card (HeroCheatCard.jsx).
+    tip: 'Stay close to your friends. Your healing only reaches heroes on your tile.',
     coach: 'Mother Ardra',
     role: 'High priestess of the temple',
     cue: '[warm, encouraging]',
@@ -17,6 +19,7 @@ export const COACHES = {
     ],
   },
   fighter: {
+    tip: 'Walk in first. Your tough armor is made for the front of the party.',
     coach: 'Sergeant Brumm',
     role: 'Dwarf drill sergeant',
     cue: '[gruff, commanding]',
@@ -30,6 +33,7 @@ export const COACHES = {
     ],
   },
   paladin: {
+    tip: 'Stand next to the scariest monster so it fights you, not your friends.',
     coach: 'Sir Edric',
     role: 'Knight of the silver order',
     cue: '[noble, steady]',
@@ -42,6 +46,7 @@ export const COACHES = {
     ],
   },
   rogue: {
+    tip: "Hit and run. Attack, then move away before the monster's turn.",
     coach: 'Whisper',
     role: 'Retired thief',
     cue: '[sly, playful]',
@@ -55,6 +60,7 @@ export const COACHES = {
     ],
   },
   wizard: {
+    tip: 'Stay a tile back. Your spells reach far, and you have the fewest hit points.',
     coach: 'Master Thessaly',
     role: 'Old wizard of the tower',
     cue: '[wise, mysterious]',
@@ -75,4 +81,15 @@ export const coachFor = (heroKey) => COACHES[heroKey] ?? null
 export const coachLine = (heroKey) => {
   const coach = coachFor(heroKey)
   return coach ? { voice: `coach_${heroKey}`, text: `${coach.cue} ${coach.tips.join(' ')}` } : null
+}
+
+const plain = (s) => s.toLowerCase().replace(/[^a-z]/g, '')
+
+// A power in the coach's own plain words, for the hero cheat card: the coach's tip that
+// names the power, or null when the coach doesn't talk about it (homebrew heroes and
+// powers the coach skips show the card text instead).
+export function coachPowerHint(heroKey, powerName) {
+  const name = plain(powerName ?? '')
+  if (!name) return null
+  return coachFor(heroKey)?.tips.find((tip) => plain(tip).includes(name)) ?? null
 }
