@@ -76,6 +76,12 @@ describe('narrator lines', () => {
       'The mountain rumbles.',
       'Heroes, enter the dungeon!',
     ])
+    // The briefing's goal comes just before the call into the dungeon.
+    const clans = { card: { title: 'Campaign Against the Clans', goal: 'Defeat the leaders of the Monster clans.' }, story: intro }
+    expect(narrationFor(game({ status: 'setup' }), game({ adventure: clans }), NOW).slice(-2)).toEqual([
+      'Your quest: Defeat the leaders of the Monster clans.',
+      'Heroes, enter the dungeon!',
+    ])
     const won = { id: 's3', title: 'Victory!', text: 'You escaped the dungeon!' }
     expect(narrationFor(game({ adventure: adventure(exit) }), game({ status: 'won', adventure: adventure(won) }), NOW)).toEqual(['You escaped the dungeon!'])
   })
