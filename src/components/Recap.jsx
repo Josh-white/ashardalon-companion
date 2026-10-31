@@ -104,6 +104,7 @@ export default function Recap({ state, dispatch, big, onFinish }) {
           {won ? 'Victory!' : 'The party has fallen'}
         </h2>
         {title && <p className="text-[1.1em] uppercase tracking-widest text-zinc-500">{title}</p>}
+        {state.adventure?.card.practice && <p className="text-[0.95em] text-sky-300">🔄 Practice game: it isn't added to anyone's records. Pick new heroes with New game.</p>}
         {won && state.adventure?.card.story.victory && (
           <p className="mx-auto mt-[0.5em] max-w-[40em] italic text-zinc-300">{state.adventure.card.story.victory}</p>
         )}

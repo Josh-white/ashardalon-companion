@@ -16,10 +16,10 @@ const counted = (name) => playerKey(name) !== '' && playerKey(name) !== 'solo'
 // (Try again and the next campaign adventure included).
 export const recordKey = (state) => state.heroes?.[0]?.id ?? null
 
-// What a finished game adds to each player's records, or null when the game hasn't ended
-// or nobody in it has a name. A player running more than one hero gets them added together.
+// What a finished game adds to each player's records, or null when the game hasn't ended,
+// nobody in it has a name, or it was only practice (the Hero Swap Warm-up). A player running more than one hero gets them added together.
 export function gameRecord(state) {
-  if (!ENDED.has(state.status) || !recordKey(state)) return null
+  if (!ENDED.has(state.status) || !recordKey(state) || state.adventure?.card?.practice) return null
   const { heroes, mvpIds } = recap(state)
   const villains = (state.villains ?? []).filter((v) => v.defeated).map((v) => v.name)
   const players = new Map()
