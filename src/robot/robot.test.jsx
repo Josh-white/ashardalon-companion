@@ -63,6 +63,8 @@ const WIN_TAPS = Math.max(TAPS, Number(process.env.ROBOT_WIN_TAPS) || 2500)
 // leaving alone the ones that would turn the big screen into something else.
 const CAMPAIGN_LOBBY_TAPS = 30
 const LOBBY_SKIP = [/Use this screen for something else/i]
+// Taps on one hero's iPad in the campaign lobby (its powers, the shop) before that.
+const IPAD_LOBBY_TAPS = 15
 const CHECKUP = process.env.ROBOT_ADVENTURES
   ? PLAIN_CARDS.adventures.filter((a) => process.env.ROBOT_ADVENTURES === 'all' || process.env.ROBOT_ADVENTURES.split(',').includes(a.id))
   : null
@@ -96,7 +98,7 @@ let other = seeded(FIRST_SEED)
 
 // --- A Pi in the test: the screens' taps go straight through the game rules ----------------
 
-const store = { state: null, history: [], listeners: new Set(), crash: null, log: [] }
+const store = { state: null, history: [], listeners: new Set(), crash: null, log: [], carried: null }
 // The app and its rules, loaded fresh for every game (see playGame).
 let app = null
 const setState = (next) => {
@@ -120,6 +122,11 @@ function robotDispatch(action) {
     return
   }
   if (next === store.state) return
+  // On to the next campaign adventure: what each hero takes with them (their level, gold and
+  // items when the party left the recap, after any last level-up or Treasure token there).
+  if (action.type === 'CAMPAIGN_NEXT') {
+    store.carried = store.state.heroes.map((h) => ({ key: h.key, level: h.level, gold: h.gold ?? 0, items: (h.items ?? []).map((i) => i.cardId) }))
+  }
   // Playing to win, every adventure's heroes start with three times their hit points: easy
   // cards can't soften the hazards and environments the rules themselves deal damage for.
   if (playingToWin && next.status === 'playing' && store.state.status !== 'playing') {
@@ -392,6 +399,7 @@ async function playGame(seed) {
   store.crash = null
   store.history = []
   store.log = []
+  store.carried = null
   store.state = lobbyFor(game)
   if (game.problem) return game
   if (game.kind.startsWith('party') && store.state.status !== 'playing') return { ...game, problem: "the party game didn't start" }
@@ -457,8 +465,6 @@ async function playGame(seed) {
         const outcome = campaignOutcome(store.state)
         game.adventures.push(`${status}${store.state.adventure?.chamber ? ` ${store.state.adventure.chamber.card.name}` : ''} in round ${store.state.turn.round}`)
         if (outcome?.over) game.campaign = outcome.over
-        checkCampaign(game, outcome)
-        if (game.problem) break
       }
       // A play-to-win campaign goes on through the recap to the next adventure.
       if (!game.win || !store.state.campaign || campaignOutcome(store.state)?.over) break
@@ -491,20 +497,13 @@ async function playGame(seed) {
   return game
 }
 
-// The heroes carried over to the next campaign adventure keep their level, gold and items
-// (rulebook p. 13; the XP resets). Checked as the robot goes on from each recap.
-function checkCampaign(game, outcome) {
-  if (!outcome || !store.state.campaign) return
-  game.carried = store.state.heroes.map((h) => ({ key: h.key, level: h.level, gold: h.gold ?? 0, items: (h.items ?? []).map((i) => i.cardId) }))
-}
-
 // Between campaign adventures: each iPad buys from the shop now and then and gets ready, the
 // robot taps around the big screen's lobby, and enters the dungeon from there, as the party does.
 async function campaignLobby(game, show) {
   const state = store.state
   const problem = (what) => (game.problem = `${what} (campaign adventure ${state.campaign.games + 1})`)
-  // What came over from the last adventure.
-  for (const before of game.carried ?? []) {
+  // What came over from the last adventure (rulebook p. 13: level, gold and items; XP resets).
+  for (const before of store.carried ?? []) {
     const saved = state.campaign.heroes.find((h) => h.key === before.key)
     if (!saved) return problem(`${before.key} wasn't kept for the next adventure`)
     if (saved.level !== before.level || saved.gold !== before.gold || saved.items.map((i) => i.cardId).join() !== before.items.join()) {
@@ -512,13 +511,27 @@ async function campaignLobby(game, show) {
     }
   }
   if (state.lobby.length !== state.campaign.heroes.length) return problem(`the lobby has ${state.lobby.length} heroes for the campaign's ${state.campaign.heroes.length}`)
-  for (const claim of state.lobby) {
-    const hero = state.campaign.heroes.find((h) => h.key === claim.heroKey)
-    const card = state.campaign.shop.find((c) => c.cost > 0 && c.cost <= hero.gold)
+  // One hero's iPad, on its "Ready your hero" screen with the shop: the robot taps around
+  // there (buying, if the hero can afford it), as the player would.
+  const claim = pick(state.lobby)
+  game.taps.push(`--- campaign adventure ${state.campaign.games + 1}: ${claim.heroKey}'s iPad in the lobby ---`)
+  cleanup()
+  localStorage.setItem('ashardalon-companion/device', claim.deviceId)
+  localStorage.setItem('ashardalon-companion/seat', claim.heroKey)
+  show()
+  await wait()
+  for (let n = 0; n < IPAD_LOBBY_TAPS && !store.crash && store.state.status === 'setup'; n++) await tapSomething(game, [...LOBBY_SKIP, /Pick a different hero/])
+  if (store.crash) return
+  localStorage.setItem('ashardalon-companion/device', 'robot')
+  // The other iPads buy now and then too, and every iPad gets ready (with a name, if the robot cleared it).
+  for (const claim of store.state.lobby) {
+    const hero = store.state.campaign.heroes.find((h) => h.key === claim.heroKey)
+    const card = store.state.campaign.shop.find((c) => c.cost > 0 && c.cost <= hero.gold)
     if (card && random() < 0.5) {
       game.taps.push(`${claim.heroKey}'s iPad buys ${card.name} from the shop`)
       robotDispatch({ type: 'CAMPAIGN_BUY', heroKey: claim.heroKey, cardId: card.id })
     }
+    if (!claim.player.trim()) robotDispatch({ type: 'SET_LOBBY_PLAYER', deviceId: claim.deviceId, player: claim.heroKey })
     robotDispatch({ type: 'SET_LOBBY_READY', deviceId: claim.deviceId, ready: true })
   }
   game.taps.push(`--- campaign adventure ${state.campaign.games + 1}: the big screen's lobby ---`)
