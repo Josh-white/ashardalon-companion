@@ -373,7 +373,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
           onProjector()
         }}
         onSolo={canSolo ? () => setRole('solo') : null}
-        onDemo={demo}
+        onDemo={state.campaign ? null : demo}
         onArt={onArt}
       />
     )

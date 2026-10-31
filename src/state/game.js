@@ -203,14 +203,18 @@ function reduce(state, action) {
       const tiles = action.boardTiles && regular > 0 ? Math.min(lobbyTiles, regular) : lobbyTiles
       const objective = card?.startObjective
       const objectiveId = objective ? newId('monster') : null
+      // A later campaign adventure: the heroes come back with the gold and items they had.
+      const entering = state.campaign ? heroes.map((h) => fromCampaign(h, campaignHero(state, h.key))) : heroes
       let started = {
         ...initialState,
         status: 'playing',
-        heroes: state.campaign ? heroes.map((h) => fromCampaign(h, campaignHero(state, h.key))) : heroes,
+        heroes: entering,
         surges,
         adventure: card ? { ...newAdventure(card), doubleEncounters: Boolean(campaign?.hard) } : null,
         tileStack: buildTileStack(tiles, card, action.tileRandom),
-        campaign: campaign && { ...campaign, heroes: campaignHeroes(campaign, heroes, state.lobby ?? []) },
+        // The campaign's record of its heroes keeps their gold and items too, so a New game
+        // partway through an adventure brings them back with what they had.
+        campaign: campaign && { ...campaign, heroes: campaignHeroes(campaign, entering, state.lobby ?? []) },
         tokenStack: campaign ? shuffle(Array.isArray(action.tokens) ? action.tokens : [], action.random) : null,
         firstRoll: newFirstRoll(heroes),
         // A game on the virtual board (solo or the party's) starts with the adventure's start tile and the heroes on it.
@@ -408,6 +412,8 @@ function reduce(state, action) {
       // A game already in progress, for trying features without setting one up:
       // every hero, a few monsters, some XP, and a hero with a condition.
       // `picks` gives each hero's starting cards by hero key (the rulebook's suggestions).
+      // Never over a campaign that's still going: it would wipe the heroes' levels, gold and chambers.
+      if (state.campaign && !campaignOutcome(state)?.over) return state
       const heroes = HERO_TEMPLATES.map((t) => ({ ...withPicks(createHero(t), action.picks?.[t.key]), player: '' }))
       heroes[1] = { ...heroes[1], hp: heroes[1].maxHp - 3 }
       heroes[3] = { ...heroes[3], conditions: ['Poisoned'] }

@@ -34,7 +34,8 @@ function Door({ icon, title, text, lit, onClick }) {
 
 // "Who stands here?": right after the intro, each new screen says what it's for. The
 // answer is remembered, so a screen only asks once. A wide screen with a mouse has the
-// big screen lit up first; an iPad or phone has the hero.
+// big screen lit up first; an iPad or phone has the hero. No demo game (onDemo null) while a
+// campaign is going, since it would take the campaign's place.
 export default function ScreenChoice({ onHero, onBigScreen, onSolo, onDemo, onArt }) {
   const big = looksLikeBigScreen()
   const hero = <Door key="hero" icon="🛡️" title="I'm a hero" text="Pick your hero on this screen" lit={!big} onClick={onHero} />
@@ -50,9 +51,11 @@ export default function ScreenChoice({ onHero, onBigScreen, onSolo, onDemo, onAr
         {onSolo && <Door icon="🗺️" title="Play solo" text="This screen runs one to five heroes on a virtual board" onClick={onSolo} />}
       </div>
       <p className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-zinc-400">
-        <button type="button" className="underline" onClick={onDemo}>
-          Start a demo game
-        </button>
+        {onDemo && (
+          <button type="button" className="underline" onClick={onDemo}>
+            Start a demo game
+          </button>
+        )}
         <button type="button" className="underline" onClick={onArt}>
           📷 Add photos of your cards
         </button>

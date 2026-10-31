@@ -160,6 +160,35 @@ describe('Campaign Against the Clans', () => {
     state = gameReducer(state, { type: 'END_CAMPAIGN' })
     expect(state.campaign).toBe(null)
   })
+
+  // Found by the robot playing whole campaigns: the campaign's record of its heroes lost
+  // their gold and items when the next adventure started, so a New game partway through
+  // that adventure brought them back broke.
+  it('keeps the heroes’ gold and items through a New game in a later adventure', () => {
+    let state = startCampaign(clans)
+    state = { ...state, heroes: state.heroes.map((h, i) => (i === 0 ? { ...h, gold: 400 } : h)) }
+    state = next(beatChamber(reveal(state)))
+    const before = state.campaign.heroes.map((h) => [h.key, h.gold, h.items.map((i) => i.cardId)])
+    expect(before[0][1]).toBe(400)
+    state = lobbyStart(state)
+    expect(state.campaign.heroes.map((h) => [h.key, h.gold, h.items.map((i) => i.cardId)])).toEqual(before)
+    state = gameReducer(state, { type: 'NEW_GAME' })
+    expect(state.campaign.heroes.map((h) => [h.key, h.gold, h.items.map((i) => i.cardId)])).toEqual(before)
+    state = lobbyStart(state)
+    expect(state.heroes[0].gold).toBe(400)
+  })
+
+  // Also found by the robot: "Start a demo game" on a screen's "Who stands here?" in the
+  // campaign lobby wiped the whole campaign.
+  it('won’t start a demo game over a campaign that’s still going', () => {
+    let state = startCampaign(clans)
+    expect(gameReducer(state, { type: 'START_DEMO' })).toBe(state)
+    state = next(beatChamber(reveal(state)))
+    expect(gameReducer(state, { type: 'START_DEMO' })).toBe(state)
+    state = beatChamber(reveal(lobbyStart(state)))
+    expect(campaignOutcome(state).over).toBe('won')
+    expect(gameReducer(state, { type: 'START_DEMO' }).campaign).toBe(null)
+  })
 })
 
 describe('Assault on Firestorm Peak', () => {
