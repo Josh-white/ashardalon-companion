@@ -58,7 +58,7 @@ describe('Try again', () => {
     expect(state.heroes[0].level).toBe(1)
     expect(state.heroes[0].hp).toBe(state.heroes[0].maxHp)
     expect(state.surges).toBe(3)
-    expect(state.retry).toEqual({ surges: 3, tiles: 10 })
+    expect(state.retry).toEqual({ surges: 3, tiles: 10, difficulty: 'normal' })
     expect(state.xp).toBe(0)
     expect(state.stats).toEqual({})
     expect(state.ending).toBe(null)

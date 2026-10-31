@@ -2,6 +2,7 @@
 // follow-ups, power damage and the powers that dodge a hit. The reducer is in game.js.
 import { XP_TO_LEVEL_UP } from '../data/heroes.js'
 import { attackItems, heroItems, itemAttackParts } from '../data/items.js'
+import { hasSecondChance } from '../data/difficulty.js'
 import { effectsOf, maxRolls } from '../data/powerEffects.js'
 import { queueFearMove, queueMoves } from '../board/powerMoves.js'
 import { clamp, findFoe, foes, heroLabel, markUsed, updateHero, updateMonster, validRoll, withCast, withLog, withMoment } from './gameHelpers.js'
@@ -149,20 +150,23 @@ export function heroAttack(state, action) {
 export function rerollAttack(state, action) {
   const last = state.turn.lastAttack
   const helper = state.heroes.find((h) => h.id === action.helperId)
-  const advice = action.helperItemId ? null : helper?.powers.find((p) => p.id === action.helperPowerId)
+  const advice = action.helperItemId || action.secondChance ? null : helper?.powers.find((p) => p.id === action.helperPowerId)
   const charm = action.helperItemId ? heroItems(helper).find((i) => i.id === action.helperItemId && !i.used && i.card?.use === 'reroll') : null
+  // Easy games: the hero who missed may roll again once per adventure.
+  const second = Boolean(action.secondChance) && helper?.id === last?.heroId && hasSecondChance(state, helper)
   const row = last?.rolls.find((r) => r.monsterId === action.monsterId && !r.hit && !r.rerolled)
   const monster = findFoe(state, action.monsterId)
   const hero = state.heroes.find((h) => h.id === last?.heroId)
   const power = hero?.powers.find((p) => p.id === last.powerId)
-  const helps = charm || (advice && !advice.used && effectsOf(advice).reaction === 'reroll')
+  const helps = second || charm || (advice && !advice.used && effectsOf(advice).reaction === 'reroll')
   if (!row || !monster || !helps || !validRoll(action.roll)) return state
 
-  const helpName = charm ? `${helper.name}'s Lucky Charm` : `${helper.name}'s Inspiring Advice`
+  const helpName = second ? `${helper.name}'s second chance` : charm ? `${helper.name}'s Lucky Charm` : `${helper.name}'s Inspiring Advice`
   const attack = row.attack ?? last.attack
   const before = { ...monster, hp: Math.min(monster.maxHp, monster.hp + row.dealt) }
   let next = updateMonster(state, monster.id, () => ({ hp: before.hp }))
   if (charm) next = spendItem(next, helper.id, charm.id)
+  if (second) next = { ...next, secondChances: [...(next.secondChances ?? []), helper.id] }
   const result = rollAgainst(before, action.roll, attack)
   next = withLog(
     next,
@@ -183,7 +187,7 @@ export function rerollAttack(state, action) {
   return withMoment(won.state, {
     kind: action.roll === 20 ? 'crit' : hurt.defeated ? 'defeat' : 'roll',
     heroId: hero.id,
-    title: `${charm ? 'Lucky Charm' : 'Inspiring Advice'}: ${result.hit ? 'Hit!' : 'Missed again'}`,
+    title: `${second ? 'Second chance' : charm ? 'Lucky Charm' : 'Inspiring Advice'}: ${result.hit ? 'Hit!' : 'Missed again'}`,
     detail: won.details.join(' '),
     rolls: [{ monsterId: monster.id, label: monster.name, value: action.roll, total: result.total, ac: monster.ac, hit: result.hit, outcome: result.outcome }],
   })

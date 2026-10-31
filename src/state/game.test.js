@@ -384,6 +384,21 @@ describe('hero attacks', () => {
       targets: [{ monsterId: state.monsters[0].id, roll }],
     })
 
+  it('gives each hero one second chance per adventure on Easy, and none on Normal', () => {
+    const easy = (state) => ({ ...state, difficulty: 'easy' })
+    let state = attack(easy(setup()), 2)
+    const hero = state.heroes[0]
+    const reroll = (s, roll) => gameReducer(s, { type: 'REROLL_ATTACK', helperId: hero.id, secondChance: true, monsterId: s.monsters[0].id, roll })
+    const normal = { ...state, difficulty: 'normal' }
+    expect(reroll(normal, 15)).toBe(normal)
+    const missedAgain = reroll(state, 2)
+    expect(missedAgain.secondChances).toEqual([hero.id])
+    // Used up for the adventure: the next miss can't be rerolled.
+    const next = attack(missedAgain, 3)
+    expect(reroll(next, 15)).toBe(next)
+    expect(reroll(state, 15).monsters).toHaveLength(0)
+  })
+
   it('misses below the monster AC and defeats it on a hit that drops it to 0', () => {
     let state = setup()
     expect(attack(state, 7).monsters[0].hp).toBe(2) // 7 + 6 = 13 vs AC 14

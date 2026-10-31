@@ -10,6 +10,8 @@ export const initialState = {
   status: 'setup', // setup | playing | won | lost
   heroes: [],
   surges: STARTING_SURGES,
+  difficulty: 'normal', // easy | normal | hard (src/data/difficulty.js)
+  secondChances: [], // Easy: heroes who used their one reroll this adventure
   xp: 0,
   monsters: [],
   turn: { heroIndex: 0, phase: 0, round: 1 },
@@ -31,6 +33,8 @@ export const initialState = {
   // Chosen on the projector before the game: the adventure card and how many healing surges.
   lobbyAdventure: null,
   lobbySurges: STARTING_SURGES,
+  // Easy / Normal / Hard (src/data/difficulty.js); the game keeps it as `difficulty`.
+  lobbyDifficulty: 'normal',
   // The virtual treasure deck, built on the first treasure draw.
   treasureDeck: null,
   treasure: null, // the treasure card just drawn, waiting for a hero to take it: { id, cardId, heroId, card }

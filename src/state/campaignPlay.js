@@ -72,7 +72,7 @@ export function nextCampaignAdventure(state, action) {
   }
   const held = campaign.heroes.flatMap((h) => h.items.map((i) => i.cardId))
   const shop = shopCards(action.treasureCards, held, shopSize({ campaign }, action.boons), action.random)
-  return campaignLobby({ ...initialState, campaign: { ...campaign, shop }, lobbySurges: state.lobbySurges, lobbyTiles: state.lobbyTiles, lobbyBoard: state.lobbyBoard })
+  return campaignLobby({ ...initialState, campaign: { ...campaign, shop }, lobbySurges: state.lobbySurges, lobbyTiles: state.lobbyTiles, lobbyBoard: state.lobbyBoard, lobbyDifficulty: state.lobbyDifficulty })
 }
 
 // Between adventures a hero buys a shop card with their own gold.
