@@ -162,6 +162,8 @@ npm run robot        # the robot plays whole solo games by itself (see below)
 
 `npm run robot` (`src/robot/robot.test.jsx`) plays a dozen whole solo games on the virtual board by itself: random adventure, one to three random heroes, then a few hundred random taps on the real screens, each one going through the real game rules. It doesn't try to win; it looks for a screen that crashes or a tap the rules can't take. It plays with made-up cards and tiles (`src/robot/robotCards.js`), so it runs anywhere. It isn't part of `npm test`, so the Pi's build doesn't take longer.
 
+Two of the games (seeds 6 and 14) play to win instead: a made-up clan campaign in easy mode (`easyCards` in `robotCards.js`: one-hit monsters and villains, the Chamber Entrance in the first few tiles), carried on through the recap, the campaign lobby on the big screen and the next adventure until the campaign is won. They check that the heroes keep their level, gold and items from one adventure to the next. To play Adventures 6 and 13 the same way with the full cards: `ROBOT_CARDS=cards/cards.json ROBOT_ADVENTURES=adventure-6,adventure-13 ROBOT_WIN=1 npm run robot` (`ROBOT_WIN_TAPS=20000` for a whole Assault on Firestorm Peak, `ROBOT_GAMELOG=log.txt` for each game's log).
+
 Every game has a seed, so a failure can be played again exactly; the failure names it and lists the robot's last taps. `ROBOT_SEED=7 ROBOT_GAMES=1 npm run robot` plays game 7 again, `ROBOT_GAMES=40 ROBOT_TAPS=600 npm run robot` digs deeper, and `ROBOT_CARDS=cards/cards.json npm run robot` plays with your own card file.
 
 ### Checks on GitHub

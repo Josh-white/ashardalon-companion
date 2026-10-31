@@ -6,7 +6,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { normalizeCardFile } from '../data/cards.js'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { powerSlotsFor } from '../state/heroSetup.js'
-import { ROBOT_CARD_FILE } from './robotCards.js'
+import { campaignOutcome } from '../state/campaign.js'
+import { easyCards, ROBOT_CARD_FILE } from './robotCards.js'
 
 // The robot: plays whole games by itself, tapping a random button on the real screens again
 // and again, with every tap going through the real game rules. Most games are solo games on
@@ -28,8 +29,16 @@ import { ROBOT_CARD_FILE } from './robotCards.js'
 // each played as a party game (solo for a one-hero adventure), board and real tiles in turn:
 //   ROBOT_CARDS=cards/cards.json ROBOT_ADVENTURES=all ROBOT_GAMES=52 npm run robot
 //   ROBOT_CARDS=cards/cards.json ROBOT_ADVENTURES=adventure-4,adventure-6 npm run robot
-// Every tap of every game written to a file, to see what the robot did:
-//   ROBOT_TAPLOG=robot-taps.txt npm run robot
+// Every tap of every game written to a file, to see what the robot did, and the end of each
+// game's own log (what the app says happened):
+//   ROBOT_TAPLOG=robot-taps.txt ROBOT_GAMELOG=robot-log.txt npm run robot
+// Playing to win: a random robot almost never finds a chamber or beats a campaign, so some
+// games are played in easy mode (robotCards.js easyCards: one-hit monsters and villains, the
+// Chamber Entrance in the first few tiles) and keep going after a win: on through the
+// recap, the campaign lobby on the big screen and the next adventure, to the campaign's end.
+// In CI every 8th game (seeds 6, 14, ...) plays the made-up clan campaign that way. For a
+// checkup, ROBOT_WIN=1 plays every adventure to win, campaigns as a party:
+//   ROBOT_CARDS=cards/cards.json ROBOT_ADVENTURES=adventure-6,adventure-13 ROBOT_WIN=1 npm run robot
 
 const GAMES = Number(process.env.ROBOT_GAMES) || 16
 const TAPS = Number(process.env.ROBOT_TAPS) || 300
@@ -39,13 +48,34 @@ const LOBBY_TAPS = 120
 const STUCK_TAPS = Number(process.env.ROBOT_STUCK) || 600
 const FIRST_SEED = Number(process.env.ROBOT_SEED) || 1
 const CARD_FILE = process.env.ROBOT_CARDS ? JSON.parse(readFileSync(process.env.ROBOT_CARDS, 'utf8')) : ROBOT_CARD_FILE
-const CARDS = normalizeCardFile(CARD_FILE)
+const PLAIN_CARDS = normalizeCardFile(CARD_FILE)
+const EASY_CARDS = normalizeCardFile(easyCards(CARD_FILE))
+// Easy mode only changes numbers; a card it broke would quietly drop out of the game.
+for (const kind of ['monsters', 'villains', 'encounters', 'adventures']) {
+  if (EASY_CARDS[kind].length !== PLAIN_CARDS[kind].length) throw new Error(`Easy mode lost some ${kind}: ${EASY_CARDS.problems.join(' ')}`)
+}
+// The cards the game being played uses (easy ones for a play-to-win game), as the screens load them.
+let CARDS = PLAIN_CARDS
+const WIN = Boolean(process.env.ROBOT_WIN)
+// Taps a play-to-win game gets: a whole campaign is several adventures.
+const WIN_TAPS = Math.max(TAPS, Number(process.env.ROBOT_WIN_TAPS) || 2500)
+// Taps on the big screen's campaign lobby between adventures, before the robot enters the dungeon,
+// leaving alone the ones that would turn the big screen into something else.
+const CAMPAIGN_LOBBY_TAPS = 30
+const LOBBY_SKIP = [/Use this screen for something else/i]
+// Taps on one hero's iPad in the campaign lobby (its powers, the shop) before that.
+const IPAD_LOBBY_TAPS = 15
 const CHECKUP = process.env.ROBOT_ADVENTURES
-  ? CARDS.adventures.filter((a) => process.env.ROBOT_ADVENTURES === 'all' || process.env.ROBOT_ADVENTURES.split(',').includes(a.id))
+  ? PLAIN_CARDS.adventures.filter((a) => process.env.ROBOT_ADVENTURES === 'all' || process.env.ROBOT_ADVENTURES.split(',').includes(a.id))
   : null
 
 // Taps the robot never makes: ones that end or leave the game, and sound switches.
-const SKIP = [/New game/i, /We won/i, /We lost/i, /switch$/i, /Sound/i, /Music/i, /🔊|🔇|🎵/, /Finish and archive/i, /Back to the normal lobby/i, /Which game/i, /Switch game/i, /Card pictures/i, /^🔥$/]
+const SKIP = [/New game/i, /End the campaign/i, /Free this hero/i, /We won/i, /We lost/i, /switch$/i, /Sound/i, /Music/i, /🔊|🔇|🎵/, /Finish and archive/i, /Back to the normal lobby/i, /Which game/i, /Switch game/i, /Card pictures/i, /^🔥$/]
+
+// Taps a play-to-win game leaves alone too: taking HP off a hero by hand, the − and +
+// buttons (XP, healing surges, tiles left), and Undo, which takes back the win it's after.
+const WIN_SKIP = [/[LG]oses 1 HP/i, /^[−+]$/, /Undo/]
+let playingToWin = false
 
 // --- Seeded dice ---------------------------------------------------------------------------
 
@@ -68,7 +98,7 @@ let other = seeded(FIRST_SEED)
 
 // --- A Pi in the test: the screens' taps go straight through the game rules ----------------
 
-const store = { state: null, history: [], listeners: new Set(), crash: null }
+const store = { state: null, history: [], listeners: new Set(), crash: null, log: [], carried: null }
 // The app and its rules, loaded fresh for every game (see playGame).
 let app = null
 const setState = (next) => {
@@ -92,8 +122,26 @@ function robotDispatch(action) {
     return
   }
   if (next === store.state) return
+  // On to the next campaign adventure: what each hero takes with them (their level, gold and
+  // items when the party left the recap, after any last level-up or Treasure token there).
+  if (action.type === 'CAMPAIGN_NEXT') {
+    store.carried = store.state.heroes.map((h) => ({ key: h.key, level: h.level, gold: h.gold ?? 0, items: (h.items ?? []).map((i) => i.cardId) }))
+  }
+  // Playing to win, every adventure's heroes start with three times their hit points: easy
+  // cards can't soften the hazards and environments the rules themselves deal damage for.
+  if (playingToWin && next.status === 'playing' && store.state.status !== 'playing') {
+    next = { ...next, heroes: next.heroes.map((h) => ({ ...h, maxHp: h.maxHp * 3, hp: h.maxHp * 3 })) }
+  }
   store.history.push(store.state)
   if (store.history.length > 30) store.history.shift()
+  // The game keeps only its last log lines; the robot keeps them all, for ROBOT_GAMELOG.
+  const seen = store.state.log?.[0]?.id
+  const added = []
+  for (const line of next.log ?? []) {
+    if (line.id === seen) break
+    added.push(line)
+  }
+  store.log.push(...added.reverse())
   setState(next)
 }
 
@@ -156,6 +204,12 @@ beforeAll(() => {
     return values
   })
   vi.spyOn(Math, 'random').mockImplementation(() => other())
+  // The big screen fits itself to the window; jsdom has no layout to watch.
+  window.ResizeObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
   window.HTMLElement.prototype.scrollIntoView = () => {}
   window.HTMLElement.prototype.scrollTo = () => {}
   // "Move on anyway?" and the like: the robot says yes or no at random.
@@ -176,15 +230,30 @@ const label = (el) => (el.getAttribute('aria-label') || el.textContent || '').re
 
 // Taps a player makes now and then, not every turn: fixing numbers by hand, looking at
 // things, tabs. The robot makes them less often, so its games get somewhere.
-const NOW_AND_THEN = [/^[−+]$/, /Zoom/i, /board$/i, /[LG][oa][si][en] 1 HP/i, /Tap to see why/i, /Menu/i, /^\W*(Log|Monsters|Party|Quest)/, /✋/, /(gains|loses) 1 HP/, /Read the card/i, /Hide the card/i, /conditions/i, /^(Weakened|Dazed|Poisoned|Immobilized|Slowed)$/, /Treasure token/i, /Put a villain/i, /^← Back$/, /^Close$/, /^Cancel$/, /^\W*Turn$/, /^(Attack bonus|AC|Speed) ?[+−\d]/, /^↓ /, /[▾▴]$/, /HP · AC \d/, /Pick a different hero/, /Change powers/, /^Change$/, /tips/, /We escaped/]
+const NOW_AND_THEN = [/^[−+]$/, /Zoom/i, /board$/i, /[LG][oa][si][en] 1 HP/i, /Tap to see why/i, /Menu/i, /^\W*(Log|Monsters|Party|Quest)/, /✋/, /(gains|loses) 1 HP/, /Read the card/i, /Hide the card/i, /conditions/i, /^(Weakened|Dazed|Poisoned|Immobilized|Slowed)$/, /Treasure token/i, /Put a villain/i, /^← Back$/, /^Close$/, /^Cancel$/, /^🪨 /, /^(Attack bonus|AC|Speed) ?[+−\d]/, /^↓ /, /[▾▴]$/, /HP · AC \d/, /Pick a different hero/, /Change powers/, /^Change$/, /tips/, /We escaped/]
 // In the lobby the robot leans toward getting in, or it would pick and unpick powers all night.
-const LEANS = [/Enter the dungeon/, /Done choosing powers/, /^Tap to pick/]
-const weightOf = (text) => (/Undo/.test(text) ? 0.03 : NOW_AND_THEN.some((re) => re.test(text)) ? 0.1 : LEANS.some((re) => re.test(text)) ? 4 : 1)
+const LEANS = [/Enter the dungeon/, /Done choosing powers/, /^Tap to pick/, /On to the next adventure/]
+// Playing to win, the robot also goes after the villain, rolls its attacks, and doesn't
+// hurry out of its Hero Phase.
+const WIN_LEANS = [
+  [/👑 Villain/, 6],
+  [/^🎲 Roll (?!the .* attack \(\+)/, 3],
+  [/On to Exploration Phase/, 0.3],
+]
+const weightOf = (text) => {
+  if (/Undo/.test(text)) return 0.03
+  // The Turn tab: back to the turn from the board or the other tabs, now and then.
+  if (/^\W*Turn$/.test(text)) return 0.4
+  if (NOW_AND_THEN.some((re) => re.test(text))) return 0.1
+  if (LEANS.some((re) => re.test(text))) return 4
+  return (playingToWin && WIN_LEANS.find(([re]) => re.test(text))?.[1]) || 1
+}
 
 // Everything on the screen the robot could tap or choose right now, each with how likely
 // the robot is to pick it.
-function choices() {
-  const buttons = [...document.querySelectorAll('button')].filter((b) => !b.disabled && !SKIP.some((re) => re.test(label(b))))
+function choices(also = []) {
+  const skip = [...SKIP, ...(playingToWin ? WIN_SKIP : []), ...also]
+  const buttons = [...document.querySelectorAll('button')].filter((b) => !b.disabled && !skip.some((re) => re.test(label(b))))
   const selects = [...document.querySelectorAll('select')].filter((s) => !s.disabled && s.options.length > 1)
   // On the virtual board: the lit squares a figure can go to, and the figures themselves.
   const squares = [...document.querySelectorAll('svg rect.cursor-pointer')]
@@ -215,20 +284,27 @@ function pickWeighted(options) {
 // Which kind of game a seed plays: 'solo', 'campaign' (solo, on the made-up campaign), or a
 // party game ('party-board' on the party's virtual board, 'party-tiles' with real tiles).
 // Picked from the seed, not the dice.
-// In a checkup, the adventure comes from the game's place in the list, and so does the kind.
-const checkupAdventure = (seed) => CHECKUP[(seed - FIRST_SEED) % CHECKUP.length]
+// In a checkup, the adventure comes from the seed's place in the list (seed 1 is the first),
+// and so does the kind, so a seed plays the same game alone as in a batch.
+const checkupAdventure = (seed) => CHECKUP[(seed - 1) % CHECKUP.length]
 function checkupKind(seed) {
   const adventure = checkupAdventure(seed)
-  if (adventure.campaign) return 'campaign'
+  // Played to win, a campaign is a party's, like the book's (2-5 heroes).
+  if (adventure.campaign && !WIN) return 'campaign'
   if (playerRange(adventure)[1] < 2) return 'solo'
-  return Math.floor((seed - FIRST_SEED) / CHECKUP.length) % 2 === 0 ? 'party-board' : 'party-tiles'
+  return Math.floor((seed - 1) / CHECKUP.length) % 2 === 0 ? 'party-board' : 'party-tiles'
 }
 // "2-5" or "1" on the adventure, as [fewest, most] heroes.
 const playerRange = (adventure) => {
   const [low, high = low] = String(adventure?.players ?? '1-5').split('-').map(Number)
   return [low || 1, high || 5]
 }
-const kindOf = (seed) => CHECKUP ? checkupKind(seed) : (seed % 4 === 2 ? 'campaign' : seed % 4 !== 0 ? 'solo' : seed % 8 === 0 ? 'party-board' : 'party-tiles')
+const kindOf = (seed) =>
+  CHECKUP ? checkupKind(seed)
+  : seed % 8 === 6 ? (seed % 16 === 6 ? 'party-board' : 'party-tiles')
+  : seed % 4 === 2 ? 'campaign' : seed % 4 !== 0 ? 'solo' : seed % 8 === 0 ? 'party-board' : 'party-tiles'
+// Games played to win: every checkup game with ROBOT_WIN, and the made-up clan campaign in CI.
+const winsOf = (seed) => (CHECKUP ? WIN : seed % 8 === 6)
 
 // A random power card for each of the hero's slots.
 function randomPicks(template) {
@@ -245,13 +321,16 @@ function lobbyFor(game) {
   const { gameReducer, initialState } = app
   const adventures = CARDS.adventures.filter((a) => !a.campaign && gameReducer(initialState, { type: 'CHOOSE_ADVENTURE', adventure: a }).lobbyAdventure)
   const adventure = CHECKUP
-    ? checkupAdventure(game.seed)
+    ? CARDS.adventures.find((a) => a.id === checkupAdventure(game.seed).id)
+    : game.win ? CARDS.adventures.find((a) => a.id === 'robot-clans')
     : game.kind === 'campaign' ? CARDS.adventures.find((a) => a.campaign) : adventures.length > 0 && random() < 0.8 ? pick(adventures) : null
   // A checkup brings the party the adventure asks for (2 to 4 heroes); otherwise 1 to 3.
-  const [fewest, most] = CHECKUP ? playerRange(adventure).map((n, i) => (i ? Math.min(n, 4) : Math.max(n, 2))) : [1, 3]
+  const [fewest, most] = CHECKUP || game.win ? playerRange(adventure).map((n, i) => (i ? Math.min(n, 4) : Math.max(n, 2))) : [1, 3]
   const heroCount = Math.min(fewest, most) + Math.floor(random() * (Math.max(most - fewest, 0) + 1))
   const heroes = [...HERO_TEMPLATES].sort(() => random() - 0.5).slice(0, heroCount)
   let state = gameReducer(initialState, { type: 'CHOOSE_ADVENTURE', adventure })
+  // Playing to win, the party takes all the healing surges the lobby allows.
+  if (game.win) state = gameReducer(state, { type: 'SET_LOBBY_SURGES', surges: 99 })
   if (adventure && !state.lobbyAdventure) game.problem = `the lobby wouldn't take ${adventure.title}`
   game.adventure = adventure?.title ?? 'free play'
   // Some solo games start from the empty lobby, and the robot picks its heroes and powers there.
@@ -283,8 +362,8 @@ function lobbyFor(game) {
 const wait = () => act(async () => vi.advanceTimersByTimeAsync(4000))
 
 // One tap (or choice) on whatever the screen shows; false when there's nothing to tap.
-async function tapSomething(game) {
-  const options = choices()
+async function tapSomething(game, skip = []) {
+  const options = choices(skip)
   if (options.length === 0) return false
   const { el, kind } = pickWeighted(options)
   if (kind === 'square' || kind === 'figure') {
@@ -313,10 +392,14 @@ async function playGame(seed) {
   random = seeded(seed)
   dice = seeded(seed + 1_000_003)
   other = seeded(seed + 2_000_003)
-  const game = { seed, kind: kindOf(seed), taps: [] }
+  const game = { seed, kind: kindOf(seed), win: winsOf(seed), taps: [], adventures: [] }
+  CARDS = game.win ? EASY_CARDS : PLAIN_CARDS
+  playingToWin = game.win
   game.lobby = !CHECKUP && game.kind === 'solo' && seed % 3 === 0
   store.crash = null
   store.history = []
+  store.log = []
+  store.carried = null
   store.state = lobbyFor(game)
   if (game.problem) return game
   if (game.kind.startsWith('party') && store.state.status !== 'playing') return { ...game, problem: "the party game didn't start" }
@@ -331,11 +414,13 @@ async function playGame(seed) {
 
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'cancelAnimationFrame', 'Date'] })
   vi.setSystemTime(new Date('2026-10-30T19:00:00'))
-  render(
-    <CrashCatcher>
-      <App />
-    </CrashCatcher>,
-  )
+  const show = () =>
+    render(
+      <CrashCatcher>
+        <App />
+      </CrashCatcher>,
+    )
+  show()
   await wait()
 
   if (game.lobby) {
@@ -367,12 +452,34 @@ async function playGame(seed) {
   // past an open encounter card left the turn with no way on but Undo).
   const where = () => `${store.state.status} ${store.state.turn.round}/${store.state.turn.heroIndex}/${store.state.turn.phase}`
   let lastMove = { where: where(), tap: 0 }
-  for (let n = 0; n < TAPS && !store.crash; n++) {
-    if (store.state.status === 'won' || store.state.status === 'lost') break
+  const taps = game.win ? WIN_TAPS : TAPS
+  // Which campaign adventure was last seen ending, and how, so each ending is noted once
+  // (an Undo on the recap can take a win back, and the adventure can still end another way).
+  let ended = null
+  for (let n = 0; n < taps && !store.crash; n++) {
+    const { status } = store.state
+    if (status === 'won' || status === 'lost') {
+      const adventureNo = `${store.state.campaign?.games ?? 0} ${status}`
+      if (ended !== adventureNo) {
+        ended = adventureNo
+        const outcome = campaignOutcome(store.state)
+        game.adventures.push(`${status}${store.state.adventure?.chamber ? ` ${store.state.adventure.chamber.card.name}` : ''} in round ${store.state.turn.round}`)
+        if (outcome?.over) game.campaign = outcome.over
+      }
+      // A play-to-win campaign goes on through the recap to the next adventure.
+      if (!game.win || !store.state.campaign || campaignOutcome(store.state)?.over) break
+    } else if (status === 'setup' && store.state.campaign) {
+      // On to the next adventure: the campaign lobby, on the big screen.
+      await campaignLobby(game, show)
+      if (game.problem || store.crash) break
+      lastMove = { where: where(), tap: n }
+      continue
+    }
     if (!(await tapSomething(game))) return { ...game, problem: 'nothing left on the screen to tap' }
     if (where() !== lastMove.where) lastMove = { where: where(), tap: n }
     else if (n - lastMove.tap >= STUCK_TAPS) {
-      game.problem = `got stuck: ${STUCK_TAPS} taps without the turn moving on (round/hero/phase ${lastMove.where})`
+      const onScreen = [...new Set([...document.querySelectorAll('button')].filter((b) => !b.disabled).map(label))].join(' | ')
+      game.problem = `got stuck: ${STUCK_TAPS} taps without the turn moving on (round/hero/phase ${lastMove.where}). Buttons on the screen: ${onScreen}`
       break
     }
   }
@@ -382,7 +489,92 @@ async function playGame(seed) {
   if (game.problem) return game
   if (store.crash) game.problem = `crashed in ${store.crash.where}: ${store.crash.error?.stack ?? store.crash.error}`
   else if (game.kind === 'campaign' && !store.state.campaign) game.problem = "the campaign didn't start"
+  // The made-up clan campaign in easy mode is beaten almost at once; if it never beats a
+  // chamber, the way through chambers or on to the next adventure is broken.
+  else if (game.win && !CHECKUP && !game.adventures.some((a) => /^won \S/.test(a) && !/^won in round/.test(a))) {
+    game.problem = `never beat a chamber in ${WIN_TAPS} taps (${game.adventures.join(', ') || 'no adventure ended'})`
+  }
   return game
+}
+
+// Between campaign adventures: each iPad buys from the shop now and then and gets ready, the
+// robot taps around the big screen's lobby, and enters the dungeon from there, as the party does.
+async function campaignLobby(game, show) {
+  const state = store.state
+  const problem = (what) => (game.problem = `${what} (campaign adventure ${state.campaign.games + 1})`)
+  // What came over from the last adventure (rulebook p. 13: level, gold and items; XP resets).
+  for (const before of store.carried ?? []) {
+    const saved = state.campaign.heroes.find((h) => h.key === before.key)
+    if (!saved) return problem(`${before.key} wasn't kept for the next adventure`)
+    if (saved.level !== before.level || saved.gold !== before.gold || saved.items.map((i) => i.cardId).join() !== before.items.join()) {
+      return problem(`${before.key} came out of the adventure at level ${before.level} with ${before.gold} gold and [${before.items}], but the campaign kept level ${saved.level}, ${saved.gold} gold and [${saved.items.map((i) => i.cardId)}]`)
+    }
+  }
+  if (state.lobby.length !== state.campaign.heroes.length) return problem(`the lobby has ${state.lobby.length} heroes for the campaign's ${state.campaign.heroes.length}`)
+  // One hero's iPad, on its "Ready your hero" screen with the shop: the robot taps around
+  // there (buying, if the hero can afford it), as the player would.
+  const claim = pick(state.lobby)
+  game.taps.push(`--- campaign adventure ${state.campaign.games + 1}: ${claim.heroKey}'s iPad in the lobby ---`)
+  cleanup()
+  localStorage.setItem('ashardalon-companion/device', claim.deviceId)
+  localStorage.setItem('ashardalon-companion/seat', claim.heroKey)
+  show()
+  await wait()
+  for (let n = 0; n < IPAD_LOBBY_TAPS && !store.crash && store.state.status === 'setup'; n++) await tapSomething(game, [...LOBBY_SKIP, /Pick a different hero/])
+  if (store.crash) return
+  localStorage.setItem('ashardalon-companion/device', 'robot')
+  // The other iPads buy now and then too, and every iPad gets ready (with a name, if the robot cleared it).
+  for (const claim of store.state.lobby) {
+    const hero = store.state.campaign.heroes.find((h) => h.key === claim.heroKey)
+    const card = store.state.campaign.shop.find((c) => c.cost > 0 && c.cost <= hero.gold)
+    if (card && random() < 0.5) {
+      game.taps.push(`${claim.heroKey}'s iPad buys ${card.name} from the shop`)
+      robotDispatch({ type: 'CAMPAIGN_BUY', heroKey: claim.heroKey, cardId: card.id })
+    }
+    if (!claim.player.trim()) robotDispatch({ type: 'SET_LOBBY_PLAYER', deviceId: claim.deviceId, player: claim.heroKey })
+    robotDispatch({ type: 'SET_LOBBY_READY', deviceId: claim.deviceId, ready: true })
+  }
+  game.taps.push(`--- campaign adventure ${state.campaign.games + 1}: the big screen's lobby ---`)
+  cleanup()
+  localStorage.setItem('ashardalon-companion/seat', 'projector')
+  show()
+  await wait()
+  for (let n = 0; n < CAMPAIGN_LOBBY_TAPS && !store.crash && store.state.status === 'setup'; n++) await tapSomething(game, LOBBY_SKIP)
+  if (!store.crash && store.state.status === 'setup') {
+    // Out of the Hall of Records or the like first, if the robot went in.
+    const back = [...document.querySelectorAll('button')].find((b) => /^(Back|Close|Done)$/.test(label(b)))
+    if (back && !document.body.textContent.includes('Enter the dungeon')) {
+      fireEvent.click(back)
+      await wait()
+    }
+    const enter = [...document.querySelectorAll('button')].find((b) => /Enter the dungeon/.test(b.textContent))
+    if (!enter || enter.disabled) return problem(`the big screen wouldn't enter the dungeon (${document.body.textContent.slice(0, 300)})`)
+    game.taps.push('tap "Enter the dungeon"')
+    fireEvent.click(enter)
+    await wait()
+  }
+  if (store.crash) return
+  if (store.state.status !== 'playing') return problem("the next campaign adventure didn't start")
+  if (!store.state.campaign) return problem('the campaign was gone when the next adventure started')
+  // Each hero starts the new adventure at the level the campaign kept, with its gold and items
+  // (and a starting treasure card on top, as every adventure begins).
+  for (const saved of store.state.campaign.heroes) {
+    const hero = store.state.heroes.find((h) => h.key === saved.key)
+    if (!hero) return problem(`${saved.key} isn't in the next adventure`)
+    const items = (hero.items ?? []).map((i) => i.cardId)
+    const missing = saved.items.map((i) => i.cardId).filter((id) => {
+      const i = items.indexOf(id)
+      return i === -1 || items.splice(i, 1).length === 0
+    })
+    if (hero.level !== saved.level || (hero.gold ?? 0) !== saved.gold || missing.length > 0) {
+      return problem(`${saved.key} started the next adventure at level ${hero.level} with ${hero.gold ?? 0} gold${missing.length > 0 ? `, without ${missing}` : ''}, not level ${saved.level} with ${saved.gold} gold`)
+    }
+  }
+  game.taps.push('--- back to the table screen ---')
+  cleanup()
+  localStorage.setItem('ashardalon-companion/seat', 'table')
+  show()
+  await wait()
 }
 
 function report(game) {
@@ -399,9 +591,12 @@ describe('the robot', () => {
     const seed = FIRST_SEED + i
     it(`plays a whole game without crashing (seed ${seed})`, async () => {
       const game = await playGame(seed)
-      process.stderr.write(`Robot ${game.kind} game ${seed}: ${game.adventure} with ${game.heroes?.join(', ')}, ${game.taps.length} taps, reached round ${game.round} with ${game.tiles} tiles out${game.status === 'playing' ? '' : `, ${game.status}`}\n`)
+      const played = game.adventures.length > 0 ? `; adventures: ${game.adventures.join(', ')}${game.campaign ? `; campaign ${game.campaign}` : ''}` : ''
+      process.stderr.write(`Robot ${game.kind}${game.win ? ' play-to-win' : ''} game ${seed}: ${game.adventure} with ${game.heroes?.join(', ')}, ${game.taps.length} taps, reached round ${game.round} with ${game.tiles} tiles out${game.status === 'playing' ? '' : `, ${game.status}`}${played}\n`)
+      // The game's own log, every line of it, to see what happened in it.
+      if (process.env.ROBOT_GAMELOG) appendFileSync(process.env.ROBOT_GAMELOG, `\n# game ${seed}\n${store.log.map((l) => `${l.round}/${l.heroIndex} ${l.text}`).join('\n')}\n`)
       if (process.env.ROBOT_TAPLOG) appendFileSync(process.env.ROBOT_TAPLOG, `\n# game ${seed} ${game.kind} ${game.adventure} -> ${game.status}\n${game.taps.join('\n')}\n`)
       expect(game.problem, game.problem && report(game)).toBeUndefined()
-    }, 120_000 * Math.max(1, TAPS / 300))
+    }, 120_000 * Math.max(1, (winsOf(seed) ? WIN_TAPS : TAPS) / 300))
   }
 })
