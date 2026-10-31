@@ -6,7 +6,8 @@ import { drawDoorKind, heroesNextToDoor, removeDoor } from '../board/doors.js'
 import { layChamber, layDoorChamber, layExit, layTile } from '../board/play.js'
 import { buildDeck, newId, pick, sameName, updateMonster, withLog, withMoment } from './gameHelpers.js'
 import { discardMonsterCard, drawMonster } from './monsterDeck.js'
-import { damageHeroes, placeVillagers, placeVillain } from './combat.js'
+import { damageHeroes, healHero, placeVillagers, placeVillain } from './combat.js'
+import { pickTileEvent, tileShape } from '../data/tileEvents.js'
 
 // A dungeon tile drawn from the stack, from the top when exploring or the bottom for a
 // card that says so. `key` says what it was for (explore, a monster, an encounter), so
@@ -29,6 +30,8 @@ export function drawDungeonTile(state, action) {
     if (!laid) next = withLog(next, "The new tile couldn't go on the board here. Put its monster down by hand.")
   }
   if (tile) next = revealTile(next, { ...action, tile, door: false })
+  // Now and then an ordinary tile the hero explores has a little something in it.
+  if (tile === '' && key === 'explore') next = tileEvent(next, laid, action.random)
   // A long hallway: the next tile goes at its far end.
   if (laid?.name === 'Long Hallway' && next.tileStack.stack.length > 0) {
     let n = 1
@@ -36,6 +39,27 @@ export function drawDungeonTile(state, action) {
     next = drawDungeonTile(next, { ...action, key: `hallway-${n}`, from: 'top' })
   }
   return next
+}
+
+// The tile event, picked with the draw's last two random numbers (shuffles use the first ones).
+function tileEvent(state, def, random) {
+  const numbers = Array.isArray(random) ? random : []
+  const hero = state.heroes[state.turn.heroIndex]
+  if (!hero || numbers.length < 2) return state
+  const seen = state.tileEventsSeen ?? []
+  const event = pickTileEvent({ shape: state.board ? tileShape(def) : null, campaign: Boolean(state.campaign), seen }, numbers[numbers.length - 2], numbers[numbers.length - 1])
+  if (!event) return state
+  let next = { ...state, tileEventsSeen: [...seen, event.id] }
+  let bonus = ''
+  if (event.effect?.heal && hero.hp < hero.maxHp) {
+    next = healHero(next, hero.id, event.effect.heal, 'the dungeon')
+    bonus = ` ${hero.name} gets ${event.effect.heal} HP back.`
+  } else if (event.effect?.gold) {
+    next = { ...next, heroes: next.heroes.map((h) => (h.id === hero.id ? { ...h, gold: (h.gold ?? 0) + event.effect.gold } : h)) }
+    bonus = ` ${hero.name} gets ${event.effect.gold} gold.`
+  }
+  const text = `${event.text}${bonus}`
+  return withLog({ ...next, turn: { ...next.turn, tileEvent: { id: event.id, text } } }, `👀 ${text}`)
 }
 
 // A special tile turned up: read its text, then do what the adventure says.

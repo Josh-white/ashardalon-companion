@@ -238,6 +238,7 @@ function ExplorationPhase({ state, hero, dispatch }) {
       ) : (
         <Note>Draw a dungeon tile and put it on that edge.</Note>
       )}
+      {state.turn.tileEvent && <Note>👀 {state.turn.tileEvent.text}</Note>}
       <RevealButtons state={state} dispatch={dispatch} />
       {monsterDrawn ? (
         <Note tone="good">

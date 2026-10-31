@@ -12,6 +12,7 @@ export const initialState = {
   surges: STARTING_SURGES,
   difficulty: 'normal', // easy | normal | hard (src/data/difficulty.js)
   secondChances: [], // Easy: heroes who used their one reroll this adventure
+  tileEventsSeen: [], // tile events (src/data/tileEvents.js) already seen this adventure, so none repeat
   xp: 0,
   monsters: [],
   turn: { heroIndex: 0, phase: 0, round: 1 },
