@@ -18,6 +18,27 @@ function useBoxSize() {
   return [ref, size]
 }
 
+const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+// Show the board as it was drawn a moment ago (`from`, a CSS transform), then let it slide
+// to where it's drawn now. The box hides the overflow meanwhile, so no scroll bars flash.
+const GLIDE_MS = 700
+function glide(el, svg, from) {
+  clearTimeout(svg.glideTimer)
+  svg.style.transition = 'none'
+  svg.style.transformOrigin = '0 0'
+  svg.style.transform = from
+  el.style.overflow = 'hidden'
+  svg.getBoundingClientRect() // so the browser takes the start before the slide
+  svg.style.transition = `transform ${GLIDE_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`
+  svg.style.transform = ''
+  svg.glideTimer = setTimeout(() => {
+    svg.style.transition = ''
+    svg.style.transformOrigin = ''
+    el.style.overflow = ''
+  }, GLIDE_MS + 50)
+}
+
 // The zoom and where the view is, kept on this screen so a page reload (a new version
 // arriving mid-game, the phone dropping the app while it's in the background), the game
 // picker or the art screen doesn't throw the board back to zoomed-to-fit. The view's
@@ -46,7 +67,7 @@ function keepZoom(v) {
 // `fill`: the board takes the whole box it's in and starts zoomed to fit. `bounds` is the
 // dungeon's outline (boardBounds), or null before there's a board. Returns the ref for the
 // scrolling box and everything the svg and the − / + buttons need.
-export function useBoardZoom({ fill, bounds, activeId, activeAt, focusId = null }) {
+export function useBoardZoom({ fill, bounds, activeId, activeAt, focusId = null, freshKey = null }) {
   // 'fit' (the whole dungeon fills the box) or how many screen pixels per board unit.
   const [kept] = useState(() => (fill ? savedZoom() : null))
   const [zoom, setZoom] = useState(kept?.zoom ?? (fill ? 'fit' : 1.6))
@@ -202,6 +223,62 @@ export function useBoardZoom({ fill, bounds, activeId, activeAt, focusId = null 
       el.removeEventListener('scroll', scrolled)
     }
   }, [fill]) // eslint-disable-line react-hooks/exhaustive-deps
+  // A new tile changes the dungeon's outline, so zoomed to fit the whole board rescales and
+  // shifts. Instead of jumping, the board is shown where it was and glides to its new place
+  // (a CSS transform, cheap even on the iPads), so everyone can follow where things went.
+  // Zoomed in, the view stays on the same squares, then slides over if the new tile is out of
+  // sight. `prevLayout` is how the board was last drawn.
+  const prevLayout = useRef(null)
+  const layoutNow = () => {
+    const now = live.current
+    return bounds && now.viewW ? { bounds, spin: now.spin, scale: now.scale, fit: now.fit, viewW: now.viewW, viewH: now.viewH } : null
+  }
+  useLayoutEffect(() => {
+    const el = boxRef.current
+    const before = prevLayout.current
+    const layout = layoutNow()
+    if (!el || !before || !layout || !box || before.spin !== layout.spin || before.fit !== layout.fit) return
+    const b0 = before.bounds
+    const b1 = bounds
+    if (b0.x === b1.x && b0.y === b1.y && b0.w === b1.w && b0.h === b1.h) return
+    // How far the drawing's top-left corner moved, in board units along the drawn axes
+    // (turned a quarter, the dungeon's top edge is the drawing's right edge).
+    const d = layout.spin ? [b0.y + b0.h - (b1.y + b1.h), b1.x - b0.x] : [b1.x - b0.x, b1.y - b0.y]
+    const [cw, ch] = [el.clientWidth, el.clientHeight]
+    if (layout.fit) {
+      if (reducedMotion()) return
+      const svg = el.querySelector('svg')
+      if (!svg) return
+      // Zoomed to fit, the dungeon sits in the middle of the svg, which fills the box.
+      const off = (l) => [(cw - l.viewW * l.scale) / 2, (ch - l.viewH * l.scale) / 2]
+      const [o0, o1] = [off(before), off(layout)]
+      const a = before.scale / layout.scale
+      const c = [0, 1].map((i) => o0[i] + before.scale * d[i] - a * o1[i])
+      glide(el, svg, `translate(${c[0]}px, ${c[1]}px) scale(${a})`)
+      return
+    }
+    // Zoomed in: the same squares stay under the same spot (centred with mx-auto when
+    // the board is narrower than the box).
+    const s = layout.scale
+    const margin = (l) => Math.max(0, (cw - l.viewW * l.scale) / 2)
+    el.scrollLeft += margin(layout) - margin(before) - s * d[0]
+    el.scrollTop -= s * d[1]
+  }, [outline]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Kept after every drawing (no DOM reads, so it costs nothing).
+  useLayoutEffect(() => {
+    prevLayout.current = layoutNow()
+  })
+  // Zoomed in, a new tile out of sight slides into view once it's down.
+  useEffect(() => {
+    const el = boxRef.current
+    if (!freshKey || !el || live.current.fit) return
+    const tile = el.querySelector('[data-new-tile]')
+    if (!tile) return
+    const [b, t] = [el.getBoundingClientRect(), tile.getBoundingClientRect()]
+    const seen = t.left >= b.left && t.right <= b.right && t.top >= b.top && t.bottom <= b.bottom
+    if (seen) return
+    el.scrollTo({ left: el.scrollLeft + t.left - b.left + t.width / 2 - el.clientWidth / 2, top: el.scrollTop + t.top - b.top + t.height / 2 - el.clientHeight / 2, behavior: reducedMotion() ? 'auto' : 'smooth' })
+  }, [freshKey]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!bounds) return { boxRef }
 
   // A long, thin dungeon in a box the other shape (a tall one on the projector's wide
@@ -231,5 +308,6 @@ export function useBoardZoom({ fill, bounds, activeId, activeAt, focusId = null 
   live.current.spin = spin
   live.current.zoom = zoom
   live.current.outline = outline
+  live.current.fit = fit
   return { boxRef, spin, viewW, viewH, viewBox, fit, scale, zoomIn, zoomOut, zoomTo }
 }

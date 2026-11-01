@@ -11,7 +11,8 @@ import { tapTargets } from '../board/taps.js'
 import { escapeBlockers } from '../state/adventure.js'
 import { activeVillains } from '../state/game.js'
 import { artUrl, useArt } from '../state/useArt.js'
-import { Carpet, Coin, ExitSquares, figureBadges, HeroTokenMark, heroTokenGroups, MarkerBadges, MarkerTiles, OpenEdges, PlacedTile, Token } from './BoardPieces.jsx'
+import { Carpet, Coin, ExitSquares, figureBadges, HeroTokenMark, heroTokenGroups, MarkerBadges, MarkerTiles, NewTileGlow, OpenEdges, PlacedTile, Token } from './BoardPieces.jsx'
+import { useFreshTiles } from './useFreshTiles.js'
 import { ClosedDoor, SQUARE } from './TileDrawing.jsx'
 import { useBoardZoom } from './useBoardZoom.js'
 import { useAimed } from './useAimed.js'
@@ -62,7 +63,9 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   // into view at the zoom the board is at (a group like the Legion Devils glows together).
   const aimed = useAimed()
   const focusId = aimed.length ? aimed[aimed.length - 1] : null
-  const { boxRef, spin, viewW, viewH, viewBox, fit, scale, zoomIn, zoomOut, zoomTo } = useBoardZoom({ fill, bounds, activeId, activeAt, focusId })
+  // A tile just laid glows for a few seconds while the board glides to its new fit.
+  const fresh = useFreshTiles(board?.tiles)
+  const { boxRef, spin, viewW, viewH, viewBox, fit, scale, zoomIn, zoomOut, zoomTo } = useBoardZoom({ fill, bounds, activeId, activeAt, focusId, freshKey: fresh?.key })
   // An attack flying across the board (Colton's idea), once its die has been read.
   const playing = useAttackFx(state.moment)
   // A hero gaining HP: a green +N floats up from the token.
@@ -405,6 +408,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
             ))}
             {/* Open edges, exits, lit squares and figures stay on top of the dark. */}
             {torch && <Torchlight bounds={bounds} lights={lightSources({ heroes: state.heroes, tokens: board.tokens, activeId, markers: placedMarkers })} />}
+            {fresh && <NewTileGlow key={fresh.key} grid={grid} uids={fresh.uids} />}
             <OpenEdges grid={grid} />
             <ExitSquares squares={exits} open={exitOpen} />
             {targets.map((k) => {

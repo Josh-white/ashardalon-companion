@@ -266,3 +266,32 @@ export function Token({ id, at, label, color, art, selected, active, aimed, fade
     </g>
   )
 }
+
+// A tile just laid (useFreshTiles): a warm wash and a bright outline round its squares that
+// flash a few times and fade, so everyone spots it while the board settles into its new fit.
+export function NewTileGlow({ grid, uids }) {
+  const squares = [...grid.values()].filter((sq) => uids.includes(sq.area))
+  if (squares.length === 0) return null
+  const own = new Set(squares.map((sq) => key([sq.x, sq.y])))
+  const sides = squares.flatMap((sq) =>
+    Object.entries(STEP)
+      .filter(([, [dx, dy]]) => !own.has(key([sq.x + dx, sq.y + dy])))
+      .map(([side, [dx, dy]]) => {
+        const [x1, y1] = [(sq.x + (dx > 0 ? 1 : 0)) * SQUARE, (sq.y + (dy > 0 ? 1 : 0)) * SQUARE]
+        return { id: `${sq.x},${sq.y},${side}`, x1, y1, x2: dx ? x1 : x1 + SQUARE, y2: dx ? y1 + SQUARE : y1 }
+      }),
+  )
+  return (
+    <g pointerEvents="none" className="new-tile-glow" data-new-tile={uids.join(' ')}>
+      {squares.map((sq) => (
+        <rect key={`${sq.x},${sq.y}`} x={sq.x * SQUARE} y={sq.y * SQUARE} width={SQUARE} height={SQUARE} fill="#fde68a" fillOpacity="0.28" />
+      ))}
+      {sides.map(({ id, ...l }) => (
+        <line key={`h${id}`} {...l} stroke="#fbbf24" strokeWidth="16" strokeOpacity="0.35" strokeLinecap="round" />
+      ))}
+      {sides.map(({ id, ...l }) => (
+        <line key={id} {...l} stroke="#fef3c7" strokeWidth="5" strokeLinecap="round" />
+      ))}
+    </g>
+  )
+}
