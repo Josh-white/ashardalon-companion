@@ -128,7 +128,7 @@ export function TreasureStep({ state, dispatch, heroId = null }) {
     )
   }
   return (
-    <div className="fixed inset-x-0 bottom-0 z-30 max-h-[85vh] overflow-y-auto border-t-4 border-amber-500 bg-zinc-950/95 p-4 shadow-2xl">
+    <div data-ally-scope="" className="fixed inset-x-0 bottom-0 z-30 max-h-[85vh] overflow-y-auto border-t-4 border-amber-500 bg-zinc-950/95 p-4 shadow-2xl">
       <div className="mx-auto max-w-3xl">{body}</div>
     </div>
   )

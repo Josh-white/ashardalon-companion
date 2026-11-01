@@ -377,6 +377,7 @@ export default function TurnGuide({ state, dispatch }) {
           however long the cards above it are. */}
       <div
         ref={footer}
+        data-turn-footer=""
         className={`sticky bottom-0 z-10 mt-4 flex items-center justify-between gap-2 rounded-b-3xl border-t border-zinc-800 bg-zinc-950/90 py-2 backdrop-blur ${
           narrow ? '-mx-4 -mb-4 px-4' : '-mx-4 -mb-4 px-4 sm:-mx-6 sm:-mb-6 sm:px-6'
         }`}

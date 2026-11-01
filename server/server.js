@@ -329,7 +329,7 @@ const gameSummary = (room, name, screens) => ({
 })
 
 const SEEN_LIMIT = 500
-const NOT_UNDOABLE = new Set(['ROLL_DIE', 'ATTACH_MONSTER_CARDS', 'UPDATE_ENCOUNTER_CARDS', 'CLAIM_HERO', 'RELEASE_HERO', 'SET_LOBBY_PLAYER', 'SET_LOBBY_PICK', 'SET_LOBBY_READY', 'PLAY_BOARD_SOUND', 'SET_SOUNDBOARD_OFF', 'SET_SOUNDBOARD_UNLIMITED', 'FIRST_ROLL_DONE', 'OPENING_NARRATING', 'OPENING_QUIET', 'OPENING_DONE', 'FIRST_ROLL_NARRATING', 'FIRST_ROLL_QUIET'])
+const NOT_UNDOABLE = new Set(['ROLL_DIE', 'ATTACH_MONSTER_CARDS', 'UPDATE_ENCOUNTER_CARDS', 'CLAIM_HERO', 'RELEASE_HERO', 'SET_LOBBY_PLAYER', 'SET_LOBBY_PICK', 'SET_LOBBY_READY', 'SET_LOBBY_ALLY', 'PLAY_BOARD_SOUND', 'SET_SOUNDBOARD_OFF', 'SET_SOUNDBOARD_UNLIMITED', 'FIRST_ROLL_DONE', 'OPENING_NARRATING', 'OPENING_QUIET', 'OPENING_DONE', 'FIRST_ROLL_NARRATING', 'FIRST_ROLL_QUIET', 'ALLY_PAUSE', 'ALLY_HELP'])
 
 export function startServer({
   port = Number(process.env.PORT ?? 3000),
@@ -629,6 +629,9 @@ export function startServer({
         // Clear the moment so screens don't replay an old celebration.
         // The sound board isn't part of Undo either, so Undo can't hand out more taps.
         r.state = { ...previous.state, moment: null, soundboard: r.state.soundboard }
+        // A computer ally would take the same step again straight away: it waits after an Undo
+        // until someone lets it go on (src/ally/).
+        if (r.state.status === 'playing' && r.state.heroes?.some((h) => h.ally)) r.state = { ...r.state, allyPaused: true }
       } else {
         const next = gameReducer(r.state, action)
         if (next === r.state) return

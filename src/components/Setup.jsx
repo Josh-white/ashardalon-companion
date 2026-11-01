@@ -158,6 +158,10 @@ function MyHero({ state, claim, cards, deviceId, dispatch, solo = false, records
         </div>
         <HeroAbilities template={template} level={level} className="mt-2 text-sm" />
         {state.campaign && <HeroCampaign state={state} heroKey={template.key} dispatch={dispatch} />}
+        <label className="mt-3 flex min-h-11 items-center gap-3 rounded-xl bg-zinc-950/50 px-3 py-2 text-zinc-200">
+          <input type="checkbox" className="h-5 w-5 accent-sky-500" checked={Boolean(claim.ally)} onChange={(e) => dispatch({ type: 'SET_LOBBY_ALLY', deviceId, ally: e.target.checked })} />
+          🤖 The computer plays {template.name}
+        </label>
         <div className="mt-3">
           <HeroCoach key={template.key} heroKey={template.key} isNew={false} voice={voice} />
         </div>
@@ -394,6 +398,9 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
       ...(onBoard ? { boardTiles: cards.tiles, boardRandom: randomNumbers(64) } : {}),
     })
 
+  // A hero nobody picked, played by the computer (src/ally/): ready at once, with the suggested powers.
+  const addAlly = (template) =>
+    dispatch({ type: 'CLAIM_HERO', deviceId: `ally~${template.key}`, heroKey: template.key, picks: startingPicks(template, cards.powers), ally: true })
   const claim = (template) => {
     const player = rememberedName()
     dispatch({ type: 'CLAIM_HERO', deviceId, heroKey: template.key, picks: startingPicks(template, cards.powers), player })
@@ -415,7 +422,16 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
       </header>
 
       {watchOnly && <Chronicle campaign={state.campaign} />}
-      {watchOnly && <HeroHall heroes={heroChoices} lobby={lobby} records={records} onFree={(c) => dispatch({ type: 'RELEASE_HERO', deviceId: c.deviceId })} levelOf={(key) => campaignHero(state, key)?.level ?? 1} />}
+      {watchOnly && (
+        <HeroHall
+          heroes={heroChoices}
+          lobby={lobby}
+          records={records}
+          onFree={(c) => dispatch({ type: 'RELEASE_HERO', deviceId: c.deviceId })}
+          onAlly={onBoard && !state.campaign ? addAlly : null}
+          levelOf={(key) => campaignHero(state, key)?.level ?? 1}
+        />
+      )}
 
       {/* Where the dungeon is: one choice for the whole table, so the big screen makes it.
           Without one in the game, any iPad can. */}
@@ -438,7 +454,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
             const taken = Boolean(owner)
             const status = taken ? (
               <span className={owner.ready ? 'text-emerald-400' : 'text-amber-400'}>
-                {owner.player || 'Another iPad'} · {owner.ready ? 'ready' : 'choosing powers'}
+                {owner.ally ? '🤖 Computer' : owner.player || 'Another iPad'} · {owner.ready ? 'ready' : 'choosing powers'}
                 <PlayerTitle records={records} name={owner.player} className="mt-1 text-xs" />
               </span>
             ) : (
@@ -455,9 +471,16 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
             )
             const size = mine ? 'sm:w-[18%]' : 'sm:w-[30%] lg:w-[18%]'
             return !taken && !mine ? (
-              <HoldToPick key={template.key} label={`Hold to pick ${template.name}`} onPick={() => claim(template)} className={`block w-full text-center transition active:scale-95 ${size}`}>
-                {banner}
-              </HoldToPick>
+              <div key={template.key} className={`w-full ${size}`}>
+                <HoldToPick label={`Hold to pick ${template.name}`} onPick={() => claim(template)} className="block w-full text-center transition active:scale-95">
+                  {banner}
+                </HoldToPick>
+                {onBoard && !state.campaign && !projectorOpen && (
+                  <Button variant="ghost" className="mt-1 w-full text-sm" onClick={() => addAlly(template)}>
+                    🤖 Computer plays {template.name}
+                  </Button>
+                )}
+              </div>
             ) : (
               <div key={template.key} className={`w-full ${size}`}>
                 {banner}

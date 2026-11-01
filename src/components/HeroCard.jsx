@@ -206,7 +206,7 @@ export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, 
             <Art name={heroArt(hero.key)} className={`w-11 shrink-0 ${down ? 'grayscale' : ''}`} />
             <div className="mr-auto min-w-0">
               <h3 className={`truncate font-display text-xl leading-tight font-bold ${color.text}`}>
-                {hero.name}
+                {hero.ally ? '🤖 ' : ''}{hero.name}
                 {hero.level >= 2 && <span className="ml-1.5 text-sm text-amber-400">★ Lv {hero.level}</span>}
               </h3>
               <p className="truncate text-xs text-zinc-400">
@@ -246,7 +246,7 @@ export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, 
             <Art name={heroArt(hero.key)} className={`w-20 ${down ? 'grayscale' : ''}`} />
             <div className="mr-auto">
               <h3 className={`font-display text-2xl font-bold ${color.text}`}>
-                {hero.name}
+                {hero.ally ? '🤖 ' : ''}{hero.name}
                 {hero.level >= 2 && <span className="ml-2 text-base text-amber-400">★ Lv {hero.level}</span>}
               </h3>
               <p className="text-sm text-zinc-400">

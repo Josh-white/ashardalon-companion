@@ -17,12 +17,23 @@ import { BoardSwitch } from './SoundBoard.jsx'
 import { HpBar } from './ui.jsx'
 import Board, { boardBounds } from './Board.jsx'
 import { useLayoutEffect, useRef, useState } from 'react'
+import AllyPanel from '../ally/AllyPanel.jsx'
 
 // A read-only screen for the projector: big enough to read across the room,
 // with no buttons to tap. Everything changes from the players' iPads.
 export default function ProjectorView(props) {
+  const { state, dispatch, allyHost } = props
+  // The big screen plays the computer allies when it's open: their turn screen sits out of sight.
+  const ally = allyHost && state.heroes[state.turn.heroIndex]?.ally && <AllyPanel state={state} dispatch={dispatch} drive hidden treasure />
   // On the virtual board the screen is split and each side fits itself (FitToBox).
-  if (props.state.board) return <ProjectorScreen {...props} />
+  if (state.board) {
+    return (
+      <>
+        <ProjectorScreen {...props} />
+        {ally}
+      </>
+    )
+  }
   return (
     <FitToScreen>
       <ProjectorScreen {...props} />
@@ -73,11 +84,18 @@ function ProjectorScreen({ state, dispatch, onSwitchSeat, sound }) {
           </div>
         ))}
       </div>
-      <ul className="mt-[1.5vh] space-y-[0.5vh] text-zinc-200">
-        {current.steps.map((step) => (
-          <li key={step}>• {step}</li>
-        ))}
-      </ul>
+      {activeHero.ally ? (
+        <div className="mt-[1.5vh] rounded-[1vw] border border-sky-800 bg-sky-950/60 p-[1vw] text-sky-100">
+          <p className="font-semibold">🤖 The computer is playing {activeHero.name}{state.allyPaused ? ' (paused)' : ''}</p>
+          {state.turn.allyHelp ? <p className="text-amber-300">✋ {state.turn.allyHelp} Tap it on an iPad.</p> : latest && <p className="text-zinc-300">{latest.text}</p>}
+        </div>
+      ) : (
+        <ul className="mt-[1.5vh] space-y-[0.5vh] text-zinc-200">
+          {current.steps.map((step) => (
+            <li key={step}>• {step}</li>
+          ))}
+        </ul>
+      )}
     </section>
   )
 
@@ -109,7 +127,7 @@ function ProjectorScreen({ state, dispatch, onSwitchSeat, sound }) {
             <div className="flex items-center gap-[0.8vw]">
               <Art name={heroArt(hero.key)} className={`w-[5vw] ${down ? 'grayscale' : ''}`} />
               <div className="min-w-0">
-                <div className={`font-display text-[2.4vw] font-bold leading-tight ${heroColor.text}`}>{hero.name}</div>
+                <div className={`font-display text-[2.4vw] font-bold leading-tight ${heroColor.text}`}>{hero.ally ? '🤖 ' : ''}{hero.name}</div>
                 <div className="text-zinc-400">{hero.player}</div>
               </div>
             </div>
