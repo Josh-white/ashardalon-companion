@@ -52,7 +52,8 @@ describe('board answers to end-of-phase questions', () => {
     const { state, heroes } = game([1, -2])
     const ask = (at) => boardAnswer({ ...state, board: { ...state.board, tokens: { ...state.board.tokens, [heroes[0].id]: at } } }, `Is ${heroes[0].name} next to a wall?`)
     expect(ask([2, 2])).toMatchObject({ answer: true }) // beside the solid column
-    expect(ask([2, 0])).toMatchObject({ answer: true }) // diagonal to the solid column
+    expect(ask([2, 0])).toMatchObject({ answer: true }) // also beside the solid column
+    expect(ask([2, -1])).toMatchObject({ answer: false }) // only a corner touches the solid column
     expect(ask([1, 2])).toMatchObject({ answer: false })
     expect(ask([0, 2])).toMatchObject({ answer: false }) // an unexplored edge isn't a wall
     expect(ask([1, 7])).toMatchObject({ answer: false }) // the south edge is open
