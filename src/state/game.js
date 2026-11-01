@@ -1,4 +1,5 @@
 import { withAttackFx } from '../board/attackFx.js'
+import { withHealFx } from '../board/healFx.js'
 import { difficultyOf, encounterCancelCost, surgeHp } from '../data/difficulty.js'
 import { hasAbility, HERO_TEMPLATES, MAX_LEVEL, STARTING_SURGES, templateFor, XP_TO_LEVEL_UP } from '../data/heroes.js'
 import { monsterArt } from '../data/art.js'
@@ -75,7 +76,7 @@ function evadeHit(state, action) {
 export const gameReducer = (state, action) => {
   const placed = pruneTokens(placeNewFigures(state, checkVictory(tagDrawn(reduceWithOpening(state, action)))))
   const sprung = springHeroTokens(placed)
-  return withAttackFx(state, trackStats(state, sprung === placed ? placed : pruneTokens(checkVictory(sprung)), action), action)
+  return withHealFx(state, withAttackFx(state, trackStats(state, sprung === placed ? placed : pruneTokens(checkVictory(sprung)), action), action))
 }
 
 // The tokens heroes put on the virtual board (board/heroTokens.js): the board keeps up with

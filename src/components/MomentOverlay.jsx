@@ -3,7 +3,7 @@ import { heroArt } from '../data/art.js'
 import { HERO_COLORS } from '../data/heroes.js'
 import { artUrl, useArt } from '../state/useArt.js'
 import Die from './Die3D.jsx'
-import { FX_DELAY_MS, FX_MS } from '../board/attackFx.js'
+import { FX_DELAY_MS, FX_IMPACT_MS, FX_MS } from '../board/attackFx.js'
 
 const SHOW_MS = { roll: 2200, crit: 3500, fumble: 3000, defeat: 3000, level: 3500, down: 3500, poison: 3500, spawn: 3000, monster: 4500, 'monster-down': 5000, encounter: 4500, treasure: 4000, join: 4000 }
 // A device that reconnects shouldn't replay a moment that is long over.
@@ -14,6 +14,13 @@ const STALE_MS = 8000
 export function momentBusyMs(moment) {
   if (!moment) return 0
   return moment.fx ? FX_DELAY_MS + FX_MS + 800 : SHOW_MS[moment.kind] ?? 2500
+}
+
+// How long this moment covers the board before something on the board should play: its
+// own screen, or for an attack, until the attack lands (a heal on a hit shows after it).
+export function momentCoverMs(moment) {
+  if (!moment) return 0
+  return moment.fx ? FX_DELAY_MS + FX_IMPACT_MS + 300 : SHOW_MS[moment.kind] ?? 2500
 }
 
 // False while the latest big moment (dice, a defeat, the attack's animation) is still

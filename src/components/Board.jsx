@@ -18,6 +18,7 @@ import { useAimed } from './useAimed.js'
 import Torchlight, { lightSources, useTorchlight } from './Torchlight.jsx'
 import { Button } from './ui.jsx'
 import AttackFx, { quakeDelay, quakes, tokenFx, useAttackFx } from './AttackFx.jsx'
+import { HealFloat, useHealFx } from './HealFx.jsx'
 import MonsterPeek, { peekTarget } from './MonsterPeek.jsx'
 
 // The virtual board (a solo game's, or the party's on the projector and iPads): the tiles laid so far and every figure on its square.
@@ -64,6 +65,8 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   const { boxRef, spin, viewW, viewH, viewBox, fit, scale, zoomIn, zoomOut, zoomTo } = useBoardZoom({ fill, bounds, activeId, activeAt, focusId })
   // An attack flying across the board (Colton's idea), once its die has been read.
   const playing = useAttackFx(state.moment)
+  // A hero gaining HP: a green +N floats up from the token.
+  const heals = useHealFx(state.healFx, state.moment)
   const anchorRef = useRef(null)
   const svgRef = useRef(null)
   // The lava's flow and the exit's glow are SVG animations, which CSS can't stop: pause them.
@@ -439,6 +442,9 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
               </g>
             ))}
             <MarkerBadges markers={placedMarkers} spin={spin} taken={new Set([...Object.values(board.tokens), ...items.filter((i) => i.at).map((i) => i.at)].map(key))} onTap={(id) => { setPeek(null); setReading(reading === id ? null : id) }} />
+            {heals.filter((h) => board.tokens[h.heroId]).map((h) => (
+              <HealFloat key={h.key} at={board.tokens[h.heroId]} amount={h.amount} delay={h.delay} spin={spin} />
+            ))}
           </g>
         </svg>
       </div>
