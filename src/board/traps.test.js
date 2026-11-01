@@ -69,8 +69,14 @@ describe('Rolling Boulder and Whirling Blades on the board', () => {
     expect(moved.turn.trapPick).toBeUndefined()
   })
 
-  it("leaves a moving trap from before the board followed them where nobody knows", () => {
+  it('moves a boulder saved without the tracked flag from its tile (drawn before the 2026-11-01 fix)', () => {
     const state = game([trap('rolling-boulder', { tile: 't2' })], [0, 5])
+    expect(trapStepChoices(state, state.traps[0]).tiles).toEqual(['t1'])
+    expect(step(state, { trapId: 'rolling-boulder' }).traps[0].tile).toBe('t1')
+  })
+
+  it('leaves a moving trap with no saved tile where nobody knows', () => {
+    const state = game([trap('rolling-boulder')], [0, 5])
     expect(trapStepChoices(state, state.traps[0])).toBeNull()
     expect(step(state, { trapId: 'rolling-boulder' })).toBe(state)
   })
