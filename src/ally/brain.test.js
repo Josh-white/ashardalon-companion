@@ -270,3 +270,30 @@ describe('handing a hero to the computer', () => {
     expect(gameReducer(lobby, { type: 'SET_LOBBY_ALLY', deviceId: 'solo~1', ally: true }).lobby[0].ally).toBe(true)
   })
 })
+
+describe('an ally back from a Time Leap', () => {
+  it('puts itself back on the board next to another hero before doing anything else', () => {
+    const base = start()
+    const other = { ...base.heroes[0], id: 'h2', name: 'Quinn', ally: false }
+    const otherAt = base.board.tokens[base.heroes[0].id]
+    const me = base.heroes[0]
+    const tokens = { [other.id]: otherAt }
+    const state = { ...base, heroes: [me, other], board: { ...base.board, tokens } }
+    const step = allyStep(state, { roll })
+    expect(step.action.type).toBe('MOVE_TOKEN')
+    expect(step.action.id).toBe(me.id)
+    expect(step.say).toMatch(/back on the board next to Quinn/)
+    const after = gameReducer(state, step.action)
+    const at = after.board.tokens[me.id]
+    expect(at).toBeTruthy()
+    expect(Math.max(Math.abs(at[0] - otherAt[0]), Math.abs(at[1] - otherAt[1]))).toBe(1)
+    expect(allyStep(after, { roll })?.action?.type).not.toBe('MOVE_TOKEN')
+  })
+
+  it('waits while the Time Leap curse is still on', () => {
+    const base = start()
+    const me = { ...base.heroes[0], curses: [{ id: 'c1', name: 'Time Leap', card: { removeAtTurnStart: true } }] }
+    const state = { ...base, heroes: [me], board: { ...base.board, tokens: {} } }
+    expect(allyStep(state, { roll })?.action?.type).not.toBe('MOVE_TOKEN')
+  })
+})

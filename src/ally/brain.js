@@ -11,7 +11,7 @@
 
 import { baseId, key, unexploredEdges } from '../board/grid.js'
 import { adjacent, distances } from '../board/paths.js'
-import { boardGrid, heroEdges, heroReach, movesLeft, stayedOnBoard } from '../board/play.js'
+import { boardGrid, heroEdges, heroReach, movesLeft, occupied, stayedOnBoard, timeLeapt } from '../board/play.js'
 import { foeDistance, foesInRange, powerRange } from '../board/monsters.js'
 import { heroesInReach } from '../board/encounters.js'
 import { moveChoices, moveTargets } from '../board/powerMoves.js'
@@ -423,6 +423,28 @@ export function bestMove(state, hero) {
   return null
 }
 
+// A hero with no token (back from a Time Leap, which lets the player put them on any tile)
+// goes on the free square nearest another hero still on the board, or on the Start tile
+// when nobody is. Null when the hero is on the board, escaped or still leapt.
+export function returnToBoard(state, hero) {
+  if (!state.board || state.board.tokens[hero.id] || hero.escaped || timeLeapt(hero)) return null
+  const grid = boardGrid(state.board)
+  const others = state.heroes.filter((h) => h.id !== hero.id && state.board.tokens[h.id])
+  const anchor = state.board.tokens[(others.find((h) => h.hp > 0) ?? others[0])?.id] ?? firstFloor(grid)
+  if (!anchor) return null
+  const { taken } = occupied(state, hero.id)
+  const spot = [...distances(grid, anchor)].sort((a, b) => a[1] - b[1]).map(([k]) => k).find((k) => !taken.has(k) && grid.get(k)?.floor)
+  if (!spot) return null
+  const near = others.length > 0 ? ` next to ${others.find((h) => state.board.tokens[h.id] === anchor)?.name ?? 'the party'}` : ''
+  return { action: { type: 'MOVE_TOKEN', id: hero.id, to: parse(spot) }, say: `${hero.name} is back on the board${near}.` }
+}
+
+// The first floor square on the board (the Start tile, placed first).
+function firstFloor(grid) {
+  const found = [...grid.entries()].find(([, sq]) => sq.floor)
+  return found ? parse(found[0]) : null
+}
+
 // The power card a hero who just levelled up takes for the new slot: the first one of the
 // right kind it doesn't have yet, from the cards the screens loaded.
 function levelUpPick(hero, powerCards = []) {
@@ -439,6 +461,9 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
   if (!hero || !state.board) return null
   const phase = PHASES[state.turn.phase]?.key
   if (state.turn.startDamageDue && state.surges > 0) return { action: { type: 'USE_SURGE', heroId: hero.id }, say: `${hero.name} uses a healing surge.` }
+  // Back from a Time Leap (or otherwise off the board): put the hero back before anything else.
+  const back = returnToBoard(state, hero)
+  if (back) return back
   // The new power after levelling up (any phase: it's picked when the hero levels).
   const pick = levelUpPick(hero, powers)
   if (pick) return { action: { type: 'SET_POWER_CARD', heroId: hero.id, powerId: pick.slot.id, card: pick.card }, say: `${hero.name} learns ${pick.card.name}.` }
