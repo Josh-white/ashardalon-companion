@@ -6,7 +6,7 @@ import { PHASES } from '../data/phases.js'
 import { heroItems } from '../data/items.js'
 import { effectsOf } from '../data/powerEffects.js'
 import { adjustTiles, buildTileStack, MAX_TILES, MIN_TILES, STARTING_TILES } from './tiles.js'
-import { aliveVillagers, checkVictory, countDefeat, DOOR_UNLOCK_ROLL, escapeBlockers, isPlayable, MAX_SURGES, MIN_SURGES, newAdventure, takeToken } from './adventure.js'
+import { aliveVillagers, checkVictory, countDefeat, DOOR_UNLOCK_ROLL, escapeBlockers, MAX_SURGES, MIN_SURGES, newAdventure, takeToken } from './adventure.js'
 import { trackStats } from './stats.js'
 import { campaignHero, campaignOutcome, campaignSurges, isCampaign, newCampaign } from './campaign.js'
 import { playBoardSound, setBoardOff, setBoardUnlimited } from './soundboard.js'
@@ -14,22 +14,24 @@ import { FIRST_ROLL_MAX_MS, newFirstRoll, rollFirst } from './firstRoll.js'
 import { finishOpening, openingNarrating, startOpening } from './opening.js'
 import { escapeAtPhaseEnd, escapedHero } from '../board/exits.js'
 import { dropItem, moveHeroToken, syncHeroTokens, trippedTokens } from '../board/heroTokens.js'
-import { moveHero, moveToken, newBoard, placeNear, placeNewFigures, pruneTokens } from '../board/play.js'
+import { moveHero, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
 import { boardMove, queueFearMove, queueFoeStep, queueHitMoves, queueMonsterControl, queueMoves, skipBoardMove } from '../board/powerMoves.js'
 import { addTreasureToken, flyCarpet, pickUpTreasure, placeItem, removeItem } from '../board/items.js'
 import { trapStep } from '../board/traps.js'
-import { activeVillains, buildDeck, clamp, heroLabel, lose, playerName, markUsed, newId, shuffle, toggle, updateHero, updateMonster, validRoll, withCast, withLog, withMoment } from './gameHelpers.js'
+import { activeVillains, buildDeck, clamp, heroLabel, lose, markUsed, newId, shuffle, toggle, updateHero, updateMonster, validRoll, withCast, withLog, withMoment } from './gameHelpers.js'
 import { discardMonsterCard, drawMonster, filterMonsterDeck, monsterFromCard } from './monsterDeck.js'
 import { discardEncounterCard, drawEncounter, oweEncounter } from './encounterDeck.js'
 import { dealStartingTreasure, drawTreasure, keepTreasure, oweTreasure, spendItem, treasureWords } from './treasureDeck.js'
-import { copyCard, createHero, heroesFromLobby, levelSlots, newPower, pickedElsewhere, POWER_LABELS, updateClaim, withPicks } from './heroSetup.js'
-import { buildDeckWithout, buyFromShop, campaignHeroes, heroRecord, campaignLobby, drawTreasureToken, fromCampaign, nextCampaignAdventure, sameHeroes, tagDrawn, useBoon } from './campaignPlay.js'
+import { copyCard, createHero, heroesFromLobby, newPower, pickedElsewhere, POWER_LABELS, withPicks } from './heroSetup.js'
+import { buildDeckWithout, buyFromShop, campaignHeroes, campaignLobby, drawTreasureToken, fromCampaign, nextCampaignAdventure, sameHeroes, tagDrawn, useBoon } from './campaignPlay.js'
 import { attackFollowUp, dodgeHit, heroAttack, powerDamage, rerollAttack, usePower } from './heroAttacks.js'
 import { initialState } from './initialState.js'
 import { drawDungeonTile, openBoardDoor, revealDoor, revealTile } from './dungeon.js'
 import { addOffer, attackHeroes, damageHeroes, defeatVillain, dropOffer, figuresLeft, healHero, heroWith, hurtVillager, monsterAttack, offers, offerSavingGrace, placeVillain, resolveEncounter, villagerAttack, villagerRoll } from './combat.js'
 import { answerCheck, canSpendAttack, checksFor, endHeroPhase, endPhaseCurses, inHeroPhase, levelUp, monsterControl, phaseChecks, removeCurse, spendAttack, startDamage, startTurn, updateEncounterCards, useItem, villagerRollDue } from './heroTurn.js'
 import { trapDisable } from './encounterRules.js'
+import { LOBBY_ACTIONS, lobbyReducer } from './lobby.js'
+import { PARTY_ACTIONS, partyReducer } from './party.js'
 
 // Parts of the rules live in their own files now; these are still exported from here
 // so the screens' imports didn't have to change.
@@ -119,6 +121,8 @@ function tryAgain(state, action) {
 }
 
 function reduce(state, action) {
+  if (LOBBY_ACTIONS.has(action.type)) return lobbyReducer(state, action)
+  if (PARTY_ACTIONS.has(action.type)) return partyReducer(state, action)
   switch (action.type) {
     case 'NEW_GAME': {
       // A campaign goes on until it's over (or someone ends it), so its heroes come back to the lobby.
@@ -293,55 +297,6 @@ function reduce(state, action) {
     case 'MOVE_HERO_ITEM':
       return moveHeroToken(state, action)
 
-    case 'CHOOSE_ADVENTURE': {
-      // Only before the game, and only an adventure the app can run.
-      if (state.status !== 'setup' || state.campaign) return state
-      const card = action.adventure ?? null
-      if (card && !isPlayable(card)) return state
-      return { ...state, lobbyAdventure: card }
-    }
-
-    case 'SET_LOBBY_DIFFICULTY': {
-      if (state.status !== 'setup') return state
-      const picked = difficultyOf(action.difficulty)
-      return { ...state, lobbyDifficulty: picked.key, lobbySurges: picked.surges }
-    }
-
-    // Switching how hard it is in the middle of a game (Story, Easy, Normal, Hard). The healing
-    // surges go up or down by the difference in extra surges; the lobby keeps the choice for
-    // Try again and the next campaign adventure.
-    case 'SET_DIFFICULTY': {
-      if (state.status !== 'playing') return state
-      const from = difficultyOf(state.difficulty)
-      const to = difficultyOf(action.difficulty)
-      if (from.key === to.key) return state
-      const surges = Math.max(0, state.surges + to.extraSurges - from.extraSurges)
-      const change = surges - state.surges
-      const words = change > 0 ? ` +${change} healing surge${change === 1 ? '' : 's'}.` : change < 0 ? ` ${change} healing surge${change === -1 ? '' : 's'}.` : ''
-      return withLog(
-        {
-          ...state,
-          difficulty: to.key,
-          surges,
-          lobbyDifficulty: to.key,
-          retry: state.retry ? { ...state.retry, difficulty: to.key } : state.retry,
-        },
-        `${to.icon} Switched to ${to.label}: ${to.detail}.${words}`,
-      )
-    }
-
-    case 'SET_LOBBY_SURGES':
-      if (state.status !== 'setup') return state
-      return { ...state, lobbySurges: clamp(Number(action.surges) || STARTING_SURGES, MIN_SURGES, MAX_SURGES) }
-
-    case 'SET_LOBBY_TILES':
-      if (state.status !== 'setup') return state
-      return { ...state, lobbyTiles: clamp(Number(action.tiles) || STARTING_TILES, MIN_TILES, MAX_TILES) }
-
-    case 'SET_LOBBY_BOARD':
-      if (state.status !== 'setup') return state
-      return { ...state, lobbyBoard: Boolean(action.on) }
-
     case 'ADVENTURE_REVEAL':
       return revealTile(state, action)
 
@@ -413,52 +368,6 @@ function reduce(state, action) {
       // Escaping only counts once every other goal is done.
       if (action.escaped && escapeBlockers(state).length > 0) return state
       return withLog({ ...state, adventure: { ...state.adventure, escaped: Boolean(action.escaped) } }, action.escaped ? 'The heroes escaped the dungeon!' : 'Not escaped after all.')
-
-    case 'CLAIM_HERO': {
-      const template = templateFor(action.heroKey)
-      const lobby = state.lobby ?? []
-      if (state.status !== 'setup' || !template || !action.deviceId) return state
-      // One hero per iPad, and nobody can take a hero another iPad already has.
-      if (lobby.some((c) => c.heroKey === template.key && c.deviceId !== action.deviceId)) return state
-      // A campaign's heroes come back with their level, name and powers.
-      const saved = campaignHero(state, template.key)
-      if (state.campaign && !saved) return state
-      const previous = lobby.find((c) => c.deviceId === action.deviceId)
-      const slots = levelSlots(template, saved?.level)
-      const picks = slots.map((_, i) => copyCard((saved ? saved.picks : action.picks)?.[i]))
-      // A computer ally (src/ally/) is ready straight away, with the suggested powers.
-      const ally = action.ally === true
-      const player = ally ? '' : saved?.player ?? previous?.player ?? String(action.player ?? '').slice(0, 40)
-      const claim = { deviceId: action.deviceId, heroKey: template.key, player, picks, ready: ally, ...(ally ? { ally: true } : {}) }
-      return { ...state, lobby: [...lobby.filter((c) => c.deviceId !== action.deviceId), claim] }
-    }
-
-    // The solo screen hands one of its heroes to the computer (src/ally/), or takes it back.
-    case 'SET_LOBBY_ALLY':
-      if (state.status !== 'setup') return state
-      return updateClaim(state, action.deviceId, () => ({ ally: Boolean(action.ally) }))
-
-    case 'RELEASE_HERO':
-      return { ...state, lobby: (state.lobby ?? []).filter((c) => c.deviceId !== action.deviceId) }
-
-    case 'SET_LOBBY_PLAYER':
-      return updateClaim(state, action.deviceId, (claim) => {
-        const player = String(action.player ?? '').slice(0, 40)
-        // A player can't stay ready without a name; the turn screens greet them by it.
-        return { player, ready: claim.ready && player.trim() !== '' }
-      })
-
-    case 'SET_LOBBY_PICK': {
-      const claim = (state.lobby ?? []).find((c) => c.deviceId === action.deviceId)
-      if (claim && pickedElsewhere(claim.picks, action.slot, action.card)) return state
-      return updateClaim(state, action.deviceId, (claim) => ({
-        picks: claim.picks.map((card, i) => (i === action.slot ? copyCard(action.card) : card)),
-        ready: false,
-      }))
-    }
-
-    case 'SET_LOBBY_READY':
-      return updateClaim(state, action.deviceId, (claim) => ({ ready: Boolean(action.ready) && claim.player.trim() !== '' }))
 
     case 'START_DEMO': {
       // A game already in progress, for trying features without setting one up:
@@ -1029,55 +938,6 @@ function reduce(state, action) {
 
     case 'RESUME':
       return { ...state, status: 'playing', ending: null }
-
-    // A hero handed to the computer, or taken back (src/ally/). Only on the virtual board,
-    // where the computer can see where everything is.
-    case 'SET_ALLY': {
-      const hero = state.heroes.find((h) => h.id === action.heroId)
-      const ally = Boolean(action.ally)
-      if (state.status !== 'playing' || !state.board || !hero || Boolean(hero.ally) === ally) return state
-      const next = updateHero(state, hero.id, () => ({ ally }))
-      const text = ally ? `🤖 The computer is playing ${hero.name} now.` : playerName(hero) ? `${playerName(hero)} is playing ${hero.name} again.` : `You are playing ${hero.name} again.`
-      return withLog({ ...next, allyPaused: ally ? false : next.allyPaused, turn: { ...next.turn, allyHelp: null } }, text)
-    }
-
-    // A hero joins a game already going (Easton wants in): on a free square next to whoever's
-    // turn it is, and in the turn order right after them. In a campaign the hero joins at
-    // level 1 with no gold or items, and stays for the later adventures.
-    case 'JOIN_GAME': {
-      const template = templateFor(action.heroKey)
-      if (state.status !== 'playing' || !template || state.heroes.some((h) => h.key === template.key)) return state
-      // Not while the party is still rolling for first turn: that roll is only for the heroes in it.
-      if (state.firstRoll && !state.firstRoll.winner) return state
-      const ally = action.ally === true && Boolean(state.board)
-      const player = ally ? '' : String(action.player ?? '').slice(0, 40)
-      if (!ally && !player.trim()) return state
-      const slots = levelSlots(template, 1)
-      const picks = slots.map((_, i) => copyCard(action.picks?.[i]))
-      const hero = { ...withPicks(createHero(template), picks), player, ...(ally ? { ally: true } : {}) }
-      const at = state.turn.heroIndex + 1
-      let next = { ...state, heroes: [...state.heroes.slice(0, at), hero, ...state.heroes.slice(at)] }
-      const active = state.heroes[state.turn.heroIndex]
-      const near = state.board && (state.board.tokens[active?.id] ?? Object.values(state.board.tokens)[0])
-      if (near) next = placeNear(next, { id: hero.id }, near)
-      if (state.campaign) next = { ...next, campaign: { ...state.campaign, heroes: [...state.campaign.heroes, heroRecord(hero, action.deviceId ?? null)] } }
-      const who = ally ? `🤖 The computer brings ${hero.name}` : `${player} brings ${hero.name}`
-      const where = state.board ? '' : ` Put ${hero.name}'s figure next to ${active?.name ?? 'the party'}.`
-      const text = `${who} into the dungeon! ${hero.name} goes after ${active?.name ?? 'the hero whose turn it is'}.${where}`
-      return withMoment(withLog(next, text), { kind: 'join', heroId: hero.id, title: `${hero.name} joins the party!`, detail: `${hero.name} goes after ${active?.name ?? 'this hero'}.` })
-    }
-
-    // Holding the computer allies still (a player wants to play the ally's turn by hand).
-    case 'ALLY_PAUSE':
-      if (Boolean(state.allyPaused) === Boolean(action.paused)) return state
-      return { ...state, allyPaused: Boolean(action.paused), turn: { ...state.turn, allyHelp: null } }
-
-    // The ally couldn't work out what to do: every screen offers to tap for it.
-    case 'ALLY_HELP': {
-      const reason = typeof action.reason === 'string' ? action.reason.slice(0, 200) : null
-      if ((state.turn.allyHelp ?? null) === reason) return state
-      return { ...state, turn: { ...state.turn, allyHelp: reason } }
-    }
 
     case 'TRY_AGAIN':
       return tryAgain(state, action)
