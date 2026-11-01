@@ -66,10 +66,12 @@ function useEntrance(area) {
 
 // A new area's picture at full brightness with its name, then it fades back behind
 // the game. Taps go straight through it.
+// Solid behind the picture (its bricks have gaps) and above the board's Sounds button, so
+// nothing of the board shows through on a phone.
 function AreaEntrance({ area }) {
   const look = AREAS[area.key]
   return (
-    <div aria-live="polite" className="area-entrance pointer-events-none fixed inset-0 z-[30] flex items-center justify-center">
+    <div aria-live="polite" className="area-entrance pointer-events-none fixed inset-0 z-[34] flex items-center justify-center bg-zinc-950">
       <DungeonScene area={area.key} className="absolute inset-0 h-full w-full" />
       <div className="relative rounded-3xl bg-black/60 px-[5vw] py-[3vh] text-center">
         <p className="text-[2.5vmax] uppercase tracking-[0.3em] text-zinc-300">You enter</p>
