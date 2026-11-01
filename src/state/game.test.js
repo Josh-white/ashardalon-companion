@@ -1189,3 +1189,16 @@ describe('giving an item to another hero', () => {
     expect(gameReducer(state, { type: 'GIVE_ITEM', heroId: b.id, itemId: 'item-1', toHeroId: b.id })).toBe(state)
   })
 })
+
+describe('a hero reading a card out loud', () => {
+  it('shows who is reading, and Skip clears it and tells every screen to stop', () => {
+    let state = startGame()
+    const hero = state.heroes[0]
+    state = gameReducer(state, { type: 'CARD_READING', on: true, heroId: hero.id, at: 5 })
+    expect(state.reading).toEqual({ heroId: hero.id, at: 5 })
+    state = gameReducer(state, { type: 'SKIP_READING' })
+    expect(state.reading).toBeNull()
+    expect(state.readSkips).toBe(1)
+    expect(gameReducer(state, { type: 'CARD_READING', on: false }).reading).toBeNull()
+  })
+})

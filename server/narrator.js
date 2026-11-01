@@ -26,6 +26,13 @@ export const DEFAULT_VOICES = {
   coach_paladin: 'onwK4e9ZLuTAKqWW03F9', // Sir Edric (Daniel)
   coach_rogue: 'IKne3meq5aSn9XLyUdCD', // Whisper (Charlie)
   coach_wizard: 'pqHfZKP75CvOlQylNhV4', // Master Thessaly (Bill)
+  // The heroes themselves, reading the cards they draw out loud (narration.js readsCard).
+  // ElevenLabs' own voices, none already in the cast; swap with ELEVENLABS_VOICE_HERO_<HERO>.
+  hero_cleric: 'cjVigY5qzO86Huf0OWal', // Quinn (Eric)
+  hero_fighter: 'FGY2WhTYpPnrIDTdsKH5', // Vistra (Laura)
+  hero_paladin: 'XrExE9yKIg6WjnnNkh2a', // Keyleth (Matilda)
+  hero_rogue: 'CwhRBWXzGAHq8TQ4Fs17', // Tarak (Roger)
+  hero_wizard: 'pNInz6obpgDQGcFmaJgB', // Heskan (Adam)
 }
 
 const castFromEnv = (env) =>

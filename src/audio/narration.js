@@ -10,7 +10,7 @@ import { templateFor } from '../data/heroes.js'
 import { VILLAIN_DEFAULT, VILLAIN_LINES } from '../data/villainLines.js'
 
 export const VOICES = [
-  ...new Set(['narrator', 'herald', 'danger', 'villain', ...Object.values(VILLAIN_LINES).map((v) => v.voice), ...Object.keys(COACHES).map((key) => `coach_${key}`)]),
+  ...new Set(['narrator', 'herald', 'danger', 'villain', ...Object.values(VILLAIN_LINES).map((v) => v.voice), ...Object.keys(COACHES).flatMap((key) => [`coach_${key}`, `hero_${key}`])]),
 ]
 
 // A moment older than this is a device catching up, not news.
@@ -70,12 +70,63 @@ const heroName = (hero) => hero?.name ?? 'the hero'
 const downLine = (text) => text.match(/^[\w' -]+ is down!/)?.[0] ?? 'The heroes are falling!'
 
 // A villain on the board whose name is in the moment's title, if any.
+// A hero reads a card out loud, like a player reading it to the table: the drawing
+// hero's own voice (hero_<key> on the Pi) says what the card makes happen. Card text
+// comes from cards.json on the Pi, so these recordings are made there the first time a
+// hero reads a card, and never go in the repository. `read` marks it for Skip.
+export const READ_TAG = '[reading aloud]'
+export const cardWords = (text) =>
+  String(text ?? '')
+    .replace(/[•▪]\s*/g, '')
+    // Card headings in capitals (OPEN THE CAGE:) would be shouted; AC, HP and XP stay.
+    .replace(/\b[A-Z]{3,}\b/g, (word) => word[0] + word.slice(1).toLowerCase())
+    .split(/\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => (/[.!?:…)"”]$/.test(part) ? part : `${part}.`))
+    .join(' ')
+export function readsCard(hero, text) {
+  const words = cardWords(text)
+  if (!hero?.key || !words) return null
+  return { text: `${READ_TAG} ${words}`, voice: `hero_${hero.key}`, read: true, heroId: hero.id }
+}
+
+// Cards found since the last state that aren't a moment of their own, read by the
+// active hero: a chamber card (its goal, and its setup with real tiles, where the
+// players place the figures), the villagers waiting in it, and a tile event.
+export function cardReadings(before, after) {
+  if (before.status !== 'playing' || after.status !== 'playing') return []
+  const hero = after.heroes[after.turn.heroIndex]
+  if (!hero) return []
+  const lines = []
+  const chamber = after.adventure?.chamber?.card
+  if (chamber && chamber.id !== before.adventure?.chamber?.card?.id) {
+    const setup = after.board ? [] : (chamber.setup ?? [])
+    lines.push(readsCard(hero, [chamber.goal, ...setup].filter(Boolean).join('\n')))
+  }
+  const had = new Set((before.villagers ?? []).map((v) => v.id))
+  for (const villager of after.villagers ?? []) {
+    if (!had.has(villager.id) && villager.card?.text) lines.push(readsCard(hero, `${villager.name}.\n${villager.card.text}`))
+  }
+  const event = after.turn.tileEvent
+  if (event?.text && (after.tileEventsSeen?.length ?? 0) > (before.tileEventsSeen?.length ?? 0)) lines.push(readsCard(hero, event.text))
+  return lines.filter(Boolean)
+}
+
 const villainIn = (title, state) =>
   (state.villains ?? []).find((v) => title.includes(v.fullName ?? v.name) || title.includes(v.name))
 
 // One moment's lines, or none for the everyday ones (plain rolls, monster attacks
 // that hurt nobody badly) so the narrator doesn't talk over the whole game.
 export function momentLines(moment, state) {
+  const lines = momentSays(moment, state)
+  // A card a moment brings along to be read (a boon): by the moment's hero, or whoever's turn it is.
+  const reader = state.heroes.find((h) => h.id === moment.heroId) ?? state.heroes[state.turn?.heroIndex ?? -1]
+  if (moment.read) lines.push(readsCard(reader, moment.read))
+  return lines.filter(Boolean)
+}
+
+function momentSays(moment, state) {
   const hero = state.heroes.find((h) => h.id === moment.heroId)
   const values = moment.value != null ? [moment.value] : (moment.rolls ?? []).map((r) => r.value)
   switch (moment.kind) {
@@ -93,11 +144,16 @@ export function momentLines(moment, state) {
     case 'encounter': {
       const card = state.encounter?.card
       // An encounter card being drawn: its name and its story line.
-      if (card && card.name === moment.title) return [say('narrator', `${OMINOUS} Encounter! ${card.name}. ${card.flavor ?? ''}`.trim())]
+      // The narrator names it, then the hero who drew it reads what happens.
+      if (card && card.name === moment.title) return [say('narrator', `${OMINOUS} Encounter! ${card.name}. ${card.flavor ?? ''}`.trim()), readsCard(hero, card.text)].filter(Boolean)
       return [say('narrator', moment.title)]
     }
-    case 'treasure':
-      return [say('herald', `${CHEER} Treasure! ${moment.title}`)]
+    case 'treasure': {
+      // A treasure card just drawn: the hero who found it reads what it does.
+      const card = state.treasure?.card
+      const reads = card && card.name === moment.title ? readsCard(hero, card.text) : null
+      return [say('herald', `${CHEER} Treasure! ${moment.title}`), reads].filter(Boolean)
+    }
     case 'join':
       return [say('herald', `${CHEER} ${heroName(hero)} joins the party!`)]
     case 'level':
@@ -215,6 +271,7 @@ export function narrationFor(before, after, now = Date.now()) {
   if (moment && moment.id !== before.moment?.id && now - moment.at < STALE_MS) {
     lines.push(...momentLines(moment, after))
   }
+  lines.push(...cardReadings(before, after))
   lines.push(...villainCallLines(before, after, now, lines))
   lines.push(...allyLines(before, after, now))
   if (rollOver && after.status === 'playing' && after.turn.phase === 0 && after.heroes[after.turn.heroIndex]) lines.push(turnLine(after.heroes[after.turn.heroIndex]))

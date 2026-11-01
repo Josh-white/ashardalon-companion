@@ -7,6 +7,7 @@ import LobbyBackdrop from './components/LobbyBackdrop.jsx'
 import DragonIntro, { useIntro } from './components/Intro.jsx'
 import DungeonDoors, { useDoorsOpening } from './components/DungeonDoors.jsx'
 import FirstRoll from './components/FirstRoll.jsx'
+import CardReading from './components/CardReading.jsx'
 import OpeningStory from './components/OpeningStory.jsx'
 import GamePicker, { GameBar } from './components/GamePicker.jsx'
 import { IdeaButton } from './components/IdeaBox.jsx'
@@ -38,7 +39,7 @@ import AllyPanel from './ally/AllyPanel.jsx'
 import { allyHostSeat } from './ally/brain.js'
 import { AllyToggle, AllyWatch, GameLog, monsterTotal, PartyGlance, PartyStrip, TabBar, usePlayTabs, WaitingBanner } from './components/PartyPanels.jsx'
 import { PartyBar, SoloBar } from './components/TopBars.jsx'
-import { FAMILY_GAME, useDeviceId, useGameChoice, useScreenRole, useSeat, useSharedGame } from './state/useSharedGame.js'
+import { FAMILY_GAME, serverNow, useDeviceId, useGameChoice, useScreenRole, useSeat, useSharedGame } from './state/useSharedGame.js'
 
 const TABLE_SEAT = 'table'
 const PROJECTOR_SEAT = 'projector'
@@ -222,6 +223,8 @@ export default function App() {
   const narrator = useNarrator(soundOn, {
     onHold: (hold, event) =>
       dispatch({ type: hold === 'opening' ? (event === 'start' ? 'OPENING_NARRATING' : 'OPENING_QUIET') : event === 'start' ? 'FIRST_ROLL_NARRATING' : 'FIRST_ROLL_QUIET' }),
+    // A hero reading a card here shows on every screen, with Skip.
+    onReading: (line) => dispatch({ type: 'CARD_READING', on: Boolean(line), heroId: line?.heroId ?? null, at: serverNow() }),
   })
   const soundLocked = useAudioLocked(soundOn) || narrator.blocked
   const doorsAt = useDoorsOpening()
@@ -337,6 +340,7 @@ export default function App() {
         <OpeningStory state={state} dispatch={dispatch} big />
         <FirstRoll state={state} dispatch={dispatch} big />
         <MomentOverlay moment={state.moment} heroes={state.heroes} big />
+        <CardReading state={state} dispatch={dispatch} big />
         <TapForSound locked={soundLocked} big />
         <DungeonDoors at={doorsAt} />
         {endHold}
@@ -358,6 +362,7 @@ export default function App() {
       <OpeningStory state={state} dispatch={dispatch} />
       <FirstRoll state={state} dispatch={dispatch} heroId={myHero?.id ?? null} />
       <MomentOverlay moment={state.moment} heroes={state.heroes} />
+      <CardReading state={state} dispatch={dispatch} />
       <TapForSound locked={soundLocked} ipad={Boolean(myHero)} />
       <DungeonDoors at={doorsAt} />
       {/* On the real board it sits above the tabs; on the virtual board, in the board's corner. */}

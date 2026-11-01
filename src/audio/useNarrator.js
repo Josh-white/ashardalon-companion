@@ -70,13 +70,18 @@ function stopSpeaking(ctx) {
 // `onHold(hold, 'start' | 'done')` hears when lines that something waits for (a line's
 // `hold`: the opening story, the roll for first turn) start and end here, so the other
 // screens can wait for them.
-export function useNarrator(on, { onHold } = {}) {
+// `onReading(line | null)` hears when a hero starts and stops reading a card here.
+export function useNarrator(on, { onHold, onReading } = {}) {
   const [available, setAvailable] = useState(false)
   const [blocked, setBlocked] = useState(false)
+  // A hero is reading a card out loud here, so the screen can offer to skip it.
+  const [reading, setReading] = useState(false)
   const queue = useRef([])
   const hold = useRef(onHold)
+  const readingHeard = useRef(onReading)
   useEffect(() => {
     hold.current = onHold
+    readingHeard.current = onReading
   })
   // The computer allies wait while the narrator talks (not while a line waits on a tap
   // to unlock the sound: that could be a long wait).
@@ -122,9 +127,13 @@ export function useNarrator(on, { onHold } = {}) {
     const line = queue.current.shift()
     const turn = { source: null, stopped: false, line }
     speaking = turn
+    setReading(Boolean(line.read))
+    if (line.read) readingHeard.current?.(line)
     const done = (said) => {
       if (speaking !== turn) return
       speaking = null
+      setReading(false)
+      if (line.read) readingHeard.current?.(null)
       if (said) last = { line, at: Date.now() }
       if (line.hold && !queue.current.some((l) => l.hold === line.hold)) hold.current?.(line.hold, 'done')
       // The music waits a moment before coming back, in case another line follows.
@@ -147,7 +156,20 @@ export function useNarrator(on, { onHold } = {}) {
     )
   }, [])
 
+  // Skip a hero reading a card: stop it, and drop any other card waiting to be read.
+  const skipNow = () => {
+    queue.current = queue.current.filter((l) => !l.read)
+    if (speaking?.line?.read) {
+      stopSpeaking(audioContext())
+      readingHeard.current?.(null)
+    }
+    setReading(false)
+    playNext()
+  }
+
   useGameStates((before, after) => {
+    // Someone tapped Skip on a hero reading a card, on this screen or another.
+    if (before && (after?.readSkips ?? 0) > (before.readSkips ?? 0)) skipNow()
     // The opening story was skipped: stop reading it.
     if (before?.opening && !before.opening.done && after?.opening?.done) {
       queue.current = queue.current.filter((l) => l.hold !== 'opening')
@@ -209,8 +231,9 @@ export function useNarrator(on, { onHold } = {}) {
     [available, on, playNext],
   )
 
+
   // Nothing being said or waiting to be said.
   const quiet = useCallback(() => !speaking && queue.current.length === 0, [])
 
-  return { available, blocked: available && on && blocked, say, quiet }
+  return { available, blocked: available && on && blocked, say, quiet, reading: available && on && reading }
 }

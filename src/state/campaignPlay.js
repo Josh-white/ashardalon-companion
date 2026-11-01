@@ -141,13 +141,13 @@ export function useBoon(state, action) {
     if (round !== 1 || heroIndex !== 0 || phase !== 0 || tiles?.explore !== undefined) return state
     const next = drawDungeonTile(state, { ...action, key: `boon-${boon.id}` })
     if (next === state) return state
-    return withMoment(spent(withLog(next, `The party used ${boon.name}.`)), { kind: 'roll', title: boon.name, detail: 'Place the top dungeon tile next to any unexplored edge. No monster and no encounter card for it.' })
+    return withMoment(spent(withLog(next, `The party used ${boon.name}.`)), { kind: 'roll', title: boon.name, detail: 'Place the top dungeon tile next to any unexplored edge. No monster and no encounter card for it.', read: boon.text })
   }
   if (boon.use === 'discardMonster') {
     const monster = state.monsters.find((m) => m.id === action.monsterId)
     if (!monster || monster.drawnAt !== turnKey(state) || !(monster.card?.types ?? []).some((t) => (boon.monsterTypes ?? []).some((want) => sameName(t, want)))) return state
     const next = discardMonsterCard({ ...state, monsters: state.monsters.filter((m) => m.id !== monster.id) }, monster)
-    return withMoment(spent(withLog(next, `${boon.name}: the ${monster.name} card is discarded.`)), { kind: 'defeat', art: monsterArt(monster), title: boon.name, detail: `Take the ${monster.name} off the board. Its card is discarded.` })
+    return withMoment(spent(withLog(next, `${boon.name}: the ${monster.name} card is discarded.`)), { kind: 'defeat', art: monsterArt(monster), title: boon.name, detail: `Take the ${monster.name} off the board. Its card is discarded.`, read: boon.text })
   }
   return state
 }

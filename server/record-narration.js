@@ -4,9 +4,14 @@
 //
 //   docker compose exec ashardalon node server/record-narration.js --dry-run   # count only
 //   docker compose exec ashardalon node server/record-narration.js             # record
+//   ... record-narration.js --cards=rogue,paladin [--dry-run]   # also the heroes reading cards
+//
+// The heroes reading cards out loud aren't recorded unless asked for with --cards (all five
+// heroes with no list): every card in every voice is more credits than a month has. Without
+// it, a card is recorded the first time a hero reads it in a game.
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { narrationScript } from '../src/audio/script.js'
+import { cardReadingScript, narrationScript } from '../src/audio/script.js'
 import { setHeroTemplates } from '../src/data/heroes.js'
 import { CREDITS_PER_LETTER, createNarrator, speakable } from './narrator.js'
 import { loadCards } from './server.js'
@@ -26,7 +31,9 @@ async function main() {
   const cards = loadCards(process.env.CARDS_FILE ?? join(ROOT, 'cards', 'cards.json'), join(ROOT, 'cards', 'cards.example.json'))
   const narrator = createNarrator({ cacheDir: join(dirname(saveFile), 'narration') })
   setHeroTemplates(cards.heroes)
-  const lines = narrationScript(cards)
+  const cardsArg = process.argv.find((a) => a === '--cards' || a.startsWith('--cards='))
+  const heroKeys = cardsArg?.includes('=') ? cardsArg.split('=')[1].split(',').filter(Boolean) : null
+  const lines = [...narrationScript(cards), ...(cardsArg ? cardReadingScript(cards, heroKeys) : [])]
   const { todo, letters, credits } = plan(narrator, lines)
   console.log(`${lines.length} lines in all, ${lines.length - todo.length} already recorded.`)
   console.log(`${todo.length} to record: ${letters} letters, about ${credits} ElevenLabs credits.`)
