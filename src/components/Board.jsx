@@ -17,6 +17,7 @@ import { useBoardZoom } from './useBoardZoom.js'
 import Torchlight, { lightSources, useTorchlight } from './Torchlight.jsx'
 import { Button } from './ui.jsx'
 import AttackFx, { quakeDelay, quakes, tokenFx, useAttackFx } from './AttackFx.jsx'
+import MonsterPeek, { peekTarget } from './MonsterPeek.jsx'
 
 // The virtual board (a solo game's, or the party's on the projector and iPads): the tiles laid so far and every figure on its square.
 // Tap your hero to see where it can go, then tap a square to move there. "Move by hand"
@@ -46,6 +47,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   const [picked, setPicked] = useState(null) // id of the figure being moved
   const [byHand, setByHand] = useState(false)
   const [reading, setReading] = useState(null) // id of the trap or hazard marker whose card is open
+  const [peek, setPeek] = useState(null) // token id of the monster whose card is open (tapped on the board)
   const [torch, toggleTorch] = useTorchlight()
   const board = state.board
   const activeId = state.heroes[state.turn.heroIndex]?.id
@@ -96,6 +98,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   // Squares to light up (board/taps.js).
   const targets = tapTargets(state, { picked, byHand, tools, watching, powerMove, trapPick: trapPicking ? trapPick : null })
   const tapSquare = (sq) => {
+    setPeek(null)
     if (trapPicking && targets.includes(key(sq))) {
       dispatch({ type: 'TRAP_STEP', trapId: trapPicking.id, tile: grid.get(key(sq)).area })
       return
@@ -121,8 +124,20 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
     dispatch(powerMove ? { type: 'BOARD_MOVE', id: picked, to: sq } : byHand ? { type: 'MOVE_TOKEN', id: picked, to: sq } : { type: 'MOVE_HERO', heroId: picked, to: sq })
     setPicked(null)
   }
+  // A tap on a monster or villain that does nothing else shows which one it is.
+  const peekAt = (id) => {
+    if (!peekTarget(state, id)) {
+      setPeek(null)
+      return
+    }
+    setReading(null)
+    setPeek(peek === id ? null : id)
+  }
   const tapFigure = (id) => {
-    if (watching) return
+    if (watching) {
+      peekAt(id)
+      return
+    }
     if (trapPicking) {
       tapSquare(board.tokens[id])
       return
@@ -132,7 +147,11 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
       tapSquare(board.tokens[id])
       return
     }
-    if (powerMove ? !movable.includes(id) : !byHand && id !== active?.id) return
+    if (powerMove ? !movable.includes(id) : !byHand && id !== active?.id) {
+      peekAt(id)
+      return
+    }
+    setPeek(null)
     if (swap) {
       dispatch({ type: 'BOARD_MOVE', id })
       return
@@ -317,7 +336,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
               type="button"
               className={`shrink-0 rounded-full border-2 px-3 py-1 ${reading === marker.id ? 'bg-zinc-700' : 'bg-zinc-900'} text-zinc-100`}
               style={{ borderColor: look.color }}
-              onClick={() => setReading(reading === marker.id ? null : marker.id)}
+              onClick={() => { setPeek(null); setReading(reading === marker.id ? null : marker.id) }}
             >
               {look.icon} {marker.name}
               {squares.length === 0 && <span className="text-zinc-400">{moves ? ' (moves)' : ' (tile not known)'}</span>}
@@ -340,7 +359,9 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
           {open.moves && open.squares.length === 0 && <p className="mt-1 text-sm text-amber-300">This marker went down before the board followed moving traps, so the board can't show where it is.</p>}
         </div>
       )}
-      <div ref={boxRef} className={fill ? 'min-h-0 flex-1 touch-pan-x touch-pan-y overflow-auto' : readOnly ? '' : 'max-h-[70vh] overflow-auto'}>
+      {peek && <MonsterPeek state={state} tokenId={peek} fill={fill} onClose={() => setPeek(null)} />}
+      {/* A tap anywhere on the board but a figure closes the monster's card. */}
+      <div ref={boxRef} onClick={peek ? (e) => { if (!e.target.closest?.('[data-token]')) setPeek(null) } : undefined} className={fill ? 'min-h-0 flex-1 touch-pan-x touch-pan-y overflow-auto' : readOnly ? '' : 'max-h-[70vh] overflow-auto'}>
         <svg
           viewBox={viewBox}
           width={small || fit ? '100%' : viewW * scale}
@@ -399,10 +420,10 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
             {[...onBoard.filter((f) => f.id !== activeId), ...onBoard.filter((f) => f.id === activeId)].map((f) => (
               // An attack makes its target flinch or dodge, and a sword swing lunges in.
               <g key={f.id} {...tokenFx(playing, board.tokens[f.id])}>
-                <Token {...f} spin={spin} at={board.tokens[f.id]} active={f.id === activeId} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)} onTap={watching ? undefined : () => tapFigure(f.id)} />
+                <Token {...f} spin={spin} at={board.tokens[f.id]} active={f.id === activeId} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)} onTap={watching && !peekTarget(state, f.id) ? undefined : () => tapFigure(f.id)} />
               </g>
             ))}
-            <MarkerBadges markers={placedMarkers} spin={spin} taken={new Set([...Object.values(board.tokens), ...items.filter((i) => i.at).map((i) => i.at)].map(key))} onTap={(id) => setReading(reading === id ? null : id)} />
+            <MarkerBadges markers={placedMarkers} spin={spin} taken={new Set([...Object.values(board.tokens), ...items.filter((i) => i.at).map((i) => i.at)].map(key))} onTap={(id) => { setPeek(null); setReading(reading === id ? null : id) }} />
           </g>
         </svg>
       </div>
