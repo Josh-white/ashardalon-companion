@@ -47,15 +47,18 @@ const MELEE = new Set(['weapon', 'slash', 'bite', 'claw'])
 // has been read (MomentOverlay steps aside then).
 export function useAttackFx(moment) {
   const [playing, setPlaying] = useState(null)
+  const timers = useRef([])
+  // Only a new attack replaces the one playing: a moment that follows straight after
+  // (the treasure for a defeated monster, the next monster's turn) lets it finish.
   useEffect(() => {
     if (!moment?.fx || serverNow() - moment.at > STALE_MS) return
-    const start = setTimeout(() => setPlaying({ id: moment.id, fx: moment.fx }), FX_DELAY_MS)
-    const stop = setTimeout(() => setPlaying(null), FX_DELAY_MS + FX_MS + 800)
-    return () => {
-      clearTimeout(start)
-      clearTimeout(stop)
-    }
+    timers.current.forEach(clearTimeout)
+    timers.current = [
+      setTimeout(() => setPlaying({ id: moment.id, fx: moment.fx }), FX_DELAY_MS),
+      setTimeout(() => setPlaying(null), FX_DELAY_MS + FX_MS + 800),
+    ]
   }, [moment?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => timers.current.forEach(clearTimeout), [])
   return playing
 }
 
@@ -118,14 +121,21 @@ export default function AttackFx({ playing, anchorRef, artFor }) {
     let frame = 0
     const tick = (now) => {
       const raw = Math.min(1, (now - begin) / FX_MS)
-      drawFrame(scene, canvas, anchorRef.current, slowMo(raw))
-      if (raw < 1 || scene.parts.length > 0) frame = requestAnimationFrame(tick)
-      else g.clearRect(0, 0, canvas.width, canvas.height)
+      // The board can go away mid-attack (another tab on an iPad): stop and leave nothing behind.
+      const anchor = anchorRef.current
+      try {
+        if (anchor) drawFrame(scene, canvas, anchor, slowMo(raw))
+      } catch {
+        wipe(g)
+        return
+      }
+      if (anchor && (raw < 1 || scene.parts.length > 0)) frame = requestAnimationFrame(tick)
+      else wipe(g)
     }
     frame = requestAnimationFrame(tick)
     return () => {
       cancelAnimationFrame(frame)
-      g.clearRect(0, 0, canvas.width, canvas.height)
+      wipe(g)
     }
   }, [playing?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -133,6 +143,13 @@ export default function AttackFx({ playing, anchorRef, artFor }) {
 }
 
 // ---------- Drawing ----------
+
+// Clears the whole canvas. The drawing is scaled to the tokens' size, so the scale comes
+// off first: a clear at the drawing's scale on a small board left words like MISS behind.
+function wipe(g) {
+  g.setTransform(1, 0, 0, 1, 0, 0)
+  g.clearRect(0, 0, g.canvas.width, g.canvas.height)
+}
 
 function drawFrame(scene, canvas, anchor, p) {
   const { g, fx } = scene
@@ -143,6 +160,8 @@ function drawFrame(scene, canvas, anchor, p) {
     canvas.width = w
     canvas.height = h
   }
+  // Last frame's drawing goes first, even when the board is hidden and nothing is drawn.
+  wipe(g)
   const m = anchor.getScreenCTM()
   if (!m || box.width === 0) return
   // One token's radius on this screen, in canvas pixels; everything is drawn to scale with it.
@@ -152,8 +171,6 @@ function drawFrame(scene, canvas, anchor, p) {
     const pt = new DOMPoint(x * SQUARE + SQUARE / 2, y * SQUARE + SQUARE / 2).matrixTransform(m)
     return { x: (((pt.x - box.left) * canvas.width) / box.width) / k, y: (((pt.y - box.top) * canvas.height) / box.height) / k }
   }
-  g.setTransform(1, 0, 0, 1, 0, 0)
-  g.clearRect(0, 0, canvas.width, canvas.height)
   g.setTransform(k, 0, 0, k, 0, 0)
   scene.k = k
 
