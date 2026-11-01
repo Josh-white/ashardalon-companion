@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AdventurePanel } from './components/Adventure.jsx'
 import Art from './components/Art.jsx'
 import ArtScreen from './components/ArtScreen.jsx'
@@ -301,7 +301,7 @@ function usePlayTabs(state, heroId, myTurn) {
     if (tab === 'monsters' || monsters < seenMonsters) setSeenMonsters(monsters)
   }, [tab, monsters, seenMonsters])
   const badges = { turn: Boolean(heroId) && myTurn && tab !== 'turn', monsters: monsters > seenMonsters && tab !== 'monsters' }
-  return [tab, setTab, badges]
+  return [tab, setTab, badges, resetKey]
 }
 
 // A game in play on any screen but the big one: the tabs at the bottom (Turn, Monsters, Party,
@@ -311,7 +311,13 @@ function usePlayTabs(state, heroId, myTurn) {
 function PlayView({ state, dispatch, hero = null, soundBoard = null }) {
   const active = state.heroes[state.turn.heroIndex]
   const myTurn = hero ? hero.id === active?.id : true
-  const [tab, setTab, badges] = usePlayTabs(state, hero?.id ?? null, myTurn)
+  const [tab, setTab, badges, resetKey] = usePlayTabs(state, hero?.id ?? null, myTurn)
+  // The turn column jumps back to the top when the Turn tab does (a new phase, your turn
+  // starting or ending), and only then, so it never jumps while someone is reading.
+  const scrollRef = useRef(null)
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 })
+  }, [resetKey])
   const [bigBoard, setBigBoard] = useState(false)
   const heroCard = (h, showCardArt = false) => (
     <HeroCard
@@ -378,7 +384,7 @@ function PlayView({ state, dispatch, hero = null, soundBoard = null }) {
   if (!state.board) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
           <div className={`mx-auto space-y-6 p-4 pb-20 ${hero ? 'max-w-3xl' : 'max-w-6xl'}`}>{body}</div>
         </div>
         {tabBar}
@@ -405,7 +411,7 @@ function PlayView({ state, dispatch, hero = null, soundBoard = null }) {
         />
       </div>
       <div className="flex min-h-0 flex-1 flex-col border-zinc-800 md:w-[26rem] md:flex-none md:border-l lg:w-[32rem]">
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2 pb-4">{body}</div>
+        <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2 pb-4">{body}</div>
         {tabBar}
       </div>
       {treasure}
