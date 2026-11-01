@@ -6,7 +6,7 @@ import { EnvironmentBanner } from './Encounters.jsx'
 import { ProjectorTreasure } from './Treasure.jsx'
 import { heroItems } from '../data/items.js'
 import { BoostBadges } from './StatBoosts.jsx'
-import { heroAc } from '../data/powerEffects.js'
+import { liveAc } from '../board/checks.js'
 import { moveSpeed } from '../board/play.js'
 import { activeVillains } from '../state/game.js'
 import { DifficultySwitch, ProjectorAdventure } from './Adventure.jsx'
@@ -137,10 +137,10 @@ function ProjectorScreen({ state, dispatch, onSwitchSeat, sound }) {
             </div>
             <HpBar hp={hero.hp} maxHp={hero.maxHp} />
             <p className="mt-[0.5vh] text-zinc-300">
-              AC {heroAc(hero)} · Speed {moveSpeed(hero)}
+              AC {liveAc(state, hero)} · Speed {moveSpeed(hero)}
             </p>
             {/* What's helping (blue) and hurting (orange): items, powers, conditions, curses. */}
-            <BoostBadges hero={hero} heroes={state.heroes} className="mt-[0.8vh] gap-[0.3em]" badgeClass="px-[0.5em] py-[0.1em] text-[0.9em] leading-snug" />
+            <BoostBadges state={state} hero={hero} className="mt-[0.8vh] gap-[0.3em]" badgeClass="px-[0.5em] py-[0.1em] text-[0.9em] leading-snug" />
             {heroItems(hero).length > 0 && (
               <p className="mt-[0.5vh] text-yellow-300">💰 {heroItems(hero).map((i) => i.name).join(', ')}</p>
             )}

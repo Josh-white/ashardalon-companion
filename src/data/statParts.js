@@ -12,7 +12,9 @@ const curseParts = (hero, field) =>
   (hero.curses ?? []).filter((c) => c.card?.[field]).map((c) => ({ label: c.name, value: -c.card[field], kind: 'curse' }))
 
 // AC, as heroAc works it out. heroes: the party, to name whose Cleric's Shield it is.
-export function acParts(hero, heroes = []) {
+// shield: the Blessed Shield bonus from standing on its owner's tile right now
+// ({ bonus, guards } from the virtual board), or null when nobody can tell.
+export function acParts(hero, heroes = [], shield = null) {
   const tokens = hero.tokens ?? {}
   const parts = [{ label: 'Starting AC', value: hero.ac, kind: 'card' }]
   // Blessed Shield guards its owner too.
@@ -27,6 +29,9 @@ export function acParts(hero, heroes = []) {
     parts.push({ label: caster ? `${caster.name}'s Cleric's Shield` : "Cleric's Shield", value: 2, kind: 'power' })
   }
   if (tokens.mirrorImage > 0) parts.push({ label: `Mirror Image (${tokens.mirrorImage})`, value: 2 * tokens.mirrorImage, kind: 'power', note: 'A miss pops one.' })
+  if (shield?.bonus > 0) {
+    parts.push({ label: `On ${shield.guards.map((g) => g.name).join(' and ')}'s tile (Blessed Shield)`, value: shield.bonus, kind: 'item', note: 'Only while you stay on that tile.' })
+  }
   parts.push(...curseParts(hero, 'acPenalty'))
   return { total: sum(parts), parts }
 }
@@ -74,13 +79,13 @@ export function attackParts(hero) {
 
 // Everything helping or hurting a hero right now, as short badges for the projector and the
 // Party tab: [{ text, good }]. Items that add nothing are left out.
-export function heroBadges(hero, heroes = []) {
+export function heroBadges(hero, heroes = [], shield = null) {
   const plus = (n) => (n > 0 ? `+${n}` : `${n}`)
   const badges = []
   const stat = (parts, word) => {
     for (const p of parts) if (p.kind !== 'card' && p.kind !== 'off' && p.value) badges.push({ text: `${plus(p.value)} ${word} ${p.label}`, good: p.value > 0 })
   }
-  stat(acParts(hero, heroes).parts, 'AC')
+  stat(acParts(hero, heroes, shield).parts, 'AC')
   stat(attackParts(hero).parts, 'hit')
   for (const p of attackParts(hero).damageParts) badges.push({ text: p.from ? `+1 dmg on ${p.from}+ ${p.label}` : `+${p.value} dmg ${p.label}`, good: true })
   stat(speedParts(hero).parts.filter((p) => p.kind === 'item'), 'speed')

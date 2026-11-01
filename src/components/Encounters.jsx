@@ -160,13 +160,13 @@ function AttackStep({ state, hero, name, attack, onAttack, onNobody, dispatch, t
               : `nobody is ${boardFound(attack.targets, hero)}.`}{' '}
             Tap a hero to change it.
           </p>
-          <HeroPicker heroes={standingHeroes(state)} chosen={chosen} onToggle={toggle} />
+          <HeroPicker state={state} heroes={standingHeroes(state)} chosen={chosen} onToggle={toggle} />
         </>
       )}
       {question && !fromBoard && (
         <>
           <p className="text-xl font-semibold text-zinc-100">{question}</p>
-          <HeroPicker heroes={standingHeroes(state)} chosen={chosen} onToggle={toggle} />
+          <HeroPicker state={state} heroes={standingHeroes(state)} chosen={chosen} onToggle={toggle} />
         </>
       )}
       {fixed && <AffectedHeroes heroes={state.heroes.filter((h) => fixed.includes(h.id))} label="It attacks" />}
@@ -580,7 +580,7 @@ function TrapDamage({ state, trap, damage, dispatch, onHit }) {
   return (
     <>
       <p className="text-xl font-semibold text-zinc-100">Tap every hero it reaches. Each takes {damage} damage.</p>
-      <HeroPicker heroes={standingHeroes(state)} chosen={chosen} onToggle={toggle} />
+      <HeroPicker state={state} heroes={standingHeroes(state)} chosen={chosen} onToggle={toggle} />
       <Button
         variant="danger"
         className="w-full py-3 text-lg font-bold"

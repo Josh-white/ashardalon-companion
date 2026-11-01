@@ -6,6 +6,8 @@
 import { OPPOSITE, STEP, baseId, key, unexploredEdges } from './grid.js'
 import { adjacent, tilesBetween } from './paths.js'
 import { boardGrid, heroTrail } from './play.js'
+import { tileAcBonus, tileGuards } from '../data/items.js'
+import { heroAc } from '../data/powerEffects.js'
 
 const squeeze = (text) => text.toLowerCase().replace(/[^a-z0-9]/g, '')
 const listNames = (names) => (names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`)
@@ -158,3 +160,18 @@ export function guardsOnTile(state, hero, guards) {
   const tile = grid.get(key(at))?.area
   return guards.filter((g) => !g.tokens?.refuge && state.board.tokens[g.id] && grid.get(key(state.board.tokens[g.id]))?.area === tile)
 }
+
+// The Blessed Shield bonus a hero has right now from where everyone stands on the virtual
+// board: { bonus, guards } (guards: the shield owners on their tile), or null when there's
+// no board or the board can't tell. Read live, so moving onto or off the owner's tile
+// changes the hero's AC straight away.
+export function tileShieldNow(state, hero) {
+  const all = tileGuards(state?.heroes ?? [], hero)
+  if (all.length === 0) return null
+  const on = guardsOnTile(state, hero, all.map((g) => g.hero))
+  if (!on) return null
+  return { bonus: tileAcBonus(on, hero), guards: on }
+}
+
+// A hero's AC as the virtual board sees it now, Blessed Shield included.
+export const liveAc = (state, hero) => heroAc(hero) + (tileShieldNow(state, hero)?.bonus ?? 0)

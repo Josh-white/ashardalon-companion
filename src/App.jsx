@@ -124,7 +124,7 @@ function PlayView({ state, dispatch, hero = null, soundBoard = null, allyHost = 
       </>
     ),
     party: hero ? (
-      <PartyStrip heroes={state.heroes} meId={hero.id} activeId={active?.id} />
+      <PartyStrip state={state} meId={hero.id} activeId={active?.id} />
     ) : state.board ? (
       <PartyGlance state={state} dispatch={dispatch} activeId={active?.id} heroCard={heroCard} />
     ) : (
