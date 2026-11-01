@@ -7,6 +7,7 @@ import { difficultyOf } from '../data/difficulty.js'
 import { heroItems } from '../data/items.js'
 import { aliveVillagers, objectiveInPlay } from './adventure.js'
 import { placeToken } from '../board/play.js'
+import { boardAnswer } from '../board/checks.js'
 import { wrathPull } from '../board/monsters.js'
 import { queueMoves, queueWandOfFear } from '../board/powerMoves.js'
 import { addCarpet } from '../board/items.js'
@@ -66,8 +67,20 @@ export function phaseChecks(state, phaseKey) {
   return sources.flatMap((source) =>
     (source.checks ?? [])
       .map((check, i) => ({ ...check, key: `${source.id}-${i}`, source: source.name, curseId: source.curseId ?? null, heroId: hero.id }))
-      .filter((check) => check.phase === phaseKey && !done.includes(check.key)),
+      .filter((check) => check.phase === phaseKey && !done.includes(check.key))
+      .filter((check) => !boardSaysNothing(state, hero, check)),
   )
+}
+
+// A question the virtual board answers with an answer that does nothing (Volcanic Vapors
+// when the hero never went near its tile, Walls of Magma away from a wall) isn't asked at
+// all. Answers that do something still show, so the players can say the board is wrong.
+function boardSaysNothing(state, hero, check) {
+  if (!state.board || !check.ask) return false
+  const board = boardAnswer(state, check.ask.replaceAll('{hero}', hero.name))
+  if (!board) return false
+  const effect = board.answer ? check.yes : check.no
+  return !effect || Object.keys(effect).length === 0
 }
 
 // True when the game's copies of encounter cards are older than the card file, such as

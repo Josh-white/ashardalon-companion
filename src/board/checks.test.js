@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
-import { createHero, gameReducer, initialState } from '../state/game.js'
+import { createHero, gameReducer, initialState, phaseChecks } from '../state/game.js'
 import { boardAnswer, guardsOnTile, liveAc, tileShieldNow } from './checks.js'
 import { heroAc } from '../data/powerEffects.js'
 import { acParts } from '../data/statParts.js'
@@ -174,6 +174,19 @@ describe('the board follows the active hero this turn (Volcanic Vapors, Dragon F
     expect(boardAnswer(sameTile, fear(heroes[0].name))).toMatchObject({ answer: false })
     const newTile = move(state, heroes[0].id, [0, -1])
     expect(boardAnswer(newTile, fear(heroes[0].name))).toMatchObject({ answer: true })
+  })
+
+  it('does not ask about Vapors at all when the hero stayed clear of its tile', () => {
+    const card = { checks: [{ phase: 'hero', ask: 'Did {hero} start the turn on the Volcanic Vapors tile, or move onto it?', yes: { condition: 'Poisoned' } }] }
+    const { state, heroes } = game([1, -6])
+    const far = { ...state, traps: [{ ...vapors('t2'), card }] }
+    expect(phaseChecks(far, 'hero')).toEqual([])
+    // Walking onto the tile brings the question back, with the board's yes.
+    const onto = move(far, heroes[0].id, [0, -5])
+    expect(phaseChecks(onto, 'hero')).toHaveLength(1)
+    // Without a board, or when the board can't tell, the players are still asked.
+    expect(phaseChecks({ ...far, board: null }, 'hero')).toHaveLength(1)
+    expect(phaseChecks({ ...far, traps: [{ ...vapors(undefined), card }] }, 'hero')).toHaveLength(1)
   })
 
   it('starts a fresh trail each turn', () => {
