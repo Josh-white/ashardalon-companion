@@ -7,6 +7,7 @@ import { normalizeCardFile } from '../data/cards.js'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { powerSlotsFor } from '../state/heroSetup.js'
 import { campaignOutcome } from '../state/campaign.js'
+import { TOWN_EVENTS } from '../data/townEvents.js'
 import { easyCards, ROBOT_CARD_FILE } from './robotCards.js'
 
 // The robot: plays whole games by itself, tapping a random button on the real screens again
@@ -458,6 +459,11 @@ async function playGame(seed) {
   let ended = null
   for (let n = 0; n < taps && !store.crash; n++) {
     const { status } = store.state
+    if ((status === 'won' || status === 'lost') && document.querySelector('[data-end-hold]')) {
+      // The end screen waits for the last roll to finish; the game under it can't be tapped.
+      await wait()
+      continue
+    }
     if (status === 'won' || status === 'lost') {
       const adventureNo = `${store.state.campaign?.games ?? 0} ${status}`
       if (ended !== adventureNo) {
@@ -503,10 +509,12 @@ async function campaignLobby(game, show) {
   const state = store.state
   const problem = (what) => (game.problem = `${what} (campaign adventure ${state.campaign.games + 1})`)
   // What came over from the last adventure (rulebook p. 13: level, gold and items; XP resets).
+  // A night in town can hand every hero gold, or take some (never below 0).
+  const townGold = TOWN_EVENTS.find((e) => e.id === state.campaign.event?.id)?.gold ?? 0
   for (const before of store.carried ?? []) {
     const saved = state.campaign.heroes.find((h) => h.key === before.key)
     if (!saved) return problem(`${before.key} wasn't kept for the next adventure`)
-    if (saved.level !== before.level || saved.gold !== before.gold || saved.items.map((i) => i.cardId).join() !== before.items.join()) {
+    if (saved.level !== before.level || saved.gold !== Math.max(0, before.gold + townGold) || saved.items.map((i) => i.cardId).join() !== before.items.join()) {
       return problem(`${before.key} came out of the adventure at level ${before.level} with ${before.gold} gold and [${before.items}], but the campaign kept level ${saved.level}, ${saved.gold} gold and [${saved.items.map((i) => i.cardId)}]`)
     }
   }
