@@ -88,7 +88,7 @@ function ProjectorScreen({ state, dispatch, onSwitchSeat, sound }) {
       {activeHero.ally ? (
         <div className="mt-[1.5vh] rounded-[1vw] border border-sky-800 bg-sky-950/60 p-[1vw] text-sky-100">
           <p className="font-semibold">🤖 The computer is playing {activeHero.name}{state.allyPaused ? ' (paused)' : ''}</p>
-          {state.turn.allyHelp ? <p className="text-amber-300">✋ {state.turn.allyHelp} Tap it on an iPad.</p> : latest && <p className="text-zinc-300">{latest.text}</p>}
+          {state.turn.allyHelp ? <p className="text-amber-300">✋ {state.turn.allyHelp} Tap it on a device.</p> : latest && <p className="text-zinc-300">{latest.text}</p>}
         </div>
       ) : (
         <ul className="mt-[1.5vh] space-y-[0.5vh] text-zinc-200">

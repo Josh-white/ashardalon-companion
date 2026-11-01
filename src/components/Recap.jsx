@@ -137,7 +137,7 @@ export default function Recap({ state, dispatch, big, onFinish, contained = fals
             ))}
           </ul>
         )}
-        {big && canTryAgain(state) && <p className="mt-[0.8em] text-[1.1em] text-amber-300">Try again, or start something new, from any iPad.</p>}
+        {big && canTryAgain(state) && <p className="mt-[0.8em] text-[1.1em] text-amber-300">Try again, or start something new, from any device.</p>}
         <CampaignRecap state={state} dispatch={dispatch} big={big} />
       </div>
 

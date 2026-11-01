@@ -18,7 +18,7 @@ export default function SeatPicker({ heroes, onPick, tableSeat, projectorSeat, o
   }
   return (
     <div className="mx-auto max-w-3xl p-4 sm:p-8">
-      <h1 className="text-center font-display text-4xl font-bold text-amber-400">Who's playing on this iPad?</h1>
+      <h1 className="text-center font-display text-4xl font-bold text-amber-400">Who's playing on this device?</h1>
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
         {heroes.map((hero) => {
           const color = HERO_COLORS[hero.color]

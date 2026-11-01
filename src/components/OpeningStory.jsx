@@ -24,7 +24,9 @@ function CampaignLine({ campaign, big }) {
 // While the narrator reads the adventure's story at the start of a game, every screen
 // shows it with a briefing: the goal, how to win tonight and the special rules. The roll
 // for first turn and the starting treasure wait (state/opening.js). Any screen can skip it.
-export default function OpeningStory({ state, dispatch, big = false }) {
+// `contained`: on a game screen the story covers the play area only, starting under the top
+// bars, which would otherwise draw over its title (they sit above every overlay).
+export default function OpeningStory({ state, dispatch, big = false, contained = false }) {
   const [, tick] = useState(0)
   const playing = openingPlaying(state, serverNow())
   const opening = state.opening
@@ -46,7 +48,7 @@ export default function OpeningStory({ state, dispatch, big = false }) {
   const brief = briefing(adventure?.card)
   const hasBrief = Boolean(brief && (brief.goal || brief.rules.length > 0))
   return (
-    <div className={`intro fixed inset-0 z-[36] flex flex-col items-center overflow-y-auto p-6 text-center ${hasBrief ? 'justify-start gap-[2vh] sm:justify-center' : 'justify-center gap-[3vh]'}`}>
+    <div className={`intro ${contained ? 'absolute' : 'fixed'} inset-0 z-[36] flex flex-col items-center overflow-y-auto p-6 text-center ${hasBrief ? 'justify-start gap-[2vh] sm:justify-center' : 'justify-center gap-[3vh]'}`}>
       <p className={`font-display tracking-[0.35em] text-orange-300 uppercase ${big ? 'text-[1.4vw]' : 'text-sm'}`}>The adventure begins</p>
       <h2 className={`lobby-title font-display font-black text-amber-400 ${big ? 'text-[4.5vw]' : 'text-4xl sm:text-5xl'}`}>
         {adventure?.card?.title ?? 'Into the dungeon'}

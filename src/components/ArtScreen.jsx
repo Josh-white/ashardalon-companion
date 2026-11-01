@@ -23,7 +23,7 @@ function Cropper({ file, title, onSave, onCancel }) {
     const url = URL.createObjectURL(file)
     const img = new Image()
     img.onload = () => setImage(img)
-    img.onerror = () => setError("That file isn't a picture this iPad can open.")
+    img.onerror = () => setError("That file isn't a picture this device can open.")
     img.src = url
     return () => URL.revokeObjectURL(url)
   }, [file])
@@ -144,7 +144,7 @@ function saveTall(name, file) {
       URL.revokeObjectURL(url)
       canvas.toBlob((blob) => saveArt(name, blob).then(resolve, reject), 'image/jpeg', 0.85)
     }
-    img.onerror = () => reject(new Error("that file isn't a picture this iPad can open"))
+    img.onerror = () => reject(new Error("that file isn't a picture this device can open"))
     img.src = url
   })
 }
@@ -211,7 +211,7 @@ export default function ArtScreen({ onDone }) {
         <div>
           <h1 className="font-display text-4xl font-bold text-amber-400">Card art</h1>
           <p className="mt-1 text-zinc-400">
-            Take a photo of each card (or pick a token picture) and fit it in the circle. Every iPad and the projector show it. The photos stay on the Pi.
+            Take a photo of each card (or pick a token picture) and fit it in the circle. Every device and the projector show it. The photos stay on the Pi.
           </p>
         </div>
         <Button variant="gold" className="px-6 py-3 text-lg" onClick={onDone}>
@@ -230,7 +230,7 @@ export default function ArtScreen({ onDone }) {
 
       <section>
         <h2 className="font-display text-2xl font-bold text-zinc-200">Hero card art</h2>
-        <p className="mb-3 text-zinc-400">The big picture from each hero card. It shows faded behind that hero's card on the player's own iPad.</p>
+        <p className="mb-3 text-zinc-400">The big picture from each hero card. It shows faded behind that hero's card on the player's own device.</p>
         <div className={GRID}>
           {heroTemplates().map((t) => (
             <ArtTile key={t.key} tall name={heroCardArt(t.key)} title={t.name} subtitle={t.className} titleClass={HERO_COLORS[t.color].text} />

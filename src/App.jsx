@@ -185,10 +185,31 @@ function Connecting() {
   )
 }
 
+function linkedGame() {
+  try {
+    const id = new URLSearchParams(window.location.search).get('game')
+    return id && /^[a-z0-9-]{1,60}$/.test(id) ? id : null
+  } catch {
+    return null
+  }
+}
+
 export default function App() {
   // Which game this screen is in (null until it picks one), and whether the "Which game?" list is open.
   const [chosenGame, setGame] = useGameChoice()
   const [picking, setPicking] = useState(false)
+  // A link to a game (?game=, sent by the friend who made it) opens that game. If this
+  // screen may not play in it, the Pi says so and "Which game?" shows instead.
+  useEffect(() => {
+    const linked = linkedGame()
+    if (!linked) return
+    setGame(linked)
+    try {
+      window.history.replaceState(null, '', window.location.pathname + window.location.hash)
+    } catch {
+      // Old browser: the link stays in the address bar, which is harmless.
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const gameId = chosenGame ?? FAMILY_GAME
   const [seat, setSeat] = useSeat(gameId)
   const [screenRole, setScreenRole] = useScreenRole(gameId)
@@ -212,7 +233,7 @@ export default function App() {
   }, [encountersOutdated]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const projectorOpen = screens.includes(PROJECTOR_SEAT)
-  const [soundOn, setSoundOn] = useSoundSetting(seat, projectorOpen)
+  const [soundOn, setSoundOn] = useSoundSetting(seat, projectorOpen, { friend: me.friend, tableOpen: screens.includes(TABLE_SEAT) })
   const [musicOn, setMusicOn] = useMusicSetting(seat)
   // Every screen can play the sound; until someone flips its switch, only the projector
   // does (or the table, in a game without one).
@@ -325,6 +346,7 @@ export default function App() {
           setRole={setScreenRole}
           projectorOpen={projectorOpen}
           voice={narrator}
+          friend={me.friend}
         />
       </main>
     )
@@ -362,7 +384,6 @@ export default function App() {
 
   const overlays = (
     <>
-      <OpeningStory state={state} dispatch={dispatch} />
       <FirstRoll state={state} dispatch={dispatch} heroId={myHero?.id ?? null} screens={screens} />
       <MomentOverlay moment={state.moment} heroes={state.heroes} />
       <CardReading state={state} dispatch={dispatch} />
@@ -396,7 +417,7 @@ export default function App() {
       ) : (
         <PartyBar undo={undo} undoDepth={undoDepth} state={state} dispatch={dispatch} seatLabel="Table" onSwitchSeat={() => setSeat(null)} sound={sound} boardSwitch />
       )}
-      {/* The end-of-game recap covers the play area only, so it starts right under the top
+      {/* The opening story and the end-of-game recap cover the play area only, so they start right under the top
           bars (Undo and the menu stay reachable) instead of hiding the game bar behind it. */}
       <div className="relative flex min-h-0 flex-1 flex-col">
         <PlayView
@@ -406,6 +427,7 @@ export default function App() {
           hero={myHero ?? null}
           soundBoard={<SoundBoard state={state} dispatch={dispatch} who={who} testCopy={Boolean(instance)} className="absolute bottom-3 left-3" />}
         />
+        <OpeningStory state={state} dispatch={dispatch} contained />
         {ended && (
           <Recap
             state={state}

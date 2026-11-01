@@ -113,6 +113,20 @@ describe('friends on the real game', () => {
     for (const s of [dad, amy, bob]) s.socket.close()
   })
 
+  it("starts a friend's new game on an adventure, and the family's on free play", async () => {
+    const amy = connect(server.port, { email: 'amy@example.com' })
+    const amysGame = (await amy.newGame("Amy's game")).id
+    const inAmys = connect(server.port, { email: 'amy@example.com', game: amysGame })
+    const state = (await inAmys.next((m) => m.type === 'state')).state
+    // The example cards have no Adventure 1, so the first adventure in the file.
+    expect(state.lobbyAdventure?.id).toBe('example-practice-hunt')
+    const dad = connect(server.port)
+    const dadsGame = (await dad.newGame('Dad solo')).id
+    const inDads = connect(server.port, { game: dadsGame })
+    expect((await inDads.next((m) => m.type === 'state')).state.lobbyAdventure).toBeNull()
+    for (const s of [amy, inAmys, dad, inDads]) s.socket.close()
+  })
+
   it('a friend in no game changes nothing, even with a tap', async () => {
     const amy = connect(server.port, { email: 'amy@example.com' })
     await amy.next((m) => m.type === 'no-game')

@@ -123,7 +123,7 @@ export function CampaignLobby({ state, dispatch }) {
       {campaign.shop.length > 0 && (
         <>
           <h3 className="mt-4 font-semibold text-amber-400">The shop ({shopSize(state, boonCards)} cards)</h3>
-          <p className="text-sm text-zinc-400">Each hero buys on their own iPad, with their own gold.</p>
+          <p className="text-sm text-zinc-400">Each hero buys on their own device, with their own gold.</p>
           <ul className="mt-1 space-y-1 text-zinc-300">
             {campaign.shop.map((card, i) => (
               <li key={`${card.id}-${i}`}>
@@ -134,7 +134,7 @@ export function CampaignLobby({ state, dispatch }) {
         </>
       )}
       <p className="mt-4 text-sm text-zinc-400">
-        Set up the table as the adventure says. Each player can swap powers on their iPad before getting ready.{' '}
+        Set up the table as the adventure says. Each player can swap powers on their device before getting ready.{' '}
         <button type="button" className="text-zinc-500 underline" onClick={end}>
           End the campaign
         </button>

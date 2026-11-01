@@ -329,6 +329,8 @@ const gameSummary = (room, name, screens) => ({
 })
 
 const SEEN_LIMIT = 500
+// How often the Pi pings each screen (see keepAlive in startServer).
+export const KEEP_ALIVE_MS = 30 * 1000
 const NOT_UNDOABLE = new Set(['ROLL_DIE', 'ATTACH_MONSTER_CARDS', 'UPDATE_ENCOUNTER_CARDS', 'CLAIM_HERO', 'RELEASE_HERO', 'SET_LOBBY_PLAYER', 'SET_LOBBY_PICK', 'SET_LOBBY_READY', 'SET_LOBBY_ALLY', 'PLAY_BOARD_SOUND', 'SET_SOUNDBOARD_OFF', 'SET_SOUNDBOARD_UNLIMITED', 'FIRST_ROLL_DONE', 'OPENING_NARRATING', 'OPENING_QUIET', 'OPENING_DONE', 'FIRST_ROLL_NARRATING', 'FIRST_ROLL_QUIET', 'ALLY_PAUSE', 'ALLY_HELP', 'CARD_READING', 'SKIP_READING'])
 
 export function startServer({
@@ -508,6 +510,19 @@ export function startServer({
   }
 
   const wss = new WebSocketServer({ noServer: true })
+  // A ping now and then keeps every screen's connection busy. Friends come in through
+  // Cloudflare, which closes a connection that's been quiet for about 100 seconds, and a
+  // slow turn on the board can be quieter than that.
+  const keepAlive = setInterval(() => {
+    for (const client of wss.clients) {
+      try {
+        client.ping()
+      } catch {
+        // Already closing.
+      }
+    }
+  }, KEEP_ALIVE_MS)
+  keepAlive.unref?.()
   // Each screen's socket knows who opened it, checked the same way as every other request.
   server.on('upgrade', (req, socket, head) => {
     if (new URL(req.url, 'http://localhost').pathname !== '/ws') {
@@ -682,6 +697,16 @@ export function startServer({
   // Tells every "Which game?" screen that the list changed.
   const broadcastGames = () => broadcastRaw(JSON.stringify({ type: 'games' }))
 
+  // A friend's new game starts on the virtual board (no tiles at their house) with
+  // Adventure 1 chosen, the gentlest way in. They can still change the adventure.
+  function friendStart() {
+    const cards = loadCards(cardsFile, exampleCardsFile)
+    const onBoard = cards.tiles.some((t) => t.id === 'start')
+    const state = onBoard ? { ...initialState, lobbyBoard: true } : initialState
+    const first = cards.adventures.find((a) => a.id === 'adventure-1') ?? cards.adventures[0]
+    return first ? gameReducer(state, { type: 'CHOOSE_ADVENTURE', adventure: first }) : state
+  }
+
   function startGame(socket, message) {
     const requestId = typeof message.requestId === 'string' ? message.requestId.slice(0, 80) : null
     const name = cleanName(message.name)
@@ -691,7 +716,7 @@ export function startServer({
     if (!roomFor(owner)) return refuse(owner ? 'friend-full' : 'full')
     const id = gameIdFor(name, [...otherGames, ...finished].map((g) => g.id))
     try {
-      writeSave(gameFile(id), initialState)
+      writeSave(gameFile(id), owner ? friendStart() : initialState)
       saveList([...otherGames, { id, name, createdAt: Date.now(), ...(owner ? { owner } : {}) }], finished)
       if (owner) friendLog.started(owner)
     } catch (error) {
@@ -812,6 +837,7 @@ export function startServer({
         port: server.address().port,
         close: () =>
           new Promise((done) => {
+            clearInterval(keepAlive)
             for (const client of wss.clients) client.terminate()
             wss.close()
             friendLog.flush()
