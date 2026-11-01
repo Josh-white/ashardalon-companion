@@ -43,7 +43,7 @@ export function rememberedName() {
     return ''
   }
 }
-function rememberName(name) {
+export function rememberName(name) {
   try {
     if (name.trim()) localStorage.setItem(NAME_KEY, name)
   } catch {

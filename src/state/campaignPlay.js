@@ -13,7 +13,7 @@ import { pickTownEvent, townEventEffect } from '../data/townEvents.js'
 export const sameHeroes = (heroes, saved) => heroes.length === saved.length && saved.every((s) => heroes.some((h) => h.key === s.key))
 
 // What a campaign hero takes into the next adventure: level, gold, items (face up again) and powers.
-const heroRecord = (hero, deviceId = null) => ({
+export const heroRecord = (hero, deviceId = null) => ({
   key: hero.key,
   deviceId,
   player: hero.player ?? '',

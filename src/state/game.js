@@ -14,7 +14,7 @@ import { FIRST_ROLL_MAX_MS, newFirstRoll, rollFirst } from './firstRoll.js'
 import { finishOpening, openingNarrating, startOpening } from './opening.js'
 import { escapeAtPhaseEnd, escapedHero } from '../board/exits.js'
 import { dropItem, moveHeroToken, syncHeroTokens, trippedTokens } from '../board/heroTokens.js'
-import { moveHero, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
+import { moveHero, moveToken, newBoard, placeNear, placeNewFigures, pruneTokens } from '../board/play.js'
 import { boardMove, queueFearMove, queueFoeStep, queueHitMoves, queueMoves, skipBoardMove } from '../board/powerMoves.js'
 import { addTreasureToken, flyCarpet, pickUpTreasure, placeItem, removeItem } from '../board/items.js'
 import { trapStep } from '../board/traps.js'
@@ -23,7 +23,7 @@ import { discardMonsterCard, drawMonster, filterMonsterDeck, monsterFromCard } f
 import { discardEncounterCard, drawEncounter, oweEncounter } from './encounterDeck.js'
 import { dealStartingTreasure, drawTreasure, keepTreasure, oweTreasure, spendItem, treasureWords } from './treasureDeck.js'
 import { copyCard, createHero, heroesFromLobby, levelSlots, newPower, pickedElsewhere, POWER_LABELS, updateClaim, withPicks } from './heroSetup.js'
-import { buildDeckWithout, buyFromShop, campaignHeroes, campaignLobby, drawTreasureToken, fromCampaign, nextCampaignAdventure, sameHeroes, tagDrawn, useBoon } from './campaignPlay.js'
+import { buildDeckWithout, buyFromShop, campaignHeroes, heroRecord, campaignLobby, drawTreasureToken, fromCampaign, nextCampaignAdventure, sameHeroes, tagDrawn, useBoon } from './campaignPlay.js'
 import { attackFollowUp, dodgeHit, heroAttack, powerDamage, rerollAttack, usePower } from './heroAttacks.js'
 import { initialState } from './initialState.js'
 import { drawDungeonTile, openBoardDoor, revealDoor, revealTile } from './dungeon.js'
@@ -1031,6 +1031,32 @@ function reduce(state, action) {
       const next = updateHero(state, hero.id, () => ({ ally }))
       const text = ally ? `🤖 The computer is playing ${hero.name} now.` : `${heroLabel(hero)} is playing ${hero.name} again.`
       return withLog({ ...next, allyPaused: ally ? false : next.allyPaused, turn: { ...next.turn, allyHelp: null } }, text)
+    }
+
+    // A hero joins a game already going (Easton wants in): on a free square next to whoever's
+    // turn it is, and in the turn order right after them. In a campaign the hero joins at
+    // level 1 with no gold or items, and stays for the later adventures.
+    case 'JOIN_GAME': {
+      const template = templateFor(action.heroKey)
+      if (state.status !== 'playing' || !template || state.heroes.some((h) => h.key === template.key)) return state
+      // Not while the party is still rolling for first turn: that roll is only for the heroes in it.
+      if (state.firstRoll && !state.firstRoll.winner) return state
+      const ally = action.ally === true && Boolean(state.board)
+      const player = ally ? '' : String(action.player ?? '').slice(0, 40)
+      if (!ally && !player.trim()) return state
+      const slots = levelSlots(template, 1)
+      const picks = slots.map((_, i) => copyCard(action.picks?.[i]))
+      const hero = { ...withPicks(createHero(template), picks), player, ...(ally ? { ally: true } : {}) }
+      const at = state.turn.heroIndex + 1
+      let next = { ...state, heroes: [...state.heroes.slice(0, at), hero, ...state.heroes.slice(at)] }
+      const active = state.heroes[state.turn.heroIndex]
+      const near = state.board && (state.board.tokens[active?.id] ?? Object.values(state.board.tokens)[0])
+      if (near) next = placeNear(next, { id: hero.id }, near)
+      if (state.campaign) next = { ...next, campaign: { ...state.campaign, heroes: [...state.campaign.heroes, heroRecord(hero, action.deviceId ?? null)] } }
+      const who = ally ? `🤖 The computer brings ${hero.name}` : `${player} brings ${hero.name}`
+      const where = state.board ? '' : ` Put ${hero.name}'s figure next to ${active?.name ?? 'the party'}.`
+      const text = `${who} into the dungeon! ${hero.name} goes after ${active?.name ?? 'the hero whose turn it is'}.${where}`
+      return withMoment(withLog(next, text), { kind: 'join', heroId: hero.id, title: `${hero.name} joins the party!`, detail: `${hero.name} goes after ${active?.name ?? 'this hero'}.` })
     }
 
     // Holding the computer allies still (a player wants to play the ally's turn by hand).

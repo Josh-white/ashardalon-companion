@@ -687,7 +687,7 @@ export default function App() {
     return (
       <main className="min-h-screen bg-zinc-950 text-zinc-100">
         {banners}
-        <SeatPicker heroes={state.heroes} onPick={setSeat} tableSeat={TABLE_SEAT} projectorSeat={PROJECTOR_SEAT} onArt={() => setArtOpen(true)} />
+        <SeatPicker heroes={state.heroes} onPick={setSeat} tableSeat={TABLE_SEAT} projectorSeat={PROJECTOR_SEAT} onArt={() => setArtOpen(true)} state={state} dispatch={dispatch} deviceId={deviceId} />
       </main>
     )
   }

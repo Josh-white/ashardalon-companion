@@ -5,7 +5,7 @@ import { artUrl, useArt } from '../state/useArt.js'
 import Die from './Die3D.jsx'
 import { FX_DELAY_MS } from '../board/attackFx.js'
 
-const SHOW_MS = { roll: 2200, crit: 3500, fumble: 3000, defeat: 3000, level: 3500, down: 3500, poison: 3500, spawn: 3000, monster: 4500, 'monster-down': 5000, encounter: 4500, treasure: 4000 }
+const SHOW_MS = { roll: 2200, crit: 3500, fumble: 3000, defeat: 3000, level: 3500, down: 3500, poison: 3500, spawn: 3000, monster: 4500, 'monster-down': 5000, encounter: 4500, treasure: 4000, join: 4000 }
 // A device that reconnects shouldn't replay a moment that is long over.
 const STALE_MS = 8000
 
@@ -21,6 +21,7 @@ const STYLES = {
   monster: { icon: '👹', title: 'text-red-300', panel: 'border-red-700 bg-zinc-900/95' },
   'monster-down': { icon: '💀', title: 'text-red-300', panel: 'border-red-600 bg-red-950/95' },
   encounter: { icon: '🃏', title: 'text-sky-300', panel: 'border-sky-600 bg-zinc-900/95' },
+  join: { icon: '🛡️', title: 'text-emerald-300', panel: 'border-emerald-500 bg-zinc-900/95 moment-glow' },
   treasure: { icon: '💰', title: 'text-amber-300', panel: 'border-amber-400 bg-amber-950/95 moment-glow' },
 }
 
@@ -46,7 +47,7 @@ export default function MomentOverlay({ moment, heroes, big = false }) {
   // A roll's big reveal waits until the die stops spinning.
   const reveal = isRoll ? 'moment-reveal' : 'moment-pop'
   // The monster's picture when it appears, attacks or falls; the hero's when they level up.
-  const picture = artUrl(art, visible.art ?? (hero && visible.kind === 'level' ? heroArt(hero.key) : null))
+  const picture = artUrl(art, visible.art ?? (hero && (visible.kind === 'level' || visible.kind === 'join') ? heroArt(hero.key) : null))
 
   return (
     <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-zinc-950/40 p-6">
