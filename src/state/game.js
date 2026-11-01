@@ -18,7 +18,7 @@ import { moveHero, moveToken, newBoard, placeNear, placeNewFigures, pruneTokens 
 import { boardMove, queueFearMove, queueFoeStep, queueHitMoves, queueMoves, skipBoardMove } from '../board/powerMoves.js'
 import { addTreasureToken, flyCarpet, pickUpTreasure, placeItem, removeItem } from '../board/items.js'
 import { trapStep } from '../board/traps.js'
-import { activeVillains, buildDeck, clamp, heroLabel, lose, markUsed, newId, shuffle, toggle, updateHero, updateMonster, validRoll, withCast, withLog, withMoment } from './gameHelpers.js'
+import { activeVillains, buildDeck, clamp, heroLabel, lose, playerName, markUsed, newId, shuffle, toggle, updateHero, updateMonster, validRoll, withCast, withLog, withMoment } from './gameHelpers.js'
 import { discardMonsterCard, drawMonster, filterMonsterDeck, monsterFromCard } from './monsterDeck.js'
 import { discardEncounterCard, drawEncounter, oweEncounter } from './encounterDeck.js'
 import { dealStartingTreasure, drawTreasure, keepTreasure, oweTreasure, spendItem, treasureWords } from './treasureDeck.js'
@@ -1031,7 +1031,7 @@ function reduce(state, action) {
       const ally = Boolean(action.ally)
       if (state.status !== 'playing' || !state.board || !hero || Boolean(hero.ally) === ally) return state
       const next = updateHero(state, hero.id, () => ({ ally }))
-      const text = ally ? `🤖 The computer is playing ${hero.name} now.` : `${heroLabel(hero)} is playing ${hero.name} again.`
+      const text = ally ? `🤖 The computer is playing ${hero.name} now.` : playerName(hero) ? `${playerName(hero)} is playing ${hero.name} again.` : `You are playing ${hero.name} again.`
       return withLog({ ...next, allyPaused: ally ? false : next.allyPaused, turn: { ...next.turn, allyHelp: null } }, text)
     }
 

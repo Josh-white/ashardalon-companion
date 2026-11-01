@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { playerName } from '../state/gameHelpers.js'
 import { heroArt } from '../data/art.js'
 import { HERO_COLORS } from '../data/heroes.js'
 import Art from './Art.jsx'
@@ -33,7 +34,7 @@ export default function SeatPicker({ heroes, onPick, tableSeat, projectorSeat, o
                 <span className={`block font-display text-3xl font-bold ${color.text}`}>I'm {hero.name}</span>
                 <span className="text-zinc-400">
                   {hero.className}
-                  {hero.player && ` · ${hero.player}`}
+                  {playerName(hero) && ` · ${playerName(hero)}`}
                 </span>
               </span>
             </button>

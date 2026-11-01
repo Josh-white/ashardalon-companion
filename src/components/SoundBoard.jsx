@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { heroLabel } from '../state/gameHelpers.js'
 import { BOARD_SOUNDS, USES_PER_TURN, boardOf, boardStatus } from '../state/soundboard.js'
 
 // Re-renders every half second while `active`, so countdowns tick down.
@@ -14,7 +15,7 @@ function useTicking(active) {
 const whoName = (state, who) => {
   if (who === 'table') return 'The table'
   const hero = state.heroes.find((h) => h.id === who)
-  return hero ? hero.player || hero.name : 'Someone'
+  return hero ? heroLabel(hero) : 'Someone'
 }
 
 // A 🔊 button in the corner that opens the sound board. `who` is this iPad's hero id

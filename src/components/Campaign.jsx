@@ -1,4 +1,5 @@
 import { HERO_COLORS, templateFor } from '../data/heroes.js'
+import { playerName } from '../state/gameHelpers.js'
 import { campaignBoons, campaignHero, campaignOutcome, outcomeLines, shopSize } from '../state/campaign.js'
 import { turnKey } from '../state/game.js'
 import { shuffleNumbers } from '../state/random.js'
@@ -114,7 +115,7 @@ export function CampaignLobby({ state, dispatch }) {
         {campaign.heroes.map((h) => (
           <li key={h.key}>
             <span className={`font-semibold ${HERO_COLORS[templateFor(h.key)?.color]?.text ?? ''}`}>{heroName(h.key)}</span>
-            {h.player && ` (${h.player})`} · level {h.level} · {gold(h.gold)}
+            {playerName(h) && ` (${playerName(h)})`} · level {h.level} · {gold(h.gold)}
             {h.items.length > 0 && ` · ${h.items.map((i) => i.name).join(', ')}`}
           </li>
         ))}

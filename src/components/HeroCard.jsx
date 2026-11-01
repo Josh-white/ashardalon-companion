@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { playerName } from '../state/gameHelpers.js'
 import { heroArt, heroCardArt } from '../data/art.js'
 import { CONDITIONS, HERO_COLORS, MAX_LEVEL, XP_TO_LEVEL_UP, hasAbility } from '../data/heroes.js'
 import { surgeHp } from '../data/difficulty.js'
@@ -251,7 +252,7 @@ export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, 
               </h3>
               <p className="text-sm text-zinc-400">
                 {hero.className}
-                {hero.player && ` · ${hero.player}`}
+                {playerName(hero) && ` · ${playerName(hero)}`}
               </p>
             </div>
             {hero.gold != null && <div className="text-right text-sm text-amber-300">💰 {hero.gold.toLocaleString()} gold</div>}
