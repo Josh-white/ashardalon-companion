@@ -384,7 +384,6 @@ export default function App() {
 
   const overlays = (
     <>
-      <OpeningStory state={state} dispatch={dispatch} />
       <FirstRoll state={state} dispatch={dispatch} heroId={myHero?.id ?? null} screens={screens} />
       <MomentOverlay moment={state.moment} heroes={state.heroes} />
       <CardReading state={state} dispatch={dispatch} />
@@ -418,7 +417,7 @@ export default function App() {
       ) : (
         <PartyBar undo={undo} undoDepth={undoDepth} state={state} dispatch={dispatch} seatLabel="Table" onSwitchSeat={() => setSeat(null)} sound={sound} boardSwitch />
       )}
-      {/* The end-of-game recap covers the play area only, so it starts right under the top
+      {/* The opening story and the end-of-game recap cover the play area only, so they start right under the top
           bars (Undo and the menu stay reachable) instead of hiding the game bar behind it. */}
       <div className="relative flex min-h-0 flex-1 flex-col">
         <PlayView
@@ -428,6 +427,7 @@ export default function App() {
           hero={myHero ?? null}
           soundBoard={<SoundBoard state={state} dispatch={dispatch} who={who} testCopy={Boolean(instance)} className="absolute bottom-3 left-3" />}
         />
+        <OpeningStory state={state} dispatch={dispatch} contained />
         {ended && (
           <Recap
             state={state}
