@@ -402,7 +402,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
                 <Token {...f} spin={spin} at={board.tokens[f.id]} active={f.id === activeId} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)} onTap={watching ? undefined : () => tapFigure(f.id)} />
               </g>
             ))}
-            <MarkerBadges markers={placedMarkers} spin={spin} onTap={(id) => setReading(reading === id ? null : id)} />
+            <MarkerBadges markers={placedMarkers} spin={spin} taken={new Set([...Object.values(board.tokens), ...items.filter((i) => i.at).map((i) => i.at)].map(key))} onTap={(id) => setReading(reading === id ? null : id)} />
           </g>
         </svg>
       </div>
