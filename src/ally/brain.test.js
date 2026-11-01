@@ -3,6 +3,7 @@ import { HERO_TEMPLATES } from '../data/heroes.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
 import { normalizeTiles } from '../board/tileDefs.js'
 import { allyHostSeat, allyStep, attackOptions, simpleAttack } from './brain.js'
+import { boardGrid } from '../board/play.js'
 
 // A made-up Start tile: 3 floor columns and a wall column, open to the north.
 const TILES = normalizeTiles(
@@ -146,6 +147,38 @@ describe('the ally looks after the party', () => {
     expect(gameReducer(far, step.action).board.tokens[state.heroes[0].id][1]).toBeGreaterThan(at[1])
     const near = { ...state, board: { ...state.board, items: [{ id: 't1', kind: 'treasure', at: [at[0], at[1] + 1] }] } }
     expect(allyStep(near, { roll }).action).toEqual({ type: 'PICK_UP_TREASURE', id: 't1', heroId: state.heroes[0].id })
+  })
+})
+
+describe('the ally and traps', () => {
+  const dart = (area) => ({ id: 'trap1', type: 'trap', cardId: 'poisoned-dart-trap', name: 'Poisoned Dart Trap', tile: area, card: { trap: { disable: 10 } } })
+  const areaOf = (state, at) => boardGrid(state.board).get(`${at[0]},${at[1]}`).area
+
+  it('disables a trap on its tile instead of attacking', () => {
+    const state = start()
+    const at = state.board.tokens[state.heroes[0].id]
+    const trapped = { ...state, traps: [dart(areaOf(state, at))] }
+    const step = allyStep(trapped, { roll: () => 12 })
+    expect(step.action).toEqual({ type: 'DISABLE_TRAP', trapId: 'trap1', heroId: state.heroes[0].id, roll: 12 })
+    expect(gameReducer(trapped, step.action).traps).toEqual([])
+  })
+
+  it('still attacks when that finishes a monster off', () => {
+    const state = start()
+    const at = state.board.tokens[state.heroes[0].id]
+    const both = withMonster({ ...state, traps: [dart(areaOf(state, at))] }, [at[0] + 1, at[1]], { hp: 1 })
+    expect(allyStep(both, { roll }).action.type).toBe('HERO_ATTACK')
+  })
+
+  it("walks over to a trap's tile", () => {
+    const state = start()
+    const at = state.board.tokens[state.heroes[0].id]
+    // The far half of the Start tile (it counts as two tiles).
+    const far = [...boardGrid(state.board).values()].find((sq) => sq.floor && sq.area !== areaOf(state, at))
+    const trapped = { ...state, traps: [dart(far.area)] }
+    const step = allyStep(trapped, { roll })
+    expect(step.action.type).toBe('MOVE_HERO')
+    expect(areaOf(state, step.action.to)).toBe(far.area)
   })
 })
 
