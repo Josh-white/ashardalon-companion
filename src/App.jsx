@@ -39,6 +39,7 @@ import AllyPanel from './ally/AllyPanel.jsx'
 import { allyHostSeat } from './ally/brain.js'
 import { AllyToggle, AllyWatch, GameLog, monsterTotal, PartyGlance, PartyStrip, TabBar, usePlayTabs, WaitingBanner } from './components/PartyPanels.jsx'
 import { PartyBar, SoloBar } from './components/TopBars.jsx'
+import { useMe } from './state/useMe.js'
 import { FAMILY_GAME, serverNow, useDeviceId, useGameChoice, useScreenRole, useSeat, useSharedGame } from './state/useSharedGame.js'
 
 const TABLE_SEAT = 'table'
@@ -193,6 +194,8 @@ export default function App() {
   const [screenRole, setScreenRole] = useScreenRole(gameId)
   const { state, connected, dispatch, undo, undoDepth, instance, screens, game, gamesVersion, changeGames, startGame } = useSharedGame(seat, gameId, setGame)
   const deviceId = useDeviceId()
+  // A friend playing from outside the house (server/access.js) can't change the family's card photos.
+  const me = useMe()
   const cards = useCards()
   const [artOpen, setArtOpen] = useState(false)
 
@@ -315,7 +318,7 @@ export default function App() {
           watchOnly={seat === PROJECTOR_SEAT}
           onProjector={() => setSeat(PROJECTOR_SEAT)}
           onLeaveProjector={() => setSeat(null)}
-          onArt={() => setArtOpen(true)}
+          onArt={me.friend ? null : () => setArtOpen(true)}
           onSolo={() => setSeat(TABLE_SEAT)}
           // An iPad that played a hero before is a hero screen; it isn't asked again.
           role={screenRole ?? (seat && seat !== TABLE_SEAT && seat !== PROJECTOR_SEAT ? 'hero' : null)}
@@ -352,7 +355,7 @@ export default function App() {
     return (
       <main className="min-h-screen bg-zinc-950 text-zinc-100">
         {banners}
-        <SeatPicker heroes={state.heroes} onPick={setSeat} tableSeat={TABLE_SEAT} projectorSeat={PROJECTOR_SEAT} onArt={() => setArtOpen(true)} state={state} dispatch={dispatch} deviceId={deviceId} />
+        <SeatPicker heroes={state.heroes} onPick={setSeat} tableSeat={TABLE_SEAT} projectorSeat={PROJECTOR_SEAT} onArt={me.friend ? null : () => setArtOpen(true)} state={state} dispatch={dispatch} deviceId={deviceId} />
       </main>
     )
   }

@@ -28,6 +28,7 @@ const when = (time) => {
 const REFUSED = {
   name: 'Give the game a name first.',
   full: 'There are already as many games as the Pi keeps. Finish one to make room.',
+  'friend-full': 'You already have as many games as a friend can keep. Finish one to start another.',
   save: "The Pi couldn't save the new game. Try again.",
   offline: "This iPad isn't connected to the Pi right now. Try again in a moment.",
 }
@@ -94,8 +95,66 @@ export default function GamePicker({ current, onPick, onClose, startGame, change
   }, [onlyFamily]) // eslint-disable-line react-hooks/exhaustive-deps
   if (onlyFamily) return null
 
-  const full = list && list.games.length >= list.max
+  const full = Boolean(list?.full)
   if (hall) return <HallOfRecords onClose={() => setHall(false)} />
+
+  const gameRow = (game) => {
+    const here = game.id === current
+    return (
+      <li key={game.id} className={`rounded-2xl border p-4 ${here ? 'border-amber-500 bg-amber-950/30' : 'border-zinc-800 bg-zinc-900'}`}>
+        {renaming?.id === game.id ? (
+          <form className="flex flex-wrap gap-2" onSubmit={rename}>
+            <input
+              id={`rename-${game.id}`}
+              autoFocus
+              maxLength={40}
+              value={renaming.name}
+              onChange={(e) => setRenaming({ ...renaming, name: e.target.value })}
+              className="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-lg text-zinc-100"
+            />
+            <Button type="submit" variant="gold">
+              Save
+            </Button>
+            <Button variant="ghost" onClick={() => setRenaming(null)}>
+              Cancel
+            </Button>
+          </form>
+        ) : (
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" onClick={() => onPick(game.id)} className="min-w-0 flex-1 text-left transition active:scale-95">
+              <span className="block font-display text-2xl font-bold text-zinc-100">
+                {game.name}
+                {here && <span className="ml-2 align-middle text-sm font-normal text-amber-400">this iPad</span>}
+              </span>
+              <span className="block text-zinc-400">{gameSummary(game)}</span>
+              <span className="block text-sm text-zinc-500">
+                {[
+                  game.owner && game.owner !== list.me && `made by ${game.owner}`,
+                  game.screens > 0 && `${game.screens} ${game.screens === 1 ? 'screen' : 'screens'} on`,
+                  when(game.updatedAt) && `last played ${when(game.updatedAt)}`,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </span>
+            </button>
+            {game.id !== FAMILY_GAME && game.mine !== false && (
+              <div className="flex gap-1">
+                <Button variant="ghost" className="text-sm" onClick={() => setRenaming({ id: game.id, name: game.name })}>
+                  Rename
+                </Button>
+                <Button variant="ghost" className="text-sm" onClick={() => finish(game)}>
+                  Finish
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+        {game.id !== FAMILY_GAME && game.mine !== false && <FriendInvites game={game} changeGames={changeGames} />}
+      </li>
+    )
+  }
+  const familyList = list?.games.filter((g) => !g.owner) ?? []
+  const friendsList = list?.games.filter((g) => g.owner) ?? []
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4 sm:p-8">
@@ -113,59 +172,19 @@ export default function GamePicker({ current, onPick, onClose, startGame, change
 
       {!list && <p className="text-zinc-400">{failed ? "Can't reach the Pi to list the games. Trying again…" : 'Looking for games…'}</p>}
 
-      {list && (
-        <ul className="space-y-3">
-          {list.games.map((game) => {
-            const here = game.id === current
-            return (
-              <li key={game.id} className={`rounded-2xl border p-4 ${here ? 'border-amber-500 bg-amber-950/30' : 'border-zinc-800 bg-zinc-900'}`}>
-                {renaming?.id === game.id ? (
-                  <form className="flex flex-wrap gap-2" onSubmit={rename}>
-                    <input
-                      id={`rename-${game.id}`}
-                      autoFocus
-                      maxLength={40}
-                      value={renaming.name}
-                      onChange={(e) => setRenaming({ ...renaming, name: e.target.value })}
-                      className="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-lg text-zinc-100"
-                    />
-                    <Button type="submit" variant="gold">
-                      Save
-                    </Button>
-                    <Button variant="ghost" onClick={() => setRenaming(null)}>
-                      Cancel
-                    </Button>
-                  </form>
-                ) : (
-                  <div className="flex flex-wrap items-center gap-3">
-                    <button type="button" onClick={() => onPick(game.id)} className="min-w-0 flex-1 text-left transition active:scale-95">
-                      <span className="block font-display text-2xl font-bold text-zinc-100">
-                        {game.name}
-                        {here && <span className="ml-2 align-middle text-sm font-normal text-amber-400">this iPad</span>}
-                      </span>
-                      <span className="block text-zinc-400">{gameSummary(game)}</span>
-                      <span className="block text-sm text-zinc-500">
-                        {[game.screens > 0 && `${game.screens} ${game.screens === 1 ? 'screen' : 'screens'} on`, when(game.updatedAt) && `last played ${when(game.updatedAt)}`]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </span>
-                    </button>
-                    {game.id !== FAMILY_GAME && (
-                      <div className="flex gap-1">
-                        <Button variant="ghost" className="text-sm" onClick={() => setRenaming({ id: game.id, name: game.name })}>
-                          Rename
-                        </Button>
-                        <Button variant="ghost" className="text-sm" onClick={() => finish(game)}>
-                          Finish
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </li>
-            )
-          })}
-        </ul>
+      {list?.friend && (
+        <p className="text-zinc-400">
+          Welcome! You're signed in as <span className="text-zinc-200">{list.me}</span>. Start a game below, or pick one a friend invited you to.
+        </p>
+      )}
+
+      {list && (list.friend ? list.games : familyList).length > 0 && <ul className="space-y-3">{(list.friend ? list.games : familyList).map(gameRow)}</ul>}
+
+      {list && !list.friend && friendsList.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="font-display text-2xl font-bold text-zinc-300">Friends' games</h2>
+          <ul className="space-y-3">{friendsList.map(gameRow)}</ul>
+        </section>
       )}
 
       {list && (
@@ -174,7 +193,7 @@ export default function GamePicker({ current, onPick, onClose, startGame, change
             Start a new game
           </label>
           {full ? (
-            <p className="text-zinc-400">The Pi keeps {list.max} games at a time. Finish one to start another.</p>
+            <p className="text-zinc-400">{list.friend ? `You can keep ${list.max} games at a time.` : `The Pi keeps ${list.max} games at a time.`} Finish one to start another.</p>
           ) : (
             <>
               <div className="flex flex-wrap gap-2">
@@ -207,15 +226,78 @@ export default function GamePicker({ current, onPick, onClose, startGame, change
                 <span className="mr-auto text-zinc-300">
                   {game.name} <span className="text-sm text-zinc-500">· finished {when(game.finishedAt)}</span>
                 </span>
-                <Button className="text-sm" disabled={full} onClick={() => changeGames({ type: 'bring-back-game', id: game.id })}>
-                  Bring back
-                </Button>
+                {game.mine !== false && (
+                  <Button className="text-sm" disabled={full && (list.friend || !game.owner)} onClick={() => changeGames({ type: 'bring-back-game', id: game.id })}>
+                    Bring back
+                  </Button>
+                )}
               </li>
             ))}
           </ul>
         </details>
       )}
       <p className="text-center text-xs text-zinc-600">{versionLine()}</p>
+    </div>
+  )
+}
+
+// Friends invited to play in a game, by the email they sign in with, and a way to invite
+// another. They also need to be on JJ's Cloudflare list to get in.
+export function FriendInvites({ game, changeGames }) {
+  const [open, setOpen] = useState(false)
+  const [email, setEmail] = useState('')
+  const invited = game.invited ?? []
+  const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+  const send = (event) => {
+    event.preventDefault()
+    if (!valid) return
+    changeGames({ type: 'invite-game', id: game.id, email: email.trim() })
+    setEmail('')
+  }
+  return (
+    <div className="mt-2 text-sm text-zinc-400">
+      {invited.length > 0 && (
+        <ul className="mb-1 flex flex-wrap gap-2">
+          <li className="py-1">Playing with:</li>
+          {invited.map((e) => (
+            <li key={e} className="flex items-center gap-1 rounded-full bg-zinc-800 py-1 pl-3 pr-1 text-zinc-200">
+              {e}
+              <button
+                type="button"
+                aria-label={`Take ${e} out of this game`}
+                className="rounded-full px-2 text-zinc-400 hover:text-red-400"
+                onClick={() => window.confirm(`Take ${e} out of "${game.name}"?`) && changeGames({ type: 'uninvite-game', id: game.id, email: e })}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {open ? (
+        <form className="flex flex-wrap gap-2" onSubmit={send}>
+          <input
+            type="email"
+            autoFocus
+            aria-label="Friend's email"
+            placeholder="friend@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-zinc-100"
+          />
+          <Button type="submit" variant="gold" className="text-sm" disabled={!valid}>
+            Invite
+          </Button>
+          <Button variant="ghost" className="text-sm" onClick={() => setOpen(false)}>
+            Done
+          </Button>
+          <p className="w-full text-xs text-zinc-500">They sign in with that email. JJ adds new friends to the sign-in list first.</p>
+        </form>
+      ) : (
+        <button type="button" className="text-amber-400 underline" onClick={() => setOpen(true)}>
+          + Invite a friend to play
+        </button>
+      )}
     </div>
   )
 }

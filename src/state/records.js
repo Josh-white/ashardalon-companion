@@ -125,17 +125,20 @@ export const findPlayer = (records, name) => (counted(name) ? records?.find((r) 
 // returns the changed file after an action, or null when nothing changed: a game that
 // ended is written in (again, if Undo took it back and it ended differently), and one
 // Undo took back to playing is taken out.
-export function syncRecord(file, state, now = Date.now()) {
+// `extra` is kept with the game's entry: which game it was, and whether friends made it
+// (server/server.js), so each screen only sees the records it should.
+export function syncRecord(file, state, now = Date.now(), extra = {}) {
   const played = syncPlayed(file, state, now)
-  const next = syncGame(played ?? file, state, now)
+  const next = syncGame(played ?? file, state, now, extra)
   return next ?? played
 }
 
-function syncGame(file, state, now) {
+function syncGame(file, state, now, extra) {
   const key = recordKey(state)
   if (!key) return null
   const games = file.games ?? {}
-  const entry = gameRecord(state)
+  const record = gameRecord(state)
+  const entry = record && { ...record, ...extra }
   if (!entry) {
     if (state.status !== 'playing' || !games[key]) return null
     const { [key]: _, ...rest } = games

@@ -6,6 +6,9 @@
 //   POST   /ideas             { text, from }  adds one
 //   POST   /ideas/<id>        { done }        marks one done (or not done)
 //   DELETE /ideas/<id>                        takes one away
+//
+// A friend playing from outside (server/access.js) can only send ideas; each one keeps
+// the email they signed in with, so Dad knows who sent it.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { dirname } from 'node:path'
@@ -50,7 +53,7 @@ export function createIdeaBox(file) {
   const send = (res, status, body) =>
     res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(body))
 
-  async function respond(req, res) {
+  async function respond(req, res, email) {
     const path = req.url.split('?')[0]
     if (path === '/ideas.json' && req.method === 'GET') {
       send(res, 200, { ideas: [...ideas].reverse() })
@@ -60,7 +63,7 @@ export function createIdeaBox(file) {
       const idea = cleanIdea(await readJson(req))
       if (!idea) return send(res, 400, { error: 'Write your idea first.' })
       if (ideas.length >= MAX_IDEAS) return send(res, 507, { error: 'The ideas box is full.' })
-      const saved = { id: randomUUID(), ...idea, sentAt: new Date().toISOString(), done: false }
+      const saved = { id: randomUUID(), ...idea, ...(email ? { email } : {}), sentAt: new Date().toISOString(), done: false }
       ideas = [...ideas, saved]
       save()
       return send(res, 201, saved)
@@ -84,10 +87,11 @@ export function createIdeaBox(file) {
 
   return {
     // True when the request was for the ideas box (and it has been answered).
-    handle(req, res) {
+    // `email`: the friend who sent it, or null for the family.
+    handle(req, res, email = null) {
       const path = req.url.split('?')[0]
       if (path !== '/ideas.json' && path !== '/ideas' && !path.startsWith('/ideas/')) return false
-      respond(req, res).catch((error) => {
+      respond(req, res, email).catch((error) => {
         console.error('Ideas box:', error.message)
         if (!res.headersSent) send(res, 400, { error: 'Could not read that.' })
       })

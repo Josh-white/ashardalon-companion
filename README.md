@@ -149,6 +149,21 @@ scripts/restore-game.sh ~/ashardalon-backups/game-2026-10-27-031500.json
 
 For a game other than the family game, put `GAME=<game>` in front, using the name of its backup folder: `GAME=coltons-solo scripts/restore-game.sh`. The restore saves the current game first (as a `-before-restore` copy), so it can be undone, then restarts the app with the backup. A backup from an older version of the app is upgraded when it loads; one from a newer version is refused until the app is updated. For the test copy, put `CONTAINER=ashardalon-test BACKUP_DIR=~/ashardalon-test-backups` in front of either command.
 
+## Friends from outside
+
+Friends can play on the real game from anywhere at `play.codebasehome.com`. A free Cloudflare Tunnel (`scripts/cloudflared/compose.yaml`) carries them to the Pi without opening anything on the router, and Cloudflare Access lets in only the emails on your list, with a code sent to that email. At home and on Tailscale nothing changes.
+
+Each friend sees and plays only the games they started (up to 2) or were invited to with **+ Invite a friend to play** on the "Which game?" screen. They never see the family game or anyone else's games, and they can't change card photos or sounds, read the ideas box (they can send ideas), or record new narrator lines. The family sees their games under **Friends' games**, and can invite friends into any game except the family game.
+
+Setup, once:
+
+1. In the Cloudflare Zero Trust dashboard, add a self-hosted Access application for `play.codebasehome.com` with an Allow policy listing the friends' emails (One-time PIN sign-in), and copy its Audience (AUD) tag.
+2. Create a tunnel, and give it a public hostname `play.codebasehome.com` → HTTP `localhost:8081`.
+3. In the game's `.env`, add `FRIENDS_HOST=play.codebasehome.com`, `CF_ACCESS_TEAM=<team name>`, `CF_ACCESS_AUD=<AUD tag>`, and `OWNER_EMAILS=<your emails>` (these sign in as family), then `docker compose up -d`.
+4. Put the tunnel's token in `scripts/cloudflared/.env` as `TUNNEL_TOKEN=...` and run `docker compose up -d` in `scripts/cloudflared`.
+
+The Pi checks Cloudflare's signature on every request to `FRIENDS_HOST`, and turns away any request there without one.
+
 ## A test copy
 
 A second copy of the app, with its own saved game, is handy for trying new features without touching the real game. Clone the repo into another folder and give it its own `.env`:

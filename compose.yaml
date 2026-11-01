@@ -12,6 +12,11 @@ services:
       - "${HOST_PORT:-8081}:3000"
     environment:
       - INSTANCE_LABEL=${INSTANCE_LABEL:-}
+      # Friends playing from outside through Cloudflare (server/access.js, README). Not set: off.
+      - FRIENDS_HOST=${FRIENDS_HOST:-}
+      - CF_ACCESS_TEAM=${CF_ACCESS_TEAM:-}
+      - CF_ACCESS_AUD=${CF_ACCESS_AUD:-}
+      - OWNER_EMAILS=${OWNER_EMAILS:-}
       - ART_DIR=/app/art
       # The narrator's voice. The key lives only in the git-ignored .env on the Pi.
       - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY:-}

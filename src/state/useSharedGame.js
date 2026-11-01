@@ -133,6 +133,13 @@ export function useSharedGame(seat, game = FAMILY_GAME, onMoved) {
           reloadWhenIdle()
         } else if (message.type === 'screens') {
           setScreens(Array.isArray(message.seats) ? message.seats : [])
+        } else if (message.type === 'no-game') {
+          // A friend's screen isn't in a game (the one it asked for isn't theirs, or was
+          // finished, or they were taken out of it): back to "Which game?".
+          lastState = null
+          setState(null)
+          setGameInfo(null)
+          onMovedRef.current?.(null)
         } else if (message.type === 'games') {
           setGamesVersion((v) => v + 1)
         } else if (message.type === 'game-created' || message.type === 'new-game-refused') {
