@@ -163,6 +163,19 @@ export function foesInRange(state, heroId, range, foes) {
   })
 }
 
+// How many of a group card's figures (the Legion Devils) the hero can reach, so a power that
+// hits several monsters can pick more than one of them. Off the board, every figure counts.
+export function figuresInRange(state, heroId, range, foe) {
+  const standing = foe.card?.figures > 1 && !foe.villain ? Math.max(1, Math.ceil(foe.hp / foe.card.hp)) : 1
+  const at = squareOf(state, heroId)
+  if (standing === 1 || !state.board || !at || !range) return standing
+  const mine = Object.entries(state.board.tokens)
+    .filter(([id]) => baseId(id) === foe.id)
+    .map(([id, sq]) => ({ id, at: sq }))
+  if (mine.length === 0) return standing
+  return Math.min(standing, Math.max(1, heroesFor(range, boardGrid(state.board), at, mine).length))
+}
+
 // How far a monster is from a hero, in the words magic weapons use: adjacent, within1 or far.
 export function foeDistance(state, heroId, foeId) {
   const at = squareOf(state, heroId)
