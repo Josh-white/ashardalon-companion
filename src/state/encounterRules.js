@@ -1,7 +1,7 @@
 // What the encounter, trap and curse screens (components/Encounters.jsx) work out and say:
 // who an attack goes after, the rolls against each hero's AC, the notes on what tapping
 // the button does, and the plain-words answers. The screens only draw it.
-import { tileAcBonus } from '../data/items.js'
+import { itemTrapBonus, tileAcBonus } from '../data/items.js'
 import { heroAc } from '../data/powerEffects.js'
 import { foeBonus } from '../data/difficulty.js'
 import { canSpendAttack } from './heroTurn.js'
@@ -125,3 +125,14 @@ export const boardEffect = (effect, name) =>
         .filter(Boolean)
         .join(' and ')
         .replace(/^./, (c) => c.toUpperCase())} when you tap OK.`
+
+// Disabling a trap: the d20 needs the card's number (10 if it has none), Kobold Trappers
+// takes `penalty` off the roll and tools (Thieves' Tools) add `tools`. `needs` is the bare
+// die roll that does it. The rules, the Disable trap box and the computer allies all use this.
+export const trapRollMods = (state, hero) => ({ penalty: state.environment?.card?.trapPenalty ?? 0, tools: itemTrapBonus(hero) })
+
+export function trapDisable(state, hero, trap) {
+  const target = trap.card.trap?.disable ?? 10
+  const { penalty, tools } = trapRollMods(state, hero)
+  return { target, penalty, tools, needs: target + penalty - tools }
+}

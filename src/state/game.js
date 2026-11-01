@@ -3,7 +3,7 @@ import { difficultyOf, encounterCancelCost, surgeHp } from '../data/difficulty.j
 import { hasAbility, HERO_TEMPLATES, MAX_LEVEL, STARTING_SURGES, templateFor, XP_TO_LEVEL_UP } from '../data/heroes.js'
 import { monsterArt } from '../data/art.js'
 import { PHASES } from '../data/phases.js'
-import { heroItems, itemTrapBonus } from '../data/items.js'
+import { heroItems } from '../data/items.js'
 import { effectsOf } from '../data/powerEffects.js'
 import { adjustTiles, buildTileStack, MAX_TILES, MIN_TILES, STARTING_TILES } from './tiles.js'
 import { aliveVillagers, checkVictory, countDefeat, DOOR_UNLOCK_ROLL, escapeBlockers, isPlayable, MAX_SURGES, MIN_SURGES, newAdventure, takeToken } from './adventure.js'
@@ -29,6 +29,7 @@ import { initialState } from './initialState.js'
 import { drawDungeonTile, openBoardDoor, revealDoor, revealTile } from './dungeon.js'
 import { addOffer, attackHeroes, damageHeroes, defeatVillain, dropOffer, figuresLeft, healHero, heroWith, hurtVillager, monsterAttack, offers, offerSavingGrace, placeVillain, resolveEncounter, villagerAttack, villagerRoll } from './combat.js'
 import { answerCheck, canSpendAttack, checksFor, endHeroPhase, endPhaseCurses, inHeroPhase, levelUp, monsterControl, phaseChecks, removeCurse, spendAttack, startDamage, startTurn, updateEncounterCards, useItem, villagerRollDue } from './heroTurn.js'
+import { trapDisable } from './encounterRules.js'
 
 // Parts of the rules live in their own files now; these are still exported from here
 // so the screens' imports didn't have to change.
@@ -868,10 +869,8 @@ function reduce(state, action) {
       const hero = state.heroes.find((h) => h.id === action.heroId)
       // Practiced Evasion's roll is free; otherwise this is the active hero's attack.
       if (!trap || !hero || !validRoll(action.roll) || (!action.free && !canSpendAttack(state, hero))) return state
-      const penalty = state.environment?.card?.trapPenalty ?? 0
-      const tools = itemTrapBonus(hero)
+      const { target, penalty, tools } = trapDisable(state, hero, trap)
       const total = action.roll - penalty + tools
-      const target = trap.card.trap?.disable ?? 10
       const disabled = total >= target
       const sum = penalty || tools ? `${action.roll}${tools ? ` + ${tools}` : ''}${penalty ? ` − ${penalty}` : ''} = ${total}` : `${action.roll}`
       let next = withLog(action.free ? state : spendAttack(state, hero, `the ${trap.name}`), `${hero.name} rolled ${sum} to disable the ${trap.name} (needed ${target}).${disabled ? ' Disabled!' : ''}`)

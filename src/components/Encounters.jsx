@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { HERO_COLORS } from '../data/heroes.js'
 import { bonusWords, encounterCancelCost, foeBonus } from '../data/difficulty.js'
-import { heroItems, itemTrapBonus } from '../data/items.js'
+import { heroItems } from '../data/items.js'
 import { reactionsFor } from '../data/powerEffects.js'
 import { ENCOUNTER_LABELS, encounterCount, isWrathCheck, phaseChecks, villainInPlay } from '../state/game.js'
-import { attackBlocked, attackRolls, boardEffect, boardFound, effectWords, encounterNotes, extraEncounterReasons, firstPicks, fixedTargets, heroNames, standingHeroes, hitWords, resolveLabel, takesWords, targetQuestion } from '../state/encounterRules.js'
+import { attackBlocked, attackRolls, boardEffect, boardFound, effectWords, encounterNotes, extraEncounterReasons, firstPicks, fixedTargets, heroNames, standingHeroes, hitWords, resolveLabel, takesWords, targetQuestion, trapDisable, trapRollMods } from '../state/encounterRules.js'
 import { rollD20, shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { boardAnswer } from '../board/checks.js'
@@ -661,8 +661,7 @@ export function DisableTraps({ state, hero, dispatch }) {
   const { here, away } = trapsToDisable(state, hero)
   if (here.length + away.length === 0) return null
   const traps = anyway ? [...here, ...away] : here
-  const penalty = state.environment?.card?.trapPenalty ?? 0
-  const tools = itemTrapBonus(hero)
+  const { penalty, tools } = trapRollMods(state, hero)
   if (traps.length === 0) {
     return (
       <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl bg-zinc-950/50 p-3 text-zinc-400">
@@ -685,7 +684,7 @@ export function DisableTraps({ state, hero, dispatch }) {
       <div className="mt-2 grid grid-cols-2 gap-2">
         {traps.map((trap) => (
           <Button key={trap.id} onClick={() => dispatch({ type: 'DISABLE_TRAP', trapId: trap.id, heroId: hero.id, roll: rollD20() })}>
-            🎲 Disable the {trap.name} ({trap.card.trap?.disable ?? 10}+)
+            🎲 Disable the {trap.name} ({trapDisable(state, hero, trap).target}+)
           </Button>
         ))}
       </div>
