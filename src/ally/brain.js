@@ -22,7 +22,8 @@ import { powerNumber } from '../state/combat.js'
 import { foes } from '../state/gameHelpers.js'
 import { attackGone } from '../state/heroTurn.js'
 import { XP_TO_LEVEL_UP } from '../data/heroes.js'
-import { heroItems } from '../data/items.js'
+import { heroItems, itemTrapBonus } from '../data/items.js'
+import { boardMarkers, trapsToDisable } from '../board/markers.js'
 import { treasureInReach } from '../board/items.js'
 import { escapeBlockers } from '../state/adventure.js'
 import { escapeGoal, escapeHold, exitName, exitSquares } from '../board/exits.js'
@@ -258,6 +259,53 @@ function walkToward(state, hero, goals, say) {
 // Treasure tokens lying on the board that nobody has picked up (Hidden Treasure).
 const looseTreasure = (state) => (state.board.items ?? []).filter((i) => i.kind === 'treasure' && i.at).map((i) => i.at)
 
+
+// ---- Traps (Poisoned Dart Trap, Whirling Blades...) ----
+
+// The roll the hero needs to disable a trap, after tools (Thieves' Tools) and Kobold Trappers.
+const disableNeeds = (state, hero, trap) => (trap.card.trap?.disable ?? 10) + (state.environment?.card?.trapPenalty ?? 0) - itemTrapBonus(hero)
+// Placed traps the board knows the tile of, with the floor squares of those tiles.
+const placedTraps = (state) => boardMarkers(state).filter((m) => m.marker.type === 'trap' && m.squares.length > 0)
+
+// Who the party sends to a trap: the computer hero with the best chance (tools first),
+// Tarak the rogue among equals, then the nearest. Players' own heroes decide for themselves.
+function trapExpert(state, trapSquares) {
+  let best = null
+  for (const h of state.heroes.filter((x) => x.ally && x.hp > 0 && !x.escaped && state.board.tokens[x.id])) {
+    const steps = stepsToGoals(state, trapSquares).get(key(state.board.tokens[h.id])) ?? 99
+    const score = itemTrapBonus(h) * 10 + (h.key === 'rogue' ? 5 : 0) - steps
+    if (!best || score > best.score) best = { hero: h, score }
+  }
+  return best?.hero ?? null
+}
+
+// On a trap's tile in the Hero Phase: roll to disable it instead of attacking, unless an
+// attack would finish a monster or hit a villain (that's worth more this turn).
+export function disableTrap(state, hero, roll = d20) {
+  if (!state.board || attackGone(state, hero)) return null
+  const { here } = trapsToDisable(state, hero)
+  const placed = new Set(placedTraps(state).map((m) => m.marker.id))
+  const traps = here.filter((t) => placed.has(t.id)).sort((a, b) => disableNeeds(state, hero, a) - disableNeeds(state, hero, b))
+  const trap = traps[0]
+  if (!trap) return null
+  const best = attackOptions(state, hero)[0]
+  if (best && (best.finishes.length > 0 || best.villain)) return null
+  return { action: { type: 'DISABLE_TRAP', trapId: trap.id, heroId: hero.id, roll: roll() }, say: `${hero.name} tries to disable the ${trap.name} (needs ${Math.max(1, disableNeeds(state, hero, trap))}).` }
+}
+
+// Walking to a trap's tile to disable it: the party's trap expert, when it has nothing to
+// attack from where it stands and can still attack after the move.
+function toTrap(state, hero) {
+  const traps = placedTraps(state)
+  if (traps.length === 0 || attackGone(state, hero) || movesLeft(state, hero) < 2) return null
+  if (trapsToDisable(state, hero).here.some((t) => traps.some((m) => m.marker.id === t.id))) return null
+  const squares = traps.flatMap((m) => m.squares.filter((sq) => sq.floor).map((sq) => [sq.x, sq.y]))
+  if (trapExpert(state, squares)?.id !== hero.id) return null
+  const best = attackOptions(state, hero)[0]
+  if (best && (best.finishes.length > 0 || best.villain)) return null
+  return walkToward(state, hero, squares, `${hero.name} heads for the trap to disable it.`)
+}
+
 // Where the hero goes now, or null to stay put: next to a monster it can attack from there,
 // closer to the monsters, or on to the nearest unexplored edge when there are none.
 export function bestMove(state, hero) {
@@ -274,6 +322,9 @@ export function bestMove(state, hero) {
   // The goals are done: head for the way out, monsters or not (getting out wins the game).
   const out = exitGoal(state, hero)
   if (out) return out.here ? null : walkToward(state, hero, out.squares, `${hero.name} heads for the ${out.name}.`)
+  // A trap hurting the party: the best one at it goes to disable it.
+  const trap = toTrap(state, hero)
+  if (trap) return trap
 
   if (foeSquares.length > 0) {
     // Already attacked: stay where it is rather than walk away from the fight.
@@ -351,6 +402,8 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
     if (token && !state.treasure && !state.turn.treasureOwed && !state.turn.tokenOwed) {
       return { action: { type: 'PICK_UP_TREASURE', id: token.id, heroId: hero.id }, say: `${hero.name} picks up the Treasure token.` }
     }
+    const disable = disableTrap(state, hero, roll)
+    if (disable) return disable
     const option = attackOptions(state, hero)[0]
     if (option) return { action: attackAction(state, hero, option, roll), say: option.say }
     const move = bestMove(state, hero)
