@@ -11,6 +11,7 @@ import { WebSocketServer } from 'ws'
 import { ART_NAME, MAX_ART_BYTES } from '../src/data/art.js'
 import { createNarrator } from './narrator.js'
 import { createIdeaBox } from './ideas.js'
+import { readBody } from './readBody.js'
 import { auditionList, pickTake, takesDir } from './soundTakes.js'
 import { normalizeCardFile } from '../src/data/cards.js'
 import { missingCards } from '../src/data/cardCheck.js'
@@ -198,22 +199,6 @@ async function handleTakes(soundsDir, req, res) {
   }
   res.writeHead(200, { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store' })
   createReadStream(file).pipe(res)
-}
-
-function readBody(req, limit) {
-  return new Promise((resolve, reject) => {
-    const chunks = []
-    let size = 0
-    req.on('data', (chunk) => {
-      size += chunk.length
-      if (size > limit) {
-        reject(new Error('too big'))
-        req.destroy()
-      } else chunks.push(chunk)
-    })
-    req.on('end', () => resolve(Buffer.concat(chunks)))
-    req.on('error', reject)
-  })
 }
 
 // GET /art/<name>.jpg (or .png) serves a picture, PUT saves one, and DELETE
