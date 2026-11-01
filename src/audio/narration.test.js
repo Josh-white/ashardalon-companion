@@ -208,6 +208,7 @@ describe('heroes reading cards out loud', () => {
     expect(lines.map((l) => l.voice)).toEqual(['narrator', 'hero_paladin'])
     expect(words(lines[1].text)).toBe('You are cursed! Take 1 damage.')
     expect(lines[1]).toMatchObject({ read: true, heroId: 'h1' })
+    expect(lines[1].text).toMatch(/^\[noble, reading aloud\] /)
   })
 
   it('has the hero who found a treasure read what it does, but not the starting treasure', () => {
