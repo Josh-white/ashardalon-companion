@@ -164,6 +164,15 @@ Setup, once:
 
 The Pi checks Cloudflare's signature on every request to `FRIENDS_HOST`, and turns away any request there without one.
 
+### Adding friends from the app
+
+With a Cloudflare API token on the Pi, the family's `#friends` page lists who can sign in, adds and removes friends' emails (no trip to the Zero Trust dashboard), and can give the Cloudflare sign-in page the game's look (dark colors, the dragon icon, and a line on what to do).
+
+1. In Cloudflare, **My Profile > API Tokens > Create Token > Create Custom Token**. Give it two **Account** permissions: **Access: Apps and Policies** (Edit) and **Access: Organizations, Identity Providers, and Groups** (Edit), for your account only.
+2. Add `CF_API_TOKEN=<the token>` and `CF_ACCOUNT_ID=<your account ID>` to the game's `.env` (the account ID is in the dashboard address, `dash.cloudflare.com/<account ID>/...`), then `docker compose up -d`.
+
+The token stays in the git-ignored `.env`. Family emails (`OWNER_EMAILS`) can't be taken off the list from the page.
+
 ## A test copy
 
 A second copy of the app, with its own saved game, is handy for trying new features without touching the real game. Clone the repo into another folder and give it its own `.env`:

@@ -25,6 +25,8 @@ export default function FriendsPage() {
             Back to the game
           </a>
         </div>
+        <SignInList />
+        <h2 className="mt-8 font-display text-2xl text-amber-300">How they play</h2>
         {error && <p className="mt-3 text-red-300">{error}</p>}
         {friends === null ? (
           !error && <p className="mt-6 text-zinc-400">Loading…</p>
@@ -81,5 +83,115 @@ export default function FriendsPage() {
         )}
       </div>
     </main>
+  )
+}
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+// Who may sign in at the friends' address: the emails on the Cloudflare Access list
+// (server/signInList.js), with a way to add and remove them and to dress up the sign-in page.
+export function SignInList() {
+  const [list, setList] = useState(null)
+  const [problem, setProblem] = useState(null)
+  const [email, setEmail] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [dressed, setDressed] = useState(false)
+  const load = () =>
+    fetch('/sign-in-list.json', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((data) => {
+        setList(data)
+        setProblem(data.problem ?? null)
+      })
+      .catch(() => setProblem("Couldn't reach the Pi."))
+  useEffect(() => {
+    load()
+  }, [])
+  const send = async (method, path, body) => {
+    setBusy(true)
+    setProblem(null)
+    try {
+      const res = await fetch(path, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.problem ?? `HTTP ${res.status}`)
+      return data
+    } catch (e) {
+      setProblem(e.message)
+      return null
+    } finally {
+      setBusy(false)
+    }
+  }
+  const change = async (method, address) => {
+    const data = await send(method, '/sign-in-list', { email: address })
+    if (data) setList(data)
+    return data
+  }
+  const add = async (event) => {
+    event.preventDefault()
+    if (await change('POST', email.trim())) setEmail('')
+  }
+  const remove = (address) => window.confirm(`Take ${address} off the sign-in list? They won't be able to sign in any more.`) && change('DELETE', address)
+  const dress = async () => {
+    if (await send('POST', '/sign-in-page')) setDressed(true)
+  }
+
+  return (
+    <section className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+      <h2 className="font-display text-2xl text-amber-300">Who can sign in</h2>
+      {list === null ? (
+        <p className="mt-2 text-zinc-400">{problem ?? 'Asking Cloudflare…'}</p>
+      ) : !list.ready ? (
+        <p className="mt-2 text-zinc-400">
+          To add friends from here, put a Cloudflare API token on the Pi ({list.missing?.join(', ')} in the game's .env; see the README). Until then, add them in the
+          Cloudflare Zero Trust dashboard.
+        </p>
+      ) : (
+        <>
+          <p className="mt-1 text-sm text-zinc-400">Friends on this list can sign in at the friends' address with a code sent to their email. Invite them to a game from "Which game?".</p>
+          {list.emails.length === 0 ? (
+            <p className="mt-3 text-zinc-400">Nobody is on the list yet.</p>
+          ) : (
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {list.emails.map((e) => {
+                const family = list.owners?.includes(e)
+                return (
+                  <li key={e} className="flex items-center gap-1 rounded-full bg-zinc-800 py-1 pl-3 pr-1 text-zinc-200">
+                    {e}
+                    {family ? (
+                      <span className="px-2 text-xs text-amber-400">family</span>
+                    ) : (
+                      <button type="button" aria-label={`Take ${e} off the list`} disabled={busy} className="rounded-full px-2 text-zinc-400 hover:text-red-400" onClick={() => remove(e)}>
+                        ×
+                      </button>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+          <form className="mt-3 flex flex-wrap gap-2" onSubmit={add}>
+            <input
+              type="email"
+              aria-label="Friend's email"
+              placeholder="friend@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100"
+            />
+            <button type="submit" disabled={busy || !EMAIL.test(email.trim())} className="rounded-xl bg-amber-500 px-4 py-2 font-semibold text-zinc-950 disabled:opacity-40">
+              Add friend
+            </button>
+          </form>
+          <p className="mt-4 text-sm text-zinc-400">
+            <button type="button" disabled={busy} className="text-amber-300 underline" onClick={dress}>
+              Give the sign-in page the game's look
+            </button>{' '}
+            {dressed ? '✓ Done. Friends see the dragon and the game\'s colors when they sign in.' : '(dark colors, the dragon icon, and a line on what to do)'}
+          </p>
+        </>
+      )}
+      {problem && list !== null && <p className="mt-2 text-red-300">{problem}</p>}
+    </section>
   )
 }

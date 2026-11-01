@@ -17,6 +17,9 @@ services:
       - CF_ACCESS_TEAM=${CF_ACCESS_TEAM:-}
       - CF_ACCESS_AUD=${CF_ACCESS_AUD:-}
       - OWNER_EMAILS=${OWNER_EMAILS:-}
+      # Lets the #friends page add friends to the Cloudflare sign-in list (server/signInList.js).
+      - CF_API_TOKEN=${CF_API_TOKEN:-}
+      - CF_ACCOUNT_ID=${CF_ACCOUNT_ID:-}
       - ART_DIR=/app/art
       # The narrator's voice. The key lives only in the git-ignored .env on the Pi.
       - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY:-}

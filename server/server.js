@@ -11,6 +11,7 @@ import { WebSocketServer } from 'ws'
 import { ART_NAME, MAX_ART_BYTES } from '../src/data/art.js'
 import { createNarrator } from './narrator.js'
 import { cleanEmail, createAccess } from './access.js'
+import { createSignInList } from './signInList.js'
 import { createIdeaBox } from './ideas.js'
 import { createFriendLog } from './friendLog.js'
 import { readBody } from './readBody.js'
@@ -348,6 +349,7 @@ export function startServer({
   // ELEVENLABS_WARM_UP=off skips recording the villain lines on start (to try voices cheaply).
   warmNarrator = process.env.ELEVENLABS_WARM_UP !== 'off',
   access = null,
+  signInList = null,
 } = {}) {
   const gamesDir = join(dirname(saveFile), 'games')
   const gameListFile = join(gamesDir, 'games.json')
@@ -372,6 +374,8 @@ export function startServer({
   }
   // Who each request is: the family, or a friend signed in through Cloudflare (server/access.js).
   access ??= createAccess()
+  // Who may sign in at the friends' address, changed from the #friends page (server/signInList.js).
+  signInList ??= createSignInList()
   // The players' ideas and feedback, sent from the 💡 button (server/ideas.js).
   const ideaBox = createIdeaBox(join(dirname(saveFile), 'ideas.json'))
   // How much each friend plays, for the #friends page (server/friendLog.js).
@@ -437,7 +441,7 @@ export function startServer({
     const reading = req.method === 'GET' || req.method === 'HEAD'
     if (path.startsWith('/art/') || path.startsWith('/sound-takes')) return !reading
     if (path === '/ideas') return req.method !== 'POST'
-    return path === '/ideas.json' || path.startsWith('/ideas/') || path === '/friends.json'
+    return path === '/ideas.json' || path.startsWith('/ideas/') || path === '/friends.json' || path.startsWith('/sign-in-')
   }
 
   function respond(req, res, who) {
@@ -455,6 +459,10 @@ export function startServer({
     }
     if (!who.family && friendRefused(req)) {
       res.writeHead(403, { 'Content-Type': 'text/plain' }).end('Only the family can do that.')
+      return
+    }
+    if (req.url.startsWith('/sign-in-')) {
+      handleSignIn(req, res)
       return
     }
     if (req.url === '/me.json') {
@@ -507,6 +515,36 @@ export function startServer({
     // Friends hear only lines already recorded, so they never spend the ElevenLabs credits.
     if (narrator.handle(req, res, { recordedOnly: !who.family })) return
     serveStatic(staticDir, req, res)
+  }
+
+  // The family's #friends page: the Cloudflare sign-in list, and the sign-in page's look.
+  async function handleSignIn(req, res) {
+    const reply = (status, body) => res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(body))
+    const path = req.url.split('?')[0]
+    if (!signInList.ready) {
+      reply(path === '/sign-in-list.json' ? 200 : 409, { ready: false, missing: signInList.missing, emails: [] })
+      return
+    }
+    try {
+      if (path === '/sign-in-list.json' && req.method === 'GET') {
+        reply(200, { ready: true, emails: await signInList.emails(), owners: signInList.owners })
+        return
+      }
+      if (path === '/sign-in-list' && (req.method === 'POST' || req.method === 'DELETE')) {
+        const { email } = JSON.parse(String(await readBody(req, 1000)) || '{}')
+        const emails = req.method === 'POST' ? await signInList.add(email) : await signInList.remove(email)
+        reply(200, { ready: true, emails, owners: signInList.owners })
+        return
+      }
+      if (path === '/sign-in-page' && req.method === 'POST') {
+        reply(200, { ok: true, look: await signInList.dressSignInPage() })
+        return
+      }
+      reply(404, { problem: 'Not found.' })
+    } catch (error) {
+      console.error('Sign-in list:', error.message)
+      reply(502, { problem: error.message })
+    }
   }
 
   const wss = new WebSocketServer({ noServer: true })
