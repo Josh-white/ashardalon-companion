@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { normalizeCardFile } from '../data/cards.js'
 import { normalizeTiles } from '../board/tileDefs.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
 import Board from './Board.jsx'
+import { setAimed } from './useAimed.js'
 
 const TILES = normalizeTiles(
   [{ id: 'start', kind: 'start', rows: ['....', '....', '....', '....', '....', '....', '....', '....'], exits: { N: 'oooo', S: 'oooo', W: 'oooooooo', E: 'oooooooo' } }],
@@ -26,6 +27,7 @@ function game() {
 const token = (c, id) => c.container.querySelector(`[data-token="${id}"]`)
 
 beforeAll(() => {
+  Element.prototype.scrollTo ??= function () {}
   window.ResizeObserver ??= class {
     observe() {}
     unobserve() {}
@@ -60,5 +62,24 @@ describe('tapping a monster token', () => {
     fireEvent.click(token(mine, state.heroes[0].id))
     expect(mine.container.querySelector('[data-peek]')).toBeNull()
     expect(mine.container.querySelectorAll('rect.cursor-pointer').length).toBeGreaterThan(0) // the hero's squares light up
+  })
+})
+
+describe('a monster picked in the attack box', () => {
+  it('glows red on the board and comes into view, without changing the zoom', () => {
+    const scrolled = vi.spyOn(Element.prototype, 'scrollTo')
+    const c = render(<Board state={game()} dispatch={vi.fn()} fill calm />)
+    fireEvent.click(c.getByLabelText('Zoom in'))
+    const width = c.container.querySelector('svg[aria-label="The dungeon board"]').getAttribute('width')
+    scrolled.mockClear()
+    expect(token(c, 'm1').querySelector('[data-aimed]')).toBeNull()
+    act(() => setAimed(['m1']))
+    expect(token(c, 'm1').querySelector('[data-aimed]')).not.toBeNull()
+    expect(scrolled).toHaveBeenCalledTimes(1)
+    expect(c.container.querySelector('svg[aria-label="The dungeon board"]').getAttribute('width')).toBe(width)
+    act(() => setAimed([]))
+    expect(token(c, 'm1').querySelector('[data-aimed]')).toBeNull()
+    scrolled.mockRestore()
+    localStorage.clear()
   })
 })

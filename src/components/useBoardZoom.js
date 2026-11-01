@@ -46,7 +46,7 @@ function keepZoom(v) {
 // `fill`: the board takes the whole box it's in and starts zoomed to fit. `bounds` is the
 // dungeon's outline (boardBounds), or null before there's a board. Returns the ref for the
 // scrolling box and everything the svg and the − / + buttons need.
-export function useBoardZoom({ fill, bounds, activeId, activeAt }) {
+export function useBoardZoom({ fill, bounds, activeId, activeAt, focusId = null }) {
   // 'fit' (the whole dungeon fills the box) or how many screen pixels per board unit.
   const [kept] = useState(() => (fill ? savedZoom() : null))
   const [zoom, setZoom] = useState(kept?.zoom ?? (fill ? 'fit' : 1.6))
@@ -65,19 +65,31 @@ export function useBoardZoom({ fill, bounds, activeId, activeAt }) {
     const [w, h] = [viewW * scale, viewH * scale]
     return { left: r.left + (r.width - w) / 2, top: r.top + (r.height - h) / 2, width: w, height: h }
   }
+  // Glide the view so a figure sits in its middle.
+  const centerOn = (id) => {
+    const el = boxRef.current
+    const token = el?.querySelector(`[data-token="${id}"]`)
+    if (!token) return
+    const [b, t] = [el.getBoundingClientRect(), token.getBoundingClientRect()]
+    el.scrollTo({ left: el.scrollLeft + t.left - b.left + t.width / 2 - el.clientWidth / 2, top: el.scrollTop + t.top - b.top + t.height / 2 - el.clientHeight / 2, behavior: 'smooth' })
+  }
   // Zoomed in, keep the active hero in the middle of the view as it moves or the turn passes
   // (but not straight after a pinch, which zooms on the fingers instead).
   useEffect(() => {
     const el = boxRef.current
     if (!fill || zoom === 'fit' || !el || !activeAt || pinched.current) return
-    const token = el.querySelector(`[data-token="${activeId}"]`)
-    if (!token) return
-    const [b, t] = [el.getBoundingClientRect(), token.getBoundingClientRect()]
-    el.scrollTo({ left: el.scrollLeft + t.left - b.left + t.width / 2 - el.clientWidth / 2, top: el.scrollTop + t.top - b.top + t.height / 2 - el.clientHeight / 2, behavior: 'smooth' })
+    centerOn(activeId)
   }, [fill, zoom, activeId, activeAt]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     pinched.current = false
   }, [activeId, activeAt])
+  // A monster picked in the attack box comes to the middle of the view, at the zoom the
+  // board is at (zoomed to fit, it's already in view).
+  useEffect(() => {
+    const el = boxRef.current
+    if (!focusId || !el || zoom === 'fit') return
+    centerOn(focusId)
+  }, [focusId]) // eslint-disable-line react-hooks/exhaustive-deps
   // Two fingers zoom the board (not the whole page); one finger scrolls it.
   useEffect(() => {
     const el = boxRef.current
