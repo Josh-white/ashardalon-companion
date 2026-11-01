@@ -13,6 +13,7 @@ const Audition = lazy(() => import('./components/Audition.jsx'))
 const CardCheck = lazy(() => import('./components/CardCheck.jsx'))
 const TileCheck = lazy(() => import('./components/TileCheck.jsx'))
 const AllScreens = lazy(() => import('./components/AllScreens.jsx'))
+const FriendsPage = lazy(() => import('./components/FriendsPage.jsx'))
 
 // A pinch that misses the board would zoom the whole page on an iPad (Safari ignores the
 // viewport's no-zoom), and a zoomed page is slow and hard to get back out of. The board
@@ -25,6 +26,7 @@ createRoot(document.getElementById('root')).render(
     {/* The #tiles page draws every dungeon tile layout, to check against the real tiles. */}
     {/* The #cards page lists cards.json problems and cards the app can't find. */}
     {/* The #ideas page lists the ideas the players sent from the 💡 button. */}
+    {/* The #friends page shows how much each friend from outside plays. */}
     {/* The #screens page shows the big screen, iPads and a phone side by side, for testing. */}
     {/* A screen that breaks shows "Something went wrong" and reloads, instead of going blank. */}
     <CrashScreen>
@@ -37,6 +39,8 @@ createRoot(document.getElementById('root')).render(
           <TileCheck />
         ) : window.location.hash === '#ideas' ? (
           <IdeasPage />
+        ) : window.location.hash === '#friends' ? (
+          <FriendsPage />
         ) : window.location.hash === '#cards' ? (
           <CardCheck />
         ) : (

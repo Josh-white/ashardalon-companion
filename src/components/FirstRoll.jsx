@@ -64,8 +64,10 @@ function HeroRoll({ hero, roll, rolled, waiting, winner, big, onRoll }) {
 
 // "Roll for First Turn": right after Enter the dungeon, everyone rolls a d20 and the
 // highest roll takes the first turn. On a hero's iPad it's one big die to tap; the
-// projector shows everyone's rolls; the table screen can roll for anyone.
-export default function FirstRoll({ state, dispatch, heroId = null, big = false }) {
+// projector shows everyone's rolls; the table screen can roll for anyone. A hero's iPad
+// can also roll for a hero with no screen open (`screens`: the seats open right now), so
+// one phone alone with a demo game isn't stuck waiting for iPads that aren't there.
+export default function FirstRoll({ state, dispatch, heroId = null, big = false, screens = [] }) {
   const showing = useShowing(state)
   // Once "X goes first!" has had its few seconds, release the starting treasure.
   const held = Boolean(state.firstRoll?.winner && state.firstRoll.after)
@@ -82,6 +84,9 @@ export default function FirstRoll({ state, dispatch, heroId = null, big = false 
   const myRoll = me ? roll.rolls[me.id] : null
   const tiedNames = roll.tied ? roll.tied.heroIds.map((id) => state.heroes.find((h) => h.id === id)?.name).join(' and ') : null
   const rollFor = (id) => dispatch({ type: 'ROLL_FIRST', heroId: id, value: rollD20() })
+  // Heroes nobody is holding: no screen of their own, and not played by the computer.
+  const unheld = (hero) => hero.id !== me?.id && !hero.ally && !screens.includes(hero.key)
+  const canHelp = me && waiting.some((id) => unheld(state.heroes.find((h) => h.id === id) ?? {}))
   const skip = () => dispatch({ type: 'SKIP_FIRST_ROLL' })
 
   const banner = winner
@@ -118,6 +123,7 @@ export default function FirstRoll({ state, dispatch, heroId = null, big = false 
               </div>
               <p className="max-w-md font-display text-2xl font-bold text-amber-100">{rollWords(myRoll)}</p>
               <p className="text-zinc-400">Waiting for {waiting.map((id) => state.heroes.find((h) => h.id === id)?.name).join(', ')} to roll…</p>
+              {canHelp && <p className="text-sm text-zinc-500">Nobody else here? Roll for them below.</p>}
             </>
           ) : (
             <p className="text-zinc-400">{tiedNames ? `${tiedNames} are rolling again…` : 'Waiting for the others to roll…'}</p>
@@ -137,7 +143,7 @@ export default function FirstRoll({ state, dispatch, heroId = null, big = false 
               waiting={waiting.includes(hero.id)}
               winner={winner?.id === hero.id}
               big={big}
-              onRoll={!me && !big ? () => rollFor(hero.id) : null}
+              onRoll={!big && (!me || unheld(hero)) ? () => rollFor(hero.id) : null}
             />
           )
         })}

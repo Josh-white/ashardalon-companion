@@ -363,7 +363,7 @@ export default function App() {
   const overlays = (
     <>
       <OpeningStory state={state} dispatch={dispatch} />
-      <FirstRoll state={state} dispatch={dispatch} heroId={myHero?.id ?? null} />
+      <FirstRoll state={state} dispatch={dispatch} heroId={myHero?.id ?? null} screens={screens} />
       <MomentOverlay moment={state.moment} heroes={state.heroes} />
       <CardReading state={state} dispatch={dispatch} />
       <TapForSound locked={soundLocked} ipad={Boolean(myHero)} />
