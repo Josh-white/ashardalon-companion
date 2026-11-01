@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { allyLines, cardWords, momentLines, narrationFor as linesFor } from './narration.js'
+import { allyLines, cardWords, momentLines, narrationFor as linesFor, nextReadings } from './narration.js'
 
 // Most tests only care about the words; the cast has its own test below.
 // Stage directions like [excited] are left out, as an older voice model would.
@@ -241,6 +241,18 @@ describe('heroes reading cards out loud', () => {
   it('reads nothing for a hero with no key', () => {
     const card = { name: 'Bloodlust', text: 'Ouch.' }
     expect(momentLines({ kind: 'encounter', heroId: 'h1', title: 'Bloodlust' }, game({ encounter: { card } })).map((l) => l.voice)).toEqual(['narrator'])
+  })
+})
+
+describe('recording the next card ahead of time', () => {
+  const party = [{ id: 'h1', key: 'paladin', name: 'Keyleth' }]
+  const deck = { cards: { a: { id: 'a', name: 'Bloodlust', text: 'Ouch.' } }, draw: ['a'], discard: [] }
+  const turn = (phase, explored) => ({ status: 'playing', heroes: party, encounterDeck: deck, encounter: null, turn: { heroIndex: 0, round: 1, phase, explored } })
+
+  it('asks for the top encounter card when a Villain Phase without a new tile starts', () => {
+    expect(nextReadings(turn(1, false), turn(2, false)).map((l) => [l.voice, words(l.text)])).toEqual([['hero_paladin', 'Ouch.']])
+    expect(nextReadings(turn(2, false), turn(2, false))).toEqual([])
+    expect(nextReadings(turn(1, true), turn(2, true))).toEqual([])
   })
 })
 

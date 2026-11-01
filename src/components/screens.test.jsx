@@ -322,4 +322,19 @@ describe('encounter screen', () => {
     expect(document.body.textContent).toMatch(/rolled \d+ \+ 8 =/)
     expect(game().encounter.attacked).toBe(true)
   })
+
+  it('waits for the hero to finish reading the card before its buttons work', async () => {
+    const start = newGame()
+    const game = play({ ...start, turn: { ...start.turn, phase: 2 } }, encounterStep)
+    await loadCards()
+    tap(/Draw an encounter card/)
+    // A screen with sound on says the hero is reading the card.
+    cleanup()
+    const reading = { ...game(), reading: { heroId: game().heroes[0].id, at: null } }
+    const again = play(reading, encounterStep)
+    expect(screen.getByText(/reads the card/)).toBeTruthy()
+    // Browsers don't let anyone tap a button in a disabled fieldset.
+    expect(screen.getByRole('button', { name: /Roll the attack/ }).matches(':disabled')).toBe(true)
+    expect(again().encounter.attacked).toBe(false)
+  })
 })

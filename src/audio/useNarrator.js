@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { narrationFor } from './narration.js'
+import { narrationFor, nextReadings } from './narration.js'
 import { momentSoundMs } from './sfx.js'
 import { serverNow, useGameStates } from '../state/useSharedGame.js'
 import { TAP_EVENTS, audioContext } from './soundSetting.js'
@@ -83,6 +83,18 @@ export function useNarrator(on, { onHold, onReading } = {}) {
     hold.current = onHold
     readingHeard.current = onReading
   })
+  // Every screen hears a card is being read from the moment it's waiting here (it can take
+  // a few seconds to record the first time), until the last card waiting is read or skipped,
+  // so the encounter's buttons wait for it.
+  const told = useRef(null) // the read line the other screens were told about
+  const syncReading = useCallback(() => {
+    // A line waiting on a tap to unlock the sound could wait a long time: the board doesn't.
+    const running = audioContext()?.state === 'running'
+    const line = !running ? null : speaking?.line?.read ? speaking.line : queue.current.find((l) => l.read) ?? null
+    if (Boolean(line) === Boolean(told.current)) return
+    told.current = line
+    readingHeard.current?.(line)
+  }, [])
   // The computer allies wait while the narrator talks (not while a line waits on a tap
   // to unlock the sound: that could be a long wait).
   const busy = useRef({ on, blocked })
@@ -118,8 +130,8 @@ export function useNarrator(on, { onHold, onReading } = {}) {
       // Paused until a tap (or after a phone call on an iPad): try to start again, and
       // keep the line for after the tap if that isn't allowed yet.
       ctx.resume().then(
-        () => (ctx.state === 'running' ? playNext() : setBlocked(true)),
-        () => setBlocked(true),
+        () => (ctx.state === 'running' ? playNext() : (setBlocked(true), syncReading())),
+        () => (setBlocked(true), syncReading()),
       )
       return
     }
@@ -128,12 +140,12 @@ export function useNarrator(on, { onHold, onReading } = {}) {
     const turn = { source: null, stopped: false, line }
     speaking = turn
     setReading(Boolean(line.read))
-    if (line.read) readingHeard.current?.(line)
+    syncReading()
     const done = (said) => {
       if (speaking !== turn) return
       speaking = null
       setReading(false)
-      if (line.read) readingHeard.current?.(null)
+      syncReading()
       if (said) last = { line, at: Date.now() }
       if (line.hold && !queue.current.some((l) => l.hold === line.hold)) hold.current?.(line.hold, 'done')
       // The music waits a moment before coming back, in case another line follows.
@@ -154,16 +166,14 @@ export function useNarrator(on, { onHold, onReading } = {}) {
       },
       () => done(false),
     )
-  }, [])
+  }, [syncReading])
 
   // Skip a hero reading a card: stop it, and drop any other card waiting to be read.
   const skipNow = () => {
     queue.current = queue.current.filter((l) => !l.read)
-    if (speaking?.line?.read) {
-      stopSpeaking(audioContext())
-      readingHeard.current?.(null)
-    }
+    if (speaking?.line?.read) stopSpeaking(audioContext())
     setReading(false)
+    syncReading()
     playNext()
   }
 
@@ -183,9 +193,14 @@ export function useNarrator(on, { onHold, onReading } = {}) {
     const moment = after.moment?.id !== before?.moment?.id ? after.moment : null
     if (moment) sfxUntil = Math.max(sfxUntil, Date.now() + momentSoundMs(moment))
     if (!available || !on) return
+    // The card the hero whose turn it is would draw next gets recorded now, so it's read
+    // the moment it's drawn instead of a few seconds later.
+    const ahead = audioContext()
+    if (ahead) for (const line of nextReadings(before, after)) fetchLine(ahead, line).catch(() => {})
     const lines = narrationFor(before, after, serverNow())
     if (lines.length === 0) return
     queue.current = [...queue.current, ...lines].slice(-MAX_QUEUE)
+    syncReading()
     // Whatever waits for these lines starts waiting now, before they're even said.
     for (const name of new Set(lines.map((l) => l.hold).filter(Boolean))) hold.current?.(name, 'start')
     // Ask for every waiting line now, so the Pi records the next one (a villain's
@@ -216,7 +231,8 @@ export function useNarrator(on, { onHold, onReading } = {}) {
     if (on) return
     queue.current = []
     stopSpeaking(audioContext())
-  }, [on])
+    syncReading()
+  }, [on, syncReading])
 
   // Says lines straight away (the intro screen's line, say), outside any game change.
   // force: say them even where this screen's sound is off by default.

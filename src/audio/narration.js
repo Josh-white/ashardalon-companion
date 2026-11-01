@@ -121,6 +121,18 @@ export function cardReadings(before, after) {
   return lines.filter(Boolean)
 }
 
+// The encounter card the hero whose turn it is is about to draw: a Villain Phase without
+// a new tile always draws one, and it's the top card. The screen asks the Pi for its reading
+// then, so it's recorded (once) by the time the card is drawn, not a few seconds after.
+export function nextReadings(before, after) {
+  const due = (state) => state?.status === 'playing' && state.turn.phase === 2 && !state.turn.explored && !state.encounter
+  const top = (state) => state?.encounterDeck?.draw?.[0] ?? null
+  if (!due(after) || (due(before) && top(before) === top(after) && before.turn.heroIndex === after.turn.heroIndex)) return []
+  const card = after.encounterDeck?.cards?.[top(after)]
+  const line = card ? readsCard(after.heroes[after.turn.heroIndex], card.text) : null
+  return line ? [line] : []
+}
+
 const villainIn = (title, state) =>
   (state.villains ?? []).find((v) => title.includes(v.fullName ?? v.name) || title.includes(v.name))
 

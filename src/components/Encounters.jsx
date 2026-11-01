@@ -1,3 +1,4 @@
+import { isReading, readerName } from './CardReading.jsx'
 import { useState } from 'react'
 import { HERO_COLORS } from '../data/heroes.js'
 import { bonusWords, encounterCancelCost, foeBonus } from '../data/difficulty.js'
@@ -340,6 +341,7 @@ function EncounterCard({ state, hero, dispatch }) {
   const needsAttack = card.attack && !attacked && villainHere
 
   const autoNotes = encounterNotes(state, card, villainHere)
+  const reading = isReading(state)
 
   return (
     <div className={`mt-4 space-y-4 rounded-2xl border-2 p-4 ${TYPE_STYLES[card.type]}`}>
@@ -357,6 +359,14 @@ function EncounterCard({ state, hero, dispatch }) {
         )}
       </div>
 
+      {/* While the hero reads the card out loud, its buttons wait, so nothing happens on the
+          board before everyone has heard what the card does (Skip ends the wait). */}
+      {reading && (
+        <p data-reading-wait className="rounded-lg bg-amber-950/60 p-3 text-lg text-amber-200">
+          📖 Listen while {readerName(state, hero)} reads the card…
+        </p>
+      )}
+      <fieldset disabled={reading} className={`contents ${reading ? '[&_button]:opacity-50' : ''}`}>
       {card.noCancel && <p className="font-semibold text-amber-300">This card can’t be canceled.</p>}
       {!attacked && !card.noCancel && (
         <Button
@@ -488,6 +498,7 @@ function EncounterCard({ state, hero, dispatch }) {
           )}
         </>
       )}
+      </fieldset>
     </div>
   )
 }

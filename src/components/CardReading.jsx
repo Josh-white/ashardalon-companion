@@ -5,10 +5,14 @@ import { serverNow } from '../state/useSharedGame.js'
 // A screen closed mid-card leaves `reading` behind, so an old one is ignored.
 export const READING_STALE_MS = 90_000
 
+// Is a hero reading a card out loud on some screen right now?
+export const isReading = (state) => Boolean(state?.reading) && !(state.reading.at && serverNow() - state.reading.at > READING_STALE_MS)
+// Who's reading: the hero named, or else `fallback`.
+export const readerName = (state, fallback) => (state?.heroes?.find((h) => h.id === state?.reading?.heroId) ?? fallback)?.name ?? 'the hero'
+
 export default function CardReading({ state, dispatch, big = false }) {
-  const reading = state?.reading
-  if (!reading || (reading.at && serverNow() - reading.at > READING_STALE_MS)) return null
-  const hero = state.heroes?.find((h) => h.id === reading.heroId)
+  if (!isReading(state)) return null
+  const hero = state.heroes?.find((h) => h.id === state.reading.heroId)
   return (
     <div
       data-card-reading
