@@ -11,7 +11,7 @@ import { MonsterChoice } from './Pickers.jsx'
 import PowerList from './PowerList.jsx'
 import { StatTiles } from './StatBoosts.jsx'
 import { ItemList } from './Treasure.jsx'
-import { Button, Chip, HpBar } from './ui.jsx'
+import { Button, Chip, HpBar, LevelBadge } from './ui.jsx'
 
 // Blade Barrier and Flaming Sphere tokens deal 1 damage to the monsters you tap.
 function TokenDamage({ state, hero, source, label, prompt, many, disabled, dispatch }) {
@@ -208,7 +208,7 @@ export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, 
             <div className="mr-auto min-w-0">
               <h3 className={`truncate font-display text-xl leading-tight font-bold ${color.text}`}>
                 {hero.ally ? '🤖 ' : ''}{hero.name}
-                {hero.level >= 2 && <span className="ml-1.5 text-sm text-amber-400">★ Lv {hero.level}</span>}
+                <LevelBadge level={hero.level} />
               </h3>
               <p className="truncate text-xs text-zinc-400">
                 {hero.className}
@@ -248,7 +248,7 @@ export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, 
             <div className="mr-auto">
               <h3 className={`font-display text-2xl font-bold ${color.text}`}>
                 {hero.ally ? '🤖 ' : ''}{hero.name}
-                {hero.level >= 2 && <span className="ml-2 text-base text-amber-400">★ Lv {hero.level}</span>}
+                <LevelBadge level={hero.level} className="text-base" />
               </h3>
               <p className="text-sm text-zinc-400">
                 {hero.className}

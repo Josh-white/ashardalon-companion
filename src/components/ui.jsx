@@ -77,3 +77,13 @@ export function useConfirm() {
   )
   return [ask, dialog]
 }
+
+// A hero's level next to their name: "Lv 1" in grey, "★ Lv 2" in gold once they level up.
+export function LevelBadge({ level = 1, className = 'text-sm' }) {
+  const up = level >= 2
+  return (
+    <span className={`ml-1.5 font-sans font-semibold whitespace-nowrap ${up ? 'text-amber-400' : 'text-zinc-400'} ${className}`}>
+      {up ? '★ ' : ''}Lv {level}
+    </span>
+  )
+}
