@@ -137,11 +137,34 @@ export function PartyGlance({ state, dispatch, activeId, heroCard }) {
         const speed = speedParts(hero).total
         const attack = attackParts(hero).total
         const open = openId === hero.id
+        // Tapped open: the full card takes the short row's place (not a second copy below it),
+        // with a clear Close bar above and below so it's easy to fold back up.
+        if (open) {
+          const close = (where) => (
+            <button
+              type="button"
+              aria-expanded
+              aria-label={`Close ${hero.name}'s card`}
+              data-close-hero={where}
+              onClick={() => setOpenId(null)}
+              className={`flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-zinc-600 bg-zinc-800 text-sm font-bold ${color.text}`}
+            >
+              ▴ Close {hero.name}'s card
+            </button>
+          )
+          return (
+            <div key={hero.id} className="space-y-2">
+              {close('top')}
+              {heroCard(hero)}
+              {close('bottom')}
+            </div>
+          )
+        }
         return (
           <div key={hero.id}>
             <div className={`rounded-xl p-2 ${color.bg} ${hero.id === activeId ? 'ring-2 ring-amber-400' : ''} ${hero.hp === 0 ? 'opacity-80' : ''}`}>
               <div className="flex items-center gap-2">
-                <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-expanded={open} onClick={() => setOpenId(open ? null : hero.id)}>
+                <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-expanded={false} onClick={() => setOpenId(hero.id)}>
                   <Art name={heroArt(hero.key)} className={`w-10 shrink-0 ${hero.hp === 0 ? 'grayscale' : ''}`} />
                   <span className="min-w-0">
                     <span className={`block truncate font-display text-lg leading-tight font-bold ${color.text}`}>
@@ -155,7 +178,7 @@ export function PartyGlance({ state, dispatch, activeId, heroCard }) {
                       {stat('Atk', attack >= 0 ? `+${attack}` : `−${-attack}`, attack)}
                     </span>
                   </span>
-                  <span className="ml-auto shrink-0 text-zinc-500">{open ? '▴' : '▾'}</span>
+                  <span className="ml-auto shrink-0 text-zinc-500">▾</span>
                 </button>
                 <Button className="h-10 w-10 shrink-0 !px-0 text-xl" aria-label={`${hero.name} loses 1 HP`} onClick={() => dispatch({ type: 'ADJUST_HP', heroId: hero.id, amount: -1 })}>
                   −
@@ -174,7 +197,6 @@ export function PartyGlance({ state, dispatch, activeId, heroCard }) {
               {hero.conditions.length > 0 && <p className="mt-1 text-sm text-amber-400">{hero.conditions.join(', ')}</p>}
               <BoostBadges hero={hero} heroes={state.heroes} className="mt-1" badgeClass="px-2 py-0.5 text-xs" />
             </div>
-            {open && <div className="mt-2">{heroCard(hero)}</div>}
           </div>
         )
       })}
