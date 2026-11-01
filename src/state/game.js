@@ -197,7 +197,8 @@ function reduce(state, action) {
       // Without a hero list, the heroes come from the lobby.
       // Everyone in the lobby has to be ready first.
       if (!action.heroes && !(state.lobby ?? []).every((c) => c.ready)) return state
-      const heroes = action.heroes ?? heroesFromLobby(state.lobby ?? [], state.campaign)
+      // The computer only plays heroes on the virtual board, where it can see everything.
+      const heroes = (action.heroes ?? heroesFromLobby(state.lobby ?? [], state.campaign)).map((h) => (h.ally && !action.boardTiles ? { ...h, ally: false } : h))
       if (state.status !== 'setup' || heroes.length === 0) return state
       const card = state.campaign?.card ?? state.lobbyAdventure
       // A campaign's adventure needs every hero of the campaign, and only them.
@@ -424,9 +425,17 @@ function reduce(state, action) {
       const previous = lobby.find((c) => c.deviceId === action.deviceId)
       const slots = levelSlots(template, saved?.level)
       const picks = slots.map((_, i) => copyCard((saved ? saved.picks : action.picks)?.[i]))
-      const claim = { deviceId: action.deviceId, heroKey: template.key, player: saved?.player ?? previous?.player ?? String(action.player ?? '').slice(0, 40), picks, ready: false }
+      // A computer ally (src/ally/) is ready straight away, with the suggested powers.
+      const ally = action.ally === true
+      const player = ally ? '' : saved?.player ?? previous?.player ?? String(action.player ?? '').slice(0, 40)
+      const claim = { deviceId: action.deviceId, heroKey: template.key, player, picks, ready: ally, ...(ally ? { ally: true } : {}) }
       return { ...state, lobby: [...lobby.filter((c) => c.deviceId !== action.deviceId), claim] }
     }
+
+    // The solo screen hands one of its heroes to the computer (src/ally/), or takes it back.
+    case 'SET_LOBBY_ALLY':
+      if (state.status !== 'setup') return state
+      return updateClaim(state, action.deviceId, () => ({ ally: Boolean(action.ally) }))
 
     case 'RELEASE_HERO':
       return { ...state, lobby: (state.lobby ?? []).filter((c) => c.deviceId !== action.deviceId) }
@@ -1012,6 +1021,29 @@ function reduce(state, action) {
 
     case 'RESUME':
       return { ...state, status: 'playing', ending: null }
+
+    // A hero handed to the computer, or taken back (src/ally/). Only on the virtual board,
+    // where the computer can see where everything is.
+    case 'SET_ALLY': {
+      const hero = state.heroes.find((h) => h.id === action.heroId)
+      const ally = Boolean(action.ally)
+      if (state.status !== 'playing' || !state.board || !hero || Boolean(hero.ally) === ally) return state
+      const next = updateHero(state, hero.id, () => ({ ally }))
+      const text = ally ? `🤖 The computer is playing ${hero.name} now.` : `${heroLabel(hero)} is playing ${hero.name} again.`
+      return withLog({ ...next, allyPaused: ally ? false : next.allyPaused, turn: { ...next.turn, allyHelp: null } }, text)
+    }
+
+    // Holding the computer allies still (a player wants to play the ally's turn by hand).
+    case 'ALLY_PAUSE':
+      if (Boolean(state.allyPaused) === Boolean(action.paused)) return state
+      return { ...state, allyPaused: Boolean(action.paused), turn: { ...state.turn, allyHelp: null } }
+
+    // The ally couldn't work out what to do: every screen offers to tap for it.
+    case 'ALLY_HELP': {
+      const reason = typeof action.reason === 'string' ? action.reason.slice(0, 200) : null
+      if ((state.turn.allyHelp ?? null) === reason) return state
+      return { ...state, turn: { ...state.turn, allyHelp: reason } }
+    }
 
     case 'TRY_AGAIN':
       return tryAgain(state, action)

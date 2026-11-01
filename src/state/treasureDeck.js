@@ -33,7 +33,8 @@ export function drawTreasure(state, action) {
   if (!hero || state.treasure) return state
   const withDeck = state.treasureDeck ? state : { ...state, treasureDeck: buildDeck(action.cards, action.random) }
   const drawn = drawTop(withDeck.treasureDeck, action.random)
-  if (!drawn) return withLog(state, 'There are no treasure cards left to draw.')
+  // An empty deck owes nothing more, so the turn can go on.
+  if (!drawn) return withLog({ ...state, turn: { ...state.turn, treasureOwed: null } }, 'There are no treasure cards left to draw.')
   const card = drawn.deck.cards[drawn.cardId]
   if (!card) return state
   let next = {

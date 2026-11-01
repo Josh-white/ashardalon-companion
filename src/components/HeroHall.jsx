@@ -30,7 +30,8 @@ function Torch({ lit }) {
 // shadow while they choose powers and blazes up when they tap Ready.
 // `onFree(claim)`: frees a hero whose iPad has gone away (closed, or put down for the night),
 // so another iPad can pick them. `levelOf(heroKey)`: a campaign hero's level, for their abilities.
-export function HeroHall({ heroes, lobby, records = null, onFree = null, levelOf = () => 1 }) {
+// `onAlly(template)`: the computer plays a hero nobody picked (on the virtual board).
+export function HeroHall({ heroes, lobby, records = null, onFree = null, onAlly = null, levelOf = () => 1 }) {
   const [ask, dialog] = useConfirm()
   const free = (claim, template) =>
     ask(
@@ -76,17 +77,30 @@ export function HeroHall({ heroes, lobby, records = null, onFree = null, levelOf
             <span className="text-center text-[1.2vw] text-zinc-400">
               {claim ? (
                 <>
-                  {claim.player || template.className}
+                  {claim.ally ? '🤖 Computer' : claim.player || template.className}
                   <PlayerTitle records={records} name={claim.player} className="mx-auto mt-[0.3vw] block w-fit text-[1vw]" />
                   {!ready && <span className="block text-amber-400">Choosing powers…</span>}
-                  {onFree && (
-                    <button type="button" className="mt-[0.4vw] block w-full text-[0.9vw] text-zinc-500 underline" onClick={() => free(claim, template)}>
-                      Free this hero
+                  {claim.ally && onFree ? (
+                    <button type="button" className="mt-[0.4vw] block w-full text-[0.9vw] text-zinc-500 underline" onClick={() => onFree(claim)}>
+                      Leave {template.name} out
                     </button>
+                  ) : (
+                    onFree && (
+                      <button type="button" className="mt-[0.4vw] block w-full text-[0.9vw] text-zinc-500 underline" onClick={() => free(claim, template)}>
+                        Free this hero
+                      </button>
+                    )
                   )}
                 </>
               ) : (
-                'Waiting…'
+                <>
+                  Waiting…
+                  {onAlly && (
+                    <button type="button" className="mt-[0.4vw] block w-full rounded-[0.6vw] border border-sky-800 bg-sky-950/60 px-[0.5vw] py-[0.3vw] text-[1vw] text-sky-200" onClick={() => onAlly(template)}>
+                      🤖 Computer plays {template.name}
+                    </button>
+                  )}
+                </>
               )}
             </span>
             <HeroAbilities template={template} level={levelOf(template.key)} dim={!claim} className="mt-[0.3vw] text-[1.05vw] leading-snug" />

@@ -40,6 +40,8 @@ import { PHASES } from './data/phases.js'
 import { activeVillains, encounterCardsOutdated } from './state/game.js'
 import { shuffleNumbers } from './state/random.js'
 import { useCards } from './state/useCards.js'
+import AllyPanel, { AllyPause } from './ally/AllyPanel.jsx'
+import { allyHostSeat } from './ally/brain.js'
 import { FAMILY_GAME, useDeviceId, useGameChoice, useScreenRole, useSeat, useSharedGame } from './state/useSharedGame.js'
 
 const TABLE_SEAT = 'table'
@@ -141,6 +143,29 @@ function WaitingBanner({ state }) {
   )
 }
 
+// On the iPads that aren't playing the ally: what the computer is up to, and its pause switch.
+function AllyWatch({ state, dispatch }) {
+  const hero = state.heroes[state.turn.heroIndex]
+  return (
+    <section className="rounded-2xl border border-sky-800 bg-sky-950/60 p-3">
+      <p className="font-semibold text-sky-200">🤖 The computer is playing {hero.name}.</p>
+      {state.log[0] && <p className="mt-1 text-zinc-300">{state.log[0].text}</p>}
+      <AllyPause state={state} dispatch={dispatch} className="mt-2 w-full" />
+    </section>
+  )
+}
+
+// Hands a hero to the computer (a player who's had enough for tonight), or takes them back.
+// Only on the virtual board, where the computer can see where everything is.
+function AllyToggle({ state, dispatch, hero }) {
+  if (!state.board || !hero || state.status !== 'playing') return null
+  return (
+    <Button variant="ghost" className="w-full border border-zinc-800 text-sm" onClick={() => dispatch({ type: 'SET_ALLY', heroId: hero.id, ally: !hero.ally })}>
+      {hero.ally ? `🙋 I'll play ${hero.name} again` : `😴 Let the computer play ${hero.name}`}
+    </Button>
+  )
+}
+
 // Every hero in the party at a glance, yours marked, whoever's turn it is ringed.
 function PartyStrip({ heroes, meId, activeId }) {
   return (
@@ -152,7 +177,7 @@ function PartyStrip({ heroes, meId, activeId }) {
             <div className="flex items-center gap-2">
               <Art name={heroArt(hero.key)} className="w-10 shrink-0" />
               <span className="min-w-0">
-                <span className={`block font-display text-lg leading-tight font-bold ${HERO_COLORS[hero.color].text}`}>{hero.name}</span>
+                <span className={`block font-display text-lg leading-tight font-bold ${HERO_COLORS[hero.color].text}`}>{hero.ally ? '🤖 ' : ''}{hero.name}</span>
                 {(hero.id === meId || hero.id === activeId) && (
                   <span className="block text-sm text-zinc-300">
                     {hero.id === meId && 'You'}
@@ -216,7 +241,7 @@ function PartyGlance({ state, dispatch, activeId, heroCard }) {
                   <Art name={heroArt(hero.key)} className={`w-10 shrink-0 ${hero.hp === 0 ? 'grayscale' : ''}`} />
                   <span className="min-w-0">
                     <span className={`block truncate font-display text-lg leading-tight font-bold ${color.text}`}>
-                      {hero.name}
+                      {hero.ally ? '🤖 ' : ''}{hero.name}
                       {hero.id === activeId && <span className="ml-1.5 font-sans text-xs font-normal text-amber-300">turn now</span>}
                     </span>
                     <span className="flex gap-2 text-sm">
@@ -309,9 +334,13 @@ function usePlayTabs(state, heroId, myTurn) {
 // Quest, Log, the same everywhere) and, on the virtual board, the board always in view above
 // them (beside them on a wide or unfolded screen). `hero` is this iPad's hero; without one
 // it's the table screen, which plays every hero.
-function PlayView({ state, dispatch, hero = null, soundBoard = null }) {
+function PlayView({ state, dispatch, hero = null, soundBoard = null, allyHost = false }) {
   const active = state.heroes[state.turn.heroIndex]
-  const myTurn = hero ? hero.id === active?.id : true
+  // The computer plays this turn (src/ally/). The screen that plays it shows its turn; the
+  // others show what it's doing, and its turn too when someone has to help or paused it.
+  const allyTurn = Boolean(active?.ally)
+  const helping = allyTurn && Boolean(state.allyPaused || state.turn.allyHelp)
+  const myTurn = hero ? hero.id === active?.id && !allyTurn : true
   const [tab, setTab, badges, resetKey] = usePlayTabs(state, hero?.id ?? null, myTurn)
   // The turn column jumps back to the top when the Turn tab does (a new phase, your turn
   // starting or ending), and only then, so it never jumps while someone is reading.
@@ -350,15 +379,26 @@ function PlayView({ state, dispatch, hero = null, soundBoard = null }) {
     turn: hero ? (
       <>
         {myTurn && <SinceLastTurn state={state} hero={hero} />}
-        {myTurn ? <TurnGuide state={state} dispatch={dispatch} /> : <WaitingBanner state={state} />}
+        {allyTurn && (allyHost || helping) ? (
+          <AllyPanel state={state} dispatch={dispatch} drive={allyHost} treasure />
+        ) : myTurn ? (
+          <TurnGuide state={state} dispatch={dispatch} />
+        ) : (
+          <>
+            <WaitingBanner state={state} />
+            {allyTurn && <AllyWatch state={state} dispatch={dispatch} />}
+          </>
+        )}
         {/* Cause Fear gives other heroes an attack during someone else's turn. */}
         {!myTurn && <ExtraAttacks state={state} dispatch={dispatch} onlyHeroId={hero.id} />}
+        <AllyToggle state={state} dispatch={dispatch} hero={hero} />
         {heroCard(hero, true)}
         <HeroCheatCard hero={hero} />
       </>
     ) : (
       <>
-        <TurnGuide state={state} dispatch={dispatch} />
+        {allyTurn ? <AllyPanel state={state} dispatch={dispatch} drive={allyHost} /> : <TurnGuide state={state} dispatch={dispatch} />}
+        <AllyToggle state={state} dispatch={dispatch} hero={active} />
         {active && heroCard(active)}
         {active && <HeroCheatCard key={`cheat-${active.id}`} hero={active} />}
       </>
@@ -404,7 +444,7 @@ function PlayView({ state, dispatch, hero = null, soundBoard = null }) {
           dispatch={dispatch}
           fill
           calm
-          readOnly={Boolean(hero) && !myTurn && !state.turn.boardMove}
+          readOnly={Boolean(hero) && !myTurn && !state.turn.boardMove && !helping}
           extraButtons={
             <Button className="min-h-10 min-w-10 !px-2 !py-1 text-sm md:hidden" onClick={() => setBigBoard(!bigBoard)} aria-label={bigBoard ? 'Smaller board' : 'Bigger board'}>
               {bigBoard ? '⤒' : '⤓'}
@@ -621,12 +661,14 @@ export default function App() {
   }
 
   const myHero = state.heroes.find((h) => h.key === seat)
+  // The one open screen that plays the computer allies' turns.
+  const allyHost = Boolean(seat) && allyHostSeat(screens) === seat
   if (seat === PROJECTOR_SEAT) {
     return (
       <main className="isolate min-h-screen bg-zinc-950 text-zinc-100">
         <AreaBackdrop state={state} />
         {banners}
-        <ProjectorView state={state} dispatch={dispatch} onSwitchSeat={() => setSeat(null)} sound={sound} />
+        <ProjectorView state={state} dispatch={dispatch} onSwitchSeat={() => setSeat(null)} sound={sound} allyHost={allyHost} />
         <BoardToast state={state} big />
         <OpeningStory state={state} dispatch={dispatch} big />
         <FirstRoll state={state} dispatch={dispatch} big />
@@ -690,6 +732,7 @@ export default function App() {
       <PlayView
         state={state}
         dispatch={dispatch}
+        allyHost={allyHost}
         hero={myHero ?? null}
         soundBoard={<SoundBoard state={state} dispatch={dispatch} who={who} testCopy={Boolean(instance)} className="absolute bottom-3 left-3" />}
       />

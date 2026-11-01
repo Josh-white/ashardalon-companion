@@ -69,7 +69,7 @@ export function heroesFromLobby(lobby, campaign = null) {
     const saved = (campaign?.heroes ?? []).find((h) => h.key === template.key)
     let hero = createHero(template)
     while (hero.level < Math.min(saved?.level ?? 1, MAX_LEVEL)) hero = { ...hero, ...nextLevel(hero) }
-    return [{ ...withPicks(hero, claim.picks), player: claim.player }]
+    return [{ ...withPicks(hero, claim.picks), player: claim.player, ...(claim.ally ? { ally: true } : {}) }]
   })
 }
 
