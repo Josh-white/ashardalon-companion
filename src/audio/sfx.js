@@ -1,8 +1,9 @@
 import { useEffect } from 'react'
 import { serverNow, useGameStates } from '../state/useSharedGame.js'
 import { audioContext } from './soundSetting.js'
-import { loadSamples, playSample, sampleMs } from './samples.js'
+import { isLoop, loadSamples, playSample, sampleMs } from './samples.js'
 import { layer } from './mixer.js'
+import { soundPlaying } from './busy.js'
 import { effectsOf } from '../data/powerEffects.js'
 import { newArrivals } from './narration.js'
 import { POWER_SPELLS, powerKey, spellKind } from './spellKind.js'
@@ -339,6 +340,8 @@ export function playSound(ctx, wanted, at) {
 function schedule(ctx, sounds) {
   const start = ctx.currentTime + 0.02
   for (const [sound, delay] of sounds) playSound(ctx, sound, start + delay / 1000)
+  // How long until the last of them ends (loops don't count: they go on under the game).
+  soundPlaying(Math.max(0, ...sounds.filter(([sound]) => !isLoop(sound)).map(([sound, delay]) => delay + soundMs(sound))))
 }
 
 // How long a paused page may take to start its sound again and still play the moment.

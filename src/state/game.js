@@ -628,7 +628,9 @@ function reduce(state, action) {
       if (action.drawKey && state.turn.monsterDraws?.[action.drawKey] !== undefined) return state
       const withDeck = state.monsterDeck ? state : { ...state, monsterDeck: buildDeck(action.cards, action.random) }
       const drawn = drawMonster(withDeck, action.heroId, action.random)
-      if (!action.drawKey || drawn.monsterDeck === withDeck.monsterDeck) return drawn
+      if (!action.drawKey) return drawn
+      // No card left to draw: that draw is done, with no monster.
+      if (drawn.monsterDeck === withDeck.monsterDeck) return { ...drawn, turn: { ...drawn.turn, monsterDraws: { ...drawn.turn.monsterDraws, [action.drawKey]: 'none' } } }
       const added = drawn.monsters.length > state.monsters.length ? drawn.monsters[drawn.monsters.length - 1].name : 'none'
       return { ...drawn, turn: { ...drawn.turn, monsterDraws: { ...drawn.turn.monsterDraws, [action.drawKey]: added } } }
     }

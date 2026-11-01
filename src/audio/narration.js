@@ -5,7 +5,7 @@
 // The cast (the Pi's server/narrator.js picks the actual ElevenLabs voice for each):
 // narrator tells the story, herald cheers the heroes on, danger brings bad news,
 // and each villain speaks for itself in its own voice.
-import { COACHES } from '../data/coaches.js'
+import { allyLine, COACHES } from '../data/coaches.js'
 import { templateFor } from '../data/heroes.js'
 import { VILLAIN_DEFAULT, VILLAIN_LINES } from '../data/villainLines.js'
 
@@ -98,6 +98,8 @@ export function momentLines(moment, state) {
     }
     case 'treasure':
       return [say('herald', `${CHEER} Treasure! ${moment.title}`)]
+    case 'join':
+      return [say('herald', `${CHEER} ${heroName(hero)} joins the party!`)]
     case 'level':
       return [say('herald', `${CHEER} ${moment.title} All hail ${hero?.name ?? 'the hero'}!`)]
     case 'defeat': {
@@ -146,6 +148,24 @@ export const previouslyLine = (last) =>
   last.won
     ? say('narrator', `${STORY} Previously… the heroes conquered ${chamberPlace(last.chamber)}. But greater dangers still wait below.`)
     : say('narrator', `${STORY} Previously… the heroes were driven back from ${chamberPlace(last.chamber)}. They return, wiser and warier.`)
+
+// The coach of a hero the computer plays (src/ally/) speaks up when it takes the hero
+// over or hands it back, when it needs the players' help, and when the hero beats a monster.
+export function allyLines(before, after, now = Date.now()) {
+  if (before.status !== 'playing' || after.status !== 'playing') return []
+  const lines = []
+  for (const hero of after.heroes) {
+    const was = before.heroes.find((h) => h.id === hero.id)
+    if (Boolean(was?.ally) !== Boolean(hero.ally) && (was || hero.ally)) lines.push(allyLine(hero.key, hero.ally ? 'take' : 'back'))
+  }
+  const active = after.heroes[after.turn.heroIndex]
+  if (!active?.ally) return lines
+  if (after.turn.allyHelp && !before.turn.allyHelp) lines.push(allyLine(active.key, 'help'))
+  const moment = after.moment
+  const fresh = moment && moment.id !== before.moment?.id && now - moment.at < STALE_MS
+  if (fresh && moment.kind === 'defeat' && /defeated|destroyed/i.test(moment.title ?? '')) lines.push(allyLine(active.key, 'defeat'))
+  return lines
+}
 
 export function narrationFor(before, after, now = Date.now()) {
   if (!before || !after) return []
@@ -196,6 +216,7 @@ export function narrationFor(before, after, now = Date.now()) {
     lines.push(...momentLines(moment, after))
   }
   lines.push(...villainCallLines(before, after, now, lines))
+  lines.push(...allyLines(before, after, now))
   if (rollOver && after.status === 'playing' && after.turn.phase === 0 && after.heroes[after.turn.heroIndex]) lines.push(turnLine(after.heroes[after.turn.heroIndex]))
   if (before.status !== after.status && after.status === 'won' && !newStory) lines.push(say('herald', `${CHEER} Victory! The heroes have triumphed. Songs will be sung of this day!`))
   if (before.status !== after.status && after.status === 'lost') lines.push(say('narrator', '[somber, tragic] Alas… the heroes have fallen. The dungeon claims another party.'))

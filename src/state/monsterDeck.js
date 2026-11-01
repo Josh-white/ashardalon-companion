@@ -38,7 +38,10 @@ export function drawMonster(state, heroId, random) {
   while (cardId === null) {
     if (draw.length === 0) {
       if (discard.length === 0 || reshuffled) {
-        return withLog(state, `There's no monster card left that ${hero.name} doesn't already have.`)
+        // Nothing to draw: no monster comes, and the turn goes on (the draw counts as done).
+        const exploring = PHASES[state.turn.phase]?.key === 'exploration' && state.heroes[state.turn.heroIndex]?.id === hero.id
+        const done = { ...state, turn: exploring ? { ...state.turn, monsterDrawn: true } : state.turn, encounter: state.encounter ? { ...state.encounter, monsterDrawn: true } : state.encounter }
+        return withLog(done, `There's no monster card left that ${hero.name} doesn't already have, so no monster comes this time.`)
       }
       draw = shuffle(discard, random)
       discard = []

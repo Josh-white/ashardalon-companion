@@ -2,7 +2,7 @@
 // server/record-narration.js records them all once, so the narrator can keep
 // playing them after the ElevenLabs key is gone. The lines come from the same
 // functions the projector uses, so the words match exactly.
-import { coachLine } from '../data/coaches.js'
+import { ALLY_LINES, allyLine, coachLine } from '../data/coaches.js'
 import { heroTemplates } from '../data/heroes.js'
 import { VILLAIN_LINES } from '../data/villainLines.js'
 import { INTRO_LINE, firstTurnLine, momentLines, narrationFor, previouslyLine } from './narration.js'
@@ -27,6 +27,8 @@ export function narrationScript(cards) {
     const line = coachLine(hero.key)
     if (line) lines.push(line)
   }
+  // What each coach says while the computer plays their hero.
+  for (const hero of templates) for (const when of Object.keys(ALLY_LINES[hero.key] ?? {})) lines.push(allyLine(hero.key, when))
   // Who won the roll for first turn, and the Chronicle's look back between campaign adventures.
   for (const hero of heroes) lines.push(firstTurnLine(hero))
   for (const won of [true, false]) {
@@ -57,6 +59,7 @@ export function narrationScript(cards) {
     moment({ kind: 'crit', heroId: hero.id, value: 20, title: 'NATURAL 20!' })
     moment({ kind: 'fumble', heroId: hero.id, value: 1, title: 'Oops… a 1' })
     moment({ kind: 'level', heroId: hero.id, title: `${hero.name} reached level 2!` })
+    moment({ kind: 'join', heroId: hero.id, title: `${hero.name} joins the party!` })
     moment({ kind: 'down', title: `${hero.name} is down!` })
     moment({ kind: 'defeat', heroId: hero.id, title: `${hero.name}: attack!` })
     moment({ kind: 'encounter', heroId: hero.id, title: `${hero.name} is back!` })
