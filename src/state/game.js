@@ -496,13 +496,19 @@ function reduce(state, action) {
       }
       // Keyleth's Healing Hands: her own surge heals 1 more. Anyone else's is offered,
       // since only the players know who is on Keyleth's tile.
+      // JJ's house rule (2026-11-01): getting back up with a surge clears every condition
+      // (Poisoned, Dazed and the rest) and every curse, so no poison or curse damage lands.
       const own = hasAbility(hero, 'healing-hands') ? 1 : 0
+      const cleared = hero.conditions ?? []
       let healed = updateHero({ ...state, surges: state.surges - 1 }, hero.id, (h) => ({
         hp: Math.min(h.maxHp, h.surgeValue + own),
+        conditions: [],
       }))
       if (!own && heroWith(state, 'healing-hands')) healed = addOffer(healed, 'healingHands', hero.id)
       healed = offerSavingGrace(healed, hero)
-      const logged = withLog(healed, `${hero.name} used a healing surge${own ? ', +1 HP from Healing Hands' : ''}.`)
+      let logged = withLog(healed, `${hero.name} used a healing surge${own ? ', +1 HP from Healing Hands' : ''}.`)
+      if (cleared.length) logged = withLog(logged, `${hero.name} is no longer ${cleared.join(' or ')}.`)
+      for (const curse of hero.curses ?? []) logged = removeCurse(logged, hero.id, curse.id, `${hero.name}'s ${curse.name} curse is over.`)
       if (state.turn.startDamageDue !== hero.id) return logged
       const { startDamageDue: _, ...turn } = logged.turn
       return startDamage({ ...logged, turn }, logged.heroes.find((h) => h.id === hero.id))
