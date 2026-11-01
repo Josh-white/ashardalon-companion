@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { stayedOnBoard } from '../board/play.js'
 import { figuresInRange, foeDistance, foesInRange, powerRange } from '../board/monsters.js'
 import { hypnotized } from '../board/powerMoves.js'
-import { hasSecondChance } from '../data/difficulty.js'
+import { difficultyOf, hasSecondChance } from '../data/difficulty.js'
 import { asksIfStayed, attackItems, distanceChoices, heroItems, itemsWithUse } from '../data/items.js'
 import { effectsOf, maxRolls, reactionsFor } from '../data/powerEffects.js'
 import { rollD20 } from '../state/random.js'
@@ -210,7 +210,7 @@ export function AttackAftermath({ state, last, dispatch }) {
             className="w-full"
             onClick={() => dispatch({ type: 'REROLL_ATTACK', helperId: hero.id, secondChance: true, monsterId: row.monsterId, roll: rollD20() })}
           >
-            😊 Second chance: roll again against the {row.label} (once this adventure)
+            😊 Second chance: roll again against the {row.label} (once this {difficultyOf(state.difficulty).rerollEachTurn ? 'turn' : 'adventure'})
           </Button>
         ))}
       {once(furiousRows).map((row) => (

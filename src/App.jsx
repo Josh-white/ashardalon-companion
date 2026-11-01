@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AdventurePanel } from './components/Adventure.jsx'
+import { AdventurePanel, DifficultySwitch } from './components/Adventure.jsx'
 import Art from './components/Art.jsx'
 import ArtScreen from './components/ArtScreen.jsx'
 import { AreaBackdrop, AreaName } from './components/AreaBackdrop.jsx'
@@ -79,6 +79,7 @@ function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitchSeat, s
           <SoundToggle on={sound.on} setOn={sound.setOn} elsewhere={sound.elsewhere} className="text-sm" />
           <MusicToggle on={sound.musicOn} setOn={sound.setMusicOn} soundOn={sound.on} className="text-sm" />
           {boardSwitch && <BoardSwitch state={state} dispatch={dispatch} className="text-sm" />}
+          <DifficultySwitch state={state} dispatch={dispatch} className="text-sm" />
           <Button variant="ghost" className="text-sm" onClick={onSwitchSeat}>
             {seatLabel} · switch
           </Button>
@@ -463,6 +464,7 @@ function SoloBar({ state, dispatch, undo, undoDepth, onSwitchSeat, sound, seatLa
             <MusicToggle on={sound.musicOn} setOn={sound.setMusicOn} soundOn={sound.on} className="text-sm" />
             {boardSwitch && <BoardSwitch state={state} dispatch={dispatch} className="text-sm" />}
           </div>
+          <DifficultySwitch state={state} dispatch={dispatch} place="inline" className="text-sm" />
           <div className="flex flex-wrap gap-2">
             <Button className="text-sm" onClick={() => dispatch({ type: 'END_GAME', result: 'won' })}>We won!</Button>
             <Button

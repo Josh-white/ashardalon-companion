@@ -6,6 +6,7 @@ import { monsterArt } from '../data/art.js'
 import { PHASES } from '../data/phases.js'
 import { tileAcBonus, tileGuards } from '../data/items.js'
 import { effectsOf, heroAc } from '../data/powerEffects.js'
+import { bonusWords, foeBonus } from '../data/difficulty.js'
 import { bottomToTop } from './tiles.js'
 import { aliveVillagers, countDefeat, showStory, villagerForRoll } from './adventure.js'
 import { placeNear, placeToken } from '../board/play.js'
@@ -62,7 +63,7 @@ export function monsterAttack(state, action) {
   for (const { heroId, roll } of targets) {
     const hero = next.heroes.find((h) => h.id === heroId)
     const ac = targetAc(next, hero, action.tileGuarded)
-    const total = roll + attack.bonus
+    const total = roll + foeBonus(next, attack)
     const hit = total >= ac
     const damage = hit ? attack.damage : attack.miss
     const conditions = hit ? attack.conditions.filter((c) => !hero.conditions.includes(c)) : []
@@ -72,10 +73,10 @@ export function monsterAttack(state, action) {
     const result = [damage > 0 && `${damage} damage`, ...conditions].filter(Boolean).join(' and ')
     const outcome = hit ? `Hit! ${result || 'No damage'}` : damage > 0 ? `Miss, but ${result}` : 'Miss!'
     rolls.push({ heroId: hero.id, value: roll, total, ac, hit, outcome })
-    results.push({ heroId: hero.id, value: roll, total, ac, hit, dealt: hero.hp - hp, miss: attack.miss, conditions, effect: attack.effect })
+    results.push({ heroId: hero.id, value: roll, bonus: total - roll, total, ac, hit, dealt: hero.hp - hp, miss: attack.miss, conditions, effect: attack.effect })
     next = withLog(
       next,
-      `The ${monster.name} attacked ${hero.name} with its ${attack.name}: rolled ${roll} + ${attack.bonus} = ${total} against AC ${ac}. ${outcome}`,
+      `The ${monster.name} attacked ${hero.name} with its ${attack.name}: rolled ${roll} ${bonusWords(next, attack)} = ${total} against AC ${ac}. ${outcome}`,
     )
     // Each miss against Mirror Image pops one of the images.
     if (!hit && hero.tokens?.mirrorImage > 0) {
@@ -85,14 +86,14 @@ export function monsterAttack(state, action) {
   }
   for (const { heroId, roll } of villagerTargets) {
     const villager = next.villagers.find((v) => v.id === heroId)
-    const total = roll + attack.bonus
+    const total = roll + foeBonus(next, attack)
     const hit = total >= villager.ac
     const damage = hit ? attack.damage : attack.miss
     const hp = clamp(villager.hp - damage, 0, villager.maxHp)
     const outcome = hit ? `Hit! ${damage} damage` : damage > 0 ? `Miss, but ${damage} damage` : 'Miss!'
     rolls.push({ heroId: villager.id, value: roll, total, ac: villager.ac, hit, outcome })
-    results.push({ heroId: villager.id, villager: true, value: roll, total, ac: villager.ac, hit, dealt: villager.hp - hp, miss: attack.miss, conditions: [], effect: attack.effect })
-    next = withLog(next, `The ${monster.name} attacked the villager ${villager.name} with its ${attack.name}: rolled ${roll} + ${attack.bonus} = ${total} against AC ${villager.ac}. ${outcome}`)
+    results.push({ heroId: villager.id, villager: true, value: roll, bonus: total - roll, total, ac: villager.ac, hit, dealt: villager.hp - hp, miss: attack.miss, conditions: [], effect: attack.effect })
+    next = withLog(next, `The ${monster.name} attacked the villager ${villager.name} with its ${attack.name}: rolled ${roll} ${bonusWords(next, attack)} = ${total} against AC ${villager.ac}. ${outcome}`)
     next = hurtVillager(next, villager, hp)
     if (hp === 0) downed.push(villager.name)
   }
@@ -192,7 +193,7 @@ export function attackHeroes(state, { who, attack, targets: list, moment, tileGu
   for (const { heroId, roll } of targets) {
     const hero = next.heroes.find((h) => h.id === heroId)
     const ac = targetAc(next, hero, tileGuarded)
-    const total = roll + attack.bonus
+    const total = roll + foeBonus(next, attack)
     const hit = total >= ac
     const damage = hit ? attack.damage : attack.miss
     const conditions = (hit ? attack.conditions : attack.missConditions ?? []).filter((c) => !hero.conditions.includes(c))
@@ -203,7 +204,7 @@ export function attackHeroes(state, { who, attack, targets: list, moment, tileGu
     const outcome = hit ? `Hit! ${result || 'No damage'}` : result ? `Miss, but ${result}` : 'Miss!'
     rolls.push({ heroId: hero.id, value: roll, total, ac, hit, outcome })
     results.push({ heroId: hero.id, hit, dealt: hero.hp - hp, conditions, miss: attack.miss, missConditions: attack.missConditions ?? [] })
-    next = withLog(next, `${who} attacked ${hero.name}: rolled ${roll} + ${attack.bonus} = ${total} against AC ${ac}. ${outcome}`)
+    next = withLog(next, `${who} attacked ${hero.name}: rolled ${roll} ${bonusWords(next, attack)} = ${total} against AC ${ac}. ${outcome}`)
     // Each miss against Mirror Image pops one of the images.
     if (!hit && hero.tokens?.mirrorImage > 0) {
       next = updateHero(next, hero.id, (h) => ({ tokens: { ...h.tokens, mirrorImage: h.tokens.mirrorImage - 1 } }))

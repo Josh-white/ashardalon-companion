@@ -8,7 +8,7 @@ import { BoostBadges } from './StatBoosts.jsx'
 import { heroAc } from '../data/powerEffects.js'
 import { moveSpeed } from '../board/play.js'
 import { activeVillains } from '../state/game.js'
-import { ProjectorAdventure } from './Adventure.jsx'
+import { DifficultySwitch, ProjectorAdventure } from './Adventure.jsx'
 import { TilesLeft } from './Tiles.jsx'
 import Art from './Art.jsx'
 import { AreaName } from './AreaBackdrop.jsx'
@@ -197,6 +197,7 @@ function ProjectorScreen({ state, dispatch, onSwitchSeat, sound }) {
         <SoundToggle on={sound.on} setOn={sound.setOn} elsewhere={sound.elsewhere} className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />
         <MusicToggle on={sound.musicOn} setOn={sound.setMusicOn} soundOn={sound.on} className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />
         <BoardSwitch state={state} dispatch={dispatch} className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />
+        <DifficultySwitch state={state} dispatch={dispatch} place="above" className="text-[1vw] text-zinc-600 [&>button]:!px-[0.6vw] [&>button]:!py-0 hover:text-zinc-300" />
         <button type="button" className="text-[1vw] text-zinc-700 hover:text-zinc-400" onClick={onSwitchSeat}>
           switch view
         </button>

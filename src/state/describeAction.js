@@ -108,6 +108,8 @@ export function describeAction(state, action) {
       return 'Black triangle'
     case 'ADJUST_SURGES':
       return `Healing surges ${signed(action.amount)}`
+    case 'SET_DIFFICULTY':
+      return 'Changing how hard it is'
     case 'ADJUST_TILES':
       return `Dungeon tiles ${signed(action.amount)}`
     case 'NEXT_PHASE':
