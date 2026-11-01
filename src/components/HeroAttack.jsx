@@ -8,6 +8,7 @@ import { asksIfStayed, attackItems, distanceChoices, heroItems, itemsWithUse } f
 import { effectsOf, maxRolls, reactionsFor } from '../data/powerEffects.js'
 import { rollD20 } from '../state/random.js'
 import { attackGone, attackNumbers, foes, powerNumber } from '../state/game.js'
+import { itemAttackIsMove } from '../state/heroTurn.js'
 import { HeroChoice, InReach, MonsterChoice, monsterName } from './Pickers.jsx'
 import { heroesInReach } from '../board/encounters.js'
 import { Button } from './ui.jsx'
@@ -345,7 +346,10 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
     (p) => !p.used && powerNumber(p.card?.attack) !== null && (!extra || p.type === 'at-will'),
   )
   // Items with their own attack (Crossbow of Speed) are picked like a power.
-  const items = extra ? [] : attackItems(hero, state.turn)
+  // The Crossbow of Speed fires instead of moving, so once the board has seen the hero
+  // move this Hero Phase it's off the list. Off the board the app can't tell, so it stays.
+  const moved = stayedOnBoard(state, hero) === false
+  const items = extra ? [] : attackItems(hero, state.turn).filter((i) => !(moved && itemAttackIsMove(i.card)))
   const [powerId, setPowerId] = useState(null)
   const [chosen, setChosen] = useState([])
   // The board on this screen lights up the picked monsters and brings the last one into view.

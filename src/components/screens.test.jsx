@@ -246,6 +246,19 @@ describe('attack box', () => {
     expect(game().turn.lastAttack.free).toBe(false)
     expect(screen.getByRole('button', { name: /Attack anyway/ })).toBeTruthy()
   })
+
+  it('takes the Crossbow of Speed off the list once the hero moved on the board', () => {
+    const start = heroPhase(boardGame([0, -3]))
+    const crossbow = { id: 'i3', cardId: 'crossbow', name: 'Crossbow of Speed', used: false, card: { id: 'crossbow', name: 'Crossbow of Speed', text: 'Instead of moving, you can attack a Monster within 1 tile.', attack: { bonus: 4, damage: 1 } } }
+    const heroes = start.heroes.map((h, i) => (i === 0 ? { ...h, items: [crossbow] } : h))
+    const still = { ...start, heroes }
+    play(still, attackBox)
+    expect(screen.queryByRole('button', { name: /Crossbow of Speed/ })).toBeTruthy()
+    cleanup()
+    play({ ...still, turn: { ...still.turn, boardMoves: 1 } }, attackBox)
+    expect(screen.queryByRole('button', { name: /Crossbow of Speed/ })).toBeNull()
+    expect(screen.getByRole('button', { name: /Jab/ })).toBeTruthy()
+  })
 })
 
 describe('encounter screen', () => {
