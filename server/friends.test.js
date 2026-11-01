@@ -183,3 +183,33 @@ describe('friends on the real game', () => {
     expect(await (await get('/records.json', amy)).json()).toEqual({ players: [], solo: [], played: {} })
   })
 })
+
+describe('how much friends play', () => {
+  let dir
+  let server
+  let url
+  beforeEach(async () => {
+    dir = mkdtempSync(join(tmpdir(), 'ashardalon-friendlog-'))
+    server = await startServer({ port: 0, saveFile: join(dir, 'game.json'), staticDir: dir, access: fakeAccess, warmNarrator: false })
+    url = `http://localhost:${server.port}`
+  })
+  afterEach(async () => {
+    await server.close()
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('counts visits, games and taps for the #friends page, which only the family can read', async () => {
+    const amy = connect(server.port, { email: 'amy@example.com' })
+    const game = (await amy.newGame("Amy's game")).id
+    const inGame = connect(server.port, { email: 'amy@example.com', game })
+    await inGame.next((m) => m.type === 'state')
+    inGame.send({ type: 'action', id: 't1', action: { type: 'START_GAME', heroes: [createHero(HERO_TEMPLATES[0])] } })
+    await inGame.next((m) => m.type === 'ack')
+    expect((await fetch(`${url}/friends.json`, { headers: as('amy@example.com') })).status).toBe(403)
+    const { friends } = await (await fetch(`${url}/friends.json`)).json()
+    expect(friends).toHaveLength(1)
+    expect(friends[0]).toMatchObject({ email: 'amy@example.com', visits: 1, gamesStarted: 1, taps: 1, gamesFinished: 0 })
+    expect(friends[0].games).toEqual([expect.objectContaining({ id: game, name: "Amy's game", mine: true, status: 'playing' })])
+    for (const s of [amy, inGame]) s.socket.close()
+  })
+})

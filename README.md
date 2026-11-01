@@ -211,4 +211,5 @@ Add these to the app's address:
 - `/#cards`: problems in `cards.json`, and cards the app looks for but can't find.
 - `/#tiles`: every dungeon tile layout, to check against the real tiles.
 - `/#ideas`: the ideas players sent from 💡.
+- `/#friends`: each friend from outside, with when they last came, visits, games started and finished, and taps (family only).
 - `/#audition`: pick the takes for the recorded sound effects.

@@ -12,6 +12,7 @@ import { ART_NAME, MAX_ART_BYTES } from '../src/data/art.js'
 import { createNarrator } from './narrator.js'
 import { cleanEmail, createAccess } from './access.js'
 import { createIdeaBox } from './ideas.js'
+import { createFriendLog } from './friendLog.js'
 import { readBody } from './readBody.js'
 import { auditionList, pickTake, takesDir } from './soundTakes.js'
 import { normalizeCardFile } from '../src/data/cards.js'
@@ -371,6 +372,8 @@ export function startServer({
   access ??= createAccess()
   // The players' ideas and feedback, sent from the 💡 button (server/ideas.js).
   const ideaBox = createIdeaBox(join(dirname(saveFile), 'ideas.json'))
+  // How much each friend plays, for the #friends page (server/friendLog.js).
+  const friendLog = createFriendLog(join(dirname(saveFile), 'friends.json'))
   let { games: otherGames, finished } = loadGameList(gameListFile)
   // Each game in memory: its state, its own Undo steps, and the ids of its latest actions
   // (so a resent one isn't applied twice). Loaded the first time a screen joins it.
@@ -432,10 +435,22 @@ export function startServer({
     const reading = req.method === 'GET' || req.method === 'HEAD'
     if (path.startsWith('/art/') || path.startsWith('/sound-takes')) return !reading
     if (path === '/ideas') return req.method !== 'POST'
-    return path === '/ideas.json' || path.startsWith('/ideas/')
+    return path === '/ideas.json' || path.startsWith('/ideas/') || path === '/friends.json'
   }
 
   function respond(req, res, who) {
+    if (!who.family) friendLog.seen(who.email)
+    if (req.url === '/friends.json' && who.family) {
+      // Each friend's visits and games, with the games they're in now.
+      const friends = friendLog.list().map((f) => ({
+        ...f,
+        games: otherGames
+          .filter((g) => canSee({ family: false, email: f.email }, g))
+          .map((g) => ({ id: g.id, name: g.name, mine: g.owner === f.email, status: room(g.id).state.status, updatedAt: room(g.id).updatedAt })),
+      }))
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify({ friends }))
+      return
+    }
     if (!who.family && friendRefused(req)) {
       res.writeHead(403, { 'Content-Type': 'text/plain' }).end('Only the family can do that.')
       return
@@ -678,6 +693,7 @@ export function startServer({
     try {
       writeSave(gameFile(id), initialState)
       saveList([...otherGames, { id, name, createdAt: Date.now(), ...(owner ? { owner } : {}) }], finished)
+      if (owner) friendLog.started(owner)
     } catch (error) {
       console.error('Could not start a new game:', error.message)
       return refuse('save')
@@ -698,6 +714,7 @@ export function startServer({
     const game = otherGames.find((g) => g.id === asked)
     if (socket.who.family) socket.room = room(isGame(asked) ? asked : FAMILY_GAME)
     else socket.room = game && canSee(socket.who, game) ? room(asked) : null
+    if (!socket.who.family) friendLog.seen(socket.who.email)
     if (socket.room) {
       socket.send(stateMessage(socket.room))
       socket.send(screensMessage(socket.room))
@@ -738,6 +755,7 @@ export function startServer({
         r.seenActions.add(id)
         if (r.seenActions.size > SEEN_LIMIT) r.seenActions.delete(r.seenActions.values().next().value)
       }
+      const wasOver = r.state.status === 'won' || r.state.status === 'lost'
       // Turning off the sound board's limits is only for trying sounds on the test copy.
       if (action.type === 'SET_SOUNDBOARD_UNLIMITED' && !instance) return
       if (action.type === 'UNDO') {
@@ -770,6 +788,18 @@ export function startServer({
         console.error('Could not save the game:', error.message)
       }
       updateRecords(r)
+      if (!socket.who.family) {
+        friendLog.tapped(socket.who.email)
+        r.friendsHere ??= new Set()
+        r.friendsHere.add(socket.who.email)
+      }
+      // A game friends played in just ended: count it for each of them, once per game.
+      const over = r.state.status === 'won' || r.state.status === 'lost'
+      const run = r.state.heroes?.[0]?.id
+      if (over && !wasOver && r.friendsHere && r.endCounted !== run) {
+        r.endCounted = run
+        for (const email of r.friendsHere) friendLog.finished(email, r.state.status === 'won')
+      }
       broadcast(r)
     })
   })
@@ -784,6 +814,7 @@ export function startServer({
           new Promise((done) => {
             for (const client of wss.clients) client.terminate()
             wss.close()
+            friendLog.flush()
             server.close(done)
           }),
       })
