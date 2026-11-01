@@ -155,6 +155,21 @@ export function Coin({ item, selected, spin, onTap }) {
   )
 }
 
+// An adventure token waiting to be picked up (Roghar's Gear on the Vault's desk).
+export function QuestToken({ spot, spin }) {
+  const cx = spot.at[0] * SQUARE + SQUARE / 2
+  const cy = spot.at[1] * SQUARE + SQUARE / 2
+  return (
+    <g data-quest-token={spot.name} pointerEvents="none">
+      <title>{spot.name}</title>
+      <circle cx={cx} cy={cy} r="17" fill="#0e7490" stroke="#fde047" strokeWidth="3" className="motion-safe:animate-pulse" />
+      <text x={cx} y={cy + 7} textAnchor="middle" fontSize="19" transform={spin ? `rotate(${-spin} ${cx} ${cy})` : undefined}>
+        ⚙️
+      </text>
+    </g>
+  )
+}
+
 // A token a hero put down (board/heroTokens.js): its icon in a coloured disc, with the
 // Flaming Sphere's stack height beside it.
 export function HeroTokenMark({ item, count, spin, selected, onTap }) {

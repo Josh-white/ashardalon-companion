@@ -1,7 +1,7 @@
-import { baseId, key } from './grid.js'
+import { baseId, boardSquares, key } from './grid.js'
 import { adjacent, tilesBetween } from './paths.js'
 import { boardGrid, movesLeft, occupied, placeToken } from './play.js'
-import { newId, withLog } from '../state/gameHelpers.js'
+import { newId, sameName, withLog } from '../state/gameHelpers.js'
 
 // Things lying on the virtual board that aren't figures: Treasure tokens (Hidden Treasure)
 // and the Flying Carpet. They live in state.board.items as { id, kind, at }, with `at` null
@@ -99,4 +99,25 @@ export function flyCarpet(state, action) {
   if (!carpet || !to || !canFlyCarpet(state, hero) || !carpetTargets(state).includes(key(to))) return state
   const moved = withItems(placeToken(state, hero.id, to), items(state).map((i) => (i.id === carpet.id ? { ...i, at: [to[0], to[1]] } : i)))
   return withLog({ ...moved, turn: { ...moved.turn, boardMoves: (state.turn.boardMoves ?? 0) + 1 } }, `${hero.name} flew the Flying Carpet.`)
+}
+
+// Adventure tokens still lying in the dungeon (Roghar's Gear): on the desk of the tile whose
+// reveal put them out, or that tile's first floor square when it has no desk. Worked out from
+// the save each time (nothing new is saved), so it shows up in games already under way.
+export function adventureTokenSpots(state) {
+  const board = state.board
+  const adventure = state.adventure
+  if (!board || !adventure) return []
+  const reveals = adventure.card?.reveals ?? []
+  return (adventure.tokens ?? []).filter((t) => !t.heldBy).flatMap((token) => {
+    const reveal = reveals.find((r) => (r.actions ?? []).some((a) => a.type === 'placeToken' && sameName(a.name ?? '', token.name)))
+    if (!reveal) return []
+    const placed = board.tiles.find((t) => board.defs[t.tileId] && sameName(board.defs[t.tileId].name, reveal.tile))
+    if (!placed) return []
+    const def = board.defs[placed.tileId]
+    const desk = (def.features ?? []).find((f) => f.type === 'desk')?.at?.[0]
+    const floor = def.rows.flatMap((row, y) => [...row].map((c, x) => (c === '#' ? null : [x, y]))).filter(Boolean)[0]
+    const spot = desk ?? floor
+    return spot ? [{ name: token.name, at: boardSquares(placed, def, [spot])[0] }] : []
+  })
 }
