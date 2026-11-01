@@ -300,9 +300,16 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
 
       {scroll && untouched &&
         (controlling ? (
-          <MonsterControl state={state} hero={scroll.hero} monster={monster} item={scroll.item} dispatch={dispatch} onDone={onDone} />
+          <MonsterControl state={state} hero={scroll.hero} monster={monster} item={scroll.item} token={token} dispatch={dispatch} onDone={onDone} />
         ) : (
-          <Button className="w-full" onClick={() => setControlling(true)}>
+          <Button
+            className="w-full"
+            onClick={() => {
+              setControlling(true)
+              // On the virtual board the card's move comes first: the board lights where it can go.
+              if (state.board?.tokens[token]) dispatch({ type: 'CONTROL_MOVE', heroId: scroll.hero.id, itemId: scroll.item.id, tokenId: token })
+            }}
+          >
             📜 Use the {scroll.item.name} on the {name}
           </Button>
         ))}

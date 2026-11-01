@@ -15,7 +15,7 @@ import { finishOpening, openingNarrating, startOpening } from './opening.js'
 import { escapeAtPhaseEnd, escapedHero } from '../board/exits.js'
 import { dropItem, moveHeroToken, syncHeroTokens, trippedTokens } from '../board/heroTokens.js'
 import { moveHero, moveToken, newBoard, placeNear, placeNewFigures, pruneTokens } from '../board/play.js'
-import { boardMove, queueFearMove, queueFoeStep, queueHitMoves, queueMoves, skipBoardMove } from '../board/powerMoves.js'
+import { boardMove, queueFearMove, queueFoeStep, queueHitMoves, queueMonsterControl, queueMoves, skipBoardMove } from '../board/powerMoves.js'
 import { addTreasureToken, flyCarpet, pickUpTreasure, placeItem, removeItem } from '../board/items.js'
 import { trapStep } from '../board/traps.js'
 import { activeVillains, buildDeck, clamp, heroLabel, lose, playerName, markUsed, newId, shuffle, toggle, updateHero, updateMonster, validRoll, withCast, withLog, withMoment } from './gameHelpers.js'
@@ -641,6 +641,13 @@ function reduce(state, action) {
     case 'FOE_STEP':
       // The Kobold Dragonlord's step to any square within 1 tile, tapped on the virtual board.
       return queueFoeStep(state, action.tokenId, action.n)
+
+    case 'CONTROL_MOVE': {
+      // Scroll of Monster Control: first put the monster within 1 tile, on the virtual board.
+      const hero = state.heroes.find((h) => h.id === action.heroId)
+      const item = (hero?.items ?? []).find((i) => i.id === action.itemId && !i.used)
+      return item ? queueMonsterControl(state, hero, action.tokenId, item) : state
+    }
 
     case 'HIT_MOVES':
       // A villain's hit that moves the hero: the virtual board asks where they go.

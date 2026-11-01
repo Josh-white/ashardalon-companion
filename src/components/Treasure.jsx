@@ -8,6 +8,7 @@ import { useCards } from '../state/useCards.js'
 import { HeroChoice, InReach, MonsterChoice } from './Pickers.jsx'
 import { heroesInReach } from '../board/encounters.js'
 import { foesInRange } from '../board/monsters.js'
+import { hypnotized } from '../board/powerMoves.js'
 import { Button } from './ui.jsx'
 
 const RANGE_WORDS = { adjacent: 'next to you', within1: 'within 1 tile' }
@@ -451,40 +452,61 @@ export function TileGuardQuestion({ state, targets, guarded, onToggle }) {
 }
 
 // Scroll of Monster Control: on the active hero's monster's turn, it attacks another monster instead.
-export function MonsterControl({ state, hero, monster, item, dispatch, onDone }) {
+// On the virtual board the players first put it in a square within 1 tile (CONTROL_MOVE, queued
+// when the scroll is opened), and only the monsters it lands next to can be attacked.
+export function MonsterControl({ state, hero, monster, item, token, dispatch, onDone }) {
   const [targetId, setTargetId] = useState(null)
-  const others = foes(state).filter((m) => m.id !== monster.id && m.ac)
   const attack = item.card.monsterAttack ?? { bonus: 9, damage: 1 }
+  const moving = Boolean(state.board) && state.turn.boardMove?.source === item.name
+  const landed = state.board ? hypnotized(state, item.name) : null
+  const moved = landed?.id === monster.id ? landed : null
+  const all = foes(state).filter((m) => m.id !== monster.id && m.ac)
+  const others = moved ? all.filter((m) => moved.nextTo.includes(m.id)) : all
+  const onBoard = Boolean(state.board?.tokens[token] && state.board.tokens[hero.id])
+  const discard = () => {
+    dispatch({ type: 'DISCARD_ITEM', heroId: hero.id, itemId: item.id })
+    onDone()
+  }
   return (
     <div className="space-y-3 rounded-xl border border-amber-600 bg-amber-950/40 p-3">
       <p className="text-lg text-amber-100">
         📜 {hero.name}'s {item.name}: put the {monster.name} in any square within 1 tile. If it lands next to another monster, it attacks that one (+{attack.bonus}, {attack.damage} damage).
       </p>
-      {others.length === 0 ? (
-        <p className="text-zinc-400">There's no other monster for it to attack.</p>
+      {moving ? (
+        <p className="rounded-lg bg-sky-950/60 p-3 text-lg font-semibold text-sky-200">
+          📍 First move it on the board: tap the {monster.name}, then a lit square within 1 tile of it.
+        </p>
       ) : (
-        <MonsterChoice state={state} monsters={others} chosen={targetId ? [targetId] : []} onToggle={setTargetId} />
+        <>
+          {!moved && onBoard && (
+            <Button className="w-full" onClick={() => dispatch({ type: 'CONTROL_MOVE', heroId: hero.id, itemId: item.id, tokenId: token })}>
+              📍 Move the {monster.name} on the board
+            </Button>
+          )}
+          {moved && <p className="text-zinc-200">The {monster.name} moved.{others.length > 0 ? ' Which monster next to it does it attack?' : ''}</p>}
+          {others.length === 0 ? (
+            <p className="text-zinc-400">{moved ? `It isn't next to another monster, so it doesn't attack.` : "There's no other monster for it to attack."}</p>
+          ) : (
+            <MonsterChoice state={state} monsters={others} chosen={targetId ? [targetId] : []} onToggle={setTargetId} />
+          )}
+          {others.length > 0 && (
+            <Button
+              variant="gold"
+              className="w-full"
+              disabled={!targetId}
+              onClick={() => {
+                dispatch({ type: 'MONSTER_CONTROL', heroId: hero.id, itemId: item.id, monsterId: monster.id, targetId, roll: rollD20() })
+                onDone()
+              }}
+            >
+              🎲 Roll the {monster.name}'s attack on it
+            </Button>
+          )}
+          <Button variant={moved && others.length === 0 ? 'gold' : undefined} className="w-full" onClick={discard}>
+            {moved && others.length === 0 ? 'Done: discard the scroll' : "It isn't next to another monster: just discard the scroll"}
+          </Button>
+        </>
       )}
-      <Button
-        variant="gold"
-        className="w-full"
-        disabled={!targetId}
-        onClick={() => {
-          dispatch({ type: 'MONSTER_CONTROL', heroId: hero.id, itemId: item.id, monsterId: monster.id, targetId, roll: rollD20() })
-          onDone()
-        }}
-      >
-        🎲 Roll the {monster.name}'s attack on it
-      </Button>
-      <Button
-        className="w-full"
-        onClick={() => {
-          dispatch({ type: 'DISCARD_ITEM', heroId: hero.id, itemId: item.id })
-          onDone()
-        }}
-      >
-        It isn't next to another monster: just discard the scroll
-      </Button>
     </div>
   )
 }

@@ -130,3 +130,38 @@ describe('Hypnotism on the board', () => {
     expect(hypnotized(alone, 'Hypnotism')?.nextTo ?? []).toEqual([])
   })
 })
+
+describe('Scroll of Monster Control on the board', () => {
+  it('puts the monster within 1 tile first, then offers only the monsters it lands next to', async () => {
+    const { hypnotized } = await import('./powerMoves.js')
+    const { state, heroes } = game()
+    const scroll = { id: 'i1', name: 'Scroll of Monster Control', card: { name: 'Scroll of Monster Control', use: 'monsterControl', monsterAttack: { bonus: 9, damage: 1 } } }
+    const other = { ...state.monsters[0], id: 'm2', name: 'Bat' }
+    let next = {
+      ...state,
+      heroes: state.heroes.map((h, i) => (i === 0 ? { ...h, items: [scroll] } : h)),
+      monsters: [...state.monsters, other],
+      board: { ...state.board, tokens: { ...state.board.tokens, m2: [2, -3] } },
+    }
+    next = gameReducer(next, { type: 'CONTROL_MOVE', heroId: heroes[0].id, itemId: 'i1', tokenId: 'm1' })
+    expect(next.turn.boardMove.source).toBe('Scroll of Monster Control')
+    expect(moveChoices(next)).toEqual(['m1'])
+    expect(movePrompt(next)).toMatch(/Tap the Rat/)
+    // Within 1 tile of the monster: its own room and the Start tile next to it.
+    expect(moveTargets(next, 'm1')).toContain('3,-3')
+    expect(hypnotized(next, 'Scroll of Monster Control')).toBeNull()
+    const nextTo = gameReducer(next, { type: 'BOARD_MOVE', id: 'm1', to: [3, -3] })
+    expect(nextTo.board.tokens.m1).toEqual([3, -3])
+    expect(nextTo.turn.boardMove).toBeNull()
+    expect(hypnotized(nextTo, 'Scroll of Monster Control')).toEqual({ id: 'm1', nextTo: ['m2'] })
+    expect(moveTargets(next, 'm1')).toContain('0,0')
+    const alone = gameReducer(next, { type: 'BOARD_MOVE', id: 'm1', to: [0, 0] })
+    expect(hypnotized(alone, 'Scroll of Monster Control').nextTo).toEqual([])
+  })
+
+  it('does nothing without the scroll', () => {
+    const { state, heroes } = game()
+    const next = gameReducer(state, { type: 'CONTROL_MOVE', heroId: heroes[0].id, itemId: 'nope', tokenId: 'm1' })
+    expect(next.turn.boardMove ?? null).toBeNull()
+  })
+})

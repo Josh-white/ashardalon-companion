@@ -161,6 +161,52 @@ describe('monster turn screen', () => {
     tap(/Done with the Brute/)
     expect(game().turn.acted).toContain('m1')
   })
+
+  it('moves the monster on the board first with the Scroll of Monster Control, then attacks one next to it', () => {
+    const start = boardGame([1, -6])
+    const scroll = { id: 'i1', name: 'Scroll of Monster Control', card: { name: 'Scroll of Monster Control', use: 'monsterControl', monsterAttack: { bonus: 9, damage: 1 }, after: 'discard' } }
+    const other = { ...brute(start, 'm2'), ownerId: start.heroes[1].id }
+    const withScroll = {
+      ...start,
+      heroes: start.heroes.map((h, i) => (i === 0 ? { ...h, items: [scroll] } : h)),
+      monsters: [...start.monsters, other],
+      board: { ...start.board, tokens: { ...start.board.tokens, m2: [3, -7] } },
+    }
+    let send
+    const game = play(withScroll, (state, dispatch) => ((send = dispatch), monsterTurns(state, dispatch)))
+    tap(/Take its turn/)
+    tap(/Use the Scroll of Monster Control/)
+    expect(screen.getByText(/First move it on the board/)).toBeTruthy()
+    expect(game().turn.boardMove.source).toBe('Scroll of Monster Control')
+    // The players tap the Brute and a square next to the other one, on the board.
+    act(() => send({ type: 'BOARD_MOVE', id: 'm1', to: [2, -7] }))
+    expect(game().board.tokens.m1).toEqual([2, -7])
+    expect(screen.getByText(/Which monster next to it does it attack/)).toBeTruthy()
+    fireEvent.click(screen.getAllByRole('button', { name: /Brute.*AC|AC.*Brute/ })[0])
+    tap(/Roll the Brute's attack on it/)
+    expect(game().heroes[0].items.some((i) => i.id === 'i1' && !i.used)).toBe(false)
+    expect(game().log.some((l) => /Scroll of Monster Control: the Brute attacked the Brute/.test(JSON.stringify(l)))).toBe(true)
+  })
+
+  it('discards the Scroll of Monster Control when the moved monster lands next to nobody', () => {
+    const start = boardGame([1, -6])
+    const scroll = { id: 'i1', name: 'Scroll of Monster Control', card: { name: 'Scroll of Monster Control', use: 'monsterControl', after: 'discard' } }
+    const other = { ...brute(start, 'm2'), ownerId: start.heroes[1].id }
+    const withScroll = {
+      ...start,
+      heroes: start.heroes.map((h, i) => (i === 0 ? { ...h, items: [scroll] } : h)),
+      monsters: [...start.monsters, other],
+      board: { ...start.board, tokens: { ...start.board.tokens, m2: [3, -10] } },
+    }
+    let send
+    const game = play(withScroll, (state, dispatch) => ((send = dispatch), monsterTurns(state, dispatch)))
+    tap(/Take its turn/)
+    tap(/Use the Scroll of Monster Control/)
+    act(() => send({ type: 'BOARD_MOVE', id: 'm1', to: [0, -5] }))
+    expect(screen.getByText(/isn't next to another monster, so it doesn't attack/)).toBeTruthy()
+    tap(/Done: discard the scroll/)
+    expect(game().heroes[0].items.some((i) => i.id === 'i1' && !i.used)).toBe(false)
+  })
 })
 
 describe('villain turn screen', () => {
