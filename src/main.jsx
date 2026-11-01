@@ -11,6 +11,11 @@ const CardCheck = lazy(() => import('./components/CardCheck.jsx'))
 const TileCheck = lazy(() => import('./components/TileCheck.jsx'))
 const AllScreens = lazy(() => import('./components/AllScreens.jsx'))
 
+// A pinch that misses the board would zoom the whole page on an iPad (Safari ignores the
+// viewport's no-zoom), and a zoomed page is slow and hard to get back out of. The board
+// has its own pinch zoom, and the rest of the screens don't need one.
+document.addEventListener('gesturestart', (e) => e.preventDefault())
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     {/* A hidden page for picking the ElevenLabs sounds; see server/generate-sounds.js. */}
