@@ -5,8 +5,8 @@ import { defeatHighlights, recap } from '../state/stats.js'
 import { campaignOutcome } from '../state/campaign.js'
 import { randomNumbers, shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
-import { findPlayer, recordKey } from '../state/records.js'
-import { useRecords } from '../state/useRecords.js'
+import { findPlayer, isSolo, playerKey, recordKey } from '../state/records.js'
+import { useRecordsFile } from '../state/useRecords.js'
 import { CampaignRecap } from './Campaign.jsx'
 import { HallOfRecords } from './Records.jsx'
 import { Button, useConfirm } from './ui.jsx'
@@ -63,7 +63,13 @@ export default function Recap({ state, dispatch, big, onFinish, contained = fals
   const [hall, setHall] = useState(false)
   // The Pi adds this game to the records as it ends, so they're loaded again for each ending.
   const thisGame = recordKey(state)
-  const records = useRecords(`${thisGame}:${state.status}:${hall}`)
+  const recordsFile = useRecordsFile(`${thisGame}:${state.status}:${hall}`)
+  const records = recordsFile?.players ?? null
+  // A solo game's titles and trophies are the solo player's, shown once, on the first hero they ran.
+  const solo = isSolo(state)
+  const soloRecord = solo ? recordsFile?.solo.find((r) => playerKey(r.name) === playerKey(state.soloName?.trim() || 'Solo')) ?? null : null
+  const soloHeroId = solo ? (state.heroes.find((h) => !h.ally) ?? null)?.id : null
+  const titlesFor = (hero) => (solo ? (hero.id === soloHeroId ? soloRecord : null) : findPlayer(records, hero.player))
   const won = state.status === 'won'
   const { heroes, mvpIds, party } = recap(state)
   const title = state.adventure?.card.title
@@ -150,7 +156,7 @@ export default function Recap({ state, dispatch, big, onFinish, contained = fals
                 {heroLabel(hero)}
               </h3>
               {hero.player && <p className="text-[0.9em] text-zinc-400">{hero.name}</p>}
-              <PlayerTitles record={findPlayer(records, hero.player)} thisGame={thisGame} />
+              <PlayerTitles record={titlesFor(hero)} thisGame={thisGame} />
               <ul className="mt-[0.6em] space-y-[0.4em]">
                 {awards.slice(0, 3).map((award) => (
                   <li key={award.key} className="flex items-center gap-[0.5em] rounded-[0.8em] bg-zinc-950/60 px-[0.6em] py-[0.3em]">

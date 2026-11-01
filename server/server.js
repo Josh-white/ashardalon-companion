@@ -20,7 +20,7 @@ import { setHeroTemplates } from '../src/data/heroes.js'
 import { describeAction } from '../src/state/describeAction.js'
 import { gameReducer, initialState } from '../src/state/game.js'
 import { migrateSave } from '../src/state/saves.js'
-import { playerRecords, recordGames, syncRecord } from '../src/state/records.js'
+import { recordsReply, syncRecord } from '../src/state/records.js'
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 
@@ -481,10 +481,9 @@ export function startServer({
     if (req.url === '/records.json') {
       // The family's records leave out friends' games; a friend sees only the games they played in.
       const seen = new Set([...otherGames, ...finished].filter((g) => canSee(who, g)).map((g) => g.id))
-      const games = recordGames(records).filter((g) => (who.family ? !g.friend : seen.has(g.game)))
       res
         .writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
-        .end(JSON.stringify({ players: playerRecords(games), played: who.family ? (records.played ?? {}) : {} }))
+        .end(JSON.stringify(recordsReply(records, (g) => (who.family ? !g.friend : seen.has(g.game)), who.family)))
       return
     }
     if (ideaBox.handle(req, res, who.family ? null : who.email)) return

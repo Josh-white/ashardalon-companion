@@ -8,7 +8,8 @@
 // flipped-up Daily). The one time it dips into the level-up XP: the card could knock a
 // hero out and the party has no healing surges left, which would end the game.
 
-import { encounterTargetIds } from '../board/encounters.js'
+import { encounterTargetIds, heroesInReach } from '../board/encounters.js'
+import { effectsOf } from '../data/powerEffects.js'
 import { MAX_LEVEL, XP_TO_LEVEL_UP } from '../data/heroes.js'
 import { encounterCancelCost, foeBonus } from '../data/difficulty.js'
 import { villainInPlay } from '../state/monsterDeck.js'
@@ -99,5 +100,15 @@ export function cancelAdvice(state, hero) {
 export function cancelEncounter(state, hero) {
   const advice = cancelAdvice(state, hero)
   if (!advice?.cancel) return null
+  // Quinn's Perseverance takes 1 XP off for each hero on her tile.
+  const perseverance = hero.powers.find((p) => !p.used && p.card && effectsOf(p).reaction === 'perseverance')
+  if (perseverance) {
+    const heroesOnTile = (heroesInReach(state, hero.id, 'sameTile') ?? [hero.id]).length
+    const cost = Math.max(0, encounterCancelCost(state) - heroesOnTile)
+    return {
+      action: { type: 'CANCEL_ENCOUNTER', perseverance: { heroId: hero.id, powerId: perseverance.id, heroesOnTile } },
+      say: `${hero.name} uses ${perseverance.name} and spends ${cost} XP to cancel ${state.encounter.card.name}.`,
+    }
+  }
   return { action: { type: 'CANCEL_ENCOUNTER' }, say: `${hero.name} spends ${encounterCancelCost(state)} XP to cancel ${state.encounter.card.name}.` }
 }

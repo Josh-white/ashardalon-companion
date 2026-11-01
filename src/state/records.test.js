@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { TITLES } from '../data/titles.js'
 import { createHero, gameReducer, initialState } from './game.js'
-import { findPlayer, gameRecord, playerRecords, recordGames, syncRecord } from './records.js'
+import { findPlayer, gameRecord, playerRecords, recordGames, recordsReply, syncRecord } from './records.js'
 
 const start = (players) =>
   gameReducer(initialState, { type: 'START_GAME', heroes: players.map((player, i) => ({ ...createHero(HERO_TEMPLATES[i]), player })) })
@@ -35,9 +35,35 @@ describe("players' records", () => {
     expect(playerRecords([{ ...gameRecord(end(start(['Dad']), 'won')), endedAt: 1 }])[0].trophies).toEqual({})
   })
 
-  it("leaves out games still going, the demo game's nameless heroes and solo's stand-in name", () => {
+  it("leaves out games still going and the demo game's nameless heroes", () => {
     expect(gameRecord(start(['Colton']))).toBeNull()
-    expect(gameRecord(end(start(['', 'Solo']), 'won'))).toBeNull()
+    expect(gameRecord(end(start(['', '']), 'won'))).toBeNull()
+  })
+
+  it("keeps solo games apart, under the solo screen's name, counting only the heroes the player ran", () => {
+    // Two of the three heroes handed to the computer.
+    const solo = (soloName) => {
+      const started = gameReducer(initialState, { type: 'START_GAME', soloName, heroes: HERO_TEMPLATES.slice(0, 3).map((t) => ({ ...createHero(t), player: 'Solo' })) })
+      return { ...started, heroes: started.heroes.map((h, i) => (i > 0 ? { ...h, ally: true } : h)) }
+    }
+    const state = solo('  JJ ')
+    expect(state.soloName).toBe('JJ')
+    const [me, ally] = state.heroes.map((h) => h.id)
+    const game = gameRecord(end(state, 'won', { [me]: { kills: 2, trophies: { 'monster-grell': { name: 'Grell', count: 1 } } }, [ally]: { kills: 5 } }))
+    expect(game).toMatchObject({ solo: true, outcome: 'won', players: [{ name: 'JJ', heroes: [HERO_TEMPLATES[0].key], stats: { kills: 2 } }] })
+    // No name typed: the games still count, for "Solo".
+    expect(gameRecord(end(solo(''), 'lost')).players[0].name).toBe('Solo')
+    // A family game with JJ in it stays on the family side.
+    const family = gameRecord(end(start(['JJ']), 'won'))
+    const reply = recordsReply({ games: { a: { ...game, endedAt: 1 }, b: { ...family, endedAt: 2 } } })
+    expect(reply.players.map((p) => [p.name, p.games, p.kills])).toEqual([['JJ', 1, 0]])
+    expect(reply.solo.map((p) => [p.name, p.games, p.wins, p.kills])).toEqual([['JJ', 1, 1, 2]])
+    expect(reply.solo[0].trophies['monster-grell'].count).toBe(1)
+  })
+
+  it('keeps the solo name when the heroes try again', () => {
+    const lost = end(gameReducer(initialState, { type: 'START_GAME', soloName: 'Easton', heroes: [{ ...createHero(HERO_TEMPLATES[0]), player: 'Solo' }] }), 'lost')
+    expect(gameReducer(lost, { type: 'TRY_AGAIN' }).soloName).toBe('Easton')
   })
 
   it('adds games up per player, whatever the name looks like, and hands out titles', () => {

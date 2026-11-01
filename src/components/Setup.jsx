@@ -43,6 +43,24 @@ export function rememberedName() {
     return ''
   }
 }
+// Who plays solo games on this screen, for their solo records. A new screen starts with
+// the name last typed on it for a hero.
+const SOLO_NAME_KEY = 'ashardalon-companion/solo-name'
+function rememberedSoloName() {
+  try {
+    return localStorage.getItem(SOLO_NAME_KEY) ?? rememberedName()
+  } catch {
+    return ''
+  }
+}
+function rememberSoloName(name) {
+  try {
+    localStorage.setItem(SOLO_NAME_KEY, name.trim())
+  } catch {
+    // Storage blocked: the name just isn't remembered.
+  }
+}
+
 export function rememberName(name) {
   try {
     if (name.trim()) localStorage.setItem(NAME_KEY, name)
@@ -272,8 +290,9 @@ function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave, voice }
   const heroChoices = state.campaign ? heroTemplates().filter((t) => campaignHero(state, t.key)) : heroTemplates()
   const campaignShort = state.campaign && !heroChoices.every((t) => mine.some((c) => c.heroKey === t.key))
   const ready = mine.length > 0 && powersDone && others.length === 0 && !campaignShort
-  // One player runs every hero, so nobody is asked for a name: the screens call each turn by
-  // the hero's name instead.
+  // One player runs every hero, so the screens call each turn by the hero's name. The name
+  // here is only for the player's solo records in the Hall of Records.
+  const [soloName, setSoloName] = useState(rememberedSoloName)
   const pick = (template) => {
     dispatch({ type: 'CLAIM_HERO', deviceId: deviceId + freeSlot, heroKey: template.key, picks: startingPicks(template, cards.powers) })
   }
@@ -282,7 +301,8 @@ function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave, voice }
       if (!c.player.trim()) dispatch({ type: 'SET_LOBBY_PLAYER', deviceId: c.deviceId, player: 'Solo' })
       if (!c.ready) dispatch({ type: 'SET_LOBBY_READY', deviceId: c.deviceId, ready: true })
     }
-    onStart()
+    rememberSoloName(soloName)
+    onStart(soloName)
   }
 
   return (
@@ -318,6 +338,17 @@ function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave, voice }
             ))}
         </div>
       )}
+      <label className="mx-auto flex max-w-md flex-col gap-1 text-center">
+        <span className="text-sm text-zinc-400">Who's playing? Your solo games go in the Hall of Records under this name.</span>
+        <input
+          type="text"
+          value={soloName}
+          maxLength={40}
+          placeholder="Your name"
+          onChange={(e) => setSoloName(e.target.value)}
+          className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-center text-xl text-zinc-100"
+        />
+      </label>
       <div className="flex flex-col items-center gap-2">
         <Button variant="gold" className="px-10 py-4 text-xl" disabled={!ready} onClick={enter}>
           Enter the dungeon
@@ -361,8 +392,8 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
       for (const slot of SOLO_SLOTS) dispatch({ type: 'RELEASE_HERO', deviceId: deviceId + slot })
       setRole(null)
     }
-    const start = () => {
-      dispatch({ type: 'START_GAME', treasureCards: cards.treasures, chambers: cards.chambers, tokens: cards.treasureTokens, random: shuffleNumbers(), tileRandom: randomNumbers(8), boardTiles: cards.tiles, boardRandom: randomNumbers(64) })
+    const start = (soloName) => {
+      dispatch({ type: 'START_GAME', soloName, treasureCards: cards.treasures, chambers: cards.chambers, tokens: cards.treasureTokens, random: shuffleNumbers(), tileRandom: randomNumbers(8), boardTiles: cards.tiles, boardRandom: randomNumbers(64) })
       onSolo()
     }
     return <SoloSetup state={state} dispatch={dispatch} deviceId={deviceId} cards={cards} onStart={start} onLeave={leave} voice={voice} />
