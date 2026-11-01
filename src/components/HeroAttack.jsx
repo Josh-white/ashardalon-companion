@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { stayedOnBoard } from '../board/play.js'
-import { foeDistance, foesInRange, powerRange } from '../board/monsters.js'
+import { figuresInRange, foeDistance, foesInRange, powerRange } from '../board/monsters.js'
 import { hypnotized } from '../board/powerMoves.js'
 import { hasSecondChance } from '../data/difficulty.js'
 import { asksIfStayed, attackItems, distanceChoices, heroItems, itemsWithUse } from '../data/items.js'
@@ -406,7 +406,11 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
         if (targets.length === 1) return Array(limit).fill(id)
         return list.length < limit ? [...list, id] : list
       }
-      if (list.includes(id)) return list.filter((x) => x !== id)
+      // A group card (three Legion Devils) is one monster with several figures: each tap
+      // picks one more figure, until they're all picked or the power has no targets left.
+      const figures = targets.find((m) => m.id === id) ? figuresInRange(state, hero.id, showAll ? null : range, targets.find((m) => m.id === id)) : 1
+      const picked = list.filter((x) => x === id).length
+      if (picked > 0 && (picked >= figures || list.length >= limit)) return list.filter((x) => x !== id)
       return list.length < limit ? [...list, id] : list
     })
   const reset = () => {
@@ -430,7 +434,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
         ? 'Which monster?'
         : limit === Infinity
           ? 'Tap every monster it hits.'
-          : `Tap up to ${limit} monsters.`
+          : `Tap up to ${limit} monsters.${targets.some((m) => m.card?.figures > 1 && !m.villain) ? ' Tap a group like the Legion Devils again to hit another one.' : ''}`
 
   return (
     <div className="mt-5 space-y-3 rounded-2xl border-2 border-amber-600/60 bg-zinc-950/60 p-4">

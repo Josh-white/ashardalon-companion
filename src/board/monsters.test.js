@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
-import { boardStep, boardTargetIds, closestTarget, foeDistance, foesInRange, powerRange, squareAway, squareNextTo, squareToward } from './monsters.js'
+import { boardStep, boardTargetIds, closestTarget, figuresInRange, foeDistance, foesInRange, powerRange, squareAway, squareNextTo, squareToward } from './monsters.js'
 import { normalizeTiles } from './tileDefs.js'
 
 // A made-up start tile and an open room laid north of it, then a second room north of that.
@@ -117,6 +117,33 @@ describe('a monster card with several figures', () => {
     expect(state.board.tokens[`${devil.id}#2`]).toEqual([2, 7])
     expect(before).not.toEqual([2, 7])
     expect(gameReducer(state, { type: 'MOVE_TOKEN', id: `${devil.id}#3`, to: [2, 6] })).toBe(state)
+  })
+})
+
+describe('a power that hits two monsters, against a group of Legion Devils', () => {
+  function devils() {
+    const heroes = HERO_TEMPLATES.slice(0, 1).map((t) => createHero(t))
+    let state = gameReducer(initialState, { type: 'START_GAME', heroes, tileRandom: [], boardTiles: TILES })
+    state = { ...state, firstRoll: null, turn: { ...state.turn, boardTiles: [{ uid: 'start', side: 'N', filled: false }] } }
+    const cards = [{ id: 'devils', name: 'Legion Devil', copies: 1, ac: 14, hp: 1, xp: 3, figures: 3, attacks: [{ id: 'claw', name: 'Claw', bonus: 6, damage: 1 }], tactics: [{ move: 'toward' }] }]
+    state = gameReducer(state, { type: 'DRAW_MONSTER', heroId: heroes[0].id, cards, random: [] })
+    return { state, devil: state.monsters[0], hero: state.heroes[0] }
+  }
+
+  it('counts each standing figure as a target', () => {
+    const { state, devil, hero } = devils()
+    expect(figuresInRange(state, hero.id, null, devil)).toBe(3)
+    expect(figuresInRange(state, hero.id, 'within1', devil)).toBe(3)
+    expect(figuresInRange({ ...state, board: null }, hero.id, 'within1', { ...devil, hp: 2 })).toBe(2)
+  })
+
+  it('takes one figure off for each hit on the same card', () => {
+    const { state, devil, hero } = devils()
+    const arc = { id: 'arc', name: 'Arc Lightning', type: 'at-will', used: false, card: { name: 'Arc Lightning', attack: '+5', damage: '1' } }
+    const armed = { ...state, heroes: state.heroes.map((h) => (h.id === hero.id ? { ...h, powers: [arc] } : h)) }
+    const next = gameReducer(armed, { type: 'HERO_ATTACK', heroId: hero.id, powerId: 'arc', targets: [{ monsterId: devil.id, roll: 19 }, { monsterId: devil.id, roll: 19 }] })
+    expect(next.monsters[0].hp).toBe(1)
+    expect(Object.keys(next.board.tokens).filter((id) => id.startsWith(devil.id))).toEqual([devil.id])
   })
 })
 
