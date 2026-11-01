@@ -62,7 +62,10 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   // Monsters picked in this screen's attack box glow red, and the last one picked is brought
   // into view at the zoom the board is at (a group like the Legion Devils glows together).
   const aimed = useAimed()
-  const focusId = aimed.length ? aimed[aimed.length - 1] : null
+  // The monster or villain taking its turn in the Villain Phase glows on every screen, and
+  // comes into view on a zoomed-in board (the first figure of a group).
+  const acting = state.turn.acting && !(state.turn.acted ?? []).includes(state.turn.acting) ? state.turn.acting : null
+  const focusId = aimed.length ? aimed[aimed.length - 1] : acting && board?.tokens[acting] ? acting : null
   // A tile just laid glows for a few seconds while the board glides to its new fit.
   const fresh = useFreshTiles(board?.tiles)
   const { boxRef, spin, viewW, viewH, viewBox, fit, scale, zoomIn, zoomOut, zoomTo } = useBoardZoom({ fill, bounds, activeId, activeAt, focusId, freshKey: fresh?.key })
@@ -442,7 +445,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
             {[...onBoard.filter((f) => f.id !== activeId), ...onBoard.filter((f) => f.id === activeId)].map((f) => (
               // An attack makes its target flinch or dodge, and a sword swing lunges in.
               <g key={f.id} {...tokenFx(playing, board.tokens[f.id])}>
-                <Token {...f} spin={spin} at={board.tokens[f.id]} active={f.id === activeId} aimed={aimed.includes(f.id.split('#')[0])} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)} onTap={watching && !peekTarget(state, f.id) ? undefined : () => tapFigure(f.id)} />
+                <Token {...f} spin={spin} at={board.tokens[f.id]} active={f.id === activeId} aimed={aimed.includes(f.id.split('#')[0])} acting={acting === f.id.split('#')[0]} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)} onTap={watching && !peekTarget(state, f.id) ? undefined : () => tapFigure(f.id)} />
               </g>
             ))}
             <MarkerBadges markers={placedMarkers} spin={spin} taken={new Set([...Object.values(board.tokens), ...items.filter((i) => i.at).map((i) => i.at)].map(key))} onTap={(id) => { setPeek(null); setReading(reading === id ? null : id) }} />

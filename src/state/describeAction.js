@@ -126,6 +126,10 @@ export function describeAction(state, action) {
     case 'END_GAME':
     case 'RESUME':
       return 'Ending the game'
+    case 'START_ACTING': {
+      const foe = state.monsters.find((m) => m.id === action.id) ?? (state.villains ?? []).find((v) => v.id === action.id)
+      return foe ? `${foe.name}'s turn starting` : 'Monster turn starting'
+    }
     case 'MARK_ACTED':
       return action.name ? `${action.name}'s turn done` : 'Turn done'
     case 'CAMPAIGN_NEXT':

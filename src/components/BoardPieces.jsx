@@ -229,7 +229,7 @@ function Badges({ cx, cy, r, badges }) {
   )
 }
 
-export function Token({ id, at, label, color, art, selected, active, aimed, faded, spin, badges = [], onTap }) {
+export function Token({ id, at, label, color, art, selected, active, aimed, acting, faded, spin, badges = [], onTap }) {
   const cx = at[0] * SQUARE + SQUARE / 2
   const cy = at[1] * SQUARE + SQUARE / 2
   const r = SQUARE / 2 - 3
@@ -241,6 +241,13 @@ export function Token({ id, at, label, color, art, selected, active, aimed, fade
         <g pointerEvents="none" className="motion-safe:animate-pulse">
           <circle cx={cx} cy={cy} r={r + 8} fill="#facc15" fillOpacity="0.4" stroke="#422006" strokeWidth="2" />
           <circle cx={cx} cy={cy} r={r + 5} fill="none" stroke="#fde047" strokeWidth="4" />
+        </g>
+      )}
+      {/* A monster or villain taking its turn in the Villain Phase: a wide pulsing orange glow. */}
+      {acting && (
+        <g pointerEvents="none" className="motion-safe:animate-pulse" data-acting="true">
+          <circle cx={cx} cy={cy} r={r + 11} fill="#f97316" fillOpacity="0.45" stroke="#431407" strokeWidth="2" />
+          <circle cx={cx} cy={cy} r={r + 6} fill="none" stroke="#fb923c" strokeWidth="5" />
         </g>
       )}
       {/* A monster picked to attack: a pulsing red glow, like the active hero's gold one. */}
