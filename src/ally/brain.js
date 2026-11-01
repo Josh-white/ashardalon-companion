@@ -11,7 +11,7 @@
 
 import { baseId, key, unexploredEdges } from '../board/grid.js'
 import { adjacent, distances } from '../board/paths.js'
-import { boardGrid, heroEdges, heroReach, movesLeft, occupied, stayedOnBoard, timeLeapt } from '../board/play.js'
+import { boardGrid, caged, heroEdges, heroReach, movesLeft, occupied, stayedOnBoard, timeLeapt } from '../board/play.js'
 import { foeDistance, foesInRange, powerRange } from '../board/monsters.js'
 import { heroesInReach } from '../board/encounters.js'
 import { moveChoices, moveTargets } from '../board/powerMoves.js'
@@ -365,6 +365,106 @@ function toTrap(state, hero) {
   return walkToward(state, hero, squares, `${hero.name} heads for the trap to disable it.`)
 }
 
+// ---- Sticking together: freeing a caged friend, and not wandering off ----
+
+// Curses a hero, or a hero on their tile, can roll to end instead of attacking (the Cage).
+const actionCurses = (h) => (h.curses ?? []).filter((c) => c.card?.removeRoll?.phase === 'action')
+const areaOf = (grid, at) => (at ? grid.get(key(at))?.area : undefined)
+const standing = (state, h) => h.hp > 0 && !h.escaped && Boolean(state.board?.tokens[h.id])
+
+// Heroes stuck in such a curse, still on the board, other than this one.
+const stuckFriends = (state, hero) => state.heroes.filter((h) => h.id !== hero.id && !h.escaped && state.board.tokens[h.id] && actionCurses(h).length > 0)
+
+// The floor squares of a hero's tile (the Start tile's halves count as two tiles).
+function tileSquares(state, heroId) {
+  const grid = boardGrid(state.board)
+  const area = areaOf(grid, state.board.tokens[heroId])
+  return [...grid.values()].filter((sq) => sq.floor && sq.area === area).map((sq) => [sq.x, sq.y])
+}
+
+// In the Hero Phase, instead of attacking: roll to open the Cage on itself or on a hero on
+// its tile. An attack that finishes off a monster comes first.
+export function freeFromCurse(state, hero, roll = d20) {
+  if (!state.board || attackGone(state, hero) || !state.board.tokens[hero.id]) return null
+  const grid = boardGrid(state.board)
+  const here = areaOf(grid, state.board.tokens[hero.id])
+  const own = actionCurses(hero).map((curse) => ({ cursed: hero, curse }))
+  const friends = stuckFriends(state, hero)
+    .filter((h) => areaOf(grid, state.board.tokens[h.id]) === here)
+    .flatMap((h) => actionCurses(h).map((curse) => ({ cursed: h, curse })))
+  const pick = [...own, ...friends][0]
+  if (!pick) return null
+  const best = attackOptions(state, hero)[0]
+  if (best && best.finishes.length > 0) return null
+  const { cursed, curse } = pick
+  const what = (curse.card.removeRoll.label || `end the ${curse.name}`).replace(/^./, (c) => c.toLowerCase())
+  return {
+    action: { type: 'CURSE_ROLL', heroId: cursed.id, curseId: curse.id, roll: roll() },
+    say: cursed.id === hero.id ? `${hero.name} tries to ${what.replace(/^try to /, '')}.` : `${hero.name} helps ${cursed.name}: ${what}.`,
+  }
+}
+
+// Who goes to a caged hero: the nearest computer hero that can still move, isn't stuck
+// itself and isn't already on that tile with someone. Players' own heroes decide for themselves.
+function rescuerFor(state, stuck) {
+  const squares = tileSquares(state, stuck.id)
+  const steps = stepsToGoals(state, squares)
+  let best = null
+  for (const h of state.heroes.filter((x) => x.ally && x.id !== stuck.id && standing(state, x) && actionCurses(x).length === 0 && !caged(x))) {
+    const d = steps.get(key(state.board.tokens[h.id])) ?? 99
+    if (d >= 99) continue
+    if (!best || d < best.d) best = { hero: h, d }
+  }
+  return best?.hero ?? null
+}
+
+// Walking to a caged friend's tile to open the cage. `arriving` only when the move gets it
+// onto the tile this turn (so it can still roll after); otherwise as close as it can.
+export function toStuckFriend(state, hero, { arriving = false } = {}) {
+  if (!state.board || movesLeft(state, hero) === 0) return null
+  const grid = boardGrid(state.board)
+  const here = areaOf(grid, state.board.tokens[hero.id])
+  for (const stuck of stuckFriends(state, hero)) {
+    const squares = tileSquares(state, stuck.id)
+    if (areaOf(grid, state.board.tokens[stuck.id]) === here) continue
+    if (rescuerFor(state, stuck)?.id !== hero.id) continue
+    const onTile = new Set(squares.map(key))
+    const landing = heroReach(state, hero).filter((k) => onTile.has(k))[0]
+    const say = `${hero.name} goes to help ${stuck.name} out of the ${actionCurses(stuck)[0].name}.`
+    if (landing) return { to: parse(landing), say }
+    if (arriving) continue
+    const walk = walkToward(state, hero, squares, say)
+    if (walk) return walk
+  }
+  return null
+}
+
+// The other heroes still in the dungeon with this one, where they stand.
+const partySquares = (state, hero) => state.heroes.filter((h) => h.id !== hero.id && standing(state, h)).map((h) => state.board.tokens[h.id])
+
+// How far a hero may drift from the nearest friend before it walks back: about two tiles.
+export const STRAY_STEPS = 8
+
+// Steps from the hero to the nearest other hero (Infinity when it's on its own).
+export function strayDistance(state, hero) {
+  const at = state.board?.tokens[hero.id]
+  const others = at ? partySquares(state, hero) : []
+  if (others.length === 0) return Infinity
+  const far = distances(boardGrid(state.board), at)
+  return Math.min(...others.map((sq) => far.get(key(sq)) ?? 99))
+}
+
+// Picks among goal groups the one that keeps the party together: the hero's own steps to it
+// plus how far, on average, the rest of the party is from it. Each group is a list of squares.
+function groupedGoal(state, hero, groups) {
+  const grid = boardGrid(state.board)
+  const mine = distances(grid, state.board.tokens[hero.id])
+  const theirs = partySquares(state, hero).map((sq) => distances(grid, sq))
+  const near = (map, squares) => Math.min(...squares.map((sq) => map.get(key(sq)) ?? 99))
+  const score = (squares) => near(mine, squares) + (theirs.length ? theirs.reduce((s, m) => s + near(m, squares), 0) / theirs.length : 0)
+  return [...groups].sort((a, b) => score(a) - score(b))[0] ?? null
+}
+
 // Where the hero goes now, or null to stay put: next to a monster it can attack from there,
 // closer to the monsters, or on to the nearest unexplored edge when there are none.
 export function bestMove(state, hero) {
@@ -378,6 +478,9 @@ export function bestMove(state, hero) {
   const fromHere = distances(grid, at)
   const nearer = (a, b) => (fromHere.get(a) ?? 99) - (fromHere.get(b) ?? 99)
 
+  // A friend stuck in the Cage: the nearest computer hero goes to let them out.
+  const rescue = toStuckFriend(state, hero)
+  if (rescue) return rescue
   // The goals are done: head for the way out, monsters or not (getting out wins the game).
   const out = exitGoal(state, hero)
   if (out) return out.here ? null : walkToward(state, hero, out.squares, `${hero.name} heads for the ${out.name}.`)
@@ -396,11 +499,9 @@ export function bestMove(state, hero) {
       if (option && (!best || option.score > best.score || (option.score === best.score && nearer(k, best.k) < 0))) best = { k, score: option.score, option }
     }
     if (best) return { to: parse(best.k), say: `${hero.name} moves in to attack.` }
-    const steps = stepsToGoals(state, foeSquares)
-    const here = steps.get(key(at)) ?? 99
-    const target = [...reach].sort((a, b) => (steps.get(a) ?? 99) - (steps.get(b) ?? 99) || nearer(a, b))[0]
-    if (target && (steps.get(target) ?? 99) < here) return { to: parse(target), say: `${hero.name} heads toward the monsters.` }
-    return null
+    // The monster nearest the party, not one off on its own somewhere.
+    const foe = groupedGoal(state, hero, foeSquares.map((sq) => [sq]))
+    return walkToward(state, hero, foe ?? foeSquares, `${hero.name} heads toward the monsters.`)
   }
 
   // No monsters: pick up a Treasure token lying about, then explore. A hero on an edge
@@ -410,17 +511,18 @@ export function bestMove(state, hero) {
     const walk = walkToward(state, hero, loot, `${hero.name} goes for the Treasure token.`)
     if (walk) return walk
   }
-  if (heroEdges(state).length > 0) return null
-  const edgeSquares = unexploredEdges(grid).flatMap((e) => e.squares)
-  if (edgeSquares.length === 0) return null
-  const onEdge = new Set(edgeSquares.map(key))
+  // Explore where the party is: the unexplored edge that's close to this hero and to the
+  // others. A hero already on an edge draws there, unless it has wandered off on its own.
+  const stray = strayDistance(state, hero) > STRAY_STEPS
+  if (heroEdges(state).length > 0 && !stray) return null
+  const edges = unexploredEdges(grid)
+  if (edges.length === 0) return stray ? walkToward(state, hero, partySquares(state, hero), `${hero.name} goes back to the others.`) : null
+  const goal = groupedGoal(state, hero, edges.map((e) => e.squares))
+  const onEdge = new Set(goal.map(key))
+  if (onEdge.has(key(at))) return null
   const landing = reach.filter((k) => onEdge.has(k)).sort(nearer)[0]
-  if (landing) return { to: parse(landing), say: `${hero.name} goes to explore.` }
-  const steps = stepsToGoals(state, edgeSquares)
-  const here = steps.get(key(at)) ?? 99
-  const target = [...reach].sort((a, b) => (steps.get(a) ?? 99) - (steps.get(b) ?? 99) || nearer(a, b))[0]
-  if (target && (steps.get(target) ?? 99) < here) return { to: parse(target), say: `${hero.name} heads for the unexplored edge.` }
-  return null
+  if (landing) return { to: parse(landing), say: stray ? `${hero.name} goes back to the others to explore.` : `${hero.name} goes to explore.` }
+  return walkToward(state, hero, goal, stray ? `${hero.name} goes back to the others.` : `${hero.name} heads for the unexplored edge.`)
 }
 
 // A hero with no token (back from a Time Leap, which lets the player put them on any tile)
@@ -488,6 +590,11 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
     }
     const free = freeItemAttack(state, hero, roll)
     if (free) return free
+    // A friend stuck in the Cage: get onto their tile first if this move does it, then roll.
+    const rescue = attackGone(state, hero) ? null : toStuckFriend(state, hero, { arriving: true })
+    if (rescue) return { action: { type: 'MOVE_HERO', heroId: hero.id, to: rescue.to }, say: rescue.say }
+    const unlock = freeFromCurse(state, hero, roll)
+    if (unlock) return unlock
     const disable = disableTrap(state, hero, roll)
     if (disable) return disable
     const option = attackOptions(state, hero)[0]
