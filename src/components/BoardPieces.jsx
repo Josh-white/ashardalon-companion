@@ -104,16 +104,24 @@ export function MarkerTiles({ markers }) {
 
 // A round badge in the top-left corner of the marker's tile; tap it to read the card.
 // A second marker on the same tile sits next to the first.
-export function MarkerBadges({ markers, spin, onTap }) {
-  const seen = {}
+export function MarkerBadges({ markers, spin, onTap, taken = new Set() }) {
+  const used = new Set(taken)
   return markers.map(({ marker, look, squares, tile }) => {
-    const n = (seen[tile] = (seen[tile] ?? -1) + 1)
-    const cx = Math.min(...squares.map((sq) => sq.x)) * SQUARE + 22 + n * 40
-    const cy = Math.min(...squares.map((sq) => sq.y)) * SQUARE + 22
+    // The badge sits on a free square of its tile (top-left first) so it never hides a
+    // figure standing there; with every square taken it shrinks into the tile's corner.
+    const own = squares.filter((sq) => sq.area === tile)
+    const order = (own.length > 0 ? own : squares).slice().sort((a, b) => a.y - b.y || a.x - b.x)
+    const free = order.find((sq) => !used.has(`${sq.x},${sq.y}`))
+    const corner = order[0]
+    if (free) used.add(`${free.x},${free.y}`)
+    const at = free ?? corner
+    const r = free ? 16 : 9
+    const cx = at.x * SQUARE + (free ? SQUARE / 2 : r + 1)
+    const cy = at.y * SQUARE + (free ? SQUARE / 2 : r + 1)
     return (
       <g key={marker.id} data-marker={marker.id} className="cursor-pointer" onClick={() => onTap(marker.id)}>
-        <circle cx={cx} cy={cy} r="18" fill="#18181b" stroke={look.color} strokeWidth="4" />
-        <text x={cx} y={cy + 7} textAnchor="middle" fontSize="20" transform={spin ? `rotate(${-spin} ${cx} ${cy})` : undefined}>
+        <circle cx={cx} cy={cy} r={r} fill="#18181b" stroke={look.color} strokeWidth={free ? 4 : 2} />
+        <text x={cx} y={cy + r * 0.38} textAnchor="middle" fontSize={r * 1.1} transform={spin ? `rotate(${-spin} ${cx} ${cy})` : undefined}>
           {look.icon}
         </text>
       </g>
