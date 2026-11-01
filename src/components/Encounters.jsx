@@ -533,7 +533,9 @@ export function EncounterStep({ state, hero, dispatch }) {
   const left = encountersLeft(state, hero)
   const drawn = state.turn.encountersDrawn ?? 0
 
-  if (state.encounter) return <EncounterCard key={state.encounter.id} state={state} hero={hero} dispatch={dispatch} />
+  // One for the Team: another hero took the card, so it's done as if they drew it.
+  const taker = state.encounter && state.heroes.find((h) => h.id === state.encounter.heroId)
+  if (state.encounter) return <EncounterCard key={`${state.encounter.id}-${taker?.id}`} state={state} hero={taker ?? hero} dispatch={dispatch} />
 
   if (!state.encounterDeck && encounters.length === 0) {
     if (left === 0) return null

@@ -15,7 +15,7 @@ import { adjacent, distances } from '../board/paths.js'
 import { boardGrid, caged, heroEdges, heroReach, movesLeft, occupied, stayedOnBoard, timeLeapt } from '../board/play.js'
 import { foeDistance, foesInRange, powerRange } from '../board/monsters.js'
 import { heroesInReach } from '../board/encounters.js'
-import { moveChoices, moveTargets, queueMoves } from '../board/powerMoves.js'
+import { hypnotized, moveChoices, moveTargets, queueMoves } from '../board/powerMoves.js'
 import { distanceChoices } from '../data/items.js'
 import { effectsOf, maxRolls } from '../data/powerEffects.js'
 import { PHASES } from '../data/phases.js'
@@ -31,6 +31,7 @@ import { escapeGoal, escapeHold, exitName, exitSquares } from '../board/exits.js
 import { trapDisable } from '../state/encounterRules.js'
 import { cancelEncounter } from './cancelEncounter.js'
 import { castDaily, fearMove, figureHp, guardPower, placeHandToken, sphereStep } from './powers.js'
+import { divertMove, divertPower, wizardEyeStep } from './boardPowers.js'
 
 // A d20 the way the screens roll one; tests pass their own.
 const d20 = () => Math.floor(Math.random() * 20) + 1
@@ -41,10 +42,10 @@ export function activeAlly(state) {
   return hero?.ally ? hero : null
 }
 
-// Attack powers the ally knows how to use on its own: a roll at one or more monsters, with
+// Attack powers the ally uses as a plain attack: a roll at one or more monsters, with
 // healing or a shield to hand out afterwards (followUp) or a move it may skip after it.
-// Powers that move figures first or ask a question first are left to the players (the ally
-// uses its other powers instead). Wrathful Thunder is fine: the board passes the monster.
+// Powers that move a figure first (Charge, a swap, a pull, Hypnotism) do that move first
+// (moveFirstPlans, hypnotismPlan below). Wrathful Thunder is fine: the board passes the monster.
 const pullsFirst = (power) => {
   const steps = effectsOf(power).board?.before ?? []
   return steps.length > 0 && steps.every((m) => /^monster/.test(m.pick) && m.to === 'nextToSelf')
@@ -64,6 +65,15 @@ export function simpleAttack(power, state = null) {
   // plain attack on that one (the pull is optional, pullsFirst below).
   if ((e.before && !pullsFirst(power)) || !asks || e.use || e.reaction) return false
   return true
+}
+
+// Benign Transposition and King's Castle swap places with a hero first, then attack.
+const swapsFirst = (power) => effectsOf(power).board?.before?.[0]?.to === 'swap'
+// How far the attack after the swap reaches: the sentence of the card that attacks
+// ("Attack 1 Monster within 2 tiles of you."), else a monster next to the hero.
+function swapRange(power) {
+  const sentence = String(power.card?.text ?? '').split(/\.\s*/).find((t) => /attack/i.test(t)) ?? ''
+  return powerRange(sentence.replace(/swap\w*/gi, '')) ?? 'adjacent'
 }
 
 const heroById = (state, id) => state.heroes.find((h) => h.id === id)
@@ -98,6 +108,8 @@ function pendingMove(state, hero) {
   if (!move || move.heroId !== hero.id) return null
   const fear = fearMove(state, hero, moveChoices(state), (id) => moveTargets(state, id))
   if (fear) return fear
+  const divert = divertMove(state, hero)
+  if (divert) return divert
   const first = moveFirstStep(state, hero)
   if (first) return first
   if (!move.from) return { action: { type: 'SKIP_BOARD_MOVE' }, say: `${hero.name} stays where it is.` }
@@ -159,7 +171,8 @@ export function freeItemAttack(state, hero, roll = d20) {
 const onBoard = (state, foe) => Object.keys(state.board.tokens).some((id) => baseId(id) === foe.id)
 
 // Every attack the hero could make from where they stand: [{ power, targets, score, say }].
-export function attackOptions(state, hero, { atWill = false } = {}) {
+// `all` keeps the dailies the ally would rather save (for planning a power's move first).
+export function attackOptions(state, hero, { atWill = false, all: every = false } = {}) {
   if (!state.board || attackGone(state, hero) || !state.board.tokens[hero.id]) return []
   const all = foes(state).filter((m) => m.ac && m.hp > 0 && onBoard(state, m))
   if (all.length === 0) return []
@@ -167,7 +180,7 @@ export function attackOptions(state, hero, { atWill = false } = {}) {
   for (const power of hero.powers.filter((p) => simpleAttack(p, state) && (!atWill || p.type === 'at-will'))) {
     const effects = effectsOf(power)
     // A card that doesn't say how far it reaches is used on a monster next to the hero.
-    const range = pullsFirst(power) || effects.before ? 'adjacent' : powerRange(power.card.text) ?? 'adjacent'
+    const range = swapsFirst(power) ? swapRange(power) : pullsFirst(power) || effects.before ? 'adjacent' : powerRange(power.card.text) ?? 'adjacent'
     const inReach = foesInRange(state, hero.id, range, all)
     if (inReach.length === 0) continue
     const answers = askAnswers(state, hero, power)
@@ -192,7 +205,7 @@ export function attackOptions(state, hero, { atWill = false } = {}) {
   const atWills = options.filter((o) => o.power.type !== 'daily')
   const atWillFinishes = new Set(atWills.flatMap((o) => o.finishes))
   return options
-    .filter((o) => o.power.type !== 'daily' || atWills.length === 0 || o.villain || o.finishes.some((id) => !atWillFinishes.has(id)))
+    .filter((o) => every || o.power.type !== 'daily' || atWills.length === 0 || o.villain || o.finishes.some((id) => !atWillFinishes.has(id)))
     .sort((a, b) => b.score - a.score)
 }
 
@@ -219,64 +232,166 @@ function attackAction(state, hero, option, roll) {
 const withHeroAt = (state, hero, at) => ({ ...state, board: { ...state.board, tokens: { ...state.board.tokens, [hero.id]: at } } })
 const parse = (k) => k.split(',').map(Number)
 
-// ---- Powers that move first, then attack (Charge, Into the Fray, Taunting Advance) ----
+// ---- Powers that move a figure first, then attack ----
+// Charge, Into the Fray, Taunting Advance (the hero walks), Divine Challenge (a monster is
+// pulled in), Benign Transposition, King's Castle (the hero swaps places with a friend) and
+// Hypnotism (a monster is moved next to another monster, which gets attacked).
 
-const MOVE_FIRST = (power) => {
+// The kind of move a power makes before its attack: 'walk', 'pull', 'swap', or null.
+function moveFirstKind(power) {
   const steps = effectsOf(power).board?.before ?? []
-  if (steps.length === 0 || steps[0].pick !== 'self' || !['squares', 'nextToHeroWithin2'].includes(steps[0].to)) return null
-  return steps.every((s, i) => i === 0 || (/^monster/.test(s.pick) && s.to === 'nextToSelf')) ? steps : null
+  if (steps.length === 0) return null
+  const pulls = (s) => /^monster/.test(s.pick) && s.to === 'nextToSelf'
+  if (steps.length === 1 && steps[0].to === 'swap' && /^hero/.test(steps[0].pick)) return 'swap'
+  if (steps.every(pulls)) return 'pull'
+  if (steps[0].pick === 'self' && ['squares', 'nextToHeroWithin2'].includes(steps[0].to) && steps.slice(1).every(pulls)) return 'walk'
+  return null
 }
 
-// Where the hero would stand for each move-first power, and how good the attack from there
-// is: { power, to: "x,y" or null to stay, score }. A pull afterwards (Taunting Advance) only
-// needs a monster within 2 tiles of the square.
-function moveFirstPlans(state, hero) {
+const placed = (state, id, at) => ({ ...state, board: { ...state.board, tokens: { ...state.board.tokens, [id]: at } } })
+// A friend down to half HP or less next to a monster: a swap takes their place in the fight.
+const inDanger = (state, h) => h.hp > 0 && h.hp <= Math.ceil(h.maxHp / 2) && adjacentFoes(state, h) > 0
+
+// Where the hero would stand (or who it swaps with) for each move-first power, and how good
+// the attack after it is: { power, to: "x,y" or null to stay, swapWith, rescue, score }. A
+// pull afterwards (Taunting Advance) only needs a monster within 2 tiles of the square.
+// `kinds` limits it to some kinds of move. A daily's swap is only worth it for a finishing
+// blow, a villain, or to get a friend out of trouble.
+function moveFirstPlans(state, hero, { kinds = ['walk', 'pull', 'swap'] } = {}) {
   const at = state.board?.tokens[hero.id]
   if (!at || hero.conditions?.includes('Immobilized') || caged(hero)) return []
   const plans = []
+  const attackAfter = (moved, power) => {
+    const ready = { ...moved, turn: { ...moved.turn, beforeMoved: power.id } }
+    return attackOptions(ready, ready.heroes.find((h) => h.id === hero.id), { all: true }).find((o) => o.power.id === power.id) ?? null
+  }
   for (const power of hero.powers.filter((p) => !p.used && p.card && powerNumber(p.card.attack) !== null && state.turn.beforeMoved !== p.id)) {
-    const steps = MOVE_FIRST(power)
-    if (!steps) continue
+    const kind = moveFirstKind(power)
+    if (!kind || !kinds.includes(kind)) continue
+    const steps = effectsOf(power).board.before
     const queued = queueMoves(state, hero, power, steps)
     if (!queued.turn.boardMove) continue
-    const squares = [key(at), ...moveTargets(queued, hero.id)]
-    const pulls = steps.length > 1
     let best = null
-    for (const k of squares) {
-      const moved = withHeroAt(state, hero, parse(k))
-      const ready = { ...moved, turn: { ...moved.turn, beforeMoved: power.id } }
-      const me = ready.heroes.find((h) => h.id === hero.id)
-      let score
-      if (pulls) {
-        const near = foesInRange(ready, hero.id, 'within2', foes(state).filter((m) => m.ac && m.hp > 0 && !m.objective && onBoard(state, m)))
-        score = near.length > 0 ? 1 + near.length / 10 : 0
-      } else {
-        score = attackOptions(ready, me).find((o) => o.power.id === power.id)?.score ?? 0
+    if (kind === 'swap') {
+      for (const id of moveChoices(queued)) {
+        const friend = heroById(state, id)
+        const option = attackAfter(placed(placed(state, hero.id, state.board.tokens[id]), id, at), power)
+        if (!option || !friend) continue
+        const rescue = inDanger(state, friend) && hero.hp > friend.hp && adjacentFoes(placed(state, id, at), friend) === 0
+        if (power.type === 'daily' && !rescue && option.finishes.length === 0 && !option.villain) continue
+        const score = option.score + (rescue ? 3 : 0)
+        if (!best || score > best.score) best = { power, to: null, swapWith: id, rescue, score }
       }
-      // Standing still counts a little more (no need to move).
-      if (score > 0 && (!best || score > best.score || (score === best.score && k === key(at)))) best = { power, to: k === key(at) ? null : k, score }
+    } else if (kind === 'pull') {
+      for (const id of moveChoices(queued)) {
+        const to = moveTargets(queued, id)[0]
+        const option = to && attackAfter(placed(state, id, parse(to)), power)
+        if (option && (!best || option.score > best.score)) best = { power, to: null, score: option.score }
+      }
+    } else {
+      const squares = [key(at), ...moveTargets(queued, hero.id)]
+      const pulls = steps.length > 1
+      for (const k of squares) {
+        const moved = withHeroAt(state, hero, parse(k))
+        let score
+        if (pulls) {
+          const ready = { ...moved, turn: { ...moved.turn, beforeMoved: power.id } }
+          const near = foesInRange(ready, hero.id, 'within2', foes(state).filter((m) => m.ac && m.hp > 0 && !m.objective && onBoard(state, m)))
+          score = near.length > 0 ? 1 + near.length / 10 : 0
+        } else {
+          score = attackAfter(moved, power)?.score ?? 0
+        }
+        // Standing still counts a little more (no need to move).
+        if (score > 0 && (!best || score > best.score || (score === best.score && k === key(at)))) best = { power, to: k === key(at) ? null : k, score }
+      }
     }
     if (best) plans.push(best)
   }
   return plans.sort((a, b) => b.score - a.score)
 }
 
+const startMove = (hero, power) => ({ action: { type: 'START_BOARD_MOVE', heroId: hero.id, powerId: power.id }, say: `${hero.name} uses ${power.name}!` })
+
 function moveFirst(state, hero) {
   if (state.turn.boardMove) return null
   const plan = moveFirstPlans(state, hero)[0]
-  if (!plan) return null
-  return { action: { type: 'START_BOARD_MOVE', heroId: hero.id, powerId: plan.power.id }, say: `${hero.name} uses ${plan.power.name}!` }
+  return plan ? startMove(hero, plan.power) : null
 }
 
-// The board waits on a move-first power's step: go to the planned square, and pull the
-// weakest monster (one the attack can finish first) next to the hero.
+// A swap that gets a hurt friend away from a monster, even when there's something else to hit.
+function rescueSwap(state, hero) {
+  if (state.turn.boardMove) return null
+  return moveFirstPlans(state, hero, { kinds: ['swap'] }).find((p) => p.rescue) ?? null
+}
+
+// Hypnotism: the best monster within 1 tile to move 1 tile next to another monster, and the
+// one it attacks there: { power, id (token), to, victim, score }.
+export function hypnotismPlan(state, hero) {
+  if (!state.board?.tokens[hero.id] || attackGone(state, hero) || state.turn.boardMove) return null
+  const grid = boardGrid(state.board)
+  const alive = foes(state).filter((m) => m.ac && m.hp > 0 && !m.objective)
+  let best = null
+  for (const power of hero.powers.filter((p) => !p.used && p.card && effectsOf(p).ask === 'moved-monster' && powerNumber(p.card.attack) !== null && state.turn.beforeMoved !== p.id)) {
+    const queued = queueMoves(state, hero, power, effectsOf(power).board?.before)
+    if (!queued.turn.boardMove) continue
+    const bonus = powerNumber(power.card.attack)
+    const damage = powerNumber(power.card.damage) ?? 1
+    for (const id of moveChoices(queued)) {
+      for (const k of moveTargets(queued, id)) {
+        const around = distances(grid, parse(k), { limit: 1 })
+        const victims = Object.entries(state.board.tokens)
+          .filter(([t, sq]) => baseId(t) !== baseId(id) && around.has(key(sq)))
+          .map(([t]) => alive.find((m) => m.id === baseId(t)))
+          .filter(Boolean)
+        for (const m of victims) {
+          const chance = Math.min(0.95, Math.max(0.05, (21 - (m.ac - bonus)) / 20))
+          const score = chance * (damage + (damage >= figureHp(m) ? 4 : 0) + (m.villain ? 2 : 0))
+          if (!best || score > best.score) best = { power, id, to: parse(k), victim: m.id, score }
+        }
+      }
+    }
+  }
+  return best
+}
+
+// Hypnotism's attack, once the monster was moved: the monster it ended up next to that's
+// best to hit (one it can finish first). Null if it ended up next to nobody.
+function hypnotismAttack(state, hero, roll) {
+  const power = hero.powers.find((p) => p.id === state.turn.beforeMoved && effectsOf(p).ask === 'moved-monster')
+  if (!power || power.used || state.turn.boardMove || attackGone(state, hero)) return null
+  const moved = hypnotized(state, power.name)
+  if (!moved) return null
+  const damage = powerNumber(power.card.damage) ?? 1
+  const victims = moved.nextTo.map((id) => foes(state).find((m) => m.id === id && m.hp > 0 && m.ac)).filter(Boolean)
+  const victim = victims.sort((a, b) => Number(damage >= figureHp(b)) - Number(damage >= figureHp(a)) || Number(Boolean(b.villain)) - Number(Boolean(a.villain)) || figureHp(a) - figureHp(b))[0]
+  if (!victim) return null
+  const thrall = foes(state).find((m) => m.id === moved.id)
+  return {
+    action: { type: 'HERO_ATTACK', heroId: hero.id, powerId: power.id, movedId: moved.id, targets: [{ monsterId: victim.id, roll: roll() }], bonusAttack: false, distances: {}, stayed: stayedOnBoard(state, hero) ?? false },
+    say: `The hypnotized ${thrall?.name ?? 'monster'} attacks the ${victim.name}!`,
+  }
+}
+
+// The board waits on a move-first power's step: go to the planned square, swap with the
+// planned friend, move the hypnotized monster, or pull the weakest monster (one the attack
+// can finish first) next to the hero.
 function moveFirstStep(state, hero) {
   const move = state.turn.boardMove
   const power = move && hero.powers.find((p) => p.id === state.turn.beforeMoved && p.name === move.source)
   const s = move?.steps?.[0]
   if (!power || !s) return null
+  const queued = { ...state, turn: { ...state.turn, boardMove: null, beforeMoved: null } }
+  if (effectsOf(power).ask === 'moved-monster') {
+    const plan = hypnotismPlan(queued, hero)
+    if (!plan) return { action: { type: 'SKIP_BOARD_MOVE' }, say: `${hero.name} can't find a monster to hypnotize.` }
+    return { action: { type: 'BOARD_MOVE', id: plan.id, to: plan.to }, say: `${hero.name} hypnotizes a monster and walks it over.` }
+  }
+  if (s.to === 'swap') {
+    const plan = moveFirstPlans(queued, hero, { kinds: ['swap'] }).find((p) => p.power.id === power.id)
+    if (!plan?.swapWith) return { action: { type: 'SKIP_BOARD_MOVE' }, say: `${hero.name} stays where it is.` }
+    return { action: { type: 'BOARD_MOVE', id: plan.swapWith }, say: `${hero.name} swaps places with ${heroById(state, plan.swapWith)?.name}.` }
+  }
   if (s.pick === 'self') {
-    const queued = { ...state, turn: { ...state.turn, boardMove: null, beforeMoved: null } }
     const plan = moveFirstPlans(queued, hero).find((p) => p.power.id === power.id)
     if (!plan?.to) return { action: { type: 'SKIP_BOARD_MOVE' }, say: `${hero.name} stays where it is.` }
     return { action: { type: 'BOARD_MOVE', id: hero.id, to: parse(plan.to) }, say: `${hero.name} rushes in.` }
@@ -645,7 +760,7 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
   // The new power after levelling up (any phase: it's picked when the hero levels).
   const pick = levelUpPick(hero, powers)
   if (pick) return { action: { type: 'SET_POWER_CARD', heroId: hero.id, powerId: pick.slot.id, card: pick.card }, say: `${hero.name} learns ${pick.card.name}.` }
-  // A Flaming Sphere or Blade Barrier just cast: put its tokens on the board.
+  // A Flaming Sphere, Blade Barrier or Wizard Eye just cast: put its tokens on the board.
   const token = placeHandToken(state, hero)
   if (token) return token
 
@@ -679,19 +794,35 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
     if (unlock) return unlock
     const disable = disableTrap(state, hero, roll)
     if (disable) return disable
+    // Hypnotism's monster was moved: now it attacks the monster it ended up next to.
+    const thrall = hypnotismAttack(state, hero, roll)
+    if (thrall) return thrall
+    // A power's move came first (Charge, a swap, a pull): its own attack follows.
+    const committed = state.turn.beforeMoved && !state.turn.boardMove ? attackOptions(state, hero, { all: true }).find((o) => o.power.id === state.turn.beforeMoved) : null
+    if (committed) return { action: attackAction(state, hero, committed, roll), say: committed.say }
     const options = attackOptions(state, hero)
+    // Benign Transposition or King's Castle to take a hurt friend's place next to a monster.
+    const swap = attackGone(state, hero) ? null : rescueSwap(state, hero)
+    if (swap && (!options[0] || swap.score > options[0].score)) return { action: startMove(hero, swap.power).action, say: `${hero.name} uses ${swap.power.name} to take ${heroById(state, swap.swapWith)?.name}'s place!` }
     // A daily that does more than an attack would (Flaming Sphere, Blade Barrier, Cause Fear).
     const daily = attackGone(state, hero) ? null : castDaily(state, hero, options, (h) => attackOptions(state, h, { atWill: true }).length > 0)
     if (daily) return daily
     const option = options[0]
+    // Hypnotism, when walking one monster over to hit another beats the best attack.
+    const hypnosis = attackGone(state, hero) ? null : hypnotismPlan(state, hero)
+    if (hypnosis && (!option || hypnosis.score > option.score)) return startMove(hero, hypnosis.power)
     if (option) return { action: attackAction(state, hero, option, roll), say: option.say }
     // Nothing in reach: Charge, Into the Fray or Taunting Advance moves first, then attacks.
     const charge = attackGone(state, hero) ? null : moveFirst(state, hero)
     if (charge) return charge
+    // Nothing to fight and no edge in reach: the Wizard Eye explores from farther away.
+    const eye = exitGoal(state, hero) || looseTreasure(state).length > 0 ? null : wizardEyeStep(state, hero)
+    if (eye) return eye
     const move = bestMove(state, hero)
     if (move) return { action: { type: 'MOVE_HERO', heroId: hero.id, to: move.to }, say: move.say }
-    // The end of the Hero Phase: the Flaming Sphere burns, and a hurt hero hides.
-    return sphereStep(state, hero) ?? guardPower(state, hero)
+    // The end of the Hero Phase: the Flaming Sphere burns, a hurt hero hides, and Command or
+    // Distant Diversion sends a monster away from a hurt friend.
+    return sphereStep(state, hero) ?? guardPower(state, hero) ?? divertPower(state, hero)
   }
   if (phase === 'exploration' && state.turn.explored !== true && state.turn.explored !== false && heroEdges(state).length === 0) {
     return { action: { type: 'SET_EXPLORED', explored: false, rolls: [roll(), roll()] }, say: `${hero.name} isn't on an unexplored edge.` }

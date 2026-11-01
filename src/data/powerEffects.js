@@ -23,6 +23,7 @@ import { itemAc } from './items.js'
 // Other powers have a `use`, done from the power's tile:
 //   healSelf, heal + pick ('other': one other hero; reach: 'sameTile', 'adjacent' or 'within2' on the
 //   virtual board), tokens, endCondition, refuge, invisible, causeFear, note,
+//   takeEncounter (One for the Team: the hero takes another hero's encounter card, as if they drew it),
 //   move (it takes the place of a move, so on the virtual board it uses one up).
 // A card in cards.json can carry its own `effect` with these fields (a homebrew power);
 // a power listed below by name always uses the entry here instead.
@@ -57,7 +58,7 @@ const EFFECTS = {
     board: { before: [{ pick: 'self', to: 'squares', n: 'speed' }, { pick: 'monsterWithin2', to: 'nextToSelf' }] },
   },
   'Inspiring Advice': { reaction: 'reroll' },
-  'One for the Team': { use: { note: 'Take the encounter card and do it as if you drew it.' } },
+  'One for the Team': { use: { takeEncounter: true, note: 'Take the encounter card and do it as if you drew it.' } },
   'To Arms!': {
     use: {
       note: 'You and one hero on your tile can each move your speed.',

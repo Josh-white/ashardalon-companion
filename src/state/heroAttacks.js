@@ -295,6 +295,9 @@ export function usePower(state, action) {
   const picked = heroIds[0] && state.heroes.find((h) => h.id === heroIds[0])
   if (use.pick && !picked && !use.optional) return state
   if (use.pick === 'other' && picked?.id === hero.id) return state
+  // One for the Team: only while another hero's encounter card is waiting to be done.
+  const taken = use.takeEncounter ? state.encounter : null
+  if (use.takeEncounter && (!taken || taken.attacked || taken.heroId === hero.id)) return state
 
   let next = withCast(power.type === 'at-will' ? state : markUsed(state, hero.id, power.id), power)
   next = withLog(next, `${heroLabel(hero)} used ${power.name}.`)
@@ -310,6 +313,10 @@ export function usePower(state, action) {
     if (!picked.conditions.includes(action.condition)) return state
     next = updateHero(next, picked.id, (h) => ({ conditions: h.conditions.filter((c) => c !== action.condition) }))
     next = withLog(next, `${picked.name} is no longer ${action.condition}.`)
+  }
+  if (taken) {
+    next = { ...next, encounter: { ...next.encounter, heroId: hero.id } }
+    next = withLog(next, `${hero.name} takes ${taken.card.name} instead, as if ${hero.name} drew it.`)
   }
   if (use.causeFear) {
     const extras = heroIds.filter((id) => id !== hero.id).map((heroId) => ({ heroId, bonus: 2, source: power.name }))

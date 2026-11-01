@@ -5,7 +5,7 @@
 // Saving Grace, Healing Hands, Brutal Recovery). Each returns { action, say } or null, like
 // the rest of the brain (brain.js calls them).
 
-import { baseId, key } from '../board/grid.js'
+import { baseId, key, unexploredEdges } from '../board/grid.js'
 import { distances, tilesBetween } from '../board/paths.js'
 import { boardGrid } from '../board/play.js'
 import { HERO_TOKENS, movableToken, sphereOf, sphereVictims, tokenMoveTargets, tokenTargets } from '../board/heroTokens.js'
@@ -29,14 +29,14 @@ export function figureHp(monster) {
 }
 
 // Monster and villain figures on the board: [{ id (token), foe, at }].
-function foeFigures(state) {
+export function foeFigures(state) {
   const list = foes(state).filter((m) => !m.objective && m.hp > 0)
   return Object.entries(state.board?.tokens ?? {})
     .map(([id, at]) => ({ id, at, foe: list.find((m) => m.id === baseId(id)) }))
     .filter((f) => f.foe)
 }
-const standingHeroes = (state) => state.heroes.filter((h) => h.hp > 0 && !h.escaped && state.board?.tokens[h.id])
-const usable = (hero, test) => hero.powers.find((p) => !p.used && p.card && test(effectsOf(p), p))
+export const standingHeroes = (state) => state.heroes.filter((h) => h.hp > 0 && !h.escaped && state.board?.tokens[h.id])
+export const usable = (hero, test) => hero.powers.find((p) => !p.used && p.card && test(effectsOf(p), p))
 
 // ---- Tokens on the board ----
 
@@ -66,6 +66,12 @@ function bestTokenSquare(state, item) {
     return [...targets].sort((a, b) => score(a) - score(b) || (toParty.get(a) ?? 99) - (toParty.get(b) ?? 99))[0]
   }
   const near = distances(grid, state.board.tokens[item.owner])
+  // The Wizard Eye: on a tile with an unexplored edge, so the wizard can explore from there.
+  if (item.kind === 'eye') {
+    const edgeAreas = new Set(unexploredEdges(grid).map((e) => e.area))
+    const onEdge = targets.filter((k) => edgeAreas.has(areaAt(grid, parse(k))))
+    if (onEdge.length > 0) return [...onEdge].sort((a, b) => (near.get(a) ?? 99) - (near.get(b) ?? 99))[0]
+  }
   return [...targets].sort((a, b) => (near.get(a) ?? 99) - (near.get(b) ?? 99))[0]
 }
 
