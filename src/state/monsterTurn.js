@@ -78,8 +78,12 @@ export function attackEffect(attack, hit) {
 }
 
 // The hero a "move toward the hero with the most HP" step goes after, or null when it's
-// a tie (the players pick) or the step moves toward the closest hero instead.
+// a tie (the players pick) or the step moves toward the closest hero instead. It goes by
+// the HP each hero has left right now (not their full HP), and skips heroes who are down
+// (0 HP), in the Astral Refuge, or not on the virtual board when there is one.
 export function towardHero(state, step) {
-  const living = state.heroes.filter((h) => h.hp > 0)
-  return step?.toward === 'mostHp' && living.length > 0 ? mostHp(living) : null
+  if (step?.toward !== 'mostHp') return null
+  const tokens = state.board?.tokens
+  const living = state.heroes.filter((h) => h.hp > 0 && !h.tokens?.refuge && (!tokens || tokens[h.id]))
+  return living.length > 0 ? mostHp(living) : null
 }
