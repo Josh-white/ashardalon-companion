@@ -3,11 +3,40 @@ import { heroArt } from '../data/art.js'
 import { HERO_COLORS } from '../data/heroes.js'
 import { artUrl, useArt } from '../state/useArt.js'
 import Die from './Die3D.jsx'
-import { FX_DELAY_MS } from '../board/attackFx.js'
+import { FX_DELAY_MS, FX_MS } from '../board/attackFx.js'
 
 const SHOW_MS = { roll: 2200, crit: 3500, fumble: 3000, defeat: 3000, level: 3500, down: 3500, poison: 3500, spawn: 3000, monster: 4500, 'monster-down': 5000, encounter: 4500, treasure: 4000, join: 4000 }
 // A device that reconnects shouldn't replay a moment that is long over.
 const STALE_MS = 8000
+
+// How long this moment keeps the screen busy: its own screen, then on the virtual board the
+// attack's animation (AttackFx plays it from FX_DELAY_MS for FX_MS, then lingers 800 ms).
+export function momentBusyMs(moment) {
+  if (!moment) return 0
+  return moment.fx ? FX_DELAY_MS + FX_MS + 800 : SHOW_MS[moment.kind] ?? 2500
+}
+
+// False while the latest big moment (dice, a defeat, the attack's animation) is still
+// playing on this screen, then true. The end screen waits on it, so the game's last roll
+// is seen to the end before the recap covers it. A moment that follows straight after
+// (the villain falling after the last hit) adds its own time.
+export function useMomentsDone(moment) {
+  const [busy, setBusy] = useState({ id: null, until: 0 })
+  const [, tick] = useState(0)
+  // Worked out while rendering, so the end screen never flashes up for a frame before the roll.
+  let until = busy.until
+  if (moment && moment.id !== busy.id && Date.now() - moment.at <= STALE_MS) {
+    until = Math.max(until, Date.now() + momentBusyMs(moment))
+    setBusy({ id: moment.id, until })
+  }
+  const left = until - Date.now()
+  useEffect(() => {
+    if (left <= 0) return
+    const wake = setTimeout(() => tick((n) => n + 1), left + 50)
+    return () => clearTimeout(wake)
+  }, [until]) // eslint-disable-line react-hooks/exhaustive-deps
+  return left <= 0
+}
 
 const STYLES = {
   roll: { icon: '🎲', title: 'text-zinc-100', panel: 'border-zinc-600 bg-zinc-900/95' },

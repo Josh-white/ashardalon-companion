@@ -91,14 +91,14 @@ export default function Recap({ state, dispatch, big, onFinish }) {
 
   if (hall) {
     return (
-      <div className="fixed inset-0 z-[35] overflow-y-auto bg-zinc-950">
+      <div className="fixed inset-0 z-[45] overflow-y-auto bg-zinc-950">
         <HallOfRecords onClose={() => setHall(false)} />
       </div>
     )
   }
 
   return (
-    <div className={`fixed inset-0 z-[35] overflow-y-auto bg-zinc-950 ${won ? '' : 'recap-defeat'} ${big ? 'p-[1.5vw] text-[1.2vw]' : 'p-4 text-base'}`}>
+    <div className={`fixed inset-0 z-[45] overflow-y-auto bg-zinc-950 ${won ? '' : 'recap-defeat'} ${big ? 'p-[1.5vw] text-[1.2vw]' : 'p-4 text-base'}`}>
       <div className="mx-auto max-w-[60em] text-center">
         <div className={`text-[4em] leading-none ${won ? 'moment-pop' : 'defeat-skull'}`}>{won ? '🏆' : '💀'}</div>
         <h2 className={`moment-pop mt-[0.2em] font-display text-[2.6em] font-bold leading-tight ${won ? 'text-amber-400' : 'text-red-400'}`}>

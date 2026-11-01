@@ -10,7 +10,7 @@ import FirstRoll from './components/FirstRoll.jsx'
 import OpeningStory from './components/OpeningStory.jsx'
 import GamePicker, { GameBar } from './components/GamePicker.jsx'
 import { IdeaButton } from './components/IdeaBox.jsx'
-import MomentOverlay from './components/MomentOverlay.jsx'
+import MomentOverlay, { useMomentsDone } from './components/MomentOverlay.jsx'
 import MonsterList, { VillainList } from './components/MonsterList.jsx'
 import ProjectorView from './components/ProjectorView.jsx'
 import Recap from './components/Recap.jsx'
@@ -228,6 +228,13 @@ export default function App() {
   // Phones, iPads and the projector stay awake while a game is open, like during a video.
   const [stayAwake] = useStayAwakeSetting()
   useStayAwake(stayAwake && Boolean(chosenGame))
+  // The end screen waits for the last roll and its attack animation to finish (an Arc
+  // Lightning that wins the game rolls several dice), so it never shows up under them.
+  const momentsDone = useMomentsDone(state?.moment)
+  const over = state?.status === 'won' || state?.status === 'lost'
+  const ended = over && momentsDone
+  // Meanwhile the game underneath can't be tapped: it's over.
+  const endHold = over && !momentsDone && <div data-end-hold className="fixed inset-0 z-[39]" aria-hidden="true" />
 
   if (showIntro) return <DragonIntro projector={seat === PROJECTOR_SEAT} say={narrator.say} quiet={narrator.quiet} onDone={finishIntro} />
 
@@ -332,7 +339,8 @@ export default function App() {
         <MomentOverlay moment={state.moment} heroes={state.heroes} big />
         <TapForSound locked={soundLocked} big />
         <DungeonDoors at={doorsAt} />
-        {(state.status === 'won' || state.status === 'lost') && <Recap state={state} big />}
+        {endHold}
+        {ended && <Recap state={state} big />}
       </main>
     )
   }
@@ -355,7 +363,8 @@ export default function App() {
       {/* On the real board it sits above the tabs; on the virtual board, in the board's corner. */}
       {!state.board && <SoundBoard state={state} dispatch={dispatch} who={myHero ? myHero.id : 'table'} testCopy={Boolean(instance)} className="fixed bottom-20 left-4" />}
       {!myHero && <BoardToast state={state} />}
-      {(state.status === 'won' || state.status === 'lost') && (
+      {endHold}
+      {ended && (
         <Recap
           state={state}
           dispatch={dispatch}
