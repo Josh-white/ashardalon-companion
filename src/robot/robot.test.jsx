@@ -70,7 +70,7 @@ const CHECKUP = process.env.ROBOT_ADVENTURES
   : null
 
 // Taps the robot never makes: ones that end or leave the game, and sound switches.
-const SKIP = [/New game/i, /End the campaign/i, /Free this hero/i, /We won/i, /We lost/i, /switch$/i, /Sound/i, /Music/i, /🔊|🔇|🎵/, /Finish and archive/i, /Back to the normal lobby/i, /Which game/i, /Switch game/i, /Card pictures/i, /^🔥$/]
+const SKIP = [/New game/i, /End the campaign/i, /Free this hero/i, /We won/i, /We lost/i, /switch$/i, /Sound/i, /Music/i, /🔊|🔇|🎵|☀️|🌙/, /Finish and archive/i, /Back to the normal lobby/i, /Which game/i, /Switch game/i, /Card pictures/i, /^🔥$/]
 
 // Taps a play-to-win game leaves alone too: taking HP off a hero by hand, the − and +
 // buttons (XP, healing surges, tiles left), and Undo, which takes back the win it's after.

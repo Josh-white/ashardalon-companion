@@ -1,4 +1,5 @@
 import { unlockAudio } from '../audio/soundSetting.js'
+import { useStayAwakeSetting } from '../state/stayAwake.js'
 
 // Turns sound effects and the narrator on or off for this device. `elsewhere` says
 // the projector is playing them while this screen is quiet.
@@ -27,6 +28,22 @@ export function MusicToggle({ on, setOn, soundOn, className = '' }) {
       title={soundOn ? undefined : 'Turn sound on to hear the music'}
     >
       {on ? '🎵 Music on' : '🎵 Music off'}
+    </button>
+  )
+}
+
+// Keeps this screen from going to sleep during the game (on by default on every screen).
+export function StayAwakeToggle({ className = '' }) {
+  const [on, setOn] = useStayAwakeSetting()
+  return (
+    <button
+      type="button"
+      className={`rounded-xl px-3 py-2 transition hover:bg-zinc-800 active:scale-95 ${on ? 'text-zinc-300' : 'text-zinc-500'} ${className}`}
+      onClick={() => setOn(!on)}
+      aria-pressed={on}
+      title={on ? 'This screen stays on during the game. Tap to let it sleep.' : 'Tap to keep this screen from going to sleep.'}
+    >
+      {on ? '☀️ Screen stays on' : '🌙 Screen can sleep'}
     </button>
   )
 }
