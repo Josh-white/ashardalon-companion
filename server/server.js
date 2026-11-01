@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url'
 import { WebSocketServer } from 'ws'
 import { ART_NAME, MAX_ART_BYTES } from '../src/data/art.js'
 import { createNarrator } from './narrator.js'
+import { createIdeaBox } from './ideas.js'
 import { auditionList, pickTake, takesDir } from './soundTakes.js'
 import { normalizeCardFile } from '../src/data/cards.js'
 import { missingCards } from '../src/data/cardCheck.js'
@@ -367,6 +368,8 @@ export function startServer({
       console.error('Could not save the players\' records:', error.message)
     }
   }
+  // The players' ideas and feedback, sent from the 💡 button (server/ideas.js).
+  const ideaBox = createIdeaBox(join(dirname(saveFile), 'ideas.json'))
   let { games: otherGames, finished } = loadGameList(gameListFile)
   // Each game in memory: its state, its own Undo steps, and the ids of its latest actions
   // (so a resent one isn't applied twice). Loaded the first time a screen joins it.
@@ -448,6 +451,7 @@ export function startServer({
         .end(JSON.stringify({ players: playerRecords(recordGames(records)), played: records.played ?? {} }))
       return
     }
+    if (ideaBox.handle(req, res)) return
     if (narrator.handle(req, res)) return
     serveStatic(staticDir, req, res)
   })

@@ -82,6 +82,11 @@ if docker cp "$CONTAINER:/data/records.json" "$incoming/records.json" 2>/dev/nul
   backup_save "$incoming/records.json" "$BACKUP_DIR/records" "Players' records"
 fi
 
+# The ideas the players sent from the 💡 button.
+if docker cp "$CONTAINER:/data/ideas.json" "$incoming/ideas.json" 2>/dev/null; then
+  backup_save "$incoming/ideas.json" "$BACKUP_DIR/ideas" "Ideas box"
+fi
+
 # Every other game (solo games and the like) is in the games folder. Each gets its
 # own folder of backups, $BACKUP_DIR/games/<game>/, next to a copy of the list of games.
 if docker cp "$CONTAINER:/data/games" "$incoming/" 2>/dev/null; then
