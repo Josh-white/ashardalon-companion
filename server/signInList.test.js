@@ -93,6 +93,28 @@ describe("the Cloudflare sign-in list", () => {
     expect(cf.org().auth_domain).toBe('hidden-violet.cloudflareaccess.com')
     expect(cf.calls.find((c) => c.method === 'PUT').body).not.toHaveProperty('created_at')
   })
+
+  it('leaves blank organization settings out, and falls back to just the look if Cloudflare still refuses', async () => {
+    const cf = fakeCloudflare()
+    cf.org().user_seat_expiration_inactive_time = ''
+    cf.org().warp_auth_session_duration = null
+    cf.org().session_duration = '24h'
+    let refusals = 1
+    const fetchImpl = async (url, options) => {
+      if (options.method === 'PUT' && url.endsWith('/organizations') && refusals-- > 0) {
+        cf.calls.push({ method: 'PUT', path: '/access/organizations', body: JSON.parse(options.body) })
+        return { ok: false, status: 400, json: async () => ({ success: false, errors: [{ message: 'access.api.error.invalid_org_config' }] }) }
+      }
+      return cf.fetchImpl(url, options)
+    }
+    const look = await listWith(cf, { fetchImpl }).dressSignInPage()
+    expect(look).toMatchObject(SIGN_IN_LOOK)
+    const [first, second] = cf.calls.filter((c) => c.method === 'PUT')
+    expect(first.body).toMatchObject({ name: 'hidden-violet', session_duration: '24h' })
+    expect(first.body).not.toHaveProperty('user_seat_expiration_inactive_time')
+    expect(first.body).not.toHaveProperty('warp_auth_session_duration')
+    expect(Object.keys(second.body).sort()).toEqual(['auth_domain', 'login_design', 'name'])
+  })
 })
 
 describe('the sign-in list on the Pi', () => {

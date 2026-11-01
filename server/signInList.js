@@ -25,7 +25,11 @@ export const SIGN_IN_LOOK = {
 
 // Fields Cloudflare fills in itself; everything else in a policy is sent back as it was.
 const POLICY_READ_ONLY = ['id', 'uid', 'created_at', 'updated_at', 'app_count', 'reusable', 'app_id']
-const ORG_READ_ONLY = ['created_at', 'updated_at']
+// The organization's own settings, sent back unchanged when the sign-in page's look changes.
+const ORG_SETTINGS = ['name', 'auth_domain', 'session_duration', 'auto_redirect_to_identity', 'allow_authenticate_via_warp', 'warp_auth_session_duration', 'user_seat_expiration_inactive_time', 'is_ui_read_only', 'ui_read_only_toggle_reason']
+const pick = (object, keys) => Object.fromEntries(keys.filter((key) => key in object).map((key) => [key, object[key]]))
+// Leaves out settings that are blank (empty text, nothing, or an empty list).
+const filled = (object) => Object.fromEntries(Object.entries(object).filter(([, value]) => value !== '' && value != null && !(Array.isArray(value) && value.length === 0)))
 
 const without = (object, keys) => Object.fromEntries(Object.entries(object).filter(([key]) => !keys.includes(key)))
 
@@ -120,8 +124,18 @@ export function createSignInList({
     // Puts the game's look on the Cloudflare sign-in page (the team's login page).
     async dressSignInPage(look = SIGN_IN_LOOK) {
       const org = await call('GET', '/access/organizations')
-      const saved = await call('PUT', '/access/organizations', { ...without(org, ORG_READ_ONLY), login_design: { ...(org.login_design ?? {}), ...look } })
-      return saved?.login_design ?? look
+      const login_design = { ...filled(org.login_design ?? {}), ...look }
+      // Sending the organization back as it came is refused (invalid_org_config) when some
+      // of its settings are blank, so send only the ones that are set. If Cloudflare still
+      // refuses, send just the name, the sign-in address and the look.
+      try {
+        const saved = await call('PUT', '/access/organizations', { ...filled(pick(org, ORG_SETTINGS)), login_design })
+        return saved?.login_design ?? look
+      } catch (error) {
+        if (!/invalid_org_config/.test(error.message)) throw error
+        const saved = await call('PUT', '/access/organizations', { name: org.name, auth_domain: org.auth_domain, login_design })
+        return saved?.login_design ?? look
+      }
     },
   }
 }
