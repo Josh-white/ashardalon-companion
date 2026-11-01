@@ -228,7 +228,7 @@ export function versionLine(version = import.meta.env.VITE_APP_VERSION, builtAt 
 
 // The game this screen is in, with a way to switch, along the top of every screen. From the
 // home screen an iPad draws the page under its status bar, so the bar starts below it.
-export function GameBar({ name, onSwitch }) {
+export function GameBar({ name, onSwitch, idea = null }) {
   if (!name) return null
   return (
     <div className="flex shrink-0 items-center justify-center gap-3 bg-zinc-900 px-4 pt-[env(safe-area-inset-top)] text-sm text-zinc-400">
@@ -236,6 +236,7 @@ export function GameBar({ name, onSwitch }) {
       <button type="button" className="py-1.5 text-amber-400 underline" onClick={onSwitch}>
         Switch game
       </button>
+      {idea}
     </div>
   )
 }
