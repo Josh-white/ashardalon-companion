@@ -483,17 +483,18 @@ describe('conditions between phases', () => {
     expect(state.moment.kind).toBe('poison')
   })
 
-  it('hurts a poisoned hero who starts at 0 HP after the healing surge', () => {
+  it('clears every condition when a hero gets back up with a healing surge (house rule)', () => {
     let state = poisoned(startGame(), 1)
-    state = gameReducer(state, { type: 'ADJUST_HP', heroId: state.heroes[1].id, amount: -99 })
+    const id = state.heroes[1].id
+    state = gameReducer(state, { type: 'TOGGLE_CONDITION', heroId: id, condition: 'Dazed' })
+    state = gameReducer(state, { type: 'ADJUST_HP', heroId: id, amount: -99 })
     state = next(next(next(state)))
     expect(state.heroes[1].hp).toBe(0)
-    state = gameReducer(state, { type: 'USE_SURGE', heroId: state.heroes[1].id })
-    expect(state.heroes[1].hp).toBe(state.heroes[1].surgeValue - 1)
-    // Only once: a second surge later in the turn doesn't hurt again.
-    state = gameReducer(state, { type: 'ADJUST_HP', heroId: state.heroes[1].id, amount: -99 })
-    state = gameReducer(state, { type: 'USE_SURGE', heroId: state.heroes[1].id })
+    state = gameReducer(state, { type: 'USE_SURGE', heroId: id })
+    expect(state.heroes[1].conditions).toEqual([])
+    // No poison damage after getting back up: the poison is gone.
     expect(state.heroes[1].hp).toBe(state.heroes[1].surgeValue)
+    expect(state.turn.startDamageDue).toBeUndefined()
   })
 
   it('waits for the healing surge of a hero who starts at 0 HP', () => {
