@@ -158,7 +158,6 @@ describe('a new trap or hazard: is there a marker on the tile already?', () => {
 
   it('asks when a marker could be anywhere', () => {
     const { state, heroes } = game()
-    expect(markerOnHeroTile({ ...state, traps: [marker('whirling-blades', 't1')] }, heroes[0])).toBeNull()
     expect(markerOnHeroTile({ ...state, traps: [marker('pit', undefined)] }, heroes[0])).toBeNull()
     expect(markerOnHeroTile({ ...state, board: null }, heroes[0])).toBeNull()
   })

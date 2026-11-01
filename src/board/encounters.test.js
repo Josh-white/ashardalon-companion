@@ -1,3 +1,4 @@
+import { boardMarkers } from './markers.js'
 import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
@@ -91,6 +92,16 @@ describe('encounter targets on the virtual board', () => {
     const drawn = { ...state, encounter: { id: 'e1', cardId: 'dart', heroId: heroes[2].id, card, attacked: false } }
     const next = gameReducer(drawn, { type: 'RESOLVE_ENCOUNTER', random: [] })
     expect(next.traps[0].tile).toBe('t1')
+  })
+
+  it('a Rolling Boulder or Lava Flow drawn on the board is followed from its tile', () => {
+    const { state, heroes } = game([1, -2])
+    const resolve = (card) => gameReducer({ ...state, encounter: { id: 'e1', cardId: card.id, heroId: heroes[2].id, card, attacked: false } }, { type: 'RESOLVE_ENCOUNTER', random: [] })
+    const boulder = resolve({ id: 'rolling-boulder', name: 'Rolling Boulder', type: 'trap', text: 'Trigger the trap during your Villain Phase: Move the Rolling Boulder marker one tile toward the closest Hero.', trap: { damage: 2 } })
+    expect(boulder.traps[0]).toMatchObject({ tile: 't1', tracked: true })
+    expect(boardMarkers(boulder)[0].squares.length).toBeGreaterThan(0)
+    const lava = resolve({ id: 'lava-flow', name: 'Lava Flow', type: 'trap', text: 'Place one Lava Flow marker on any tile adjacent to a tile with a Lava Flow marker.', trap: {} })
+    expect(lava.traps[0].tiles).toEqual(['t1'])
   })
 
   it('puts a monster drawn with no new tile on the closest tile with an unexplored edge (Surrounded!)', () => {

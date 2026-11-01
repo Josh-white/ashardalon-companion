@@ -24,8 +24,7 @@ export const markerMoves = isMovingTrap
 
 // Every marker in play, with the squares of its tiles when the board knows where it is:
 // [{ marker, look, moves, tile, tiles, squares }]. `squares` is empty for an older marker with
-// no saved tile, a tile no longer on the board, or a moving trap placed before the board
-// followed them. The saved tile is the rules' tile (a square's `area`), so a marker on the
+// no saved tile or a tile no longer on the board. The saved tile is the rules' tile (a square's `area`), so a marker on the
 // Start tile's far half tints only that half. Lava Flow can cover several tiles (`tiles`).
 export function boardMarkers(state) {
   const traps = state.traps ?? []
@@ -41,7 +40,7 @@ export function boardMarkers(state) {
 
 // Hero Phase: which traps the hero can try to disable. The rules allow it only from the
 // trap's tile, so on the virtual board a trap whose tile is known and isn't the hero's goes
-// in `away`. A trap the board can't place (an older marker, one that moves, no board, or a
+// in `away`. A trap the board can't place (a marker with no saved tile, no board, or a
 // hero not on the board) stays in `here`, so the button is still offered.
 export function trapsToDisable(state, hero) {
   const traps = (state.traps ?? []).filter((t) => t.type === 'trap')
@@ -55,8 +54,7 @@ export function trapsToDisable(state, hero) {
 
 // A new trap or hazard: does the hero's tile already have a marker? The marker found, false
 // when the board is sure there's none, or null when it can't tell (no board, the hero isn't
-// on it, or a marker it can't place could be anywhere, like a moving trap from before the
-// board followed them), so the screen asks.
+// on it, or a marker with no saved tile could be anywhere), so the screen asks.
 export function markerOnHeroTile(state, hero) {
   const at = state.board && !hero.tokens?.refuge ? state.board.tokens[hero.id] : null
   if (!at) return null

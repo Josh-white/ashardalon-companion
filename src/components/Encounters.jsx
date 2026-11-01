@@ -362,10 +362,11 @@ function EncounterCard({ state, hero, dispatch }) {
             </p>
           )}
           <div className="mt-3 grid grid-cols-2 gap-3">
-            <Button className="py-3 text-xl" onClick={() => dispatch({ type: 'REDRAW_ENCOUNTER' })}>
+            {/* The gold button is the board's answer, so a computer ally taps the right one. */}
+            <Button variant={boardMarker ? 'gold' : undefined} className="py-3 text-xl" onClick={() => dispatch({ type: 'REDRAW_ENCOUNTER' })}>
               Yes
             </Button>
-            <Button variant="gold" className="py-3 text-xl" onClick={() => setMarkerChecked(true)}>
+            <Button variant={boardMarker ? undefined : 'gold'} className="py-3 text-xl" onClick={() => setMarkerChecked(true)}>
               No
             </Button>
           </div>

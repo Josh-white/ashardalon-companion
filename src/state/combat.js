@@ -287,8 +287,9 @@ export function resolveEncounter(state, action) {
     if (tile !== undefined) {
       marker.tile = tile
       // The board follows moving traps (Rolling Boulder) and spreading lava from here on.
-      if (isMovingTrap(card)) marker.tracked = true
-      if (isLava(card)) marker.tiles = [tile]
+      // (Both helpers read a marker, not a card: passing the card made them always false.)
+      if (isMovingTrap(marker)) marker.tracked = true
+      if (isLava(marker)) marker.tiles = [tile]
     }
     next = withLog({ ...next, traps: [...(next.traps ?? []), marker] }, `A ${card.name} marker goes on ${hero?.name ?? 'the hero'}'s tile.`)
   } else if (card.returnToTop) {

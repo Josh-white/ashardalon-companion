@@ -43,11 +43,13 @@ describe('trap and hazard markers on the board', () => {
     expect(found.map((m) => m.tile)).toEqual([undefined, undefined])
   })
 
-  it("doesn't pin a trap that moves (Rolling Boulder) to its first tile", () => {
+  it('draws a trap that moves (Rolling Boulder) on its saved tile, even without the tracked flag', () => {
+    // Every boulder drawn before 2026-11-01 missed the flag (a bug), and never moved.
     const boulder = { id: 'trap4', cardId: 'rolling-boulder', name: 'Rolling Boulder', type: 'trap', tile: 't1', card: { text: 'Move the Rolling Boulder marker one tile toward the closest Hero.' } }
     const [m] = boardMarkers(game([boulder]))
     expect(m.moves).toBe(true)
-    expect(m.squares).toHaveLength(0)
+    expect(m.tile).toBe('t1')
+    expect(m.squares.length).toBeGreaterThan(0)
   })
 
   it('gives an unknown card a look by its type', () => {
@@ -86,9 +88,10 @@ describe('which traps a hero can try to disable', () => {
     expect(away.map((t) => t.id)).toEqual(['dart-start'])
   })
 
-  it('still offers traps the board can’t place: no saved tile, or one that moves', () => {
+  it('still offers traps the board can’t place (no saved tile), and places a boulder by its tile', () => {
     const { state, hero } = withHero([dart(undefined), boulder], [1, 2])
-    expect(trapsToDisable(state, hero).here).toHaveLength(2)
+    expect(trapsToDisable(state, hero).here.map((t) => t.id)).toEqual(['dart-undefined'])
+    expect(trapsToDisable(state, hero).away.map((t) => t.id)).toEqual(['boulder'])
   })
 
   it('offers every trap without a board, and leaves hazards out', () => {

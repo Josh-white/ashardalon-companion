@@ -14,11 +14,12 @@ export const isLava = (marker) => marker?.cardId === 'lava-flow'
 export const isMovingTrap = (marker) => /move the .* marker/i.test(marker?.card?.text ?? '')
 
 // The tiles a marker covers on the board (a square's `area`: half of the Start tile is a
-// tile). A moving trap is only followed once it was placed with this version (`tracked`);
-// an older one could have moved anywhere, so it has none.
+// tile). A moving trap is followed from the tile it went down on. (Until 2026-11-01 a bug
+// left the `tracked` flag off every moving trap, so the flag isn't required: those traps
+// never moved, so their saved tile is still where they are.)
 export function markerTiles(marker) {
   if (isLava(marker) && Array.isArray(marker.tiles)) return marker.tiles
-  if (marker.tile === undefined || (isMovingTrap(marker) && !marker.tracked)) return []
+  if (marker.tile === undefined) return []
   return [marker.tile]
 }
 
