@@ -127,4 +127,17 @@ describe('towardHero', () => {
     expect(towardHero(state, { move: 'toward' })).toBeNull()
     expect(towardHero({ heroes: [hero('a', 6), hero('b', 6)] }, { toward: 'mostHp' })).toBeNull()
   })
+  it('goes by the HP left, not full HP, and skips a downed hero', () => {
+    // Vistra has the biggest HP total but is down; Keyleth has the most HP left.
+    const heroes = [{ ...hero('vistra', 0), maxHp: 12 }, { ...hero('keyleth', 5), maxHp: 10 }, { ...hero('quinn', 3), maxHp: 8 }]
+    expect(towardHero({ heroes }, { move: 'toward', toward: 'mostHp' }).id).toBe('keyleth')
+    const hurt = heroes.map((h) => (h.id === 'vistra' ? { ...h, hp: 2 } : h))
+    expect(towardHero({ heroes: hurt }, { move: 'toward', toward: 'mostHp' }).id).toBe('keyleth')
+  })
+  it('skips a hero in the Astral Refuge or off the virtual board', () => {
+    const step = { move: 'toward', toward: 'mostHp' }
+    expect(towardHero({ heroes: [hero('a', 4), hero('b', 6, { refuge: true })] }, step).id).toBe('a')
+    const board = { tokens: { a: [0, 0] } }
+    expect(towardHero({ heroes: [hero('a', 4), hero('b', 6)], board }, step).id).toBe('a')
+  })
 })
