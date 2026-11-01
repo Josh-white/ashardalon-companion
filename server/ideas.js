@@ -9,6 +9,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { dirname } from 'node:path'
+import { readBody } from './readBody.js'
 
 export const MAX_IDEA_LENGTH = 2000
 export const MAX_FROM_LENGTH = 40
@@ -34,26 +35,8 @@ export function cleanIdea({ text, from } = {}) {
   return { text: body, from: who || null }
 }
 
-function readJson(req, limit = 16 * 1024) {
-  return new Promise((resolve, reject) => {
-    const chunks = []
-    let size = 0
-    req.on('data', (chunk) => {
-      size += chunk.length
-      if (size > limit) {
-        reject(new Error('too big'))
-        req.destroy()
-      } else chunks.push(chunk)
-    })
-    req.on('end', () => {
-      try {
-        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'))
-      } catch (error) {
-        reject(error)
-      }
-    })
-    req.on('error', reject)
-  })
+async function readJson(req, limit = 16 * 1024) {
+  return JSON.parse((await readBody(req, limit)).toString('utf8') || '{}')
 }
 
 export function createIdeaBox(file) {
