@@ -227,6 +227,25 @@ describe('attack box', () => {
     tap(/Roll Wand/)
     expect(game().heroes[0].items.find((i) => i.id === 'i2').used).toBe(true)
   })
+
+  it('keeps the powers up after the Crossbow of Speed, which fires instead of moving', () => {
+    const start = heroPhase(newGame())
+    const crossbow = { id: 'i3', cardId: 'crossbow', name: 'Crossbow of Speed', used: false, card: { id: 'crossbow', name: 'Crossbow of Speed', text: 'Instead of moving, you can attack a Monster within 1 tile.', attack: { bonus: 4, damage: 1 } } }
+    const heroes = start.heroes.map((h, i) => (i === 0 ? { ...h, items: [crossbow] } : h))
+    const game = play({ ...start, heroes, monsters: [brute(start), brute(start, 'm2')] }, attackBox)
+    tap(/Crossbow of Speed/)
+    fireEvent.click(screen.getAllByRole('button', { name: /Brute/ })[0])
+    tap(/Roll Crossbow/)
+    expect(game().turn.lastAttack.free).toBe(true)
+    // No "Attack again" tap: the hero's attack is still there, right under the result.
+    expect(screen.queryByRole('button', { name: 'Attack again' })).toBeNull()
+    expect(screen.getByText(/didn't use .*'s attack/)).toBeTruthy()
+    tap(/Jab/)
+    fireEvent.click(screen.getAllByRole('button', { name: /Brute/ })[0])
+    tap(/Roll Jab/)
+    expect(game().turn.lastAttack.free).toBe(false)
+    expect(screen.getByRole('button', { name: /Attack anyway/ })).toBeTruthy()
+  })
 })
 
 describe('encounter screen', () => {

@@ -265,6 +265,13 @@ function BeforeQuestion({ hero, effects, answers, setAnswers }) {
   return null
 }
 
+// What the hero just attacked with, for the "that wasn't your attack" note.
+function sourceName(hero, last) {
+  const item = last.itemId ? heroItems(hero).find((i) => i.id === last.itemId) : null
+  const power = last.powerId ? hero.powers.find((p) => p.id === last.powerId) : null
+  return `The ${item?.name ?? power?.name ?? 'last attack'}`
+}
+
 // The hero's attack is used up: says why, with a way past it for when a card allows
 // another attack.
 function AttackUsed({ reason, onAnyway }) {
@@ -384,6 +391,9 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
     (effects.ask && Object.keys(asked).length === 0) || (choices && chosen.some((id) => !allDistances[id]))
   const last = state.turn.lastAttack
   const showResults = rolled && last && !last.bonus && last.heroId === hero.id
+  // An item attack that isn't the hero's attack (Crossbow of Speed fires instead of moving,
+  // the Throwing Shield says so): its result stays up and the powers come straight back.
+  const freeResults = showResults && last.free && !gone
 
   if (foes(state).length === 0 && !showResults) {
     return extra ? null : <p className="mt-4 rounded-xl bg-zinc-950/50 p-3 text-zinc-400">No monsters to attack right now.</p>
@@ -442,7 +452,15 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
         {extra ? `⚔️ ${hero.name}'s extra attack from ${extra.source}${extra.bonus ? ` (+${extra.bonus})` : ''}` : '⚔️ Attack a monster'}
       </h3>
 
-      {showResults ? (
+      {freeResults && (
+        <>
+          <AttackAftermath state={state} last={last} dispatch={dispatch} />
+          <p className="rounded-lg bg-emerald-950/60 p-3 text-emerald-200">
+            {sourceName(hero, last)} didn't use {hero.name}'s attack. Pick a power to attack now.
+          </p>
+        </>
+      )}
+      {showResults && !freeResults ? (
         <>
           <AttackAftermath state={state} last={last} dispatch={dispatch} />
           {gone ? (
