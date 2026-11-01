@@ -14,6 +14,7 @@ import { playBoardSound, setBoardOff, setBoardUnlimited } from './soundboard.js'
 import { FIRST_ROLL_MAX_MS, newFirstRoll, rollFirst } from './firstRoll.js'
 import { finishOpening, openingNarrating, startOpening } from './opening.js'
 import { escapeAtPhaseEnd, escapedHero } from '../board/exits.js'
+import { applyPasses, highAlertPass } from './passMonsters.js'
 import { dropItem, moveHeroToken, syncHeroTokens, trippedTokens } from '../board/heroTokens.js'
 import { moveHero, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
 import { boardMove, queueFearMove, queueFoeStep, queueHitMoves, queueMonsterControl, queueMoves, skipBoardMove } from '../board/powerMoves.js'
@@ -918,11 +919,15 @@ function reduce(state, action) {
       }
       // An encounter or treasure card has to be finished before the turn moves on.
       if (state.encounter || state.treasure) return state
+      // High Alert: at the end of each Villain Phase the active hero passes one monster card.
+      // On the virtual board the app does it; at a table the turn guide asks.
+      const alert = state.environment?.cardId === 'high-alert' && state.board ? highAlertPass(state) : null
+      const passed = alert ? applyPasses(state, [alert], 'High Alert') : state
       // A hero who escaped (The Vast Gate Opens) has no more turns.
       let nextIndex = (heroIndex + 1) % state.heroes.length
       for (let i = 0; i < state.heroes.length && escapedHero(state.heroes[nextIndex]); i++) nextIndex = (nextIndex + 1) % state.heroes.length
       // Read-aloud text belongs to the turn it came up in; it doesn't stay on the projector.
-      const told = state.adventure?.story ? { ...state, adventure: { ...state.adventure, story: null } } : state
+      const told = passed.adventure?.story ? { ...passed, adventure: { ...passed.adventure, story: null } } : passed
       return startTurn({
         ...endPhaseCurses(told, state.heroes[heroIndex], 'villain', action.rolls),
         turn: { heroIndex: nextIndex, phase: 0, round: nextIndex <= heroIndex ? round + 1 : round },

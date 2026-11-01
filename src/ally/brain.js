@@ -40,8 +40,8 @@ export function activeAlly(state) {
 
 // Attack powers the ally knows how to use on its own: a roll at one or more monsters, with
 // healing or a shield to hand out afterwards (followUp) or a move it may skip after it.
-// Powers that move figures first, ask a question first, or pass a monster on are left to
-// the players (the ally uses its other powers instead).
+// Powers that move figures first or ask a question first are left to the players (the ally
+// uses its other powers instead). Wrathful Thunder is fine: the board passes the monster.
 const pullsFirst = (power) => {
   const steps = effectsOf(power).board?.before ?? []
   return steps.length > 0 && steps.every((m) => /^monster/.test(m.pick) && m.to === 'nextToSelf')
@@ -54,7 +54,7 @@ export function simpleAttack(power) {
   const asks = !e.ask || ['started-adjacent', 'adjacent-count'].includes(e.ask)
   // Divine Challenge pulls a monster next to the hero first; with one there already, it's a
   // plain attack on that one (the pull is optional, pullsFirst below).
-  if ((e.before && !pullsFirst(power)) || !asks || e.use || e.reaction || e.after === 'pass-monster') return false
+  if ((e.before && !pullsFirst(power)) || !asks || e.use || e.reaction) return false
   return true
 }
 

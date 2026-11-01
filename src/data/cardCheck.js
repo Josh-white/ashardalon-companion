@@ -7,7 +7,8 @@ import { POWER_EFFECT_NAMES, effectsOf } from './powerEffects.js'
 export const ENCOUNTER_IDS = {
   cage: "Cage: reminds the hero they are caged, and the virtual board won't let them move",
   'dragon-s-tribute': "Dragon's Tribute: draws two treasures and keeps the lower one",
-  'high-alert': 'High Alert: reminder in the turn guide',
+  'high-alert': 'High Alert: reminder in the turn guide; the virtual board passes the monster card itself',
+  'warp-in-time': 'Warp in Time: the virtual board passes the monster cards itself',
   surrounded: 'Surrounded!: reminder in the turn guide',
   'occupied-lair': 'Occupied Lair: draws the bottom tile and puts a Treasure token on the virtual board',
   'scream-of-the-sentry': 'Scream of the Sentry: draws the bottom tile, next to the chosen monster on the virtual board',

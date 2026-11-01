@@ -17,6 +17,7 @@ import { MonsterChoice } from './Pickers.jsx'
 import { TileGuardQuestion } from './Treasure.jsx'
 import { DrawTileButton } from './Tiles.jsx'
 import { Button } from './ui.jsx'
+import { highAlertPass, passWords, warpPasses } from '../state/passMonsters.js'
 
 // Encounter cards that put the bottom dungeon tile into play.
 const BOTTOM_TILE_CARDS = new Set(['occupied-lair', 'scream-of-the-sentry', 'spotted'])
@@ -245,6 +246,21 @@ function RefreshDaily({ state, dispatch }) {
 
 // Warp in Time and High Alert: monster cards change hands.
 export function PassMonsters({ state, dispatch, only }) {
+  // On the virtual board the app passes the cards itself; this just says what will happen.
+  if (state.board) {
+    const passes = only ? [highAlertPass(state)].filter(Boolean) : warpPasses(state)
+    if (passes.length === 0) return <p className="text-zinc-400">No monster cards to pass.</p>
+    return (
+      <div className="space-y-1">
+        <p className="text-lg text-zinc-100">{only ? 'High Alert: at the end of this Villain Phase the board passes:' : 'The board passes these cards when you go on:'}</p>
+        {passes.map((pass) => (
+          <p key={pass.monster.id} className="text-zinc-200">
+            🔄 {passWords(pass)}.
+          </p>
+        ))}
+      </div>
+    )
+  }
   const monsters = only ? state.monsters.filter((m) => m.ownerId === only) : state.monsters
   if (monsters.length === 0) return <p className="text-zinc-400">No monster cards to pass.</p>
   return (

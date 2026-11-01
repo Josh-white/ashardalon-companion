@@ -20,6 +20,7 @@ import { activeVillains, clamp, findFoe, lose, markUsed, newId, shuffle, updateH
 import { drawMonsterOfType, filterMonsterDeck, villainInPlay } from './monsterDeck.js'
 import { discardEncounterCard, intoTopThree, oweEncounter } from './encounterDeck.js'
 import { oweTreasure, treasureWords } from './treasureDeck.js'
+import { applyPasses, warpPasses } from './passMonsters.js'
 
 // A hero's AC against an attack. Heroes standing on a Blessed Shield owner's tile get its
 // bonus too: read from the virtual board, or asked on the iPad (tileGuarded) without one.
@@ -300,6 +301,8 @@ export function resolveEncounter(state, action) {
     next = discardEncounterCard(next, card.id)
   }
   if (card.id === 'lost') next = bottomToTop(next)
+  // Warp in Time: on the virtual board the app passes the monster cards itself.
+  if ((card.passMonsters || card.id === 'warp-in-time') && next.board) next = applyPasses(next, warpPasses(next), card.name)
   if (card.drawAnother) next = oweEncounter(next, `${card.name} says to draw another encounter card.`)
   if (downed.length > 0) {
     next = withMoment(next, { kind: 'down', title: `${downed.join(' and ')} ${downed.length > 1 ? 'are' : 'is'} down!`, detail: card.name })
