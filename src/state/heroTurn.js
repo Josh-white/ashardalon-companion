@@ -192,9 +192,8 @@ export function startTurn(state) {
     state = withMoment(state, { kind: 'encounter', heroId: hero.id, title: `${hero.name} is back!`, detail: `${curse.name} is over. ${put}` })
   }
   if (!hero) return state
-  // A hero who starts the turn at 0 HP spends a healing surge first; curse damage comes
-  // after that (USE_SURGE), so getting back up doesn't skip it. The surge clears conditions,
-  // so there is no poison damage then (JJ's house rule).
+  // A hero who starts the turn at 0 HP spends a healing surge first (USE_SURGE). The surge
+  // clears conditions and curses (JJ's house rule), so no poison or curse damage follows.
   if (hero.hp === 0 && state.surges <= 0) {
     return lose(state, `${hero.name} is down at the start of the turn with no healing surges left.`)
   }
