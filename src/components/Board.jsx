@@ -3,7 +3,7 @@ import { heroArt, monsterArt } from '../data/art.js'
 import { boardGrid, figureToken, figuresLeft, moveSpeed, movesLeft, timeLeapt } from '../board/play.js'
 import { moveChoices, movePrompt } from '../board/powerMoves.js'
 import { key } from '../board/grid.js'
-import { canFlyCarpet } from '../board/items.js'
+import { adventureTokenSpots, canFlyCarpet } from '../board/items.js'
 import { HERO_TOKENS, isHeroToken, movableToken } from '../board/heroTokens.js'
 import { boardMarkers } from '../board/markers.js'
 import { exitSquares } from '../board/exits.js'
@@ -11,7 +11,7 @@ import { tapTargets } from '../board/taps.js'
 import { escapeBlockers } from '../state/adventure.js'
 import { activeVillains } from '../state/game.js'
 import { artUrl, useArt } from '../state/useArt.js'
-import { Carpet, Coin, ExitSquares, figureBadges, HeroTokenMark, heroTokenGroups, MarkerBadges, MarkerTiles, NewTileGlow, OpenEdges, PlacedTile, Token } from './BoardPieces.jsx'
+import { Carpet, Coin, ExitSquares, figureBadges, HeroTokenMark, heroTokenGroups, MarkerBadges, MarkerTiles, NewTileGlow, OpenEdges, PlacedTile, QuestToken, Token } from './BoardPieces.jsx'
 import { useFreshTiles } from './useFreshTiles.js'
 import { ClosedDoor, SQUARE } from './TileDrawing.jsx'
 import { useBoardZoom } from './useBoardZoom.js'
@@ -95,6 +95,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   const onBoard = figures.filter((f) => board.tokens[f.id])
   const markers = boardMarkers(state)
   const placedMarkers = markers.filter((m) => m.squares.length > 0)
+  const questTokens = adventureTokenSpots(state)
   const open = markers.find((m) => m.marker.id === reading)
   // A hero lost in a Time Leap waits for their turn before coming back; one who escaped is gone.
   const exits = [...exitSquares(state)]
@@ -432,6 +433,9 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
                 />
               )
             })}
+            {questTokens.map((spot) => (
+              <QuestToken key={spot.name} spot={spot} spin={spin} />
+            ))}
             {items.filter((i) => i.at && i.kind === 'carpet').map((i) => (
               <Carpet key={i.id} item={i} selected={picked === i.id} onTap={tools ? () => setPicked(picked === i.id ? null : i.id) : undefined} />
             ))}
@@ -448,7 +452,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
                 <Token {...f} spin={spin} at={board.tokens[f.id]} active={f.id === activeId} aimed={aimed.includes(f.id.split('#')[0])} acting={acting === f.id.split('#')[0]} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)} onTap={watching && !peekTarget(state, f.id) ? undefined : () => tapFigure(f.id)} />
               </g>
             ))}
-            <MarkerBadges markers={placedMarkers} spin={spin} taken={new Set([...Object.values(board.tokens), ...items.filter((i) => i.at).map((i) => i.at)].map(key))} onTap={(id) => { setPeek(null); setReading(reading === id ? null : id) }} />
+            <MarkerBadges markers={placedMarkers} spin={spin} taken={new Set([...Object.values(board.tokens), ...items.filter((i) => i.at).map((i) => i.at), ...questTokens.map((q) => q.at)].map(key))} onTap={(id) => { setPeek(null); setReading(reading === id ? null : id) }} />
             {heals.filter((h) => board.tokens[h.heroId]).map((h) => (
               <HealFloat key={h.key} at={board.tokens[h.heroId]} amount={h.amount} delay={h.delay} spin={spin} />
             ))}

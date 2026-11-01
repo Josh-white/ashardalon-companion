@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
-import { canFlyCarpet, carpetTargets, treasureInReach } from './items.js'
+import { adventureTokenSpots, canFlyCarpet, carpetTargets, treasureInReach } from './items.js'
 import { normalizeTiles } from './tileDefs.js'
 
 // A made-up start tile with a room north of it.
@@ -112,5 +112,26 @@ describe('Flying Carpet on the virtual board', () => {
     const placed = gameReducer(state, { type: 'PLACE_ITEM', id: carpetId, to: [2, 1] })
     expect(canFlyCarpet(placed, hero)).toBe(false)
     expect(gameReducer(placed, { type: 'FLY_CARPET', to: [1, -3] })).toBe(placed)
+  })
+})
+
+describe("Adventure tokens on the virtual board (Roghar's Gear)", () => {
+  const vault = { id: 'vault', name: 'Vault', kind: 'special', triangle: 'white', rows: ['####', '#..#', '#..#', '#.S#'], exits: { N: 'xxxx', S: 'xoox', W: 'xxxx', E: 'xxxx' }, features: [{ type: 'desk', at: [[1, 1]] }] }
+  const withVault = (turn, held = null) => {
+    const { state } = game()
+    const card = { reveals: [{ tile: 'Vault', actions: [{ type: 'placeToken', name: "Roghar's Gear" }] }] }
+    const board = { ...state.board, defs: { ...state.board.defs, vault }, tiles: [...state.board.tiles, { uid: 'v1', tileId: 'vault', at: [0, -8], turn }] }
+    return { ...state, board, adventure: { card, tokens: [{ name: "Roghar's Gear", heldBy: held }] } }
+  }
+
+  it('puts the Gear on the Vault desk, turned with the tile', () => {
+    expect(adventureTokenSpots(withVault(0))).toEqual([{ name: "Roghar's Gear", at: [1, -7] }])
+    expect(adventureTokenSpots(withVault(180))).toEqual([{ name: "Roghar's Gear", at: [2, -6] }])
+  })
+
+  it('is gone once a hero carries it, and waits until the Vault is on the board', () => {
+    expect(adventureTokenSpots(withVault(0, 'hero-1'))).toEqual([])
+    const { state } = game()
+    expect(adventureTokenSpots({ ...state, adventure: { card: { reveals: [{ tile: 'Vault', actions: [{ type: 'placeToken', name: 'Gear' }] }] }, tokens: [{ name: 'Gear', heldBy: null }] } })).toEqual([])
   })
 })
