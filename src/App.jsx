@@ -355,13 +355,6 @@ export default function App() {
       {/* On the real board it sits above the tabs; on the virtual board, in the board's corner. */}
       {!state.board && <SoundBoard state={state} dispatch={dispatch} who={myHero ? myHero.id : 'table'} testCopy={Boolean(instance)} className="fixed bottom-20 left-4" />}
       {!myHero && <BoardToast state={state} />}
-      {(state.status === 'won' || state.status === 'lost') && (
-        <Recap
-          state={state}
-          dispatch={dispatch}
-          onFinish={game && game.id !== FAMILY_GAME ? { name: game.name, finish: () => changeGames({ type: 'finish-game', id: game.id }) } : null}
-        />
-      )}
     </>
   )
   // The whole game fits the screen and nothing scrolls but the tab that's open. A hero's iPad
@@ -386,13 +379,25 @@ export default function App() {
       ) : (
         <PartyBar undo={undo} undoDepth={undoDepth} state={state} dispatch={dispatch} seatLabel="Table" onSwitchSeat={() => setSeat(null)} sound={sound} boardSwitch />
       )}
-      <PlayView
-        state={state}
-        dispatch={dispatch}
-        allyHost={allyHost}
-        hero={myHero ?? null}
-        soundBoard={<SoundBoard state={state} dispatch={dispatch} who={who} testCopy={Boolean(instance)} className="absolute bottom-3 left-3" />}
-      />
+      {/* The end-of-game recap covers the play area only, so it starts right under the top
+          bars (Undo and the menu stay reachable) instead of hiding the game bar behind it. */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <PlayView
+          state={state}
+          dispatch={dispatch}
+          allyHost={allyHost}
+          hero={myHero ?? null}
+          soundBoard={<SoundBoard state={state} dispatch={dispatch} who={who} testCopy={Boolean(instance)} className="absolute bottom-3 left-3" />}
+        />
+        {(state.status === 'won' || state.status === 'lost') && (
+          <Recap
+            state={state}
+            dispatch={dispatch}
+            contained
+            onFinish={game && game.id !== FAMILY_GAME ? { name: game.name, finish: () => changeGames({ type: 'finish-game', id: game.id }) } : null}
+          />
+        )}
+      </div>
       {overlays}
     </main>
   )
