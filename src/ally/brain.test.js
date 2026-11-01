@@ -114,6 +114,41 @@ describe('the computer ally', () => {
   })
 })
 
+describe('the ally looks after the party', () => {
+  const hymn = card('Healing Hymn', 'utility', '', '', 'You and one hero on your tile regain 2 HP.')
+  const powers = [card('Jab', 'at-will', '+6', '1', 'Attack one adjacent monster.'), hymn]
+  const hurtBy = (state, n) => ({ ...state, heroes: state.heroes.map((h) => ({ ...h, hp: h.maxHp - n })) })
+
+  it('sings Healing Hymn once it has lost 2 HP, not before', () => {
+    const state = start({ powers })
+    expect(allyStep(hurtBy(state, 1), { roll })?.action.type).not.toBe('USE_POWER')
+    const step = allyStep(hurtBy(state, 2), { roll })
+    expect(step.action).toMatchObject({ type: 'USE_POWER', powerId: state.heroes[0].powers.find((p) => p.name === 'Healing Hymn').id })
+    const healed = gameReducer(hurtBy(state, 2), step.action)
+    expect(healed.heroes[0].hp).toBe(healed.heroes[0].maxHp)
+  })
+
+  it('drinks a healing potion at 2 HP or less', () => {
+    const state = start()
+    const potion = { id: 'i1', cardId: 'potion', name: 'Potion', used: false, card: { name: 'Potion', use: 'heal', heal: 2, after: 'discard' } }
+    const low = { ...state, heroes: state.heroes.map((h) => ({ ...h, hp: 2, items: [potion] })) }
+    expect(allyStep(low, { roll }).action).toEqual({ type: 'USE_ITEM', heroId: state.heroes[0].id, itemId: 'i1', heroIds: [state.heroes[0].id] })
+    const fine = { ...low, heroes: low.heroes.map((h) => ({ ...h, hp: 5 })) }
+    expect(allyStep(fine, { roll })?.action.type).not.toBe('USE_ITEM')
+  })
+
+  it('walks to a Treasure token and picks it up', () => {
+    const state = start()
+    const at = state.board.tokens[state.heroes[0].id]
+    const far = { ...state, board: { ...state.board, items: [{ id: 't1', kind: 'treasure', at: [at[0], 7] }] } }
+    const step = allyStep(far, { roll })
+    expect(step.action.type).toBe('MOVE_HERO')
+    expect(gameReducer(far, step.action).board.tokens[state.heroes[0].id][1]).toBeGreaterThan(at[1])
+    const near = { ...state, board: { ...state.board, items: [{ id: 't1', kind: 'treasure', at: [at[0], at[1] + 1] }] } }
+    expect(allyStep(near, { roll }).action).toEqual({ type: 'PICK_UP_TREASURE', id: 't1', heroId: state.heroes[0].id })
+  })
+})
+
 describe('handing a hero to the computer', () => {
   it('only on the virtual board, and back again', () => {
     const state = { ...start(), heroes: start().heroes.map((h) => ({ ...h, ally: false })) }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { momentLines, narrationFor as linesFor } from './narration.js'
+import { allyLines, momentLines, narrationFor as linesFor } from './narration.js'
 
 // Most tests only care about the words; the cast has its own test below.
 // Stage directions like [excited] are left out, as an older voice model would.
@@ -167,5 +167,24 @@ describe('roll for first turn lines', () => {
     expect(lines.every((l) => l.hold === 'firstRoll')).toBe(true)
     const released = { ...after, firstRoll: { ...after.firstRoll, after: null } }
     expect(linesFor(after, released, 0).map((l) => l.text)).toEqual([expect.stringContaining("Tarak, it's your turn")])
+  })
+})
+
+describe('the coach of a hero the computer plays', () => {
+  const base = { status: 'playing', heroes: [{ id: 'h1', key: 'rogue', name: 'Tarak' }], villains: [], turn: { heroIndex: 0, phase: 0, round: 2 }, moment: null }
+  const ally = { ...base, heroes: [{ ...base.heroes[0], ally: true }] }
+
+  it('takes the hero over, and hands it back, in the coach voice', () => {
+    expect(allyLines(base, ally)).toEqual([{ voice: 'coach_rogue', text: expect.stringMatching(/keep Tarak out of trouble/) }])
+    expect(allyLines(ally, base)[0].text).toMatch(/back in your hands/)
+  })
+
+  it('asks for a hand, and cheers a monster defeated', () => {
+    const help = { ...ally, turn: { ...ally.turn, allyHelp: 'Tarak needs a hand with this step.' } }
+    expect(allyLines(ally, help)[0].text).toMatch(/Tarak's stuck/)
+    const won = { ...ally, moment: { id: 'm1', kind: 'defeat', at: 1000, title: 'Kobold defeated!' } }
+    expect(linesFor(ally, won, 1000).map((l) => l.voice)).toEqual(['herald', 'coach_rogue'])
+    // A player's own hero: the coach stays quiet.
+    expect(allyLines(base, { ...base, moment: won.moment }, 1000)).toEqual([])
   })
 })

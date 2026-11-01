@@ -5,6 +5,7 @@ import { serverNow, useGameStates } from '../state/useSharedGame.js'
 import { TAP_EVENTS, audioContext } from './soundSetting.js'
 import { VOICE_DUCK, VOICE_HOLD_S, holdQuiet, layer, releaseQuiet } from './mixer.js'
 import { SWITCH_PAUSE_MS, pauseBetween, waitMs } from './pacing.js'
+import { narratorBusyIs } from './busy.js'
 
 // If the game moves faster than the narrator can talk, old lines are dropped.
 const MAX_QUEUE = 5
@@ -77,6 +78,14 @@ export function useNarrator(on, { onHold } = {}) {
   useEffect(() => {
     hold.current = onHold
   })
+  // The computer allies wait while the narrator talks (not while a line waits on a tap
+  // to unlock the sound: that could be a long wait).
+  const busy = useRef({ on, blocked })
+  busy.current = { on, blocked }
+  useEffect(() => {
+    narratorBusyIs(() => busy.current.on && !busy.current.blocked && (Boolean(speaking) || queue.current.length > 0))
+    return () => narratorBusyIs(() => false)
+  }, [])
 
   useEffect(() => {
     fetch('/narrate')

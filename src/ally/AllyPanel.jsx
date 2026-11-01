@@ -9,6 +9,7 @@ import { rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { serverNow } from '../state/useSharedGame.js'
 import { activeAlly, allyStep, bonusAttack } from './brain.js'
+import { audioBusy } from '../audio/busy.js'
 
 // How long the ally waits between taps, so everyone can see what it did.
 export const ALLY_STEP_MS = 2500
@@ -18,6 +19,10 @@ const REACTION_MS = 6000
 const STUCK_TICKS = 3
 // The same button this many times in a row: it isn't getting anywhere.
 const MAX_REPEATS = 8
+// The ally waits for the sounds and the narrator on this screen to finish, but never longer than this.
+const MAX_SOUND_WAIT_MS = 20000
+// How often it checks whether they have.
+const SOUND_CHECK_MS = 400
 
 const label = (el) => (el.getAttribute('aria-label') || el.textContent || '').replace(/\s+/g, ' ').trim()
 
@@ -67,6 +72,18 @@ export function useAllyDriver(state, dispatch, drive) {
         return ALLY_STEP_MS
       }
       if (firstRollShowing(s, serverNow())) return ALLY_STEP_MS
+      // A roar, a fanfare or the narrator still going: let it finish, then a short breath.
+      if (audioBusy()) {
+        mem.soundSince ??= Date.now()
+        if (Date.now() - mem.soundSince < MAX_SOUND_WAIT_MS) {
+          mem.afterSound = true
+          return SOUND_CHECK_MS
+        }
+      } else mem.soundSince = null
+      if (mem.afterSound) {
+        mem.afterSound = false
+        return ALLY_STEP_MS / 2
+      }
       // An extra attack handed to an ally on anyone's turn (Cause Fear).
       const extra = (s.turn.bonusAttacks ?? []).map((b) => s.heroes.find((h) => h.id === b.heroId)).find((h) => h?.ally)
       const bonus = extra && bonusAttack(s, extra, rollD20)

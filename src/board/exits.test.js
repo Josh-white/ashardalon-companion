@@ -106,3 +106,23 @@ describe('escaping on the virtual board', () => {
     expect(state.status).toBe('won')
   })
 })
+
+describe('a computer ally and the way out', () => {
+  it('walks to the stairs once the goals are done, and stops on them', async () => {
+    const { allyStep } = await import('../ally/brain.js')
+    let state = withExit(ONE_OUT)
+    state = { ...state, heroes: state.heroes.map((h) => ({ ...h, ally: true })), monsters: [], villains: [], turn: { ...state.turn, phase: 0 } }
+    const exits = exitSquares(state)
+    for (let i = 0; i < 12 && !exits.has(key(state.board.tokens[state.heroes[0].id])); i++) {
+      const step = allyStep(state, { roll: () => 10 })
+      expect(step?.action.type).toBe('MOVE_HERO')
+      state = gameReducer(state, step.action)
+      // A new turn when the moves run out.
+      if ((state.turn.boardMoves ?? 0) >= 2) state = { ...state, turn: { ...state.turn, boardMoves: 0 } }
+    }
+    expect(exits.has(key(state.board.tokens[state.heroes[0].id]))).toBe(true)
+    // On the stairs: nothing more to do, so the Hero Phase ends there and the hero gets out.
+    expect(allyStep(state, { roll: () => 10 })).toBeNull()
+    expect(endHeroPhase(state).adventure.escaped).toBe(true)
+  })
+})

@@ -565,6 +565,14 @@ describe('what a phase still needs', () => {
     expect(phaseTodo(state, decks)).toEqual([])
   })
 
+  it("goes on when there's no monster card left to draw", () => {
+    let state = gameReducer(next(startGame()), { type: 'SET_EXPLORED', explored: true })
+    state = { ...state, monsterDeck: { cards: {}, draw: [], discard: [] } }
+    state = gameReducer(state, { type: 'DRAW_MONSTER', heroId: state.heroes[0].id, random: [] })
+    expect(state.log[0].text).toMatch(/no monster comes this time/)
+    expect(phaseTodo(state, decks)).toEqual([])
+  })
+
   it('waits for the encounter card and each monster turn', () => {
     let state = startGame()
     const hero = state.heroes[0]

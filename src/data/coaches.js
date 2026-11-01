@@ -93,3 +93,45 @@ export function coachPowerHint(heroKey, powerName) {
   if (!name) return null
   return coachFor(heroKey)?.tips.find((tip) => plain(tip).includes(name)) ?? null
 }
+
+// What each coach says while the computer plays their hero (src/ally/): taking the hero
+// over, handing it back, asking the players for a hand, and cheering a monster defeated.
+// Set lines with the hero's name, so the Pi records each once (audio/script.js).
+export const ALLY_LINES = {
+  cleric: {
+    take: '[warm] Rest now, child. I will guide Quinn for a while.',
+    back: '[warm] Quinn is yours again, child. Walk in the light.',
+    help: '[gentle] Child, Quinn needs your help with this one. Tap for Quinn, please.',
+    defeat: '[warm, proud] Well done, Quinn! The light is with you.',
+  },
+  fighter: {
+    take: '[gruff] Take a breather, recruit! Sergeant Brumm has Vistra from here.',
+    back: '[gruff] Back on your feet, recruit! Vistra is all yours.',
+    help: '[gruff] Recruit! Vistra needs a hand with this step. Tap it!',
+    defeat: "[gruff, proud] That's how it's done, Vistra! Next!",
+  },
+  paladin: {
+    take: '[noble] Rest, friend. I will stand with Keyleth until you return.',
+    back: '[noble] Keyleth answers to you again. Be brave.',
+    help: '[noble] Friend, Keyleth needs your help here. Choose for us.',
+    defeat: '[noble, triumphant] For the silver order! Well struck, Keyleth!',
+  },
+  rogue: {
+    take: "[sly] Psst. Go grab a snack. I'll keep Tarak out of trouble.",
+    back: "[sly] Tarak's back in your hands. Don't tell anyone I helped.",
+    help: "[sly, whispering] Psst! Tarak's stuck. Give this step a tap for me?",
+    defeat: '[sly, delighted] Ha! They never saw Tarak coming.',
+  },
+  wizard: {
+    take: "[wise] Rest your mind. I shall guide Heskan's spells a while.",
+    back: "[wise] Heskan's magic returns to you. Use it well.",
+    help: '[wise, curious] Hmm. Heskan needs a wiser head for this step. Tap for us, please.',
+    defeat: "[wise, pleased] Splendid! Heskan's magic prevails.",
+  },
+}
+
+// One of those lines in the coach's voice, or null (a homebrew hero has no coach).
+export const allyLine = (heroKey, when) => {
+  const text = ALLY_LINES[heroKey]?.[when]
+  return text ? { voice: `coach_${heroKey}`, text } : null
+}

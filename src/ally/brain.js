@@ -11,7 +11,7 @@
 
 import { baseId, key, unexploredEdges } from '../board/grid.js'
 import { distances } from '../board/paths.js'
-import { boardGrid, heroEdges, heroReach, stayedOnBoard } from '../board/play.js'
+import { boardGrid, heroEdges, heroReach, movesLeft, stayedOnBoard } from '../board/play.js'
 import { foeDistance, foesInRange, powerRange } from '../board/monsters.js'
 import { heroesInReach } from '../board/encounters.js'
 import { moveChoices, moveTargets } from '../board/powerMoves.js'
@@ -22,6 +22,10 @@ import { powerNumber } from '../state/combat.js'
 import { foes } from '../state/gameHelpers.js'
 import { attackGone } from '../state/heroTurn.js'
 import { XP_TO_LEVEL_UP } from '../data/heroes.js'
+import { heroItems } from '../data/items.js'
+import { treasureInReach } from '../board/items.js'
+import { escapeBlockers } from '../state/adventure.js'
+import { escapeGoal, escapeHold, exitName, exitSquares } from '../board/exits.js'
 
 // A d20 the way the screens roll one; tests pass their own.
 const d20 = () => Math.floor(Math.random() * 20) + 1
@@ -166,6 +170,94 @@ function stepsToGoals(state, goals) {
   return best
 }
 
+
+// ---- Looking after the party (slice 3): heals, items, treasure and the way out ----
+
+// Heroes still standing within a reach of the ally ('sameTile', 'adjacent', 'within2'), the ally first.
+const nearby = (state, hero, reach) => (heroesInReach(state, hero.id, reach) ?? [hero.id]).map((id) => heroById(state, id)).filter((h) => h && h.hp > 0 && !h.escaped)
+const neediest = (list) => [...list].sort((a, b) => hurt(b) - hurt(a) || a.hp - b.hp)[0] ?? null
+const foesOnBoard = (state) => foes(state).filter((m) => !m.objective && m.hp > 0 && onBoard(state, m))
+// Conditions a power or item can end (not curses).
+const ENDABLE = ['Dazed', 'Poisoned', 'Immobilized', 'Slowed', 'Weakened']
+const endable = (h) => (h.conditions ?? []).find((c) => ENDABLE.includes(c)) ?? null
+
+// A utility power the ally knows: one that heals (Healing Hymn, Lay On Hands, Dwarven
+// Resilience), ends a condition (Virtue's Touch) or puts Mirror Image up when monsters are
+// around. Used only when it does some good. Powers that place things on the board stay
+// with the players.
+export function supportPower(state, hero) {
+  for (const power of hero.powers.filter((p) => !p.used && p.card)) {
+    const use = effectsOf(power).use
+    if (!use || use.board || use.causeFear || use.refuge || use.invisible || use.ask) continue
+    if (use.tokens && !use.tokens.mirrorImage) continue
+    // Healing that isn't worth it yet: save it until someone has lost this much.
+    const amount = Math.max(use.healSelf ?? 0, use.heal ?? 0)
+    if (use.move && movesLeft(state, hero) === 0) continue
+    if (use.endCondition) {
+      const who = nearby(state, hero, use.reach ?? 'adjacent').find((h) => (use.pick !== 'other' || h.id !== hero.id) && endable(h))
+      if (who) return { action: { type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: [who.id], condition: endable(who) }, say: `${hero.name} uses ${power.name}: ${who.name} is no longer ${endable(who)}.` }
+      continue
+    }
+    if (use.tokens?.mirrorImage) {
+      if (hero.tokens?.mirrorImage || foesOnBoard(state).length === 0 || hero.hp > hero.maxHp / 2) continue
+      return { action: { type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: [] }, say: `${hero.name} casts ${power.name}.` }
+    }
+    if (!amount) continue
+    const others = use.pick ? nearby(state, hero, use.reach ?? 'sameTile').filter((h) => h.id !== hero.id) : []
+    const other = neediest(others)
+    const selfGood = use.healSelf && hurt(hero) >= use.healSelf
+    const otherGood = use.heal && other && hurt(other) >= use.heal
+    if (use.pick === 'other' && !use.optional && !use.healSelf ? !otherGood : !(selfGood || otherGood)) continue
+    const heroIds = use.pick && other && (otherGood || !use.optional) ? [other.id] : []
+    const who = [use.healSelf && hero.name, heroIds[0] && other.name].filter(Boolean).join(' and ')
+    return { action: { type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds }, say: `${hero.name} uses ${power.name} to heal ${who}.` }
+  }
+  return null
+}
+
+// A healing potion or a cure among the ally's items, for itself or a hero next to it who
+// needs it: healing once a hero is down to 2 HP or less, a cure for a condition.
+export function supportItem(state, hero) {
+  for (const item of heroItems(hero).filter((i) => !i.used && i.card)) {
+    const card = item.card
+    const close = nearby(state, hero, 'adjacent')
+    if (card.use === 'heal') {
+      const who = neediest(close.filter((h) => h.hp <= 2 && hurt(h) > 0))
+      if (who) return { action: { type: 'USE_ITEM', heroId: hero.id, itemId: item.id, heroIds: [who.id] }, say: `${hero.name} uses the ${card.name} on ${who.id === hero.id ? 'itself' : who.name}.` }
+    }
+    if (card.use === 'endCondition') {
+      const who = close.find(endable)
+      if (who) return { action: { type: 'USE_ITEM', heroId: hero.id, itemId: item.id, heroIds: [who.id], condition: endable(who) }, say: `${hero.name} uses the ${card.name}: ${who.name} is no longer ${endable(who)}.` }
+    }
+  }
+  return null
+}
+
+// The way out, once the adventure's goals are done and this hero can leave (carrying the
+// item it has to, if any). Null while there's nothing to escape to.
+export function exitGoal(state, hero) {
+  if (!state.board || !escapeGoal(state) || state.adventure.escaped || escapeBlockers(state).length > 0) return null
+  const hold = escapeHold(state, hero)
+  if (hold === 'token' || hold === 'goals' || hold === 'no-escape') return null
+  const squares = [...exitSquares(state)].map(parse)
+  return squares.length > 0 ? { squares, name: exitName(state), here: hold === '' } : null
+}
+
+// Walks the hero toward some goal squares, as far as it can this move. Null when it can't get closer.
+function walkToward(state, hero, goals, say) {
+  const reach = heroReach(state, hero)
+  const at = state.board.tokens[hero.id]
+  if (!at || reach.length === 0 || goals.length === 0) return null
+  const steps = stepsToGoals(state, goals)
+  const here = steps.get(key(at)) ?? 99
+  const target = [...reach].sort((a, b) => (steps.get(a) ?? 99) - (steps.get(b) ?? 99))[0]
+  if (target && (steps.get(target) ?? 99) < here) return { to: parse(target), say }
+  return null
+}
+
+// Treasure tokens lying on the board that nobody has picked up (Hidden Treasure).
+const looseTreasure = (state) => (state.board.items ?? []).filter((i) => i.kind === 'treasure' && i.at).map((i) => i.at)
+
 // Where the hero goes now, or null to stay put: next to a monster it can attack from there,
 // closer to the monsters, or on to the nearest unexplored edge when there are none.
 export function bestMove(state, hero) {
@@ -178,6 +270,10 @@ export function bestMove(state, hero) {
   const grid = boardGrid(state.board)
   const fromHere = distances(grid, at)
   const nearer = (a, b) => (fromHere.get(a) ?? 99) - (fromHere.get(b) ?? 99)
+
+  // The goals are done: head for the way out, monsters or not (getting out wins the game).
+  const out = exitGoal(state, hero)
+  if (out) return out.here ? null : walkToward(state, hero, out.squares, `${hero.name} heads for the ${out.name}.`)
 
   if (foeSquares.length > 0) {
     // Already attacked: stay where it is rather than walk away from the fight.
@@ -197,7 +293,13 @@ export function bestMove(state, hero) {
     return null
   }
 
-  // No monsters: explore. A hero on an edge already stays to draw the tile.
+  // No monsters: pick up a Treasure token lying about, then explore. A hero on an edge
+  // already stays to draw the tile.
+  const loot = looseTreasure(state)
+  if (loot.length > 0 && !treasureInReach(state, hero)) {
+    const walk = walkToward(state, hero, loot, `${hero.name} goes for the Treasure token.`)
+    if (walk) return walk
+  }
   if (heroEdges(state).length > 0) return null
   const edgeSquares = unexploredEdges(grid).flatMap((e) => e.squares)
   if (edgeSquares.length === 0) return null
@@ -241,6 +343,13 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
     if (state.turn.boardMove || (state.turn.bonusAttacks ?? []).length > 0) return null
     if (hero.level === 1 && state.turn.natural20 === hero.id && state.xp >= XP_TO_LEVEL_UP) {
       return { action: { type: 'LEVEL_UP', heroId: hero.id }, say: `Natural 20! ${hero.name} levels up.` }
+    }
+    const care = supportItem(state, hero) ?? supportPower(state, hero)
+    if (care) return care
+    // A Treasure token on or next to the hero: pick it up (nothing else waiting to be handed out).
+    const token = treasureInReach(state, hero)
+    if (token && !state.treasure && !state.turn.treasureOwed && !state.turn.tokenOwed) {
+      return { action: { type: 'PICK_UP_TREASURE', id: token.id, heroId: hero.id }, say: `${hero.name} picks up the Treasure token.` }
     }
     const option = attackOptions(state, hero)[0]
     if (option) return { action: attackAction(state, hero, option, roll), say: option.say }
