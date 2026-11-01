@@ -3,7 +3,8 @@
 //
 // It makes the choices a player makes in the Hero Phase (spend a surge, attack, move, pick
 // the extra power after levelling up) and answers "no tile" in the Exploration Phase when
-// the hero isn't on an edge. Everything else (drawing the tile, the encounter card, every
+// the hero isn't on an edge, and cancels a nasty encounter card when the party has XP to
+// spare (cancelEncounter.js). Everything else (drawing the tile, the encounter card, every
 // monster's turn, treasure) is a tap through the turn screen, where the board already
 // answers the questions; AllyPanel.jsx taps those buttons. Returns
 //   { action, say }  a tap to send, and what the ally is doing, in words
@@ -28,6 +29,7 @@ import { treasureInReach } from '../board/items.js'
 import { escapeBlockers } from '../state/adventure.js'
 import { escapeGoal, escapeHold, exitName, exitSquares } from '../board/exits.js'
 import { trapDisable } from '../state/encounterRules.js'
+import { cancelEncounter } from './cancelEncounter.js'
 
 // A d20 the way the screens roll one; tests pass their own.
 const d20 = () => Math.floor(Math.random() * 20) + 1
@@ -575,6 +577,9 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
   // A moving trap or the lava with more than one way to go: the first tile the board lights.
   const trapPick = state.turn.trapPick
   if (trapPick?.tiles?.length > 0) return { action: { type: 'TRAP_STEP', trapId: trapPick.trapId, tile: trapPick.tiles[0] }, say: 'The trap moves on.' }
+  // An encounter card just drawn: cancel it with spare XP when it's a nasty one.
+  const cancel = cancelEncounter(state, hero)
+  if (cancel) return cancel
   if (phase === 'hero') {
     // A move waiting for someone else, or someone's extra attack: those come first.
     if (state.turn.boardMove || (state.turn.bonusAttacks ?? []).length > 0) return null
