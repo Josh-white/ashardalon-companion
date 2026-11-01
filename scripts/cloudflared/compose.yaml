@@ -1,0 +1,15 @@
+# The Cloudflare Tunnel that lets friends reach the game from outside the house at
+# FRIENDS_HOST (see "Friends from outside" in the README). It dials out to Cloudflare,
+# so nothing opens on the router. The token lives only in the git-ignored .env here:
+#   TUNNEL_TOKEN=<the token from the Cloudflare dashboard>
+# Start: docker compose up -d     Stop: docker compose down
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.3
+    container_name: cloudflared
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN:?Put TUNNEL_TOKEN in scripts/cloudflared/.env}
+    # The tunnel's public hostname points at localhost:8081, the real game.
+    network_mode: host
+    restart: unless-stopped

@@ -100,14 +100,15 @@ export function createNarrator({
   // The same line in the same voice, recorded with any model.
   const savedFile = (voice, text) => KNOWN_MODELS.map((model) => cacheFile(voice, model, text)).find(existsSync)
 
-  const speak = async (text, voice, model) => {
+  const speak = async (text, voice, model, recordedOnly = false) => {
     const file = cacheFile(voice, model, text)
     if (existsSync(file)) return readFileSync(file)
     // The same line in the same voice, already recorded with another model.
     const saved = savedFile(voice, text)
     if (saved) return readFileSync(saved)
     // Without a key the narrator only plays lines it already recorded.
-    if (!apiKey) throw Object.assign(new Error('Not recorded yet, and no ElevenLabs key to record it'), { status: 0, offline: true })
+    // Friends' screens only play lines already recorded too (server/access.js).
+    if (!apiKey || recordedOnly) throw Object.assign(new Error('Not recorded yet, and no ElevenLabs key to record it'), { status: 0, offline: true })
     if (pending.has(file)) return pending.get(file)
     const job = (async () => {
       const response = await fetchSpeech(`https://api.elevenlabs.io/v1/text-to-speech/${voice}?output_format=mp3_44100_128`, {
@@ -140,16 +141,16 @@ export function createNarrator({
   // Speaks a line as one of the cast's roles; anything else is the narrator, so a
   // page can't ask for any voice it likes. A voice this ElevenLabs account can't
   // use falls back to the narrator, so the line is still heard.
-  const speakAs = (role, text) => {
+  const speakAs = (role, text, { recordedOnly = false } = {}) => {
     const chosen = voiceFor(role)
     const voice = refused.has(chosen) ? voices.narrator : chosen
     const model = modelFor(role)
-    return speak(text, voice, model).catch((error) => {
+    return speak(text, voice, model, recordedOnly).catch((error) => {
       if (voice === voices.narrator) throw error
       if (!error.offline) console.error(`Narrator: the ${role} voice failed, using the narrator instead.`, error.message)
       // Not found or not on this plan won't fix itself; a network blip might.
       if (error.status === 402 || error.status === 403 || error.status === 404) refused.add(voice)
-      return speak(text, voices.narrator, model)
+      return speak(text, voices.narrator, model, recordedOnly)
     })
   }
 
@@ -170,8 +171,8 @@ export function createNarrator({
   const enabled = () => Boolean(apiKey) || (existsSync(cacheDir) && readdirSync(cacheDir).some((f) => f.endsWith('.mp3')))
 
   // Handles /narrate (is the narrator set up?) and /narrate?text=... (the mp3).
-  // Returns false for any other path.
-  const handle = (req, res) => {
+  // Returns false for any other path. `recordedOnly` plays only lines already saved.
+  const handle = (req, res, { recordedOnly = false } = {}) => {
     const url = new URL(req.url, 'http://localhost')
     if (url.pathname !== '/narrate') return false
     const text = (url.searchParams.get('text') ?? '').trim()
@@ -183,7 +184,7 @@ export function createNarrator({
       res.writeHead(413, { 'Content-Type': 'text/plain' }).end('Line too long')
       return true
     }
-    speakAs(url.searchParams.get('voice'), text).then(
+    speakAs(url.searchParams.get('voice'), text, { recordedOnly }).then(
       (audio) => res.writeHead(200, { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'public, max-age=31536000, immutable' }).end(audio),
       (error) => {
         if (error.offline) {

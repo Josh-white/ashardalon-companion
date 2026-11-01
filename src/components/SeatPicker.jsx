@@ -52,11 +52,13 @@ export default function SeatPicker({ heroes, onPick, tableSeat, projectorSeat, o
         <Button onClick={() => onPick(tableSeat)}>Table view (everyone's heroes and monsters)</Button>
         <Button onClick={() => onPick(projectorSeat)}>Projector view (big screen, no buttons)</Button>
       </div>
-      <p className="mt-6 text-center text-sm">
-        <button type="button" className="text-zinc-500 underline" onClick={onArt}>
-          📷 Add photos of your cards
-        </button>
-      </p>
+      {onArt && (
+        <p className="mt-6 text-center text-sm">
+          <button type="button" className="text-zinc-500 underline" onClick={onArt}>
+            📷 Add photos of your cards
+          </button>
+        </p>
+      )}
     </div>
   )
 }

@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url'
 import { WebSocketServer } from 'ws'
 import { ART_NAME, MAX_ART_BYTES } from '../src/data/art.js'
 import { createNarrator } from './narrator.js'
+import { cleanEmail, createAccess } from './access.js'
 import { createIdeaBox } from './ideas.js'
 import { readBody } from './readBody.js'
 import { auditionList, pickTake, takesDir } from './soundTakes.js'
@@ -271,8 +272,14 @@ function serveStatic(staticDir, req, res) {
 // The family game is always there. Other games are started from the "Which game?" screen.
 export const FAMILY_GAME = 'family'
 const FAMILY_NAME = 'Family game'
-// How many games can be kept at once, the family game included.
+// How many games the family can keep at once, the family game included. Friends' games
+// don't count against it: each friend keeps at most FRIEND_GAMES of their own.
 export const MAX_GAMES = 10
+export const FRIEND_GAMES = 2
+// A game can have this many friends invited to play in it.
+export const MAX_INVITES = 8
+// However many friends there are, the Pi keeps no more games than this.
+const MAX_ALL_GAMES = 60
 const GAME_ID = /^[a-z0-9-]{1,40}$/
 
 // How long a finished game stays on the Finished list, where it can be brought back.
@@ -301,6 +308,12 @@ export function gameIdFor(name, taken) {
   for (let n = 2; id === FAMILY_GAME || taken.includes(id); n++) id = `${base}-${n}`
   return id
 }
+
+// Friends see and play only the games they made or were invited to. The family sees
+// every game; a friend's game can be managed (renamed, finished, invited to) by the
+// friend who made it and by the family.
+export const canSee = (who, game) => who.family || (Boolean(who.email) && (game.owner === who.email || (game.invited ?? []).includes(who.email)))
+export const canManage = (who, game) => who.family || (Boolean(who.email) && game.owner === who.email)
 
 // What the "Which game?" screen shows about a game.
 const gameSummary = (room, name, screens) => ({
@@ -331,6 +344,7 @@ export function startServer({
   narrator = createNarrator({ cacheDir: join(dirname(saveFile), 'narration') }),
   // ELEVENLABS_WARM_UP=off skips recording the villain lines on start (to try voices cheaply).
   warmNarrator = process.env.ELEVENLABS_WARM_UP !== 'off',
+  access = null,
 } = {}) {
   const gamesDir = join(dirname(saveFile), 'games')
   const gameListFile = join(gamesDir, 'games.json')
@@ -343,8 +357,8 @@ export function startServer({
   } catch (error) {
     console.error('Could not read the players\' records:', error.message)
   }
-  function updateRecords(state) {
-    const next = syncRecord(records, state)
+  function updateRecords(r) {
+    const next = syncRecord(records, r.state, Date.now(), { game: r.id, friend: Boolean(otherGames.find((g) => g.id === r.id)?.owner) })
     if (!next) return
     records = next
     try {
@@ -353,6 +367,8 @@ export function startServer({
       console.error('Could not save the players\' records:', error.message)
     }
   }
+  // Who each request is: the family, or a friend signed in through Cloudflare (server/access.js).
+  access ??= createAccess()
   // The players' ideas and feedback, sent from the 💡 button (server/ideas.js).
   const ideaBox = createIdeaBox(join(dirname(saveFile), 'ideas.json'))
   let { games: otherGames, finished } = loadGameList(gameListFile)
@@ -396,6 +412,38 @@ export function startServer({
       res.writeHead(200, { 'Content-Type': 'text/plain' }).end('ok')
       return
     }
+    access.who(req).then(
+      (who) => {
+        if (!who) {
+          res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Please sign in through the link JJ sent you.')
+          return
+        }
+        respond(req, res, who)
+      },
+      (error) => {
+        console.error('Friends: could not check who is asking:', error.message)
+        if (!res.headersSent) res.writeHead(500).end()
+      },
+    )
+  })
+  // What a friend's screen may not do: change card pictures or sounds, or read and tidy the ideas box.
+  const friendRefused = (req) => {
+    const path = req.url.split('?')[0]
+    const reading = req.method === 'GET' || req.method === 'HEAD'
+    if (path.startsWith('/art/') || path.startsWith('/sound-takes')) return !reading
+    if (path === '/ideas') return req.method !== 'POST'
+    return path === '/ideas.json' || path.startsWith('/ideas/')
+  }
+
+  function respond(req, res, who) {
+    if (!who.family && friendRefused(req)) {
+      res.writeHead(403, { 'Content-Type': 'text/plain' }).end('Only the family can do that.')
+      return
+    }
+    if (req.url === '/me.json') {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify({ friend: !who.family, email: who.email }))
+      return
+    }
     if (req.url === '/cards.json') {
       const cards = loadCards(cardsFile, exampleCardsFile)
       setHeroTemplates(cards.heroes)
@@ -427,21 +475,44 @@ export function startServer({
       return
     }
     if (req.url === '/games.json') {
-      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(gameList()))
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(gameList(who)))
       return
     }
     if (req.url === '/records.json') {
+      // The family's records leave out friends' games; a friend sees only the games they played in.
+      const seen = new Set([...otherGames, ...finished].filter((g) => canSee(who, g)).map((g) => g.id))
       res
         .writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
-        .end(JSON.stringify(recordsReply(records)))
+        .end(JSON.stringify(recordsReply(records, (g) => (who.family ? !g.friend : seen.has(g.game)), who.family)))
       return
     }
-    if (ideaBox.handle(req, res)) return
-    if (narrator.handle(req, res)) return
+    if (ideaBox.handle(req, res, who.family ? null : who.email)) return
+    // Friends hear only lines already recorded, so they never spend the ElevenLabs credits.
+    if (narrator.handle(req, res, { recordedOnly: !who.family })) return
     serveStatic(staticDir, req, res)
-  })
+  }
 
-  const wss = new WebSocketServer({ server, path: '/ws' })
+  const wss = new WebSocketServer({ noServer: true })
+  // Each screen's socket knows who opened it, checked the same way as every other request.
+  server.on('upgrade', (req, socket, head) => {
+    if (new URL(req.url, 'http://localhost').pathname !== '/ws') {
+      socket.destroy()
+      return
+    }
+    access.who(req).then(
+      (who) => {
+        if (!who) {
+          socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n')
+          return
+        }
+        wss.handleUpgrade(req, socket, head, (ws) => {
+          ws.who = who
+          wss.emit('connection', ws, req)
+        })
+      },
+      () => socket.destroy(),
+    )
+  })
   const screensIn = (r) => [...wss.clients].filter((c) => c.room === r)
 
   const stateMessage = (r) =>
@@ -470,9 +541,29 @@ export function startServer({
     JSON.stringify({ type: 'screens', seats: [...new Set(screensIn(r).map((c) => c.seat).filter(Boolean))].sort() })
   const broadcastScreens = (r) => broadcastRaw(screensMessage(r), screensIn(r))
 
-  function gameList() {
-    const games = [FAMILY_GAME, ...otherGames.map((g) => g.id)].map((id) => gameSummary(room(id), gameName(id), screensIn(room(id)).length))
-    return { games, finished: finished.map(({ id, name, finishedAt }) => ({ id, name, finishedAt })), max: MAX_GAMES, finishedDays: FINISHED_DAYS }
+  const familyGames = () => otherGames.filter((g) => !g.owner).length + 1
+  const ownedBy = (email) => otherGames.filter((g) => g.owner === email).length
+  // Is there room for one more game made by `who`, or for bringing back `game`?
+  const roomFor = (owner) => otherGames.length < MAX_ALL_GAMES && (owner ? ownedBy(owner) < FRIEND_GAMES : familyGames() < MAX_GAMES)
+
+  // The "Which game?" list as `who` may see it.
+  function gameList(who) {
+    const listed = otherGames.filter((g) => canSee(who, g))
+    const extra = (g) => ({ owner: g.owner ?? null, invited: g.invited ?? [], mine: canManage(who, g) })
+    const games = [
+      ...(who.family ? [{ ...gameSummary(room(FAMILY_GAME), FAMILY_NAME, screensIn(room(FAMILY_GAME)).length), owner: null, invited: [], mine: false }] : []),
+      ...listed.map((g) => ({ ...gameSummary(room(g.id), g.name, screensIn(room(g.id)).length), ...extra(g) })),
+    ]
+    const owner = who.family ? null : who.email
+    return {
+      games,
+      finished: finished.filter((g) => canSee(who, g)).map((g) => ({ id: g.id, name: g.name, finishedAt: g.finishedAt, owner: g.owner ?? null, mine: canManage(who, g) })),
+      max: owner ? FRIEND_GAMES : MAX_GAMES,
+      full: !roomFor(owner),
+      friend: !who.family,
+      me: who.email,
+      finishedDays: FINISHED_DAYS,
+    }
   }
 
   function saveList(games, done) {
@@ -490,28 +581,35 @@ export function startServer({
     saveList(otherGames, finished.filter((g) => !old.includes(g)))
   }
 
-  // Moves a game to the Finished list. Its screens go to the family game.
-  function finishGame(id) {
+  // Takes a screen out of its game: back to the family game, or for a friend, to "Which game?".
+  function leaveGame(client) {
+    if (client.who?.family === false) {
+      client.room = null
+      if (client.readyState === client.OPEN) client.send(JSON.stringify({ type: 'no-game' }))
+      return
+    }
+    client.room = room(FAMILY_GAME)
+    if (client.readyState === client.OPEN) client.send(stateMessage(client.room))
+  }
+
+  // Moves a game to the Finished list. Its screens go to the family game (friends' to "Which game?").
+  function finishGame(who, id) {
     const game = otherGames.find((g) => g.id === id)
-    if (!game) return
+    if (!game || !canManage(who, game)) return
     mkdirSync(finishedDir, { recursive: true })
     if (existsSync(gameFile(id))) renameSync(gameFile(id), join(finishedDir, `${id}.json`))
     saveList(otherGames.filter((g) => g !== game), [...finished, { ...game, finishedAt: Date.now() }])
     const r = rooms.get(id)
     rooms.delete(id)
-    const family = room(FAMILY_GAME)
-    for (const client of r ? screensIn(r) : []) {
-      client.room = family
-      if (client.readyState === client.OPEN) client.send(stateMessage(family))
-    }
-    broadcastScreens(family)
+    for (const client of r ? screensIn(r) : []) leaveGame(client)
+    broadcastScreens(room(FAMILY_GAME))
   }
 
   // Brings a finished game back, if there's room for it.
   function bringBack(socket, id) {
     const game = finished.find((g) => g.id === id)
-    if (!game) return
-    if (otherGames.length + 1 >= MAX_GAMES) {
+    if (!game || !canManage(socket.who, game)) return
+    if (!roomFor(game.owner)) {
       socket.send(JSON.stringify({ type: 'new-game-refused', reason: 'full' }))
       return
     }
@@ -521,8 +619,8 @@ export function startServer({
     saveList([...otherGames, back], finished.filter((g) => g !== game))
   }
 
-  function renameGame(id, name) {
-    if (!name || !otherGames.some((g) => g.id === id)) return
+  function renameGame(who, id, name) {
+    if (!name || !otherGames.some((g) => g.id === id && canManage(who, g))) return
     saveList(otherGames.map((g) => (g.id === id ? { ...g, name } : g)), finished)
     for (const r of rooms.values()) if (r.id === id) broadcast(r)
   }
@@ -534,15 +632,38 @@ export function startServer({
       return
     }
     try {
-      if (message.type === 'rename-game') renameGame(message.id, cleanName(message.name))
-      if (message.type === 'finish-game') finishGame(message.id)
+      if (message.type === 'rename-game') renameGame(socket.who, message.id, cleanName(message.name))
+      if (message.type === 'finish-game') finishGame(socket.who, message.id)
       if (message.type === 'bring-back-game') bringBack(socket, message.id)
+      if (message.type === 'invite-game') invite(socket.who, message.id, cleanEmail(message.email))
+      if (message.type === 'uninvite-game') uninvite(socket.who, message.id, cleanEmail(message.email))
       clearOldFinished()
     } catch (error) {
       console.error('Could not change the list of games:', error.message)
     }
     broadcastGames()
   }
+  // Lets a friend play in a game, by the email they sign in with. Family-made games can have
+  // friends too (JJ playing with friends); the family game itself can't.
+  function invite(who, id, email) {
+    const game = otherGames.find((g) => g.id === id)
+    if (!email || !game || !canManage(who, game) || email === game.owner) return
+    const invited = game.invited ?? []
+    if (invited.includes(email) || invited.length >= MAX_INVITES) return
+    saveList(otherGames.map((g) => (g === game ? { ...g, invited: [...invited, email] } : g)), finished)
+  }
+
+  // Takes a friend out of a game; their screens in it go back to "Which game?".
+  function uninvite(who, id, email) {
+    const game = otherGames.find((g) => g.id === id)
+    if (!email || !game || !canManage(who, game) || !(game.invited ?? []).includes(email)) return
+    saveList(otherGames.map((g) => (g === game ? { ...g, invited: g.invited.filter((e) => e !== email) } : g)), finished)
+    const r = rooms.get(id)
+    if (!r) return
+    for (const client of screensIn(r)) if (client.who?.family === false && client.who.email === email) leaveGame(client)
+    broadcastScreens(r)
+  }
+
   // Tells every "Which game?" screen that the list changed.
   const broadcastGames = () => broadcastRaw(JSON.stringify({ type: 'games' }))
 
@@ -551,11 +672,12 @@ export function startServer({
     const name = cleanName(message.name)
     const refuse = (reason) => socket.send(JSON.stringify({ type: 'new-game-refused', requestId, reason }))
     if (!name) return refuse('name')
-    if (otherGames.length + 1 >= MAX_GAMES) return refuse('full')
+    const owner = socket.who?.family === false ? socket.who.email : null
+    if (!roomFor(owner)) return refuse(owner ? 'friend-full' : 'full')
     const id = gameIdFor(name, [...otherGames, ...finished].map((g) => g.id))
     try {
       writeSave(gameFile(id), initialState)
-      saveList([...otherGames, { id, name, createdAt: Date.now() }], finished)
+      saveList([...otherGames, { id, name, createdAt: Date.now(), ...(owner ? { owner } : {}) }], finished)
     } catch (error) {
       console.error('Could not start a new game:', error.message)
       return refuse('save')
@@ -569,12 +691,19 @@ export function startServer({
   wss.on('connection', (socket, req) => {
     // A screen asks for its game in the address (/ws?game=coltons-solo). No game, or
     // one that isn't kept any more, means the family game.
+    // A friend's screen only joins a game they may play in; otherwise it stays on "Which game?"
+    // (no game), where it can still start one.
+    socket.who ??= { family: true, email: null }
     const asked = new URL(req.url, 'http://localhost').searchParams.get('game')
-    socket.room = room(isGame(asked) ? asked : FAMILY_GAME)
-    socket.send(stateMessage(socket.room))
-    socket.send(screensMessage(socket.room))
+    const game = otherGames.find((g) => g.id === asked)
+    if (socket.who.family) socket.room = room(isGame(asked) ? asked : FAMILY_GAME)
+    else socket.room = game && canSee(socket.who, game) ? room(asked) : null
+    if (socket.room) {
+      socket.send(stateMessage(socket.room))
+      socket.send(screensMessage(socket.room))
+    } else socket.send(JSON.stringify({ type: 'no-game' }))
     socket.on('close', () => {
-      if (socket.seat) broadcastScreens(socket.room)
+      if (socket.seat && socket.room) broadcastScreens(socket.room)
     })
     socket.on('message', (raw) => {
       let message
@@ -587,11 +716,11 @@ export function startServer({
         const seat = typeof message.seat === 'string' ? message.seat.slice(0, 40) : null
         if (seat !== (socket.seat ?? null)) {
           socket.seat = seat
-          broadcastScreens(socket.room)
+          if (socket.room) broadcastScreens(socket.room)
         }
         return
       }
-      if (['new-game', 'rename-game', 'finish-game', 'bring-back-game'].includes(message?.type)) {
+      if (['new-game', 'rename-game', 'finish-game', 'bring-back-game', 'invite-game', 'uninvite-game'].includes(message?.type)) {
         changeGames(socket, message)
         return
       }
@@ -602,6 +731,8 @@ export function startServer({
       // a reconnect. Each action has an id, so one that arrived twice only counts once.
       const id = typeof message.id === 'string' ? message.id : null
       if (id) socket.send(JSON.stringify({ type: 'ack', id }))
+      // A friend's screen that isn't in a game has nothing to change.
+      if (!r) return
       if (id && r.seenActions.has(id)) return
       if (id) {
         r.seenActions.add(id)
@@ -638,7 +769,7 @@ export function startServer({
       } catch (error) {
         console.error('Could not save the game:', error.message)
       }
-      updateRecords(r.state)
+      updateRecords(r)
       broadcast(r)
     })
   })

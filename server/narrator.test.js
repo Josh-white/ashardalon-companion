@@ -10,7 +10,7 @@ describe('narrator endpoint', () => {
   let server
   let calls
 
-  const start = async (apiKey) => {
+  const start = async (apiKey, access = undefined) => {
     calls = []
     const fetchSpeech = async (url, options) => {
       calls.push({ url, options })
@@ -22,6 +22,7 @@ describe('narrator endpoint', () => {
       staticDir: dir,
       warmNarrator: false,
       narrator: createNarrator({ apiKey, cacheDir: join(dir, 'narration'), fetchSpeech }),
+      access,
     })
     return `http://localhost:${server.port}`
   }
@@ -47,6 +48,17 @@ describe('narrator endpoint', () => {
     expect(await (await fetch(`${base}/narrate`)).json()).toEqual({ enabled: false })
     expect((await fetch(`${base}/narrate?text=Hello`)).status).toBe(404)
     expect(calls).toHaveLength(0)
+  })
+
+  it("plays friends only lines already recorded, so they never spend the family's credits", async () => {
+    const access = { who: async (req) => (req.headers['x-friend'] ? { family: false, email: 'amy@example.com' } : { family: true, email: null }) }
+    const base = await start('secret-key', access)
+    await fetch(`${base}/narrate?voice=herald&text=Hello`)
+    expect(calls).toHaveLength(1)
+    const friend = { headers: { 'x-friend': '1' } }
+    expect((await fetch(`${base}/narrate?voice=herald&text=Hello`, friend)).status).toBe(200)
+    expect((await fetch(`${base}/narrate?voice=herald&text=Something%20new`, friend)).status).toBe(404)
+    expect(calls).toHaveLength(1)
   })
 
   it('keeps playing recorded lines after the key is removed', async () => {

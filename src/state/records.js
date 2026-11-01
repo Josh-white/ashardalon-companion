@@ -156,17 +156,20 @@ export const findPlayer = (records, name) => (counted(name) ? records?.find((r) 
 // returns the changed file after an action, or null when nothing changed: a game that
 // ended is written in (again, if Undo took it back and it ended differently), and one
 // Undo took back to playing is taken out.
-export function syncRecord(file, state, now = Date.now()) {
+// `extra` is kept with the game's entry: which game it was, and whether friends made it
+// (server/server.js), so each screen only sees the records it should.
+export function syncRecord(file, state, now = Date.now(), extra = {}) {
   const played = syncPlayed(file, state, now)
-  const next = syncGame(played ?? file, state, now)
+  const next = syncGame(played ?? file, state, now, extra)
   return next ?? played
 }
 
-function syncGame(file, state, now) {
+function syncGame(file, state, now, extra) {
   const key = recordKey(state)
   if (!key) return null
   const games = file.games ?? {}
-  const entry = gameRecord(state)
+  const record = gameRecord(state)
+  const entry = record && { ...record, ...extra }
   if (!entry) {
     if (state.status !== 'playing' || !games[key]) return null
     const { [key]: _, ...rest } = games
@@ -181,12 +184,14 @@ export const recordGames = (file) => Object.values(file?.games ?? {}).sort((a, b
 
 // What /records.json sends: the family's records (`players`) and the solo games' records
 // (`solo`), each added up on its own, so a solo night never changes a family title.
-export const recordsReply = (file) => {
-  const games = recordGames(file)
+// `keep` picks which finished games this screen may see, and `played` is left out for a
+// friend's screen (server/server.js).
+export const recordsReply = (file, keep = () => true, played = true) => {
+  const games = recordGames(file).filter(keep)
   return {
     players: playerRecords(games.filter((g) => !g.solo)),
     solo: playerRecords(games.filter((g) => g.solo)),
-    played: file?.played ?? {},
+    played: played ? (file?.played ?? {}) : {},
   }
 }
 

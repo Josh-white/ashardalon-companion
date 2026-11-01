@@ -566,7 +566,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
           🏆 Hall of Records
         </Button>
       </p>
-      {watchOnly && (
+      {watchOnly && onArt && (
         <p className="text-center text-sm">
           <button type="button" className="text-zinc-600 underline" onClick={onArt}>
             📷 Add photos of your cards

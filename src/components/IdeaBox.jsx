@@ -179,7 +179,7 @@ export default function IdeasPage() {
                 <p className={`whitespace-pre-wrap text-lg ${idea.done ? 'line-through' : ''}`}>{idea.text}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-zinc-400">
                   <span className="mr-auto">
-                    {idea.from ? `From ${idea.from}` : 'No name'} · {new Date(idea.sentAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                    {idea.from ? `From ${idea.from}` : 'No name'}{idea.email ? ` (friend: ${idea.email})` : ''} · {new Date(idea.sentAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
                   </span>
                   <Button className="!py-1 text-sm" onClick={() => change(idea.id, { method: 'POST', body: JSON.stringify({ done: !idea.done }) })}>
                     {idea.done ? 'Not done' : '✓ Done'}

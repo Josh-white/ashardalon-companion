@@ -56,9 +56,11 @@ export default function ScreenChoice({ onHero, onBigScreen, onSolo, onDemo, onAr
             Start a demo game
           </button>
         )}
-        <button type="button" className="underline" onClick={onArt}>
-          📷 Add photos of your cards
-        </button>
+        {onArt && (
+          <button type="button" className="underline" onClick={onArt}>
+            📷 Add photos of your cards
+          </button>
+        )}
       </p>
     </div>
   )
