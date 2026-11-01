@@ -29,7 +29,7 @@ import TurnGuide, { ExtraAttacks } from './components/TurnGuide.jsx'
 import UndoButton from './components/UndoButton.jsx'
 import { MusicToggle, SoundToggle, StayAwakeToggle, TapForSound } from './components/SoundToggle.jsx'
 import { BoardSwitch, BoardToast, SoundBoard } from './components/SoundBoard.jsx'
-import { Button, HpBar, useConfirm } from './components/ui.jsx'
+import { Button, HpBar, LevelBadge, useConfirm } from './components/ui.jsx'
 import { heroArt } from './data/art.js'
 import { useSoundEffects } from './audio/sfx.js'
 import { useNarrator } from './audio/useNarrator.js'
@@ -181,7 +181,7 @@ function PartyStrip({ heroes, meId, activeId }) {
             <div className="flex items-center gap-2">
               <Art name={heroArt(hero.key)} className="w-10 shrink-0" />
               <span className="min-w-0">
-                <span className={`block font-display text-lg leading-tight font-bold ${HERO_COLORS[hero.color].text}`}>{hero.ally ? '🤖 ' : ''}{hero.name}</span>
+                <span className={`block font-display text-lg leading-tight font-bold ${HERO_COLORS[hero.color].text}`}>{hero.ally ? '🤖 ' : ''}{hero.name}<LevelBadge level={hero.level} /></span>
                 {(hero.id === meId || hero.id === activeId) && (
                   <span className="block text-sm text-zinc-300">
                     {hero.id === meId && 'You'}
@@ -246,6 +246,7 @@ function PartyGlance({ state, dispatch, activeId, heroCard }) {
                   <span className="min-w-0">
                     <span className={`block truncate font-display text-lg leading-tight font-bold ${color.text}`}>
                       {hero.ally ? '🤖 ' : ''}{hero.name}
+                      <LevelBadge level={hero.level} className="text-xs" />
                       {hero.id === activeId && <span className="ml-1.5 font-sans text-xs font-normal text-amber-300">turn now</span>}
                     </span>
                     <span className="flex gap-2 text-sm">

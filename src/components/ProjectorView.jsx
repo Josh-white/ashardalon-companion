@@ -15,7 +15,7 @@ import Art from './Art.jsx'
 import { AreaName } from './AreaBackdrop.jsx'
 import { MusicToggle, SoundToggle, StayAwakeToggle } from './SoundToggle.jsx'
 import { BoardSwitch } from './SoundBoard.jsx'
-import { HpBar } from './ui.jsx'
+import { HpBar, LevelBadge } from './ui.jsx'
 import Board, { boardBounds } from './Board.jsx'
 import { useLayoutEffect, useRef, useState } from 'react'
 import AllyPanel from '../ally/AllyPanel.jsx'
@@ -128,7 +128,7 @@ function ProjectorScreen({ state, dispatch, onSwitchSeat, sound }) {
             <div className="flex items-center gap-[0.8vw]">
               <Art name={heroArt(hero.key)} className={`w-[5vw] ${down ? 'grayscale' : ''}`} />
               <div className="min-w-0">
-                <div className={`font-display text-[2.4vw] font-bold leading-tight ${heroColor.text}`}>{hero.ally ? '🤖 ' : ''}{hero.name}</div>
+                <div className={`font-display text-[2.4vw] font-bold leading-tight ${heroColor.text}`}>{hero.ally ? '🤖 ' : ''}{hero.name}<LevelBadge level={hero.level} className="text-[1.3vw]" /></div>
                 <div className="text-zinc-400">{hero.player}</div>
               </div>
             </div>
