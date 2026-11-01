@@ -69,4 +69,6 @@ export const initialState = {
   ending: null,
   // The settings the game started with, so Try again can start it the same way: { surges, tiles }.
   retry: null,
+  // Who is playing a solo game, as typed on the solo screen, for their solo records (state/records.js).
+  soloName: null,
 }

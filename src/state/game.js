@@ -118,7 +118,7 @@ function tryAgain(state, action) {
   }
   const { boardTiles, boardRandom, ...rest } = action
   const board = state.board && Array.isArray(boardTiles) ? { boardTiles, boardRandom } : {}
-  const next = reduce(setup, { ...rest, ...board, type: 'START_GAME', heroes })
+  const next = reduce(setup, { ...rest, ...board, type: 'START_GAME', heroes, soloName: state.soloName })
   return next.status === 'playing' ? withLog(next, 'The heroes try again!') : state
 }
 
@@ -249,6 +249,7 @@ function reduce(state, action) {
         // A game on the virtual board (solo or the party's) starts with the adventure's start tile and the heroes on it.
         board: action.boardTiles ? newBoard(action.boardTiles, heroes, action.boardRandom, card, objectiveId) : null,
         retry: { surges: clamp(Number(state.lobbySurges) || STARTING_SURGES, MIN_SURGES, MAX_SURGES), tiles: lobbyTiles, difficulty: difficulty.key },
+        soloName: typeof action.soloName === 'string' && action.soloName.trim() ? action.soloName.trim().slice(0, 40) : null,
       }
       // The Vast Gate Opens: the gate is on the Start tile, and its Flares! card is in the top 3 encounters.
       if (objective) {
