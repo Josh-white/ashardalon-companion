@@ -22,15 +22,13 @@ export function gameRecord(state) {
   if (!ENDED.has(state.status) || !recordKey(state) || state.adventure?.card?.practice) return null
   const { heroes, mvpIds } = recap(state)
   const villains = (state.villains ?? []).filter((v) => v.defeated).map((v) => v.name)
+  if (isSolo(state)) return soloRecord(state, heroes, mvpIds, villains)
   const players = new Map()
   for (const { hero, stats } of heroes) {
     if (!counted(hero.player)) continue
     const key = playerKey(hero.player)
     const player = players.get(key) ?? { name: hero.player.trim(), heroes: [], mvp: false, stats: {} }
-    for (const [stat, value] of Object.entries(stats)) {
-      if (stat === 'trophies') player.stats.trophies = addTrophies(player.stats.trophies, value)
-      else player.stats[stat] = stat === 'biggestHit' ? Math.max(player.stats[stat] ?? 0, value) : (player.stats[stat] ?? 0) + value
-    }
+    addStats(player, stats)
     if (!player.heroes.includes(hero.key)) player.heroes.push(hero.key)
     player.mvp ||= mvpIds.includes(hero.id)
     players.set(key, player)
@@ -42,6 +40,39 @@ export function gameRecord(state) {
     adventure: state.adventure?.card?.title ?? null,
     villains,
     players: [...players.values()],
+  }
+}
+
+// A solo game: every hero goes by "Solo" and one person runs them all from one screen.
+export const isSolo = (state) => (state.heroes ?? []).some((h) => playerKey(h.player) === 'solo')
+
+// A solo game counts for the name typed on the solo screen (state.soloName), or for
+// "Solo" when nobody typed one, and is kept apart from the family's games (`solo: true`).
+// The win or loss counts whoever played which hero, but only the heroes the player ran
+// themselves add to their numbers and trophies: what a computer ally does is its own.
+function soloRecord(state, heroes, mvpIds, villains) {
+  const name = typeof state.soloName === 'string' && state.soloName.trim() ? state.soloName.trim().replace(/\s+/g, ' ') : 'Solo'
+  const player = { name, heroes: [], mvp: false, stats: {} }
+  for (const { hero, stats } of heroes) {
+    if (hero.ally) continue
+    addStats(player, stats)
+    if (!player.heroes.includes(hero.key)) player.heroes.push(hero.key)
+    player.mvp ||= mvpIds.includes(hero.id)
+  }
+  return {
+    key: recordKey(state),
+    solo: true,
+    outcome: state.status,
+    adventure: state.adventure?.card?.title ?? null,
+    villains,
+    players: [player],
+  }
+}
+
+function addStats(player, stats) {
+  for (const [stat, value] of Object.entries(stats)) {
+    if (stat === 'trophies') player.stats.trophies = addTrophies(player.stats.trophies, value)
+    else player.stats[stat] = stat === 'biggestHit' ? Math.max(player.stats[stat] ?? 0, value) : (player.stats[stat] ?? 0) + value
   }
 }
 
@@ -147,6 +178,17 @@ function syncGame(file, state, now) {
 }
 
 export const recordGames = (file) => Object.values(file?.games ?? {}).sort((a, b) => a.endedAt - b.endedAt)
+
+// What /records.json sends: the family's records (`players`) and the solo games' records
+// (`solo`), each added up on its own, so a solo night never changes a family title.
+export const recordsReply = (file) => {
+  const games = recordGames(file)
+  return {
+    players: playerRecords(games.filter((g) => !g.solo)),
+    solo: playerRecords(games.filter((g) => g.solo)),
+    played: file?.played ?? {},
+  }
+}
 
 // Which heroes each player has taken into the dungeon, so the hero coach knows who's new
 // to a hero: { played: { [player key]: { [hero key]: when first played } } }. Counted from

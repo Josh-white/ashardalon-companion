@@ -19,7 +19,7 @@ import { setHeroTemplates } from '../src/data/heroes.js'
 import { describeAction } from '../src/state/describeAction.js'
 import { gameReducer, initialState } from '../src/state/game.js'
 import { migrateSave } from '../src/state/saves.js'
-import { playerRecords, recordGames, syncRecord } from '../src/state/records.js'
+import { recordsReply, syncRecord } from '../src/state/records.js'
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 
@@ -433,7 +433,7 @@ export function startServer({
     if (req.url === '/records.json') {
       res
         .writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
-        .end(JSON.stringify({ players: playerRecords(recordGames(records)), played: records.played ?? {} }))
+        .end(JSON.stringify(recordsReply(records)))
       return
     }
     if (ideaBox.handle(req, res)) return

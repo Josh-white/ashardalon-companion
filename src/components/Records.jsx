@@ -1,10 +1,11 @@
+import { useState } from 'react'
 import { TITLES } from '../data/titles.js'
 import { cardArt } from '../data/art.js'
 import { useCards } from '../state/useCards.js'
 import { artUrl, useArt } from '../state/useArt.js'
 import { templateFor } from '../data/heroes.js'
 import { findPlayer } from '../state/records.js'
-import { useRecords } from '../state/useRecords.js'
+import { useRecordsFile } from '../state/useRecords.js'
 import { Button } from './ui.jsx'
 
 // A player's best title (the first one they've earned in data/titles.js), as a small
@@ -22,9 +23,14 @@ export function PlayerTitle({ records, name, className = '' }) {
 const heroName = (key) => templateFor(key)?.name ?? key
 
 // The Hall of Records: every player's titles (earned ones lit, the rest showing how to
-// earn them) and their totals across every game they've finished.
+// earn them) and their totals across every game they've finished. Solo games on the
+// virtual board have a tab of their own, added up apart from the family's games.
 export function HallOfRecords({ onClose }) {
-  const records = useRecords()
+  const file = useRecordsFile()
+  const [tab, setTab] = useState('family')
+  const solo = tab === 'solo'
+  const records = file ? (solo ? file.solo : file.players) : null
+  const tabClass = (on) => `rounded-full px-4 py-2 text-lg font-bold ${on ? 'bg-amber-500 text-zinc-950' : 'border border-zinc-700 text-zinc-300'}`
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
       <div className="flex items-center gap-3">
@@ -33,10 +39,27 @@ export function HallOfRecords({ onClose }) {
           Back
         </Button>
       </div>
-      {!records && <p className="text-zinc-400">Looking for records…</p>}
-      {records?.length === 0 && (
-        <p className="text-zinc-400">No records yet. Finish a game (win or lose) and every player with a name gets their first title.</p>
+      <div className="flex gap-2" role="tablist">
+        <button type="button" role="tab" aria-selected={!solo} className={tabClass(!solo)} onClick={() => setTab('family')}>
+          👪 Family games
+        </button>
+        <button type="button" role="tab" aria-selected={solo} className={tabClass(solo)} onClick={() => setTab('solo')}>
+          🧭 Solo games
+        </button>
+      </div>
+      {solo && (
+        <p className="text-sm text-zinc-400">
+          Games played solo on the virtual board, under the name typed on the solo screen. The win or loss always counts; heroes the computer played don't add to your
+          numbers or trophy book.
+        </p>
       )}
+      {!records && <p className="text-zinc-400">Looking for records…</p>}
+      {records?.length === 0 &&
+        (solo ? (
+          <p className="text-zinc-400">No solo records yet. Type your name on the solo screen and finish a solo game (win or lose) to get your first solo title.</p>
+        ) : (
+          <p className="text-zinc-400">No records yet. Finish a game (win or lose) and every player with a name gets their first title.</p>
+        ))}
       {records?.map((record) => (
         <PlayerRecord key={record.name} record={record} />
       ))}
