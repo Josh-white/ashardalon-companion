@@ -229,7 +229,7 @@ function Badges({ cx, cy, r, badges }) {
   )
 }
 
-export function Token({ id, at, label, color, art, selected, active, faded, spin, badges = [], onTap }) {
+export function Token({ id, at, label, color, art, selected, active, aimed, faded, spin, badges = [], onTap }) {
   const cx = at[0] * SQUARE + SQUARE / 2
   const cy = at[1] * SQUARE + SQUARE / 2
   const r = SQUARE / 2 - 3
@@ -241,6 +241,13 @@ export function Token({ id, at, label, color, art, selected, active, faded, spin
         <g pointerEvents="none" className="motion-safe:animate-pulse">
           <circle cx={cx} cy={cy} r={r + 8} fill="#facc15" fillOpacity="0.4" stroke="#422006" strokeWidth="2" />
           <circle cx={cx} cy={cy} r={r + 5} fill="none" stroke="#fde047" strokeWidth="4" />
+        </g>
+      )}
+      {/* A monster picked to attack: a pulsing red glow, like the active hero's gold one. */}
+      {aimed && (
+        <g pointerEvents="none" className="motion-safe:animate-pulse" data-aimed="true">
+          <circle cx={cx} cy={cy} r={r + 8} fill="#ef4444" fillOpacity="0.45" stroke="#450a0a" strokeWidth="2" />
+          <circle cx={cx} cy={cy} r={r + 5} fill="none" stroke="#f87171" strokeWidth="4" />
         </g>
       )}
       <clipPath id={clip}>

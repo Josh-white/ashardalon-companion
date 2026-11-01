@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useShareAim } from './useAimed.js'
 import { stayedOnBoard } from '../board/play.js'
 import { figuresInRange, foeDistance, foesInRange, powerRange } from '../board/monsters.js'
 import { hypnotized } from '../board/powerMoves.js'
@@ -347,6 +348,8 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   const items = extra ? [] : attackItems(hero, state.turn)
   const [powerId, setPowerId] = useState(null)
   const [chosen, setChosen] = useState([])
+  // The board on this screen lights up the picked monsters and brings the last one into view.
+  useShareAim(chosen)
   const [answers, setAnswers] = useState({})
   const [distances, setDistances] = useState({})
   // null until a player taps it: then the board's answer is used.

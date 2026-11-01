@@ -14,6 +14,7 @@ import { artUrl, useArt } from '../state/useArt.js'
 import { Carpet, Coin, ExitSquares, figureBadges, HeroTokenMark, heroTokenGroups, MarkerBadges, MarkerTiles, OpenEdges, PlacedTile, Token } from './BoardPieces.jsx'
 import { ClosedDoor, SQUARE } from './TileDrawing.jsx'
 import { useBoardZoom } from './useBoardZoom.js'
+import { useAimed } from './useAimed.js'
 import Torchlight, { lightSources, useTorchlight } from './Torchlight.jsx'
 import { Button } from './ui.jsx'
 import AttackFx, { quakeDelay, quakes, tokenFx, useAttackFx } from './AttackFx.jsx'
@@ -56,7 +57,11 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   const activeId = state.heroes[state.turn.heroIndex]?.id
   const activeAt = board?.tokens[activeId]?.join(',')
   const bounds = board ? boardBounds(board) : null
-  const { boxRef, spin, viewW, viewH, viewBox, fit, scale, zoomIn, zoomOut, zoomTo } = useBoardZoom({ fill, bounds, activeId, activeAt })
+  // Monsters picked in this screen's attack box glow red, and the last one picked is brought
+  // into view at the zoom the board is at (a group like the Legion Devils glows together).
+  const aimed = useAimed()
+  const focusId = aimed.length ? aimed[aimed.length - 1] : null
+  const { boxRef, spin, viewW, viewH, viewBox, fit, scale, zoomIn, zoomOut, zoomTo } = useBoardZoom({ fill, bounds, activeId, activeAt, focusId })
   // An attack flying across the board (Colton's idea), once its die has been read.
   const playing = useAttackFx(state.moment)
   const anchorRef = useRef(null)
@@ -430,7 +435,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
             {[...onBoard.filter((f) => f.id !== activeId), ...onBoard.filter((f) => f.id === activeId)].map((f) => (
               // An attack makes its target flinch or dodge, and a sword swing lunges in.
               <g key={f.id} {...tokenFx(playing, board.tokens[f.id])}>
-                <Token {...f} spin={spin} at={board.tokens[f.id]} active={f.id === activeId} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)} onTap={watching && !peekTarget(state, f.id) ? undefined : () => tapFigure(f.id)} />
+                <Token {...f} spin={spin} at={board.tokens[f.id]} active={f.id === activeId} aimed={aimed.includes(f.id.split('#')[0])} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)} onTap={watching && !peekTarget(state, f.id) ? undefined : () => tapFigure(f.id)} />
               </g>
             ))}
             <MarkerBadges markers={placedMarkers} spin={spin} taken={new Set([...Object.values(board.tokens), ...items.filter((i) => i.at).map((i) => i.at)].map(key))} onTap={(id) => { setPeek(null); setReading(reading === id ? null : id) }} />
