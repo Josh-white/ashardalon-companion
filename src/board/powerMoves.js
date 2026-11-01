@@ -95,6 +95,15 @@ export function queueFoeStep(state, tokenId, n = 1) {
   if (!foe || !hero || !state.board.tokens[hero.id] || state.turn.boardMove) return state
   return queueMoves(state, hero, { name: foe.name }, [{ pick: 'listed', to: 'tileWithin', n, ref: 'piece' }], { tokens: [tokenId], from: tokenId, fromName: foe.name })
 }
+// Scroll of Monster Control: the players put the monster (one figure, `tokenId`) in any square
+// within 1 tile of where it stands; if it ends next to another monster it attacks that one
+// (see hypnotized(), which works for any move that sets turn.powerMoved).
+export function queueMonsterControl(state, hero, tokenId, item) {
+  const foe = state.board?.tokens[tokenId] && findFoeName(state, baseId(tokenId))
+  if (!foe || !hero || !state.board.tokens[hero.id] || state.turn.boardMove) return state
+  const prompt = `Tap the ${foe.name}, then a lit square within 1 tile of where it stands. If it lands next to another monster, it attacks that one.`
+  return queueMoves(state, hero, item, [{ pick: 'listed', to: 'tileWithin', n: 1, ref: 'piece' }], { tokens: [tokenId], prompt })
+}
 // Wand of Fear: each monster within 1 tile of the hero is offered once; the players move the
 // ones on the tile they chose to a square within 2 tiles of the hero and skip the rest.
 export function queueWandOfFear(state, hero, item) {
