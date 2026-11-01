@@ -27,6 +27,7 @@ import { boardMarkers, trapsToDisable } from '../board/markers.js'
 import { treasureInReach } from '../board/items.js'
 import { escapeBlockers } from '../state/adventure.js'
 import { escapeGoal, escapeHold, exitName, exitSquares } from '../board/exits.js'
+import { trapDisable } from '../state/encounterRules.js'
 
 // A d20 the way the screens roll one; tests pass their own.
 const d20 = () => Math.floor(Math.random() * 20) + 1
@@ -321,7 +322,7 @@ const looseTreasure = (state) => (state.board.items ?? []).filter((i) => i.kind 
 // ---- Traps (Poisoned Dart Trap, Whirling Blades...) ----
 
 // The roll the hero needs to disable a trap, after tools (Thieves' Tools) and Kobold Trappers.
-const disableNeeds = (state, hero, trap) => (trap.card.trap?.disable ?? 10) + (state.environment?.card?.trapPenalty ?? 0) - itemTrapBonus(hero)
+const disableNeeds = (state, hero, trap) => trapDisable(state, hero, trap).needs
 // Placed traps the board knows the tile of, with the floor squares of those tiles.
 const placedTraps = (state) => boardMarkers(state).filter((m) => m.marker.type === 'trap' && m.squares.length > 0)
 

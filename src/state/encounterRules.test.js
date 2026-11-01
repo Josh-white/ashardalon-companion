@@ -4,7 +4,7 @@ import { heroAc } from '../data/powerEffects.js'
 import { createHero, gameReducer, initialState } from './game.js'
 import {
   attackBlocked, attackRolls, boardEffect, effectWords, encounterNotes, extraEncounterReasons, firstPicks, fixedTargets,
-  heroNames, hitWords, resolveLabel, takesWords, targetQuestion,
+  heroNames, hitWords, resolveLabel, takesWords, targetQuestion, trapDisable,
 } from './encounterRules.js'
 
 function game() {
@@ -89,5 +89,17 @@ describe('encounter rules', () => {
     expect(effectWords({ damage: 1, condition: 'Dazed' })).toBe('1 damage and Dazed')
     expect(boardEffect({ damage: 1 }, 'Quinn')).toBe('Quinn takes 1 damage when you tap OK.')
     expect(boardEffect(null, 'Quinn')).toBe('Nothing happens.')
+  })
+})
+
+describe('trapDisable', () => {
+  const trap = { card: { trap: { disable: 12 } } }
+  it('needs the card number, plus Kobold Trappers, minus tools', () => {
+    const hero = { items: [] }
+    expect(trapDisable({}, hero, trap)).toEqual({ target: 12, penalty: 0, tools: 0, needs: 12 })
+    expect(trapDisable({ environment: { card: { trapPenalty: 2 } } }, hero, trap).needs).toBe(14)
+    const rogue = { items: [{ card: { inPlay: true, trapBonus: 4 } }] }
+    expect(trapDisable({ environment: { card: { trapPenalty: 2 } } }, rogue, trap)).toEqual({ target: 12, penalty: 2, tools: 4, needs: 10 })
+    expect(trapDisable({}, hero, { card: {} }).target).toBe(10)
   })
 })
