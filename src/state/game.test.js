@@ -330,6 +330,17 @@ describe('monster deck', () => {
     expect(state.moment.rolls.map((r) => r.hit)).toEqual([true, false])
   })
 
+  it('takes 2 off monster attacks on Story', () => {
+    let state = { ...draw(startGame(), 0, [devils]), difficulty: 'story' }
+    const quinn = state.heroes[0]
+    // 5 + 11 - 2 = 14 misses Quinn (AC 16): only the miss damage.
+    state = gameReducer(state, { type: 'MONSTER_ATTACK', monsterId: state.monsters[0].id, attackId: 'sword', targets: [{ heroId: quinn.id, roll: 5 }] })
+    expect(state.heroes[0].hp).toBe(quinn.hp - 1)
+    expect(state.moment.rolls[0]).toMatchObject({ total: 14, hit: false })
+    expect(state.turn.lastMonsterAttack.results[0].bonus).toBe(9)
+    expect(state.log[0].text).toMatch(/\+ 11 − 2 \(Story\) = 14/)
+  })
+
   it('skips a hero who is down when a monster attacks', () => {
     let state = draw(startGame())
     const [a, b] = state.heroes

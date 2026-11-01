@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { HERO_COLORS } from '../data/heroes.js'
-import { encounterCancelCost } from '../data/difficulty.js'
+import { bonusWords, encounterCancelCost, foeBonus } from '../data/difficulty.js'
 import { heroItems, itemTrapBonus } from '../data/items.js'
 import { reactionsFor } from '../data/powerEffects.js'
 import { ENCOUNTER_LABELS, encounterCount, isWrathCheck, phaseChecks, villainInPlay } from '../state/game.js'
@@ -120,7 +120,7 @@ function AttackStep({ state, hero, name, attack, onAttack, onNobody, dispatch, t
           const evasion = hit && !evaded && reactionsFor([now], 'evade')[0]
           return (
             <li key={target.id} className={`rounded-xl p-3 text-lg ${hit && !evaded ? 'bg-red-950' : 'bg-zinc-900'}`}>
-              {name} rolled {value} + {attack.bonus} = {total} against{' '}
+              {name} rolled {value} {bonusWords(state, attack)} = {total} against{' '}
               <span className={`font-bold ${HERO_COLORS[target.color].text}`}>{target.name}</span>'s AC {ac}.{' '}
               <b className={hit && !evaded ? 'text-red-300' : 'text-emerald-300'}>
                 {evaded ? 'Practiced Evasion: a miss!' : hit ? 'Hit!' : 'Miss!'}
@@ -146,7 +146,7 @@ function AttackStep({ state, hero, name, attack, onAttack, onNobody, dispatch, t
   return (
     <div className="space-y-3">
       <p className="text-lg text-zinc-200">
-        It attacks with +{attack.bonus}: a hit is {hitWords(attack)}
+        It attacks with +{foeBonus(state, attack)}{foeBonus(state, attack) !== attack.bonus && ' (−2 for Story)'}: a hit is {hitWords(attack)}
         {attack.miss > 0 && `, a miss is still ${attack.miss} damage`}.
       </p>
       {question && fromBoard && (

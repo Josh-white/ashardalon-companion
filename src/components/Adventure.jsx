@@ -56,7 +56,7 @@ export function AdventurePicker({ state, dispatch, board = false, compact = fals
 
       <div className="mt-4">
         <span className="text-zinc-400">How hard?</span>
-        <div className="mt-1 grid gap-2 sm:grid-cols-3">
+        <div className="mt-1 grid gap-2 sm:grid-cols-2">
           {DIFFICULTIES.map((d) => (
             <button
               key={d.key}
@@ -74,7 +74,7 @@ export function AdventurePicker({ state, dispatch, board = false, compact = fals
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <span className="text-zinc-400">Healing surges{difficulty.extraSurges ? ` (+${difficulty.extraSurges} on Easy)` : ''}:</span>
+        <span className="text-zinc-400">Healing surges{difficulty.extraSurges ? ` (+${difficulty.extraSurges} on ${difficulty.label})` : ''}:</span>
         {Array.from({ length: MAX_SURGES - MIN_SURGES + 1 }, (_, i) => MIN_SURGES + i).map((n) => (
           <Button key={n} variant={n === surges ? 'gold' : 'default'} onClick={() => dispatch({ type: 'SET_LOBBY_SURGES', surges: n })}>
             {'❤'.repeat(n)} {n === 1 ? 'harder' : n === 3 ? 'easier' : 'normal'}
@@ -670,5 +670,40 @@ export function ProjectorAdventure({ state }) {
         <VillagerList state={state} big />
       </div>
     </section>
+  )
+}
+
+// How hard it is, switched in the middle of a game: one button that opens the four choices.
+// On the iPads' menu, the table bar and the projector's footer. `place`: where the choices
+// open: 'below' (a top bar), 'above' (a footer) or 'inline' (inside a menu that scrolls).
+export function DifficultySwitch({ state, dispatch, className = '', place = 'below' }) {
+  const [open, setOpen] = useState(false)
+  const now = difficultyOf(state.difficulty)
+  return (
+    <span className={`relative ${place === 'inline' ? 'block' : 'inline-block'} ${className}`}>
+      <button type="button" className="rounded-xl px-3 py-2 transition hover:bg-zinc-800 active:scale-95" onClick={() => setOpen(!open)} aria-expanded={open}>
+        {now.icon} {now.label} · change
+      </button>
+      {open && (
+        <span className={`${place === 'inline' ? 'mt-1' : `absolute right-0 z-50 w-72 max-w-[90vw] ${place === 'above' ? 'bottom-full mb-1' : 'top-full mt-1'}`} block space-y-1 rounded-xl border border-zinc-700 bg-zinc-950 p-2 text-left text-sm shadow-2xl`}>
+          {DIFFICULTIES.map((d) => (
+            <button
+              key={d.key}
+              type="button"
+              className={`block w-full rounded-lg border-2 px-2 py-1.5 text-left active:scale-95 ${d.key === now.key ? 'border-amber-400 bg-amber-950/40' : 'border-zinc-800 bg-zinc-900'}`}
+              onClick={() => {
+                dispatch({ type: 'SET_DIFFICULTY', difficulty: d.key })
+                setOpen(false)
+              }}
+            >
+              <span className="block font-bold text-zinc-100">
+                {d.icon} {d.label}
+              </span>
+              <span className="block text-xs text-zinc-400">{d.detail}</span>
+            </button>
+          ))}
+        </span>
+      )}
+    </span>
   )
 }

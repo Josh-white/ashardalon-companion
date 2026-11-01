@@ -3,6 +3,7 @@
 // the Scroll of Monster Control. The reducer is in game.js.
 import { addedSlot, templateFor } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
+import { difficultyOf } from '../data/difficulty.js'
 import { heroItems } from '../data/items.js'
 import { aliveVillagers, objectiveInPlay } from './adventure.js'
 import { placeToken } from '../board/play.js'
@@ -197,8 +198,24 @@ export function startTurn(state) {
   if (hero.hp === 0 && state.surges <= 0) {
     return lose(state, `${hero.name} is down at the start of the turn with no healing surges left.`)
   }
+  state = storyTurnStart(state)
   if (hero.hp === 0) return { ...state, turn: { ...state.turn, startDamageDue: hero.id } }
-  return startDamage(state, hero)
+  const healed = state.heroes.find((h) => h.id === hero.id)
+  return startDamage(storyHeal(state, healed), healed)
+}
+
+// Story: the reroll comes back each turn.
+function storyTurnStart(state) {
+  if (!difficultyOf(state.difficulty).rerollEachTurn || !(state.secondChances ?? []).length) return state
+  return { ...state, secondChances: [] }
+}
+
+// Story: a hero who is still standing heals 1 HP at the start of their turn.
+function storyHeal(state, hero) {
+  const heal = difficultyOf(state.difficulty).healEachTurn ?? 0
+  if (!heal || hero.hp <= 0 || hero.hp >= hero.maxHp) return state
+  const hp = Math.min(hero.maxHp, hero.hp + heal)
+  return withLog(updateHero(state, hero.id, () => ({ hp })), `📖 Story: ${hero.name} heals ${hp - hero.hp} HP at the start of the turn.`)
 }
 
 // Poison and start-of-turn curse damage (Bloodlust).

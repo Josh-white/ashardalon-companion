@@ -3,6 +3,7 @@
 // the button does, and the plain-words answers. The screens only draw it.
 import { tileAcBonus } from '../data/items.js'
 import { heroAc } from '../data/powerEffects.js'
+import { foeBonus } from '../data/difficulty.js'
 import { canSpendAttack } from './heroTurn.js'
 
 // Who an attack goes after, asked as a question when the app can't tell.
@@ -54,7 +55,7 @@ export const firstPicks = (attack, hero, fromBoard) =>
 export function attackRolls(state, attack, rolled, guarded = []) {
   return rolled.map(({ heroId, roll }) => {
     const target = state.heroes.find((h) => h.id === heroId)
-    const total = roll + attack.bonus
+    const total = roll + foeBonus(state, attack)
     const ac = heroAc(target) + (guarded.includes(heroId) ? tileAcBonus(state.heroes, target) : 0)
     return { hero: target, value: roll, total, ac, hit: total >= ac }
   })

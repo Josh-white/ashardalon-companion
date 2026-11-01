@@ -30,4 +30,38 @@ describe('Easy / Normal / Hard', () => {
   it('remembers the difficulty for Try again', () => {
     expect(start('hard').retry.difficulty).toBe('hard')
   })
+
+  it('adds three healing surges on Story', () => {
+    expect(start('story')).toMatchObject({ difficulty: 'story', surges: 5 })
+  })
+
+  it('switches mid-game, moving the healing surges by the difference', () => {
+    let state = start()
+    state = gameReducer(state, { type: 'SET_DIFFICULTY', difficulty: 'story' })
+    expect(state).toMatchObject({ difficulty: 'story', surges: 5, lobbyDifficulty: 'story' })
+    expect(state.retry.difficulty).toBe('story')
+    expect(state.log[0].text).toMatch(/Switched to Story/)
+    state = gameReducer(state, { type: 'SET_DIFFICULTY', difficulty: 'easy' })
+    expect(state).toMatchObject({ difficulty: 'easy', surges: 4 })
+    state = gameReducer({ ...state, surges: 0 }, { type: 'SET_DIFFICULTY', difficulty: 'normal' })
+    expect(state.surges).toBe(0)
+    expect(gameReducer(initialState, { type: 'SET_DIFFICULTY', difficulty: 'story' })).toBe(initialState)
+  })
+
+  it('heals a standing hero 1 HP at the start of their turn on Story, and gives the reroll back', () => {
+    let state = { ...start('story'), secondChances: ['someone'] }
+    const second = state.heroes[1]
+    state = gameReducer(state, { type: 'ADJUST_HP', heroId: second.id, amount: -3 })
+    // Through the first hero's turn to the second hero's.
+    for (let i = 0; i < 20 && state.turn.heroIndex === 0; i++) state = gameReducer(state, { type: 'NEXT_PHASE' })
+    expect(state.turn.heroIndex).toBe(1)
+    expect(state.heroes[1].hp).toBe(second.hp - 2)
+    expect(state.secondChances).toEqual([])
+    expect(state.log.some((l) => /Story: .* heals 1 HP/.test(l.text))).toBe(true)
+  })
+
+  it('makes cancelling an encounter cost 3 XP on Story', () => {
+    const story = { ...start('story'), xp: 3 }
+    expect(gameReducer(story, { type: 'CANCEL_ENCOUNTER' }).xp).toBe(0)
+  })
 })

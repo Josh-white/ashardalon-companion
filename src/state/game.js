@@ -305,6 +305,29 @@ function reduce(state, action) {
       return { ...state, lobbyDifficulty: picked.key, lobbySurges: picked.surges }
     }
 
+    // Switching how hard it is in the middle of a game (Story, Easy, Normal, Hard). The healing
+    // surges go up or down by the difference in extra surges; the lobby keeps the choice for
+    // Try again and the next campaign adventure.
+    case 'SET_DIFFICULTY': {
+      if (state.status !== 'playing') return state
+      const from = difficultyOf(state.difficulty)
+      const to = difficultyOf(action.difficulty)
+      if (from.key === to.key) return state
+      const surges = Math.max(0, state.surges + to.extraSurges - from.extraSurges)
+      const change = surges - state.surges
+      const words = change > 0 ? ` +${change} healing surge${change === 1 ? '' : 's'}.` : change < 0 ? ` ${change} healing surge${change === -1 ? '' : 's'}.` : ''
+      return withLog(
+        {
+          ...state,
+          difficulty: to.key,
+          surges,
+          lobbyDifficulty: to.key,
+          retry: state.retry ? { ...state.retry, difficulty: to.key } : state.retry,
+        },
+        `${to.icon} Switched to ${to.label}: ${to.detail}.${words}`,
+      )
+    }
+
     case 'SET_LOBBY_SURGES':
       if (state.status !== 'setup') return state
       return { ...state, lobbySurges: clamp(Number(action.surges) || STARTING_SURGES, MIN_SURGES, MAX_SURGES) }

@@ -3,6 +3,7 @@ import { monsterArt } from '../data/art.js'
 import { HERO_COLORS } from '../data/heroes.js'
 import { itemsWithUse } from '../data/items.js'
 import { heroAc, reactionsFor } from '../data/powerEffects.js'
+import { foeBonus } from '../data/difficulty.js'
 import { activeVillains } from '../state/game.js'
 import { attackEffect, chooseTargets, currentStepIndex, figureCount, inRefuge, monsterTargets, nobodyToAttack, stepAttack, tapsMany, toggleTarget, towardHero as towardHeroFor } from '../state/monsterTurn.js'
 import { useCards } from '../state/useCards.js'
@@ -378,7 +379,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
             </p>
           )}
           <Button variant="danger" className="w-full py-4 text-xl font-bold" disabled={targetIds.length === 0} onClick={() => roll()}>
-            {table.length > 0 ? `🎲 Roll for the ${attack.name}` : `🎲 Roll the ${attack.name} attack (+${attack.bonus})`}
+            {table.length > 0 ? `🎲 Roll for the ${attack.name}` : `🎲 Roll the ${attack.name} attack (+${foeBonus(state, attack)})`}
           </Button>
           {table.length > 0 && (
             <p className="text-sm text-zinc-400">The first die picks the ray: {table.map((a) => `${a.roll[0]}–${a.roll[1]} ${a.name}`).join(', ')}.</p>
@@ -404,7 +405,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
                 const villager = state.villagers.find((v) => v.id === row.heroId)
                 return (
                   <li key={row.heroId} className={`rounded-xl p-3 text-lg ${row.hit ? 'bg-red-950' : 'bg-zinc-900'}`}>
-                    The {name} rolled {row.value} + {used.bonus} = {row.total} against the villager{' '}
+                    The {name} rolled {row.value} + {row.bonus ?? used.bonus} = {row.total} against the villager{' '}
                     <span className="font-bold text-emerald-200">{villager?.name}</span>'s AC {row.ac}.{' '}
                     <b className={row.hit ? 'text-red-300' : 'text-emerald-300'}>{row.hit ? 'Hit!' : 'Miss!'}</b> {villager?.name} takes {row.dealt} damage.
                     {villager?.removed && <span className="mt-1 block font-semibold text-amber-200">{villager.name} is gone. Take the token off the board.</span>}
@@ -417,7 +418,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
               const [bracers] = row.hit && !row.dodged && row.dealt > 0 ? itemsWithUse([hero], 'reduceDamage') : []
               return (
                 <li key={row.heroId} className={`rounded-xl p-3 text-lg ${hit ? 'bg-red-950' : 'bg-zinc-900'}`}>
-                  The {name} rolled {row.value} + {used.bonus} = {row.total} against{' '}
+                  The {name} rolled {row.value} + {row.bonus ?? used.bonus} = {row.total} against{' '}
                   <span className={`font-bold ${HERO_COLORS[hero.color].text}`}>{hero.name}</span>'s AC {row.ac}.{' '}
                   <b className={hit ? 'text-red-300' : 'text-emerald-300'}>{row.dodged ? 'Tumbling Escape: a miss!' : hit ? 'Hit!' : 'Miss!'}</b>{' '}
                   {hero.name} takes {effect(hit)}.
