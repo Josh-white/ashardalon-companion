@@ -26,7 +26,7 @@ import { TreasureStep } from './components/Treasure.jsx'
 import { TilesLeft } from './components/Tiles.jsx'
 import TurnGuide, { ExtraAttacks } from './components/TurnGuide.jsx'
 import UndoButton from './components/UndoButton.jsx'
-import { MusicToggle, SoundToggle, TapForSound } from './components/SoundToggle.jsx'
+import { MusicToggle, SoundToggle, StayAwakeToggle, TapForSound } from './components/SoundToggle.jsx'
 import { BoardSwitch, BoardToast, SoundBoard } from './components/SoundBoard.jsx'
 import { Button, HpBar, useConfirm } from './components/ui.jsx'
 import { heroArt } from './data/art.js'
@@ -41,6 +41,7 @@ import { PHASES } from './data/phases.js'
 import { activeVillains, encounterCardsOutdated } from './state/game.js'
 import { shuffleNumbers } from './state/random.js'
 import { useCards } from './state/useCards.js'
+import { useStayAwake, useStayAwakeSetting } from './state/stayAwake.js'
 import AllyPanel, { AllyPause } from './ally/AllyPanel.jsx'
 import { allyHostSeat } from './ally/brain.js'
 import { FAMILY_GAME, useDeviceId, useGameChoice, useScreenRole, useSeat, useSharedGame } from './state/useSharedGame.js'
@@ -81,6 +82,7 @@ function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitchSeat, s
           <UndoButton undo={undo} depth={undoDepth} dispatch={dispatch} className="max-w-56 truncate" />
           <SoundToggle on={sound.on} setOn={sound.setOn} elsewhere={sound.elsewhere} className="text-sm" />
           <MusicToggle on={sound.musicOn} setOn={sound.setMusicOn} soundOn={sound.on} className="text-sm" />
+          <StayAwakeToggle className="text-sm" />
           {boardSwitch && <BoardSwitch state={state} dispatch={dispatch} className="text-sm" />}
           <DifficultySwitch state={state} dispatch={dispatch} className="text-sm" />
           <Button variant="ghost" className="text-sm" onClick={onSwitchSeat}>
@@ -503,6 +505,7 @@ function SoloBar({ state, dispatch, undo, undoDepth, onSwitchSeat, sound, seatLa
           <div className="flex flex-wrap gap-2">
             <SoundToggle on={sound.on} setOn={sound.setOn} elsewhere={sound.elsewhere} className="text-sm" />
             <MusicToggle on={sound.musicOn} setOn={sound.setMusicOn} soundOn={sound.on} className="text-sm" />
+            <StayAwakeToggle className="text-sm" />
             {boardSwitch && <BoardSwitch state={state} dispatch={dispatch} className="text-sm" />}
           </div>
           <DifficultySwitch state={state} dispatch={dispatch} place="inline" className="text-sm" />
@@ -575,6 +578,9 @@ export default function App() {
   })
   const soundLocked = useAudioLocked(soundOn) || narrator.blocked
   const doorsAt = useDoorsOpening()
+  // Phones, iPads and the projector stay awake while a game is open, like during a video.
+  const [stayAwake] = useStayAwakeSetting()
+  useStayAwake(stayAwake && Boolean(chosenGame))
 
   if (showIntro) return <DragonIntro projector={seat === PROJECTOR_SEAT} say={narrator.say} quiet={narrator.quiet} onDone={finishIntro} />
 
