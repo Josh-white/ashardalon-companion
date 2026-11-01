@@ -75,6 +75,14 @@ const downLine = (text) => text.match(/^[\w' -]+ is down!/)?.[0] ?? 'The heroes 
 // comes from cards.json on the Pi, so these recordings are made there the first time a
 // hero reads a card, and never go in the repository. `read` marks it for Skip.
 export const READ_TAG = '[reading aloud]'
+// How each hero reads, acted out by v3 (picked with JJ). A homebrew hero reads plainly.
+export const HERO_READ_TAGS = {
+  cleric: '[kind, reading aloud]',
+  fighter: '[gruff, reading aloud]',
+  paladin: '[noble, reading aloud]',
+  rogue: '[swagger, reading aloud]',
+  wizard: '[dramatic, reading aloud]',
+}
 export const cardWords = (text) =>
   String(text ?? '')
     .replace(/[•▪]\s*/g, '')
@@ -88,7 +96,7 @@ export const cardWords = (text) =>
 export function readsCard(hero, text) {
   const words = cardWords(text)
   if (!hero?.key || !words) return null
-  return { text: `${READ_TAG} ${words}`, voice: `hero_${hero.key}`, read: true, heroId: hero.id }
+  return { text: `${HERO_READ_TAGS[hero.key] ?? READ_TAG} ${words}`, voice: `hero_${hero.key}`, read: true, heroId: hero.id }
 }
 
 // Cards found since the last state that aren't a moment of their own, read by the

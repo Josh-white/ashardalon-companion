@@ -27,12 +27,13 @@ export const DEFAULT_VOICES = {
   coach_rogue: 'IKne3meq5aSn9XLyUdCD', // Whisper (Charlie)
   coach_wizard: 'pqHfZKP75CvOlQylNhV4', // Master Thessaly (Bill)
   // The heroes themselves, reading the cards they draw out loud (narration.js readsCard).
-  // ElevenLabs' own voices, none already in the cast; swap with ELEVENLABS_VOICE_HERO_<HERO>.
-  hero_cleric: 'cjVigY5qzO86Huf0OWal', // Quinn (Eric)
-  hero_fighter: 'FGY2WhTYpPnrIDTdsKH5', // Vistra (Laura)
-  hero_paladin: 'XrExE9yKIg6WjnnNkh2a', // Keyleth (Matilda)
-  hero_rogue: 'CwhRBWXzGAHq8TQ4Fs17', // Tarak (Roger)
-  hero_wizard: 'pNInz6obpgDQGcFmaJgB', // Heskan (Adam)
+  // Picked by JJ by ear from the ElevenLabs community library (2026-11-01); swap with
+  // ELEVENLABS_VOICE_HERO_<HERO>.
+  hero_cleric: 'G17SuINrv2H9FC6nvetn', // Quinn (Christopher, Gentle and Trustworthy)
+  hero_fighter: 'YHcCpa6SBWnKDaCPZJQR', // Vistra (Mora, Gritty and Enigmatic)
+  hero_paladin: 'ksryVoNAGZT8GxWCTiVm', // Keyleth (Elariel X, Epic Queen Ethereal)
+  hero_rogue: 'Xq2dbIWNPChFB77imiDe', // Tarak (Gideon, Pirate)
+  hero_wizard: 'HAvvFKatz0uu0Fv55Riy', // Heskan (Matthew Schmitz, Ancient Sage Dragon Wizard)
 }
 
 const castFromEnv = (env) =>
