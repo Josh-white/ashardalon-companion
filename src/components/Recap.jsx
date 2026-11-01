@@ -55,7 +55,9 @@ export const LOST_QUESTION = { title: 'Did the party lose?', body: 'This shows t
 
 // `onFinish` ({ name, finish }) finishes and archives this game. Only a named game has
 // one: the family game always stays.
-export default function Recap({ state, dispatch, big, onFinish }) {
+// `contained` puts it over its parent (the play area under the top bars) instead of the
+// whole window.
+export default function Recap({ state, dispatch, big, onFinish, contained = false }) {
   const [ask, dialog] = useConfirm()
   const cards = useCards()
   const [hall, setHall] = useState(false)
@@ -89,16 +91,17 @@ export default function Recap({ state, dispatch, big, onFinish }) {
   // Mid-campaign, the way on is the campaign's own button above.
   const canNewGame = !state.campaign || campaignOutcome(state)?.over
 
+  const place = contained ? 'absolute' : 'fixed'
   if (hall) {
     return (
-      <div className="fixed inset-0 z-[45] overflow-y-auto bg-zinc-950">
+      <div className={`${place} inset-0 z-[45] overflow-y-auto bg-zinc-950`}>
         <HallOfRecords onClose={() => setHall(false)} />
       </div>
     )
   }
 
   return (
-    <div className={`fixed inset-0 z-[45] overflow-y-auto bg-zinc-950 ${won ? '' : 'recap-defeat'} ${big ? 'p-[1.5vw] text-[1.2vw]' : 'p-4 text-base'}`}>
+    <div className={`${place} inset-0 z-[45] overflow-y-auto bg-zinc-950 ${won ? '' : 'recap-defeat'} ${big ? 'p-[1.5vw] text-[1.2vw]' : 'p-4 text-base'}`}>
       <div className="mx-auto max-w-[60em] text-center">
         <div className={`text-[4em] leading-none ${won ? 'moment-pop' : 'defeat-skull'}`}>{won ? '🏆' : '💀'}</div>
         <h2 className={`moment-pop mt-[0.2em] font-display text-[2.6em] font-bold leading-tight ${won ? 'text-amber-400' : 'text-red-400'}`}>
