@@ -18,6 +18,7 @@ import { MonsterChoice } from './Pickers.jsx'
 import { TileGuardQuestion } from './Treasure.jsx'
 import { DrawTileButton } from './Tiles.jsx'
 import { Button } from './ui.jsx'
+import { cancelAdvice } from '../ally/cancelEncounter.js'
 import { highAlertPass, passWords, warpPasses } from '../state/passMonsters.js'
 
 // Encounter cards that put the bottom dungeon tile into play.
@@ -315,6 +316,24 @@ export function Perseverance({ state, dispatch }) {
   )
 }
 
+// Is the cancel worth it? Saves the XP for heroes who haven't levelled up yet (the same
+// rule the computer allies play by).
+const ADVICE_STYLES = {
+  good: 'bg-emerald-950/60 text-emerald-200',
+  save: 'bg-amber-950/60 text-amber-200',
+  helps: 'bg-sky-950/60 text-sky-200',
+}
+const ADVICE_ICONS = { good: '👍', save: '✋', helps: '🎁' }
+export function CancelAdvice({ state, hero }) {
+  const advice = cancelAdvice(state, hero)
+  if (!advice) return null
+  return (
+    <p data-cancel-advice={advice.tone} className={`-mt-2 rounded-lg p-2 text-base ${ADVICE_STYLES[advice.tone]}`}>
+      {ADVICE_ICONS[advice.tone]} {advice.text}
+    </p>
+  )
+}
+
 // The encounter card being read out, and what the app can do for it.
 function EncounterCard({ state, hero, dispatch }) {
   const { monsters: monsterCards, villains } = useCards()
@@ -377,6 +396,7 @@ function EncounterCard({ state, hero, dispatch }) {
           Spend {encounterCancelCost(state)} XP to cancel it (party has {state.xp})
         </Button>
       )}
+      {!attacked && !card.noCancel && <CancelAdvice state={state} hero={hero} />}
       {!attacked && !card.noCancel && <Perseverance state={state} dispatch={dispatch} />}
 
       {placesMarker && !markerChecked && !attacked ? (
