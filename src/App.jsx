@@ -402,6 +402,7 @@ function PlayView({ state, dispatch, hero = null, soundBoard = null }) {
           state={state}
           dispatch={dispatch}
           fill
+          calm
           readOnly={Boolean(hero) && !myTurn && !state.turn.boardMove}
           extraButtons={
             <Button className="min-h-10 min-w-10 !px-2 !py-1 text-sm md:hidden" onClick={() => setBigBoard(!bigBoard)} aria-label={bigBoard ? 'Smaller board' : 'Bigger board'}>

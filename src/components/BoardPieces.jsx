@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { key, STEP, unexploredEdges } from '../board/grid.js'
 import { HERO_TOKENS, isHeroToken } from '../board/heroTokens.js'
 import HazardFloor, { hasHazardFloor } from './HazardFloor.jsx'
@@ -7,7 +8,7 @@ import { SQUARE, TileShapes } from './TileDrawing.jsx'
 // edges, exits, trap and hazard markers, the tokens heroes put down, and the figures.
 
 // A placed tile drawn in board squares: moved to its spot and turned.
-export function PlacedTile({ placed, def, spin }) {
+function PlacedTileDrawing({ placed, def, spin }) {
   const w = def.rows[0].length * SQUARE
   const h = def.rows.length * SQUARE
   const [x, y] = [placed.at[0] * SQUARE, placed.at[1] * SQUARE]
@@ -19,12 +20,23 @@ export function PlacedTile({ placed, def, spin }) {
   )
 }
 
+// A tile never changes once it's down, but every tap anywhere sends the whole game again, so
+// without this each tile's few hundred stone shapes were drawn over on every update.
+const sameTile = (a, b) =>
+  a.spin === b.spin &&
+  a.placed.uid === b.placed.uid &&
+  a.placed.turn === b.placed.turn &&
+  a.placed.at[0] === b.placed.at[0] &&
+  a.placed.at[1] === b.placed.at[1] &&
+  (a.def === b.def || JSON.stringify(a.def) === JSON.stringify(b.def))
+export const PlacedTile = memo(PlacedTileDrawing, sameTile)
+
 // The open sides of the dungeon a hero can still explore: a glowing dashed line along the
 // edge and an arrow pointing out into the dark, so they don't look like walls.
 const OPEN_EDGE = '#22d3ee'
 export function OpenEdges({ grid }) {
   return (
-    <g pointerEvents="none" className="motion-safe:animate-pulse">
+    <g pointerEvents="none" className="motion-safe:animate-pulse" data-open-edges="">
       {unexploredEdges(grid).map((edge) => {
         const [dx, dy] = STEP[edge.side]
         const lines = edge.squares.map(([x, y]) => {
