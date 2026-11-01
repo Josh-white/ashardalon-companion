@@ -18,16 +18,46 @@ function useBoxSize() {
   return [ref, size]
 }
 
+// The zoom and where the view is, kept on this screen so a page reload (a new version
+// arriving mid-game, the phone dropping the app while it's in the background), the game
+// picker or the art screen doesn't throw the board back to zoomed-to-fit. The view's
+// middle is kept as a share of the drawn dungeon, so it lands on the same squares even on a
+// box of another size, and only for the same dungeon (the same outline and turn).
+const KEY = 'ashardalon-board-zoom'
+
+export function savedZoom() {
+  try {
+    const v = JSON.parse(localStorage.getItem(KEY))
+    if (v && (v.zoom === 'fit' || (typeof v.zoom === 'number' && v.zoom > 0))) return v
+  } catch {
+    // Nothing kept, or storage blocked.
+  }
+  return null
+}
+
+function keepZoom(v) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(v))
+  } catch {
+    // Private mode: the zoom lasts until the page reloads.
+  }
+}
+
 // `fill`: the board takes the whole box it's in and starts zoomed to fit. `bounds` is the
 // dungeon's outline (boardBounds), or null before there's a board. Returns the ref for the
 // scrolling box and everything the svg and the − / + buttons need.
 export function useBoardZoom({ fill, bounds, activeId, activeAt }) {
   // 'fit' (the whole dungeon fills the box) or how many screen pixels per board unit.
-  const [zoom, setZoom] = useState(fill ? 'fit' : 1.6)
+  const [kept] = useState(() => (fill ? savedZoom() : null))
+  const [zoom, setZoom] = useState(kept?.zoom ?? (fill ? 'fit' : 1.6))
   const [boxRef, box] = useBoxSize()
   const live = useRef({}) // the latest sizes, for the pinch handlers
   const pinch = useRef(null)
-  const pinched = useRef(false)
+  // A kept view for this dungeon is put back once the box has its size (restoreView below),
+  // so the board doesn't first glide to the active hero.
+  const outline = bounds ? `${bounds.x},${bounds.y},${bounds.w},${bounds.h}` : null
+  const restore = useRef(kept?.view && kept.view.outline === outline ? kept.view : null)
+  const pinched = useRef(Boolean(restore.current))
   // Where the dungeon itself is on screen (zoomed to fit, the svg has empty bands round it).
   const drawn = () => {
     const r = boxRef.current.querySelector('svg').getBoundingClientRect()
@@ -111,6 +141,55 @@ export function useBoardZoom({ fill, bounds, activeId, activeAt }) {
     el.scrollLeft += r.left + a.fx * r.width - a.mx
     el.scrollTop += r.top + a.fy * r.height - a.my
   }, [zoom]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Put back the kept view once the box is measured and the board drawn at the kept zoom.
+  useLayoutEffect(() => {
+    const el = boxRef.current
+    const v = restore.current
+    if (!el || !v || !box || !live.current.viewW) return
+    restore.current = null
+    if (v.spin !== live.current.spin) return
+    const r = drawn()
+    const b = el.getBoundingClientRect()
+    el.scrollLeft += r.left + v.fx * r.width - (b.left + el.clientWidth / 2)
+    el.scrollTop += r.top + v.fy * r.height - (b.top + el.clientHeight / 2)
+  }, [box]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Keep the zoom, and (a moment after scrolling stops) the middle of the view.
+  const save = () => {
+    const el = boxRef.current
+    if (!fill || !el || !live.current.viewW) return
+    // Not put back yet (the box isn't measured): keep the old view as it is.
+    let view = restore.current
+    if (!view && live.current.outline && live.current.zoom !== 'fit') {
+      const r = drawn()
+      const b = el.getBoundingClientRect()
+      view = {
+        outline: live.current.outline,
+        spin: live.current.spin,
+        fx: (b.left + el.clientWidth / 2 - r.left) / r.width,
+        fy: (b.top + el.clientHeight / 2 - r.top) / r.height,
+      }
+    }
+    keepZoom({ zoom: live.current.zoom, view })
+  }
+  const saveRef = useRef(save)
+  saveRef.current = save
+  useEffect(() => {
+    if (fill) saveRef.current()
+  }, [fill, zoom])
+  useEffect(() => {
+    const el = boxRef.current
+    if (!fill || !el) return
+    let timer
+    const scrolled = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => saveRef.current(), 300)
+    }
+    el.addEventListener('scroll', scrolled, { passive: true })
+    return () => {
+      clearTimeout(timer)
+      el.removeEventListener('scroll', scrolled)
+    }
+  }, [fill]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!bounds) return { boxRef }
 
   // A long, thin dungeon in a box the other shape (a tall one on the projector's wide
@@ -123,7 +202,8 @@ export function useBoardZoom({ fill, bounds, activeId, activeAt }) {
   // Zoom to fit: the biggest size that shows the whole dungeon in the box. The buttons step
   // through the fixed sizes bigger than it; a pinch goes anywhere in between.
   const fitScale = fitFor(viewW, viewH)
-  const fit = fill && zoom === 'fit'
+  // A kept zoom smaller than fitting this box (the phone unfolded since) just fits.
+  const fit = fill && (zoom === 'fit' || zoom < fitScale)
   const scale = fit ? fitScale : zoom
   const sizes = fill ? ZOOMS.filter((z) => z > fitScale * 1.15) : ZOOMS
   const zoomOut = fit ? null : [...sizes].reverse().find((z) => z < scale / 1.05) ?? (fill ? 'fit' : null)
@@ -136,5 +216,8 @@ export function useBoardZoom({ fill, bounds, activeId, activeAt }) {
   live.current.fitScale = fitScale
   live.current.viewW = viewW
   live.current.viewH = viewH
+  live.current.spin = spin
+  live.current.zoom = zoom
+  live.current.outline = outline
   return { boxRef, spin, viewW, viewH, viewBox, fit, scale, zoomIn, zoomOut, zoomTo }
 }
