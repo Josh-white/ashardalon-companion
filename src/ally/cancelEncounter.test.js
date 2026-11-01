@@ -9,7 +9,7 @@ const TILES = normalizeTiles(
   [{ id: 'start', kind: 'start', rows: ['...#', '...#', '...#', '...#', '...#', '...#', '...#', '...#'], exits: { N: 'ooox', S: 'xxxx', W: 'xxxxxxxx', E: 'xxxxxxxx' } }],
   [],
 )
-import { cancelEncounter, encounterHarm, levelUpReserve, spareXp } from './cancelEncounter.js'
+import { cancelAdvice, cancelEncounter, encounterHarm, levelUpReserve, spareXp } from './cancelEncounter.js'
 
 const card = (extra) => ({ id: 'x', name: 'Card', type: 'event', text: '', ...extra })
 const CAGE = card({ id: 'cage', name: 'Cage', type: 'curse', curse: { acPenalty: 2 } })
@@ -97,5 +97,33 @@ describe('computer allies cancelling encounters', () => {
     expect(allyStep(withBoard)?.action).toEqual({ type: 'CANCEL_ENCOUNTER' })
     const human = { ...withBoard, heroes: withBoard.heroes.map((h) => ({ ...h, ally: false })) }
     expect(allyStep(human)).toBeNull()
+  })
+
+  describe('advice for the players', () => {
+    it('says to save the XP, naming the heroes still at level 1', () => {
+      const state = game({ xp: 12 })
+      const advice = cancelAdvice(state, hero(state))
+      expect(advice).toMatchObject({ cancel: false, tone: 'save' })
+      expect(advice.text).toContain(`${state.heroes[0].name} and ${state.heroes[1].name} still need 5 XP each`)
+    })
+
+    it('says go ahead with XP to spare on a nasty card', () => {
+      const state = game({ xp: 15 })
+      expect(cancelAdvice(state, hero(state))).toMatchObject({ cancel: true, tone: 'good' })
+      const all2 = game({ xp: 5, levels: [2, 2] })
+      expect(cancelAdvice(all2, hero(all2)).text).toMatch(/every hero is level 2/)
+    })
+
+    it('says keep the XP on a mild or helpful card', () => {
+      const mild = game({ xp: 5, levels: [2, 2], encounter: BULLS_EYE })
+      expect(cancelAdvice(mild, hero(mild))).toMatchObject({ cancel: false, tone: 'save' })
+      const good = game({ xp: 30, encounter: TREASURE })
+      expect(cancelAdvice(good, hero(good))).toMatchObject({ cancel: false, tone: 'helps' })
+    })
+
+    it("says nothing when the party can't afford it", () => {
+      const state = game({ xp: 3 })
+      expect(cancelAdvice(state, hero(state))).toBeNull()
+    })
   })
 })

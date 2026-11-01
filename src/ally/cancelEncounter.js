@@ -65,20 +65,39 @@ export function encounterHarm(state, card, hero) {
   return { score, lethal }
 }
 
-// The ally's cancel, or null to play the card.
-export function cancelEncounter(state, hero) {
-  const encounter = state.encounter
-  if (!encounter || encounter.attacked || encounter.card.noCancel) return null
+// Is cancelling the drawn encounter worth the XP? The same rule the computer allies play by,
+// in words for the players: { cancel, tone, text }. Tone is 'good' (cancel it), 'save' (keep
+// the XP) or 'helps' (the card is good for you). Null when there's nothing to cancel or the
+// party can't afford it.
+export function cancelAdvice(state, hero) {
+  const encounter = state?.encounter
+  if (!encounter || encounter.attacked || encounter.card.noCancel || !hero) return null
   const cost = encounterCancelCost(state)
   if (state.xp < cost) return null
   const { score, lethal } = encounterHarm(state, encounter.card, hero)
-  if (score === 0) return null
+  if (score === 0) return { cancel: false, tone: 'helps', text: 'This card helps you. Keep your XP and play it.' }
+  if (lethal && state.surges === 0) return { cancel: true, tone: 'good', text: 'Cancel it! It could knock out a hero, and there are no healing surges left.' }
+  const waiting = state.heroes.filter((h) => h.level < MAX_LEVEL)
   const spare = spareXp(state)
-  const say = `${hero.name} spends ${cost} XP to cancel ${encounter.card.name}.`
-  // No surges left and this could knock someone out: that ends the game, so pay for it.
-  if (lethal && state.surges === 0) return { action: { type: 'CANCEL_ENCOUNTER' }, say }
-  if (spare < cost) return null
+  if (spare < cost) {
+    const names = waiting.map((h) => h.name)
+    const who = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
+    return {
+      cancel: false,
+      tone: 'save',
+      text: `Better to save the XP: ${who} still ${names.length === 1 ? 'needs' : 'need'} ${XP_TO_LEVEL_UP} XP each to level up on a natural 20 (${levelUpReserve(state)} XP to keep).`,
+    }
+  }
+  const why = waiting.length === 0 ? 'every hero is level 2, so XP is only good for cancelling' : `you have ${spare} XP left over after saving for level ups`
   // Plenty to spare: cancel the merely annoying cards too.
   const bar = spare >= cost * 2 ? 2 : 3
-  return score >= bar ? { action: { type: 'CANCEL_ENCOUNTER' }, say } : null
+  if (score >= bar) return { cancel: true, tone: 'good', text: `Good idea: ${why}, and this card hurts.` }
+  return { cancel: false, tone: 'save', text: `${why[0].toUpperCase()}${why.slice(1)}, but this card is mild. Maybe save the XP for a worse one.` }
+}
+
+// The ally's cancel, or null to play the card.
+export function cancelEncounter(state, hero) {
+  const advice = cancelAdvice(state, hero)
+  if (!advice?.cancel) return null
+  return { action: { type: 'CANCEL_ENCOUNTER' }, say: `${hero.name} spends ${encounterCancelCost(state)} XP to cancel ${state.encounter.card.name}.` }
 }
