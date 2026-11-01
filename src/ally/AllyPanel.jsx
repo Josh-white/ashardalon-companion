@@ -10,6 +10,7 @@ import { useCards } from '../state/useCards.js'
 import { serverNow } from '../state/useSharedGame.js'
 import { activeAlly, allyStep, bonusAttack } from './brain.js'
 import { audioBusy } from '../audio/busy.js'
+import { isReading } from '../components/CardReading.jsx'
 
 // How long the ally waits between taps, so everyone can see what it did.
 export const ALLY_STEP_MS = 2500
@@ -73,6 +74,12 @@ export function useAllyDriver(state, dispatch, drive) {
       }
       if (firstRollShowing(s, serverNow())) return ALLY_STEP_MS
       // A roar, a fanfare or the narrator still going: let it finish, then a short breath.
+      // A hero reading a card out loud on any screen: wait for the whole card (a long one
+      // takes half a minute; an old reading left by a closed screen stops counting).
+      if (isReading(s)) {
+        mem.afterSound = true
+        return SOUND_CHECK_MS
+      }
       if (audioBusy()) {
         mem.soundSince ??= Date.now()
         if (Date.now() - mem.soundSince < MAX_SOUND_WAIT_MS) {
