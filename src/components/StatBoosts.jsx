@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { tileAcBonus, tileGuards } from '../data/items.js'
+import { tileShieldNow } from '../board/checks.js'
 import { acParts, attackParts, heroBadges, speedParts } from '../data/statParts.js'
 
 // Blue is something helping, orange something hurting (told apart by lightness too).
@@ -75,7 +76,9 @@ function Breakdown({ tile, onClose }) {
 export function StatTiles({ state, hero, compact = false }) {
   const [open, setOpen] = useState(null)
   const heroes = state?.heroes ?? []
-  const ac = acParts(hero, heroes)
+  // On the virtual board the AC counts a Blessed Shield as soon as the hero steps onto its owner's tile.
+  const shield = tileShieldNow(state, hero)
+  const ac = acParts(hero, heroes, shield)
   const speed = speedParts(hero)
   const attack = attackParts(hero)
   const guards = tileGuards(heroes, hero)
@@ -91,7 +94,7 @@ export function StatTiles({ state, hero, compact = false }) {
       parts: ac.parts,
       title: `Why is ${hero.name}'s AC ${ac.total}?`,
       totalLabel: 'Total AC',
-      notes: tileBonus > 0 ? [`+${tileBonus} more while on ${guards.map((g) => g.hero.name).join(' or ')}'s tile (Blessed Shield).`] : [],
+      notes: !shield && tileBonus > 0 ? [`+${tileBonus} more while on ${guards.map((g) => g.hero.name).join(' or ')}'s tile (Blessed Shield).`] : [],
     },
     {
       key: 'speed',
@@ -188,8 +191,8 @@ export function StatTiles({ state, hero, compact = false }) {
 }
 
 // Small blue (helping) and orange (hurting) badges: the projector and the Party tab.
-export function BoostBadges({ hero, heroes, className = '', badgeClass = 'px-2 py-0.5 text-sm' }) {
-  const badges = heroBadges(hero, heroes)
+export function BoostBadges({ state, hero, heroes = state?.heroes ?? [], className = '', badgeClass = 'px-2 py-0.5 text-sm' }) {
+  const badges = heroBadges(hero, heroes, tileShieldNow(state, hero))
   if (badges.length === 0) return null
   return (
     <ul className={`flex flex-wrap gap-1.5 ${className}`}>

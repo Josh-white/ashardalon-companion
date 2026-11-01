@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
-import { boardAnswer, guardsOnTile } from './checks.js'
+import { boardAnswer, guardsOnTile, liveAc, tileShieldNow } from './checks.js'
+import { heroAc } from '../data/powerEffects.js'
+import { acParts } from '../data/statParts.js'
 import { normalizeTiles } from './tileDefs.js'
 
 // A made-up start tile (its east column solid) with a room north of it and another north of that.
@@ -92,6 +94,44 @@ describe('Blessed Shield on the virtual board', () => {
     expect(guardsOnTile(state, heroes[0], [heroes[1]])).toEqual([heroes[1]])
     expect(guardsOnTile(state, heroes[2], [heroes[1]])).toEqual([])
     expect(guardsOnTile({ ...state, board: null }, heroes[0], [heroes[1]])).toBeNull()
+  })
+
+  // The second hero carries a +2 Blessed Shield; the third starts on another tile.
+  const shielded = (thirdAt) => {
+    const { state } = game(thirdAt)
+    const shield = { id: 'bs', cardId: 'blessed-shield', name: 'Blessed Shield', used: false, card: { inPlay: true, tileAcBonus: 2 } }
+    const heroes = state.heroes.map((h, i) => (i === 1 ? { ...h, items: [shield] } : h))
+    return { state: { ...state, heroes }, heroes }
+  }
+  const move = (state, id, to) => gameReducer(state, { type: 'MOVE_TOKEN', id, to })
+
+  it('raises AC the moment a hero steps onto the owner’s tile, and drops it on stepping off', () => {
+    const { state, heroes } = shielded([0, -4])
+    const [, owner, walker] = heroes
+    expect(tileShieldNow(state, walker)).toMatchObject({ bonus: 0, guards: [] })
+    expect(liveAc(state, walker)).toBe(heroAc(walker))
+    const onTile = move(state, walker.id, [2, 1])
+    expect(tileShieldNow(onTile, walker)).toMatchObject({ bonus: 2 })
+    expect(tileShieldNow(onTile, walker).guards.map((g) => g.id)).toEqual([owner.id])
+    expect(liveAc(onTile, walker)).toBe(heroAc(walker) + 2)
+    expect(acParts(walker, onTile.heroes, tileShieldNow(onTile, walker)).total).toBe(heroAc(walker) + 2)
+    const offAgain = move(onTile, walker.id, [0, -4])
+    expect(liveAc(offAgain, walker)).toBe(heroAc(walker))
+  })
+
+  it('follows the owner, not where the shield was first played', () => {
+    const { state, heroes } = shielded([0, -4])
+    const [first, owner] = heroes
+    expect(liveAc(state, first)).toBe(heroAc(first) + 2)
+    const ownerLeft = move(state, owner.id, [1, -3])
+    expect(liveAc(ownerLeft, first)).toBe(heroAc(first))
+    expect(liveAc(ownerLeft, heroes[2])).toBe(heroAc(heroes[2]) + 2)
+  })
+
+  it('leaves it to the iPad question without a board', () => {
+    const { state, heroes } = shielded([0, -4])
+    expect(tileShieldNow({ ...state, board: null }, heroes[0])).toBeNull()
+    expect(liveAc({ ...state, board: null }, heroes[0])).toBe(heroAc(heroes[0]))
   })
 })
 

@@ -4,7 +4,7 @@
 import { hasAbility } from '../data/heroes.js'
 import { monsterArt } from '../data/art.js'
 import { PHASES } from '../data/phases.js'
-import { tileAcBonus, tileGuards } from '../data/items.js'
+import { tileAcBonus } from '../data/items.js'
 import { effectsOf, heroAc } from '../data/powerEffects.js'
 import { bonusWords, foeBonus } from '../data/difficulty.js'
 import { bottomToTop } from './tiles.js'
@@ -13,7 +13,7 @@ import { placeNear, placeToken } from '../board/play.js'
 import { sentryMoves } from '../board/monsters.js'
 import { queueEncounterMoves } from '../board/powerMoves.js'
 import { heroTile } from '../board/encounters.js'
-import { guardsOnTile } from '../board/checks.js'
+import { tileShieldNow } from '../board/checks.js'
 import { addTreasureToken } from '../board/items.js'
 import { isLava, isMovingTrap } from '../board/traps.js'
 import { activeVillains, clamp, findFoe, lose, markUsed, newId, shuffle, updateHero, updateMonster, validRoll, withLog, withMoment, withVillainCall } from './gameHelpers.js'
@@ -25,8 +25,8 @@ import { applyPasses, warpPasses } from './passMonsters.js'
 // A hero's AC against an attack. Heroes standing on a Blessed Shield owner's tile get its
 // bonus too: read from the virtual board, or asked on the iPad (tileGuarded) without one.
 function targetAc(state, hero, tileGuarded) {
-  const onBoard = guardsOnTile(state, hero, tileGuards(state.heroes, hero).map((g) => g.hero))
-  if (onBoard) return heroAc(hero) + tileAcBonus(onBoard, hero)
+  const onBoard = tileShieldNow(state, hero)
+  if (onBoard) return heroAc(hero) + onBoard.bonus
   return heroAc(hero) + (Array.isArray(tileGuarded) && tileGuarded.includes(hero.id) ? tileAcBonus(state.heroes, hero) : 0)
 }
 

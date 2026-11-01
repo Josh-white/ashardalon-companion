@@ -16,6 +16,7 @@ import { figureToken } from '../board/play.js'
 import { stoppedShort } from '../board/heroTokens.js'
 import { boardStep, boardTargetIds, closestTarget, foeDistance, squareAway, squareNextTo, squareToward } from '../board/monsters.js'
 import { seesInvisible } from '../board/tactics.js'
+import { liveAc } from '../board/checks.js'
 import { hitMoveStep } from '../board/powerMoves.js'
 
 // Keyleth's Bravery: when a monster within 1 tile of her activates, she can step next to it and heal 1.
@@ -93,7 +94,7 @@ const THEN = {
   away: (name) => `Now move the ${name} to the closest square that isn't next to a hero.`,
 }
 
-export function HeroPicker({ heroes, chosen, onToggle }) {
+export function HeroPicker({ state, heroes, chosen, onToggle }) {
   return (
     <div className="grid grid-cols-2 gap-2">
       {heroes.map((hero) => {
@@ -121,7 +122,7 @@ export function HeroPicker({ heroes, chosen, onToggle }) {
             } ${HERO_COLORS[hero.color].text}`}
           >
             {hero.name}
-            <span className="block text-sm font-normal text-zinc-400">AC {heroAc(hero)} · {hero.hp} HP</span>
+            <span className="block text-sm font-normal text-zinc-400">AC {state ? liveAc(state, hero) : heroAc(hero)} · {hero.hp} HP</span>
             {hero.tokens?.invisible && <span className="block text-sm font-normal text-sky-300">👻 Invisible: never the closest</span>}
             {hero.tokens?.refuge && <span className="block text-sm font-normal text-sky-300">✨ In the Astral Refuge</span>}
           </button>
@@ -358,7 +359,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
             </p>
           )}
           {villagers.length > 0 && <p className="text-emerald-200">Villagers count as heroes here, and the {name} picks a villager over a hero when it can.</p>}
-          <HeroPicker heroes={targetable} chosen={chosen} onToggle={toggle} />
+          <HeroPicker state={state} heroes={targetable} chosen={chosen} onToggle={toggle} />
           {step.target === 'mostHp' && tapped.length > 1 && strongest && (
             <p className="rounded-lg bg-zinc-900 p-3 text-lg text-zinc-200">{`${strongest.name} has the most HP, so it attacks ${strongest.name}.`}</p>
           )}

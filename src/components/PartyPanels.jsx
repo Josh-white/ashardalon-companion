@@ -5,10 +5,10 @@ import { heroLabel } from '../state/gameHelpers.js'
 import Art from './Art.jsx'
 import { BoostBadges } from './StatBoosts.jsx'
 import { acParts, attackParts, speedParts } from '../data/statParts.js'
+import { liveAc, tileShieldNow } from '../board/checks.js'
 import { Button, HpBar, LevelBadge } from './ui.jsx'
 import { heroArt } from '../data/art.js'
 import { HERO_COLORS } from '../data/heroes.js'
-import { heroAc } from '../data/powerEffects.js'
 import { moveSpeed } from '../board/play.js'
 import { PHASES } from '../data/phases.js'
 import { activeVillains } from '../state/game.js'
@@ -71,7 +71,7 @@ export function AllyToggle({ state, dispatch, hero }) {
 }
 
 // Every hero in the party at a glance, yours marked, whoever's turn it is ringed.
-export function PartyStrip({ heroes, meId, activeId }) {
+export function PartyStrip({ state, heroes = state?.heroes ?? [], meId, activeId }) {
   return (
     <section>
       <h2 className="mb-2 font-display text-xl font-bold text-zinc-300">Your party</h2>
@@ -102,9 +102,9 @@ export function PartyStrip({ heroes, meId, activeId }) {
               </div>
             </div>
             <p className="mt-1 text-sm text-zinc-300">
-              AC {heroAc(hero)} · Speed {moveSpeed(hero)}
+              AC {liveAc(state, hero)} · Speed {moveSpeed(hero)}
             </p>
-            <BoostBadges hero={hero} heroes={heroes} className="mt-1.5" />
+            <BoostBadges state={state} hero={hero} heroes={heroes} className="mt-1.5" />
             {(hero.items ?? []).length > 0 && (
               <p className="mt-1 text-sm text-yellow-300">💰 {hero.items.map((i) => (i.used ? `${i.name} (used)` : i.name)).join(', ')}</p>
             )}
@@ -133,7 +133,7 @@ export function PartyGlance({ state, dispatch, activeId, heroCard }) {
     <div className="space-y-2">
       {state.heroes.map((hero) => {
         const color = HERO_COLORS[hero.color]
-        const ac = acParts(hero, state.heroes).total
+        const ac = acParts(hero, state.heroes, tileShieldNow(state, hero)).total
         const speed = speedParts(hero).total
         const attack = attackParts(hero).total
         const open = openId === hero.id
@@ -195,7 +195,7 @@ export function PartyGlance({ state, dispatch, activeId, heroCard }) {
                 <HpBar hp={hero.hp} maxHp={hero.maxHp} />
               </div>
               {hero.conditions.length > 0 && <p className="mt-1 text-sm text-amber-400">{hero.conditions.join(', ')}</p>}
-              <BoostBadges hero={hero} heroes={state.heroes} className="mt-1" badgeClass="px-2 py-0.5 text-xs" />
+              <BoostBadges state={state} hero={hero} className="mt-1" badgeClass="px-2 py-0.5 text-xs" />
             </div>
           </div>
         )
