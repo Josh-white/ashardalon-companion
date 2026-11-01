@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { heroArt, monsterArt } from '../data/art.js'
 import { boardGrid, figureToken, figuresLeft, moveSpeed, movesLeft, timeLeapt } from '../board/play.js'
 import { moveChoices, movePrompt } from '../board/powerMoves.js'
@@ -42,7 +42,10 @@ export function boardBounds(board) {
 
 // `fill`: the board takes the whole box it's in (the solo screen, the projector) and starts zoomed to fit,
 // with + to zoom in on the active hero. Without it the board keeps its fixed zoom steps.
-export default function Board({ state, dispatch, readOnly = false, fill = false, extraButtons = null }) {
+// `calm` (iPads, phones, the table screen): the torchlight, the open edges and the hazard
+// floors stand still, so the board isn't redrawn many times a second all game. The big
+// screen keeps them moving. Attacks still fly and the active hero still glows.
+export default function Board({ state, dispatch, readOnly = false, fill = false, calm = false, extraButtons = null }) {
   const art = useArt()
   const [picked, setPicked] = useState(null) // id of the figure being moved
   const [byHand, setByHand] = useState(false)
@@ -57,6 +60,12 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   // An attack flying across the board (Colton's idea), once its die has been read.
   const playing = useAttackFx(state.moment)
   const anchorRef = useRef(null)
+  const svgRef = useRef(null)
+  // The lava's flow and the exit's glow are SVG animations, which CSS can't stop: pause them.
+  useEffect(() => {
+    if (calm) svgRef.current?.pauseAnimations?.()
+    else svgRef.current?.unpauseAnimations?.()
+  })
   if (!board) return null
 
   const grid = boardGrid(board)
@@ -363,10 +372,11 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
       {/* A tap anywhere on the board but a figure closes the monster's card. */}
       <div ref={boxRef} onClick={peek ? (e) => { if (!e.target.closest?.('[data-token]')) setPeek(null) } : undefined} className={fill ? 'min-h-0 flex-1 touch-pan-x touch-pan-y overflow-auto' : readOnly ? '' : 'max-h-[70vh] overflow-auto'}>
         <svg
+          ref={svgRef}
           viewBox={viewBox}
           width={small || fit ? '100%' : viewW * scale}
           height={small ? undefined : fit ? '100%' : viewH * scale}
-          className={`${small ? 'mx-auto max-h-[45vh]' : fit ? 'block' : 'mx-auto'} ${quakes(playing) ? 'fx-quake' : ''}`}
+          className={`${small ? 'mx-auto max-h-[45vh]' : fit ? 'block' : 'mx-auto'} ${quakes(playing) ? 'fx-quake' : ''} ${calm ? 'board-calm' : ''}`}
           style={quakes(playing) ? { '--fx-delay': quakeDelay() } : undefined}
           role="img"
           aria-label="The dungeon board"

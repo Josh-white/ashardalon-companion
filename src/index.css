@@ -242,8 +242,9 @@ body {
   .hazard-glow, .hazard-fog { animation: none; }
 }
 
-/* Torchlight on the virtual board (Torchlight.jsx): an uneven flicker, opacity only. */
-@keyframes torch-flicker {
+/* Torchlight on the virtual board (Torchlight.jsx): an uneven flicker, opacity only.
+   Its own name: sharing torch-flicker with the lobby's flames took their flicker away. */
+@keyframes torchlight-flicker {
   0%, 100% { opacity: 1; }
   12% { opacity: 0.78; }
   20% { opacity: 0.95; }
@@ -253,8 +254,16 @@ body {
   80% { opacity: 0.96; }
   88% { opacity: 0.74; }
 }
-.torch-flicker { animation: torch-flicker 2.6s linear infinite; }
+.torch-flicker { animation: torchlight-flicker 2.6s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .torch-flicker { animation: none; } }
+
+/* iPads and phones (Board's `calm`): nothing on the board loops forever, so it isn't redrawn
+   all game long. A torch flicker or an open-edge pulse repaints the board under it every frame,
+   and that grows with the dungeon (and a pinch-zoomed board). Attacks and the active hero's glow still move. */
+.board-calm .torch-flicker,
+.board-calm .hazard-glow,
+.board-calm .hazard-fog,
+.board-calm [data-open-edges] { animation: none; }
 
 /* Attacks on the virtual board (AttackFx.jsx): the target flinches or dodges, a sword
    swing lunges in, and a hit shakes the board. --fx-delay is when the attack lands. */
