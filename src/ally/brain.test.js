@@ -164,6 +164,28 @@ describe("Keyleth's attacks and items", () => {
     expect(step.action.startedAdjacent ?? step.action.adjacentCount).toBeTruthy()
   })
 
+  it('uses Divine Challenge on a monster already next to it, not one it would have to pull', () => {
+    const challenge = card('Divine Challenge', 'at-will', '+8', '1', 'Choose one Monster within 1 tile of you. Place that Monster adjacent to your Hero. Attack one adjacent Monster.')
+    const state = start({ powers: [challenge] })
+    const at = state.board.tokens[state.heroes[0].id]
+    expect(allyStep(withMonster(state, [at[0] + 1, at[1]], { hp: 4 }), { roll }).action.type).toBe('HERO_ATTACK')
+    const away = withMonster(state, [at[0], at[1] + 3], { hp: 4 })
+    expect(attackOptions(away, away.heroes[0])).toEqual([])
+  })
+
+  it('fires a Ring of Shooting Stars, which is not its attack', () => {
+    const state = start()
+    const at = state.board.tokens[state.heroes[0].id]
+    const ring = { id: 'r1', cardId: 'ring-of-shooting-stars', name: 'Ring of Shooting Stars', used: false, card: { name: 'Ring of Shooting Stars', attack: { bonus: 8, damage: 1 }, after: 'flip', freeAttack: true, note: "Attack a monster within 2 tiles. It doesn't count as your attack." } }
+    const armed = withMonster({ ...state, heroes: state.heroes.map((h) => ({ ...h, items: [ring] })) }, [at[0], at[1] + 3], { hp: 4 })
+    const step = allyStep(armed, { roll })
+    expect(step.action).toMatchObject({ type: 'HERO_ATTACK', itemId: 'r1', targets: [{ monsterId: 'm1', roll: 15 }] })
+    const after = gameReducer(armed, step.action)
+    expect(after.monsters[0].hp).toBe(3)
+    // The ring is used up, and the hero still has its own attack.
+    expect(allyStep(after, { roll })?.action.itemId).toBeUndefined()
+  })
+
   it('uses a daily when no at-will can reach, rather than doing nothing', () => {
     const state = start({ powers: [smite] })
     const at = state.board.tokens[state.heroes[0].id]
