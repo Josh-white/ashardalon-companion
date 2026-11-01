@@ -4,7 +4,7 @@ import { encounterCancelCost } from '../data/difficulty.js'
 import { heroItems, itemTrapBonus } from '../data/items.js'
 import { reactionsFor } from '../data/powerEffects.js'
 import { ENCOUNTER_LABELS, encounterCount, isWrathCheck, phaseChecks, villainInPlay } from '../state/game.js'
-import { attackBlocked, attackRolls, boardEffect, boardFound, effectWords, encounterNotes, extraEncounterReasons, firstPicks, fixedTargets, heroNames, hitWords, resolveLabel, takesWords, targetQuestion } from '../state/encounterRules.js'
+import { attackBlocked, attackRolls, boardEffect, boardFound, effectWords, encounterNotes, extraEncounterReasons, firstPicks, fixedTargets, heroNames, standingHeroes, hitWords, resolveLabel, takesWords, targetQuestion } from '../state/encounterRules.js'
 import { rollD20, shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { boardAnswer } from '../board/checks.js'
@@ -101,6 +101,7 @@ function AttackStep({ state, hero, name, attack, onAttack, onNobody, dispatch, t
   const [guarded, setGuarded] = useState([])
   const [results, setResults] = useState(null)
   const targets = fixed ?? chosen
+  const downHeroes = state.heroes.filter((h) => h.hp <= 0)
   const toggle = (id) => setChosen((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]))
 
   const roll = () => {
@@ -157,16 +158,21 @@ function AttackStep({ state, hero, name, attack, onAttack, onNobody, dispatch, t
               : `nobody is ${boardFound(attack.targets, hero)}.`}{' '}
             Tap a hero to change it.
           </p>
-          <HeroPicker heroes={state.heroes} chosen={chosen} onToggle={toggle} />
+          <HeroPicker heroes={standingHeroes(state)} chosen={chosen} onToggle={toggle} />
         </>
       )}
       {question && !fromBoard && (
         <>
           <p className="text-xl font-semibold text-zinc-100">{question}</p>
-          <HeroPicker heroes={state.heroes} chosen={chosen} onToggle={toggle} />
+          <HeroPicker heroes={standingHeroes(state)} chosen={chosen} onToggle={toggle} />
         </>
       )}
       {fixed && <AffectedHeroes heroes={state.heroes.filter((h) => fixed.includes(h.id))} label="It attacks" />}
+      {downHeroes.length > 0 && (
+        <p className="text-lg text-zinc-400">
+          💤 {heroNames(downHeroes)} {downHeroes.length > 1 ? 'are' : 'is'} down at 0 HP, so it skips {downHeroes.length > 1 ? 'them' : 'that hero'}.
+        </p>
+      )}
       <TileGuardQuestion
         state={state}
         targets={targets}
@@ -381,6 +387,7 @@ function EncounterCard({ state, hero, dispatch }) {
               name={card.name}
               attack={card.attack}
               onAttack={(targets, tileGuarded) => dispatch({ type: 'ENCOUNTER_ATTACK', targets, tileGuarded })}
+              onNobody={() => dispatch({ type: 'ENCOUNTER_ATTACK', nobody: true })}
               dispatch={dispatch}
             />
           )}
@@ -545,7 +552,7 @@ function TrapDamage({ state, trap, damage, dispatch, onHit }) {
   return (
     <>
       <p className="text-xl font-semibold text-zinc-100">Tap every hero it reaches. Each takes {damage} damage.</p>
-      <HeroPicker heroes={state.heroes} chosen={chosen} onToggle={toggle} />
+      <HeroPicker heroes={standingHeroes(state)} chosen={chosen} onToggle={toggle} />
       <Button
         variant="danger"
         className="w-full py-3 text-lg font-bold"

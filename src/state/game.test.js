@@ -330,6 +330,17 @@ describe('monster deck', () => {
     expect(state.moment.rolls.map((r) => r.hit)).toEqual([true, false])
   })
 
+  it('skips a hero who is down when a monster attacks', () => {
+    let state = draw(startGame())
+    const [a, b] = state.heroes
+    state = gameReducer(state, { type: 'ADJUST_HP', heroId: a.id, amount: -a.hp })
+    const after = gameReducer(state, { type: 'MONSTER_ATTACK', monsterId: state.monsters[0].id, attackId: 'bite', targets: [{ heroId: a.id, roll: 20 }] })
+    expect(after).toBe(state)
+    state = gameReducer(state, { type: 'MONSTER_ATTACK', monsterId: state.monsters[0].id, attackId: 'bite', targets: [{ heroId: a.id, roll: 20 }, { heroId: b.id, roll: 20 }] })
+    expect(state.heroes[0].conditions).toEqual([])
+    expect(state.heroes[1].conditions).toEqual(['Poisoned'])
+  })
+
   it('adds a condition on a hit', () => {
     let state = draw(startGame())
     expect(state.monsters[0].name).toBe('Snake')
@@ -617,6 +628,22 @@ describe('encounter deck', () => {
     state = resolve(state)
     expect(state.encounter).toBeNull()
     expect(state.encounterDeck.discard).toEqual(['arrow'])
+  })
+
+  it('does not roll an encounter attack against a hero who is down', () => {
+    let state = drawCard(startGame(), 'arrow')
+    const [a, b] = state.heroes
+    state = gameReducer(state, { type: 'ADJUST_HP', heroId: b.id, amount: -b.hp })
+    state = gameReducer(state, { type: 'ENCOUNTER_ATTACK', targets: [{ heroId: a.id, roll: 20 }, { heroId: b.id, roll: 20 }] })
+    expect(state.moment.rolls.map((r) => r.heroId)).toEqual([a.id])
+    expect(state.heroes[1].conditions).not.toContain('Poisoned')
+  })
+
+  it('lets an encounter attack find nobody, so the card can still be resolved', () => {
+    let state = drawCard(startGame(), 'arrow')
+    state = gameReducer(state, { type: 'ENCOUNTER_ATTACK', nobody: true })
+    expect(state.encounter.attacked).toBe(true)
+    expect(state.heroes.map((h) => h.hp)).toEqual(startGame().heroes.map((h) => h.hp))
   })
 
   it('cancels an encounter for 5 XP before it happens', () => {

@@ -37,11 +37,17 @@ export const takesWords = (attack, hit) =>
   [(hit ? attack.damage : attack.miss) > 0 && `${hit ? attack.damage : attack.miss} damage`, ...((hit ? attack.conditions : attack.missConditions) ?? [])].filter(Boolean).join(' and ') || 'nothing'
 
 // The heroes an attack hits without asking (the active hero, or everyone), or null when it has to ask.
-export const fixedTargets = (state, attack, hero) => (attack.targets === 'active' ? [hero.id] : attack.targets === 'all' ? state.heroes.map((h) => h.id) : null)
+// Heroes at 0 HP are down, so attacks skip them.
+export const fixedTargets = (state, attack, hero) =>
+  attack.targets === 'active' ? (hero.hp > 0 ? [hero.id] : []) : attack.targets === 'all' ? standingHeroes(state).map((h) => h.id) : null
+
+// The heroes an attack can go after: everyone not down at 0 HP.
+export const standingHeroes = (state) => state.heroes.filter((h) => h.hp > 0)
 
 // The heroes picked before anyone taps: what the board found, else the active hero (nobody
 // for an attack from a trap's tile or a villain).
-export const firstPicks = (attack, hero, fromBoard) => fromBoard ?? (attack.targets === 'trapTile' || attack.targets === 'villainWithin1' ? [] : [hero.id])
+export const firstPicks = (attack, hero, fromBoard) =>
+  fromBoard ?? (attack.targets === 'trapTile' || attack.targets === 'villainWithin1' || hero.hp <= 0 ? [] : [hero.id])
 
 // Each target's roll against their AC (plus a Blessed Shield's bonus for the heroes the
 // table said stand on its tile). The reducer applies the damage; this is what the screen shows.

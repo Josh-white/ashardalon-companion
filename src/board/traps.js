@@ -82,7 +82,7 @@ export function heroesOnTrap(state, trap) {
   if (tiles.size === 0) return null
   const grid = boardGrid(state.board)
   return state.heroes
-    .filter((h) => !h.tokens?.refuge && state.board.tokens[h.id] && tiles.has(grid.get(key(state.board.tokens[h.id]))?.area))
+    .filter((h) => h.hp > 0 && !h.tokens?.refuge && state.board.tokens[h.id] && tiles.has(grid.get(key(state.board.tokens[h.id]))?.area))
     .map((h) => h.id)
 }
 

@@ -40,7 +40,7 @@ export function stepAttack(card, step) {
 // Captives), listed first because a monster goes for a villager when it can.
 export function monsterTargets(state) {
   const villagers = aliveVillagers(state).map((v) => ({ ...v, villager: true }))
-  return [...villagers, ...state.heroes.filter((h) => !h.tokens?.refuge)]
+  return [...villagers, ...state.heroes.filter((h) => h.hp > 0 && !h.tokens?.refuge)]
 }
 
 // Whether the players tap several heroes for this step: it attacks them all, or the app
