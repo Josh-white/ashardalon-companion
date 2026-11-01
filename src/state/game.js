@@ -617,12 +617,22 @@ function reduce(state, action) {
       return changed ? { ...state, monsters } : state
     }
 
+    case 'START_ACTING': {
+      // A monster or villain starts its turn in the Villain Phase. Kept in the game so every
+      // screen's board can light it up while it moves and attacks.
+      const id = action.id
+      if (!id || state.turn.acting === id || (state.turn.acted ?? []).includes(id)) return state
+      if (!state.monsters.some((m) => m.id === id) && !activeVillains(state).some((v) => v.id === id)) return state
+      return { ...state, turn: { ...state.turn, acting: id } }
+    }
+
     case 'MARK_ACTED': {
       // A monster, villain or trap finished its turn this Villain Phase. Kept in the game so
       // every screen sees it, and the turn can't pass until they all have.
       const acted = state.turn.acted ?? []
       if (!action.id || acted.includes(action.id)) return state
-      return { ...state, turn: { ...state.turn, acted: [...acted, action.id] } }
+      const { acting, ...turn } = state.turn
+      return { ...state, turn: { ...turn, ...(acting && acting !== action.id ? { acting } : {}), acted: [...acted, action.id] } }
     }
 
     case 'SET_EXPLORED': {

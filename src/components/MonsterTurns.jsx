@@ -507,15 +507,13 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
 // The Villain Phase's monster activations for the active hero: each of their monster
 // cards takes a turn, one at a time.
 export default function MonsterTurns({ state, dispatch, hero }) {
-  const [activeId, setActiveId] = useState(null)
   const monsters = state.monsters.filter((m) => m.ownerId === hero.id)
-  // Kept in the game, so every iPad sees which monsters have gone.
+  // Kept in the game, so every iPad sees which monsters have gone, and every board lights up
+  // the one taking its turn.
   const isDone = (monster) => (state.turn.acted ?? []).includes(monster.id)
-  const markDone = (monster) => {
-    dispatch({ type: 'MARK_ACTED', id: monster.id, name: monster.name })
-    setActiveId(null)
-  }
-  const active = monsters.find((m) => m.id === activeId)
+  const markDone = (monster) => dispatch({ type: 'MARK_ACTED', id: monster.id, name: monster.name })
+  const setActiveId = (id) => dispatch({ type: 'START_ACTING', id })
+  const active = monsters.find((m) => m.id === state.turn.acting && !isDone(m))
 
   if (monsters.length === 0) {
     return <p className="mt-4 rounded-xl bg-zinc-950/50 p-3 text-zinc-400">You have no monster cards, so no monster turns.</p>
@@ -566,15 +564,12 @@ export default function MonsterTurns({ state, dispatch, hero }) {
 // Villains go first in every Villain Phase, whoever's turn it is: each takes its turn
 // from its card's tactics, the same way a monster does.
 export function VillainTurns({ state, dispatch, hero }) {
-  const [activeId, setActiveId] = useState(null)
   const villains = activeVillains(state)
   if (villains.length === 0) return null
   const isDone = (villain) => (state.turn.acted ?? []).includes(villain.id)
-  const markDone = (villain) => {
-    dispatch({ type: 'MARK_ACTED', id: villain.id, name: villain.name })
-    setActiveId(null)
-  }
-  const active = villains.find((v) => v.id === activeId)
+  const markDone = (villain) => dispatch({ type: 'MARK_ACTED', id: villain.id, name: villain.name })
+  const setActiveId = (id) => dispatch({ type: 'START_ACTING', id })
+  const active = villains.find((v) => v.id === state.turn.acting && !isDone(v))
 
   return (
     <div className="mt-5">
