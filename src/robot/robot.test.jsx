@@ -231,7 +231,7 @@ const label = (el) => (el.getAttribute('aria-label') || el.textContent || '').re
 
 // Taps a player makes now and then, not every turn: fixing numbers by hand, looking at
 // things, tabs. The robot makes them less often, so its games get somewhere.
-const NOW_AND_THEN = [/^[−+]$/, /Zoom/i, /board$/i, /[LG][oa][si][en] 1 HP/i, /Tap to see why/i, /Menu/i, /^\W*(Log|Monsters|Party|Quest)/, /✋/, /(gains|loses) 1 HP/, /Read the card/i, /Hide the card/i, /conditions/i, /^(Weakened|Dazed|Poisoned|Immobilized|Slowed)$/, /Treasure token/i, /Put a villain/i, /^← Back$/, /^Close$/, /^Cancel$/, /^🪨 /, /^(Attack bonus|AC|Speed) ?[+−\d]/, /^↓ /, /[▾▴]$/, /HP · AC \d/, /Pick a different hero/, /Change powers/, /^Change$/, /tips/, /We escaped/, /^\W*How .* works/, /^Got it!$/]
+const NOW_AND_THEN = [/^[−+]$/, /Zoom/i, /board$/i, /[LG][oa][si][en] 1 HP/i, /Tap to see why/i, /Menu/i, /^\W*(Log|Monsters|Party|Quest)/, /✋/, /(gains|loses) 1 HP/, /Read the card/i, /Hide the card/i, /conditions/i, /^(Weakened|Dazed|Poisoned|Immobilized|Slowed)$/, /Treasure token/i, /Put a villain/i, /^← Back$/, /^Close$/, /^Close .*'s card$/, /^Cancel$/, /^🪨 /, /^(Attack bonus|AC|Speed) ?[+−\d]/, /^↓ /, /[▾▴]$/, /HP · AC \d/, /Pick a different hero/, /Change powers/, /^Change$/, /tips/, /We escaped/, /^\W*How .* works/, /^Got it!$/]
 // In the lobby the robot leans toward getting in, or it would pick and unpick powers all night.
 const LEANS = [/Enter the dungeon/, /Done choosing powers/, /^Tap to pick/, /On to the next adventure/]
 // Playing to win, the robot also goes after the villain, rolls its attacks, and doesn't
