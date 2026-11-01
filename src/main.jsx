@@ -3,6 +3,7 @@ import './state/screenStorage.js'
 import { lazy, StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.jsx'
+import CrashScreen from './components/CrashScreen.jsx'
 // Part of the game's own screens already (the 💡 button), so not loaded separately.
 import IdeasPage from './components/IdeaBox.jsx'
 import './index.css'
@@ -25,20 +26,23 @@ createRoot(document.getElementById('root')).render(
     {/* The #cards page lists cards.json problems and cards the app can't find. */}
     {/* The #ideas page lists the ideas the players sent from the 💡 button. */}
     {/* The #screens page shows the big screen, iPads and a phone side by side, for testing. */}
-    <Suspense fallback={null}>
-      {window.location.hash === '#screens' ? (
-        <AllScreens />
-      ) : window.location.hash === '#audition' ? (
-        <Audition />
-      ) : window.location.hash === '#tiles' ? (
-        <TileCheck />
-      ) : window.location.hash === '#ideas' ? (
-        <IdeasPage />
-      ) : window.location.hash === '#cards' ? (
-        <CardCheck />
-      ) : (
-        <App />
-      )}
-    </Suspense>
+    {/* A screen that breaks shows "Something went wrong" and reloads, instead of going blank. */}
+    <CrashScreen>
+      <Suspense fallback={null}>
+        {window.location.hash === '#screens' ? (
+          <AllScreens />
+        ) : window.location.hash === '#audition' ? (
+          <Audition />
+        ) : window.location.hash === '#tiles' ? (
+          <TileCheck />
+        ) : window.location.hash === '#ideas' ? (
+          <IdeasPage />
+        ) : window.location.hash === '#cards' ? (
+          <CardCheck />
+        ) : (
+          <App />
+        )}
+      </Suspense>
+    </CrashScreen>
   </StrictMode>,
 )
