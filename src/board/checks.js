@@ -31,8 +31,9 @@ function figureNamed(state, name) {
   return at ? { id: figure.id, name: figure.name, at } : null
 }
 
-// Next to a wall: a wall on one of the square's sides (a tile edge with no opening or a
-// thin wall), or a solid black square on any of the 8 around it.
+// Next to a wall: a wall along one of the square's 4 sides (a tile edge with no opening,
+// a thin wall, or a solid black square beside it). Only touching a wall at a corner
+// doesn't count (JJ's call for Walls of Magma).
 export function nextToWall(grid, at) {
   const square = grid.get(key(at))
   if (!square) return null
@@ -40,10 +41,6 @@ export function nextToWall(grid, at) {
   for (const [side, [dx, dy]] of Object.entries(STEP)) {
     const next = grid.get(key([at[0] + dx, at[1] + dy]))
     if (next && (!next.floor || next.blocked.has(OPPOSITE[side]))) return true
-  }
-  for (const [dx, dy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
-    const next = grid.get(key([at[0] + dx, at[1] + dy]))
-    if (next && !next.floor) return true
   }
   return false
 }
