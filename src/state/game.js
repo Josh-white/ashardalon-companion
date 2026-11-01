@@ -288,7 +288,10 @@ function reduce(state, action) {
       // A power's "first move..." done on the board before its attack roll.
       const hero = state.heroes.find((h) => h.id === action.heroId)
       const power = hero?.powers.find((p) => p.id === action.powerId && !p.used)
-      return queueMoves(state, hero, power, effectsOf(power).board?.before)
+      if (!power) return state
+      // The power's attack is now open to the computer heroes (src/ally/brain.js).
+      const moved = { ...state, turn: { ...state.turn, beforeMoved: power.id } }
+      return queueMoves(moved, hero, power, effectsOf(power).board?.before)
     }
 
     case 'MOVE_HERO':

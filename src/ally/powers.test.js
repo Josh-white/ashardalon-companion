@@ -174,3 +174,51 @@ describe('reactions and hero card abilities', () => {
     expect(allyReaction(hurt).action).toMatchObject({ type: 'POWER_DAMAGE', source: 'furious', monsterIds: ['m1'] })
   })
 })
+
+describe('powers that move first', () => {
+  it('Charges a monster out of reach: moves, then attacks with Charge', () => {
+    let state = start([['fighter', [card('Charge', 'at-will', '+6', '1'), card('Sure Strike', 'at-will', '+6', '1', 'Attack one adjacent monster.')]]])
+    const vistra = state.heroes[0]
+    state = place(state, vistra.id, [0, 7])
+    state = withMonsters(state, [[0, 2]])
+    let step = allyStep(state, { roll })
+    expect(step.action).toMatchObject({ type: 'START_BOARD_MOVE', powerId: vistra.powers.find((p) => p.name === 'Charge').id })
+    state = run(state, step)
+    step = allyStep(state, { roll })
+    expect(step.action).toMatchObject({ type: 'BOARD_MOVE', id: vistra.id })
+    state = run(state, step)
+    step = allyStep(state, { roll })
+    expect(step.action).toMatchObject({ type: 'HERO_ATTACK', powerId: vistra.powers.find((p) => p.name === 'Charge').id })
+    state = run(state, step)
+    // The Charge move didn't count as one of its moves: it can still move once.
+    expect(state.turn.boardMoves ?? 0).toBe(0)
+  })
+
+  it('Taunting Advance pulls the weakest monster in, then attacks it', () => {
+    let state = start([['fighter', [card('Taunting Advance', 'at-will', '+6', '1')]]])
+    const vistra = state.heroes[0]
+    state = place(state, vistra.id, [0, 7])
+    state = withMonsters(state, [[0, 2]], 1)
+    state = run(state, allyStep(state, { roll }))
+    // Stays put (a monster is already within 2 tiles), then pulls it in and attacks.
+    let step = allyStep(state, { roll })
+    expect(step.action.type).toBe('SKIP_BOARD_MOVE')
+    state = run(state, step)
+    step = allyStep(state, { roll })
+    expect(step.action).toMatchObject({ type: 'BOARD_MOVE', id: 'm1' })
+    state = run(state, step)
+    expect(allyStep(state, { roll }).action).toMatchObject({ type: 'HERO_ATTACK', targets: [{ monsterId: 'm1', roll: 15 }] })
+  })
+})
+
+describe('Perseverance', () => {
+  it('makes the cancel cheaper when Quinn cancels an encounter', async () => {
+    const { cancelEncounter } = await import('./cancelEncounter.js')
+    let state = start([['cleric', [jab, card('Perseverance', 'utility')]]])
+    const quinn = state.heroes[0]
+    state = { ...state, xp: 30, encounter: { cardId: 'c', card: { id: 'c', name: 'Nasty', type: 'curse' } } }
+    const step = cancelEncounter(state, quinn)
+    expect(step.action).toMatchObject({ type: 'CANCEL_ENCOUNTER', perseverance: { heroId: quinn.id, heroesOnTile: 1 } })
+    expect(run(state, step).xp).toBe(26)
+  })
+})

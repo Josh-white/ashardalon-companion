@@ -78,8 +78,9 @@ const NAMED = [
   ['cleric', 'daily', 'Cause Fear'], ['cleric', 'utility', 'Astral Refuge'],
   ['wizard', 'daily', 'Flaming Sphere'], ['wizard', 'utility', 'Invisibility'],
   ['rogue', 'utility', 'Tumbling Escape'], ['fighter', 'utility', 'Inspiring Advice'],
-  ['paladin', 'daily', 'Blade Barrier'],
-].map(([hero, type, name]) => ({ id: `robot-${name.toLowerCase().replace(/\W+/g, '-')}`, hero, type, name, attack: '', damage: '', text: 'Made-up power.', suggested: true }))
+  ['paladin', 'daily', 'Blade Barrier'], ['cleric', 'utility', 'Perseverance'],
+  ['fighter', 'at-will', 'Charge', '+6', '1'], ['fighter', 'at-will', 'Taunting Advance', '+6', '1'],
+].map(([hero, type, name, attack = '', damage = '']) => ({ id: `robot-${name.toLowerCase().replace(/\W+/g, '-')}`, hero, type, name, attack, damage, text: 'Made-up power.', suggested: true }))
 
 // A made-up campaign, so the robot plays campaign games too: the same adventure again and
 // again, with Treasure tokens for kills. No chambers, so beating it once ends the campaign.
