@@ -61,7 +61,7 @@ export function TapForSound({ locked, big = false, ipad = false }) {
         onClick={unlockAudio}
         className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-3 border-b-2 border-amber-500 bg-amber-950/95 px-4 py-4 text-lg font-bold text-amber-200 shadow-xl"
       >
-        <span className="animate-pulse text-2xl">🔊</span> Tap here to start sound on this iPad
+        <span className="animate-pulse text-2xl">🔊</span> Tap here to start sound on this device
       </button>
     )
   }

@@ -30,7 +30,7 @@ const REFUSED = {
   full: 'There are already as many games as the Pi keeps. Finish one to make room.',
   'friend-full': 'You already have as many games as a friend can keep. Finish one to start another.',
   save: "The Pi couldn't save the new game. Try again.",
-  offline: "This iPad isn't connected to the Pi right now. Try again in a moment.",
+  offline: "This device isn't connected to the Pi right now. Try again in a moment.",
 }
 
 // "Which game?": every game on the Pi, a way to start a new one, and the finished ones.
@@ -124,7 +124,7 @@ export default function GamePicker({ current, onPick, onClose, startGame, change
             <button type="button" onClick={() => onPick(game.id)} className="min-w-0 flex-1 text-left transition active:scale-95">
               <span className="block font-display text-2xl font-bold text-zinc-100">
                 {game.name}
-                {here && <span className="ml-2 align-middle text-sm font-normal text-amber-400">this iPad</span>}
+                {here && <span className="ml-2 align-middle text-sm font-normal text-amber-400">this device</span>}
               </span>
               <span className="block text-zinc-400">{gameSummary(game)}</span>
               <span className="block text-sm text-zinc-500">
@@ -174,7 +174,7 @@ export default function GamePicker({ current, onPick, onClose, startGame, change
 
       {list?.friend && (
         <p className="text-zinc-400">
-          Welcome! You're signed in as <span className="text-zinc-200">{list.me}</span>. Start a game below, or pick one a friend invited you to.
+          Welcome! You're signed in as <span className="text-zinc-200">{list.me}</span>. Name a new game below and tap Start, or tap a game a friend invited you to.
         </p>
       )}
 
@@ -200,7 +200,7 @@ export default function GamePicker({ current, onPick, onClose, startGame, change
                 <input
                   id="new-game-name"
                   maxLength={40}
-                  placeholder="Colton's solo"
+                  placeholder={list.friend ? 'My first game' : "Colton's solo"}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-lg text-zinc-100"
@@ -209,7 +209,11 @@ export default function GamePicker({ current, onPick, onClose, startGame, change
                   Start
                 </Button>
               </div>
-              <p className="text-sm text-zinc-500">You pick the heroes, the adventure, and table or solo board next, just like a new game.</p>
+              <p className="text-sm text-zinc-500">
+                {list.friend
+                  ? 'Next you choose: play on this device, or together with friends on their own devices.'
+                  : 'You pick the heroes, the adventure, and table or solo board next, just like a new game.'}
+              </p>
             </>
           )}
           {problem && <p className="text-red-400">{problem}</p>}
@@ -274,6 +278,7 @@ export function FriendInvites({ game, changeGames }) {
           ))}
         </ul>
       )}
+      {invited.length > 0 && <ShareLink game={game} />}
       {open ? (
         <form className="flex flex-wrap gap-2" onSubmit={send}>
           <input
@@ -291,7 +296,7 @@ export function FriendInvites({ game, changeGames }) {
           <Button variant="ghost" className="text-sm" onClick={() => setOpen(false)}>
             Done
           </Button>
-          <p className="w-full text-xs text-zinc-500">They sign in with that email. JJ adds new friends to the sign-in list first.</p>
+          <p className="w-full text-xs text-zinc-500">They sign in with that email. A new friend needs JJ to add their email to the sign-in list first.</p>
         </form>
       ) : (
         <button type="button" className="text-amber-400 underline" onClick={() => setOpen(true)}>
@@ -299,6 +304,36 @@ export function FriendInvites({ game, changeGames }) {
         </button>
       )}
     </div>
+  )
+}
+
+// A link straight to this game, to text to the friends in it. It opens the game once
+// they've signed in (App.jsx reads ?game=).
+export function gameLink(id, origin = window.location.origin) {
+  return `${origin}/?game=${encodeURIComponent(id)}`
+}
+
+function ShareLink({ game }) {
+  const [copied, setCopied] = useState(false)
+  const share = async () => {
+    const url = gameLink(game.id)
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: game.name, text: `Join my Wrath of Ashardalon game "${game.name}":`, url })
+        return
+      }
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2500)
+    } catch {
+      // Share sheet closed, or the clipboard is blocked: show the link to copy by hand.
+      window.prompt('Copy this link for your friends:', url)
+    }
+  }
+  return (
+    <button type="button" className="mb-1 mr-4 text-amber-400 underline" onClick={share}>
+      {copied ? '✓ Link copied' : '🔗 Send the link to this game'}
+    </button>
   )
 }
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { heroArt } from '../data/art.js'
 import { HERO_COLORS, HERO_TEMPLATES, heroTemplates, statsAtLevel, templateFor } from '../data/heroes.js'
 import { campaignHero } from '../state/campaign.js'
@@ -88,7 +88,7 @@ function BoardChoice({ state, dispatch, big = false }) {
       </div>
       {on && (
         <p className="mt-2 text-sm text-zinc-400">
-          No tiles needed. The projector or TV shows the whole dungeon, and each player moves their hero on their own iPad. No projector? Any ready
+          No tiles needed. The projector or TV shows the whole dungeon, and each player moves their hero on their own device. No projector? Any ready
           player can enter the dungeon.
         </p>
       )}
@@ -355,7 +355,7 @@ function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave, voice }
         </Button>
         <p className="text-sm text-zinc-500">
           {others.length > 0
-            ? 'Another iPad has a hero in the lobby. A solo game needs it to pick "Pick a different hero" first.'
+            ? 'Another device has a hero in the lobby. A solo game needs it to pick "Pick a different hero" first.'
             : mine.length === 0
               ? 'Pick a hero to start.'
               : campaignShort
@@ -374,9 +374,15 @@ function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave, voice }
 
 // `role` is what this screen said it is on "Who stands here?" (null until it says), and
 // `projectorOpen` whether a big screen is in the game right now.
-export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watchOnly, onProjector, onLeaveProjector, onArt, onSolo, role, setRole, projectorOpen, voice = null }) {
+export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watchOnly, onProjector, onLeaveProjector, onArt, onSolo, role, setRole, projectorOpen, voice = null, friend = false }) {
   const cards = useCards()
   const [hall, setHall] = useState(false)
+  // A friend plays from their own house, with no tiles on the table: their games are always
+  // on the virtual board.
+  const friendBoard = friend && cards.tiles.some((t) => t.id === 'start') && state.status === 'setup' && !state.lobbyBoard
+  useEffect(() => {
+    if (friendBoard) dispatch({ type: 'SET_LOBBY_BOARD', on: true })
+  }, [friendBoard]) // eslint-disable-line react-hooks/exhaustive-deps
   // Loaded again after the Hall of Records closes.
   const recordsFile = useRecordsFile(hall)
   const records = recordsFile?.players ?? null
@@ -410,6 +416,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
         onSolo={canSolo ? () => setRole('solo') : null}
         onDemo={state.campaign ? null : demo}
         onArt={onArt}
+        friend={friend && canSolo}
       />
     )
   }
@@ -448,7 +455,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
           {watchOnly ? 'The Heroes Assemble' : mine ? 'Ready your hero' : 'Choose your hero'}
         </h1>
         <p className="mt-3 font-display text-xl text-amber-100/90 italic">
-          {watchOnly ? 'Pick your hero on your iPad to light their torch.' : mine ? 'Check your powers, then tell the party you are ready.' : 'Hold a hero to light their torch.'}
+          {watchOnly ? 'Pick your hero on your device to light their torch.' : mine ? 'Check your powers, then tell the party you are ready.' : 'Hold a hero to light their torch.'}
         </p>
       </header>
 
@@ -470,8 +477,15 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
         <QuestLine state={state} dispatch={dispatch} onBoard={onBoard} boardChoice={canBoard ? <BoardChoice state={state} dispatch={dispatch} big /> : null} />
       ) : (
         <>
-          {watchOnly ? <CampaignLobby state={state} dispatch={dispatch} /> : <ChosenAdventure state={state} />}
-          {canBoard && (watchOnly || !projectorOpen) && <BoardChoice state={state} dispatch={dispatch} big={watchOnly} />}
+          {watchOnly ? (
+            <CampaignLobby state={state} dispatch={dispatch} />
+          ) : onBoard && !projectorOpen && !state.campaign ? (
+            // No big screen to pick the adventure, and any ready player can enter: any player picks it.
+            <QuestLine state={state} dispatch={dispatch} onBoard big={false} />
+          ) : (
+            <ChosenAdventure state={state} />
+          )}
+          {canBoard && !friend && (watchOnly || !projectorOpen) && <BoardChoice state={state} dispatch={dispatch} big={watchOnly} />}
         </>
       )}
 
@@ -485,7 +499,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
             const taken = Boolean(owner)
             const status = taken ? (
               <span className={owner.ready ? 'text-emerald-400' : 'text-amber-400'}>
-                {owner.ally ? '🤖 Computer' : owner.player || 'Another iPad'} · {owner.ready ? 'ready' : 'choosing powers'}
+                {owner.ally ? '🤖 Computer' : owner.player || 'Another device'} · {owner.ready ? 'ready' : 'choosing powers'}
                 <PlayerTitle records={records} name={owner.player} className="mt-1 text-xs" />
               </span>
             ) : (
@@ -531,7 +545,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
         )}
         <p className="text-sm text-zinc-500">
           {lobby.length === 0
-            ? 'Each player picks a hero on their own iPad.'
+            ? 'Each player picks a hero on their own device.'
             : ready
               ? `Everyone's ready! Turn order: ${lobby.map((c) => templateFor(c.heroKey).name).join(', ')}.`
               : state.campaign

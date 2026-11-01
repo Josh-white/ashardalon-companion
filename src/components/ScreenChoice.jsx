@@ -36,7 +36,23 @@ function Door({ icon, title, text, lit, onClick }) {
 // answer is remembered, so a screen only asks once. A wide screen with a mouse has the
 // big screen lit up first; an iPad or phone has the hero. No demo game (onDemo null) while a
 // campaign is going, since it would take the campaign's place.
-export default function ScreenChoice({ onHero, onBigScreen, onSolo, onDemo, onArt }) {
+export default function ScreenChoice({ onHero, onBigScreen, onSolo, onDemo, onArt, friend = false }) {
+  // A friend is on their own phone or tablet, away from JJ's projector and tiles: they play
+  // the whole game on this screen, or each friend plays a hero on their own device.
+  if (friend) {
+    return (
+      <div className="mx-auto flex min-h-[85vh] max-w-xl flex-col items-center justify-center gap-6 p-4 text-center sm:p-8">
+        <header>
+          <h1 className="lobby-title font-display text-5xl font-black text-amber-400 sm:text-6xl">Who stands here?</h1>
+          <p className="mt-3 font-display text-xl text-amber-100/90 italic">The dragon wants to know who he's facing.</p>
+        </header>
+        <div className="flex w-full flex-col gap-4">
+          <Door icon="🗺️" title="Play on this device" text="You run one to five heroes on a virtual board. Best for a first game." lit onClick={onSolo} />
+          <Door icon="🛡️" title="Play together" text="Each friend in this game picks a hero on their own device" onClick={onHero} />
+        </div>
+      </div>
+    )
+  }
   const big = looksLikeBigScreen()
   const hero = <Door key="hero" icon="🛡️" title="I'm a hero" text="Pick your hero on this screen" lit={!big} onClick={onHero} />
   const screen = <Door key="big" icon="📽️" title="The big screen" text="Projector or TV: shows the whole party" lit={big} onClick={onBigScreen} />

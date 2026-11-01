@@ -5,10 +5,12 @@ const SOUND_KEY = 'ashardalon-companion/sound'
 // Until someone flips the switch on a device, the projector plays the sound, and the
 // table screen plays it only when no projector screen is open (a one-screen game).
 // Hero iPads stay quiet: four iPads playing the same sound a beat apart is just noise.
-export function soundOnByDefault(seat, projectorOpen) {
+// A friend's hero screen is the exception when nothing else in the game plays sound: friends
+// playing together are usually each in their own house.
+export function soundOnByDefault(seat, projectorOpen, { friend = false, tableOpen = false } = {}) {
   if (seat === 'projector') return true
   if (seat === 'table') return !projectorOpen
-  return false
+  return Boolean(seat) && friend && !projectorOpen && !tableOpen
 }
 
 // Older iPads only count touchend as a tap that may start sound.
@@ -57,7 +59,7 @@ export function soundSwitchedOff() {
 
 // Whether this device plays sound effects and the narrator. Stored per device once
 // someone flips the switch; until then see soundOnByDefault.
-export function useSoundSetting(seat, projectorOpen) {
+export function useSoundSetting(seat, projectorOpen, others = {}) {
   const [saved, setSaved] = useState(() => {
     try {
       return localStorage.getItem(SOUND_KEY)
@@ -65,7 +67,7 @@ export function useSoundSetting(seat, projectorOpen) {
       return null
     }
   })
-  const on = saved ? saved === 'on' : soundOnByDefault(seat, projectorOpen)
+  const on = saved ? saved === 'on' : soundOnByDefault(seat, projectorOpen, others)
   const setOn = useCallback((value) => {
     setSaved(value ? 'on' : 'off')
     try {

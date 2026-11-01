@@ -37,7 +37,7 @@ export function HeroHall({ heroes, lobby, records = null, onFree = null, onAlly 
     ask(
       {
         title: `Free ${template.name}?`,
-        body: `${claim.player || 'The iPad holding ' + template.name} will need to pick a hero again. Any iPad can then pick ${template.name}.`,
+        body: `${claim.player || 'The device holding ' + template.name} will need to pick a hero again. Any device can then pick ${template.name}.`,
         yes: `Free ${template.name}`,
       },
       () => onFree(claim),

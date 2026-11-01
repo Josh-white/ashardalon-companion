@@ -8,4 +8,11 @@ describe('which screens play sound', () => {
     expect(soundOnByDefault('table', false)).toBe(true)
     expect(soundOnByDefault('wizard', false)).toBe(false)
   })
+
+  it("plays on a friend's hero screen when nothing else in the game plays sound", () => {
+    expect(soundOnByDefault('wizard', false, { friend: true })).toBe(true)
+    expect(soundOnByDefault('wizard', true, { friend: true })).toBe(false)
+    expect(soundOnByDefault('wizard', false, { friend: true, tableOpen: true })).toBe(false)
+    expect(soundOnByDefault(null, false, { friend: true })).toBe(false)
+  })
 })
