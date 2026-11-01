@@ -5,7 +5,7 @@
 // draws the same thing (a defeated monster's token is already gone from the board).
 // AttackFx.jsx draws it.
 import { monsterArt } from '../data/art.js'
-import { spellKind } from '../audio/spellKind.js'
+import { powerKey, spellKind } from '../audio/spellKind.js'
 import { findFoe } from '../state/gameHelpers.js'
 import { figureToken } from './play.js'
 
@@ -42,9 +42,12 @@ export function rayColor(attackName = '') {
   return '#7dd3fc'
 }
 
+// Attacks with a look of their own, by the power's (or item's) name.
+const NAMED_LOOKS = { 'throwing shield': 'shield' }
+
 // A hero's attack looks like its sound: lightning, fire, frost and so on, or a sword
-// swing for a weapon attack.
-export const heroLook = (title) => spellKind(title) ?? 'weapon'
+// swing for a weapon attack. The Throwing Shield flies at the monster and comes back.
+export const heroLook = (title = '') => NAMED_LOOKS[powerKey(title.split(': ')[1] ?? '')] ?? spellKind(title) ?? 'weapon'
 
 // The square a monster's token stands on (its first figure, for a card with several).
 const foeSquare = (board, id) => board.tokens[id] ?? board.tokens[figureToken(id, 2)] ?? board.tokens[figureToken(id, 3)] ?? null

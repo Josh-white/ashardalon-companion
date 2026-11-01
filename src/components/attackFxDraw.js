@@ -626,7 +626,91 @@ function wind({ scene, from, aim, shot, target, p, once: onceFor }) {
   })
 }
 
+// A round shield, seen from above: a steel rim, red and dark-red quarters (so the spin
+// shows) and a gold boss in the middle, turned by `spin`.
+function drawShield(g, x, y, spin, r = 42, alpha = 1) {
+  g.save()
+  g.globalAlpha = alpha
+  g.translate(x, y)
+  g.rotate(spin)
+  for (let q = 0; q < 4; q++) {
+    g.fillStyle = q % 2 ? '#7f1d1d' : '#dc2626'
+    g.beginPath()
+    g.moveTo(0, 0)
+    g.arc(0, 0, r, (q * Math.PI) / 2, ((q + 1) * Math.PI) / 2)
+    g.fill()
+  }
+  g.strokeStyle = '#e2e8f0'
+  g.lineWidth = r * 0.22
+  g.beginPath()
+  g.arc(0, 0, r, 0, 7)
+  g.stroke()
+  g.strokeStyle = '#475569'
+  g.lineWidth = 2
+  g.beginPath()
+  g.arc(0, 0, r + r * 0.11, 0, 7)
+  g.stroke()
+  g.fillStyle = '#fbbf24'
+  g.beginPath()
+  g.arc(0, 0, r * 0.28, 0, 7)
+  g.fill()
+  g.fillStyle = '#fff7d6'
+  g.beginPath()
+  g.arc(-r * 0.08, -r * 0.08, r * 0.1, 0, 7)
+  g.fill()
+  g.restore()
+}
+
+// The Throwing Shield: it spins out to the monster along a slight curve, clangs off it in
+// a burst of sparks (or sails past on a miss), then curves back to the hero's hand.
+function shield({ scene, from, aim, shot, p, once: onceFor }) {
+  const { g } = scene
+  const miss = shot.result === 'miss'
+  const [dx, dy] = [aim.x - from.x, aim.y - from.y]
+  const len = Math.hypot(dx, dy) || 1
+  // Out on one side of the straight line, back on the other, like a thrown disc.
+  const curve = (a, b, u, bow) => {
+    const mx = (a.x + b.x) / 2 - ((b.y - a.y) / len) * bow
+    const my = (a.y + b.y) / 2 + ((b.x - a.x) / len) * bow
+    return { x: (1 - u) ** 2 * a.x + 2 * (1 - u) * u * mx + u * u * b.x, y: (1 - u) ** 2 * a.y + 2 * (1 - u) * u * my + u * u * b.y }
+  }
+  const out = (u) => curve(from, aim, u, 70)
+  const back = (u) => curve(aim, from, u, 70)
+  const goT = seg(p, 0.05, IMPACT)
+  const backT = seg(p, IMPACT + (miss ? 0.02 : 0.1), 0.9)
+  const where = (q) => (q <= IMPACT ? out(seg(q, 0.05, IMPACT)) : q < IMPACT + (miss ? 0.02 : 0.1) ? aim : back(seg(q, IMPACT + (miss ? 0.02 : 0.1), 0.9)))
+  const spin = p * 60
+  // Flying out or coming back: a blur of fading shields behind it.
+  const flying = (p > 0.05 && goT < 1) || (backT > 0 && backT < 1)
+  if (flying) {
+    for (let n = 3; n >= 1; n--) {
+      const q = where(Math.max(0.05, p - n * 0.025))
+      drawShield(g, q.x, q.y, spin - n * 0.6, 42, 0.18 * (4 - n))
+    }
+    const at = where(p)
+    drawShield(g, at.x, at.y, spin)
+    if (Math.random() < 0.6) spawn(scene, 1, at.x, at.y, '#e2e8f0', { speed: 0.5, size: 2, decay: 0.06 })
+  } else if (p >= IMPACT && backT === 0) {
+    // The moment it strikes: it sticks for a beat, jolting.
+    const jolt = Math.sin(p * 400) * 6
+    drawShield(g, aim.x + jolt, aim.y, spin, 46)
+  }
+  onceFor('impact', p > IMPACT, () => {
+    if (miss) return
+    spawn(scene, 34, aim.x, aim.y, '#fde68a', { speed: 11, size: 3, decay: 0.05 })
+    spawn(scene, 18, aim.x, aim.y, '#e2e8f0', { speed: 7, size: 4, kind: 'star' })
+  })
+  if (!miss) {
+    const k = seg(p, IMPACT, IMPACT + 0.18)
+    if (k > 0 && k < 1) ring(g, aim.x, aim.y, 40 + k * 110, '#f1f5f9', 14 * (1 - k), 0.9 * (1 - k))
+    if (p > IMPACT && p < IMPACT + 0.025) flash(g, 'rgba(241,245,249,0.14)')
+  }
+  // Back in the hero's hand: a little glint.
+  onceFor('caught', backT >= 1, () => spawn(scene, 10, from.x, from.y, '#fef3c7', { speed: 3, size: 3, kind: 'star' }))
+}
+
 export const LOOKS = {
+  shield,
   weapon: (ctx) => slash(ctx, '#e5e7eb'),
   slash: (ctx) => slash(ctx, '#f87171'),
   arrow,
