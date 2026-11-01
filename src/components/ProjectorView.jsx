@@ -1,4 +1,5 @@
 import { heroArt, monsterArt } from '../data/art.js'
+import { heroLabel } from '../state/gameHelpers.js'
 import { HERO_COLORS } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
 import { EnvironmentBanner } from './Encounters.jsx'
@@ -69,7 +70,7 @@ function ProjectorScreen({ state, dispatch, onSwitchSeat, sound }) {
       <div className="flex items-center gap-[1.5vw]">
         <Art name={heroArt(activeHero.key)} className="w-[8vw]" />
         <h1 className={`font-display text-[5vw] font-bold leading-tight ${color.text}`}>
-          {activeHero.player || activeHero.name}'s turn
+          {heroLabel(activeHero)}'s turn
         </h1>
       </div>
       <div className="mt-[1vh] grid grid-cols-3 gap-[1vw]">

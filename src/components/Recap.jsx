@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { heroLabel } from '../state/gameHelpers.js'
 import { HERO_COLORS } from '../data/heroes.js'
 import { defeatHighlights, recap } from '../state/stats.js'
 import { campaignOutcome } from '../state/campaign.js'
@@ -143,7 +144,7 @@ export default function Recap({ state, dispatch, big, onFinish }) {
             >
               <h3 className={`font-display text-[1.6em] font-bold leading-tight ${color.text}`}>
                 {mvp && '👑 '}
-                {hero.player || hero.name}
+                {heroLabel(hero)}
               </h3>
               {hero.player && <p className="text-[0.9em] text-zinc-400">{hero.name}</p>}
               <PlayerTitles record={findPlayer(records, hero.player)} thisGame={thisGame} />

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { heroLabel } from './state/gameHelpers.js'
 import { AdventurePanel, DifficultySwitch } from './components/Adventure.jsx'
 import Art from './components/Art.jsx'
 import ArtScreen from './components/ArtScreen.jsx'
@@ -137,7 +138,7 @@ function WaitingBanner({ state }) {
     <section className="rounded-3xl border border-zinc-800 bg-zinc-900 p-5">
       <p className="text-sm uppercase tracking-widest text-zinc-500">Round {state.turn.round}</p>
       <h2 className="font-display text-3xl font-bold text-zinc-200">
-        It's <span className={color.text}>{hero.player || hero.name}</span>'s turn
+        It's <span className={color.text}>{heroLabel(hero)}</span>'s turn
       </h2>
       <p className="mt-1 text-lg text-zinc-400">
         {phase.emoji} {phase.title}

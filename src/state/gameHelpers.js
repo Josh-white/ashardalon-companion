@@ -32,7 +32,15 @@ export const withVillainCall = (state, villain, when) => ({
 // A power used outside an attack (healing, a token, a dodge), so screens can play its sound.
 export const withCast = (state, power) => ({ ...state, cast: { id: newId('cast'), at: Date.now(), power: power.name } })
 
-export const heroLabel = (hero) => hero.player || hero.name
+// The player's name, or '' when there isn't a real one. A solo game's heroes all go by
+// "Solo" (one person runs every hero), which reads wrong in the log ("Solo drew the
+// encounter…"), so it counts as no name and the hero's own name is used instead.
+export const playerName = (hero) => {
+  const name = String(hero?.player ?? '').trim()
+  return name.toLowerCase() === 'solo' ? '' : name
+}
+
+export const heroLabel = (hero) => playerName(hero) || hero.name
 
 export const updateHero = (state, heroId, change) => ({
   ...state,
