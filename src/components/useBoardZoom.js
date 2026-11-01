@@ -54,24 +54,42 @@ export function useBoardZoom({ fill, bounds, activeId, activeAt }) {
     if (!fill || !el) return
     const gap = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
     const middle = (t) => [(t[0].clientX + t[1].clientX) / 2, (t[0].clientY + t[1].clientY) / 2]
+    // While the fingers move, the board is only stretched (a CSS transform, which the iPad
+    // does cheaply); it's drawn again at the new size once when the fingers come off. Drawing
+    // the whole board on every finger movement made a pinching iPad lag.
+    const svgOf = () => el.querySelector('svg')
     const start = (e) => {
       if (e.touches.length !== 2) return
-      pinch.current = { gap: gap(e.touches), scale: live.current.scale }
+      const svg = svgOf()
+      if (!svg) return
+      const [mx, my] = middle(e.touches)
+      const r = drawn()
+      const s = svg.getBoundingClientRect()
+      svg.style.transformOrigin = `${mx - s.left}px ${my - s.top}px`
+      pinch.current = { gap: gap(e.touches), scale: live.current.scale, next: live.current.scale, anchor: { mx, my, fx: (mx - r.left) / r.width, fy: (my - r.top) / r.height } }
     }
     const move = (e) => {
       if (e.touches.length !== 2 || !pinch.current) return
       e.preventDefault()
-      const { fitScale } = live.current
-      const next = Math.min(ZOOMS[ZOOMS.length - 1], (pinch.current.scale * gap(e.touches)) / pinch.current.gap)
-      // Keep the board point under the fingers where it is.
-      const r = drawn()
-      const [mx, my] = middle(e.touches)
-      live.current.anchor = { mx, my, fx: (mx - r.left) / r.width, fy: (my - r.top) / r.height }
-      pinched.current = true
-      setZoom(next <= fitScale * 1.05 ? 'fit' : next)
+      const p = pinch.current
+      p.next = Math.max(live.current.fitScale, Math.min(ZOOMS[ZOOMS.length - 1], (p.scale * gap(e.touches)) / p.gap))
+      const svg = svgOf()
+      if (svg) svg.style.transform = `scale(${p.next / p.scale})`
     }
     const end = (e) => {
-      if (e.touches.length < 2) pinch.current = null
+      if (e.touches.length >= 2 || !pinch.current) return
+      const p = pinch.current
+      pinch.current = null
+      const svg = svgOf()
+      if (svg) {
+        svg.style.transform = ''
+        svg.style.transformOrigin = ''
+      }
+      if (Math.abs(p.next - p.scale) < 0.01) return
+      // Keep the board point that was under the fingers where it is.
+      live.current.anchor = p.anchor
+      pinched.current = true
+      setZoom(p.next <= live.current.fitScale * 1.05 ? 'fit' : p.next)
     }
     el.addEventListener('touchstart', start, { passive: true })
     el.addEventListener('touchmove', move, { passive: false })
