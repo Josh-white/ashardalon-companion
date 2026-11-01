@@ -150,6 +150,62 @@ describe('the ally looks after the party', () => {
   })
 })
 
+describe("Keyleth's attacks and items", () => {
+  const holy = card('Holy Strike', 'at-will', '+8', '1', 'Attack one adjacent Monster. If you started your Hero Phase adjacent to the Monster, deal +1 damage if you hit.')
+  const valiant = card('Valiant Strike', 'at-will', '+8', '1', 'Attack one adjacent Monster. When making this attack, you get a +1 bonus to attack for each Monster adjacent to your Hero.')
+  const smite = card('Righteous Smite', 'daily', '+9', '3', 'Attack one adjacent Monster.')
+
+  it('attacks with Holy Strike or Valiant Strike, answering their questions from the board', () => {
+    const state = start({ powers: [holy, valiant, smite] })
+    const at = state.board.tokens[state.heroes[0].id]
+    const step = allyStep(withMonster(state, [at[0] + 1, at[1]], { hp: 4 }), { roll })
+    expect(step.action.type).toBe('HERO_ATTACK')
+    expect(['Holy Strike', 'Valiant Strike']).toContain(state.heroes[0].powers.find((p) => p.id === step.action.powerId).name)
+    expect(step.action.startedAdjacent ?? step.action.adjacentCount).toBeTruthy()
+  })
+
+  it('uses Divine Challenge on a monster already next to it, not one it would have to pull', () => {
+    const challenge = card('Divine Challenge', 'at-will', '+8', '1', 'Choose one Monster within 1 tile of you. Place that Monster adjacent to your Hero. Attack one adjacent Monster.')
+    const state = start({ powers: [challenge] })
+    const at = state.board.tokens[state.heroes[0].id]
+    expect(allyStep(withMonster(state, [at[0] + 1, at[1]], { hp: 4 }), { roll }).action.type).toBe('HERO_ATTACK')
+    const away = withMonster(state, [at[0], at[1] + 3], { hp: 4 })
+    expect(attackOptions(away, away.heroes[0])).toEqual([])
+  })
+
+  it('fires a Ring of Shooting Stars, which is not its attack', () => {
+    const state = start()
+    const at = state.board.tokens[state.heroes[0].id]
+    const ring = { id: 'r1', cardId: 'ring-of-shooting-stars', name: 'Ring of Shooting Stars', used: false, card: { name: 'Ring of Shooting Stars', attack: { bonus: 8, damage: 1 }, after: 'flip', freeAttack: true, note: "Attack a monster within 2 tiles. It doesn't count as your attack." } }
+    const armed = withMonster({ ...state, heroes: state.heroes.map((h) => ({ ...h, items: [ring] })) }, [at[0], at[1] + 3], { hp: 4 })
+    const step = allyStep(armed, { roll })
+    expect(step.action).toMatchObject({ type: 'HERO_ATTACK', itemId: 'r1', targets: [{ monsterId: 'm1', roll: 15 }] })
+    const after = gameReducer(armed, step.action)
+    expect(after.monsters[0].hp).toBe(3)
+    // The ring is used up, and the hero still has its own attack.
+    expect(allyStep(after, { roll })?.action.itemId).toBeUndefined()
+  })
+
+  it('uses a daily when no at-will can reach, rather than doing nothing', () => {
+    const state = start({ powers: [smite] })
+    const at = state.board.tokens[state.heroes[0].id]
+    expect(allyStep(withMonster(state, [at[0] + 1, at[1]], { hp: 9 }), { roll }).action.type).toBe('HERO_ATTACK')
+  })
+
+  it('reads a Tome of Experience at level 1, and flips a used daily back with a Potion of Rejuvenation', () => {
+    const state = start()
+    const tome = { id: 'i1', cardId: 'tome-of-experience', name: 'Tome of Experience', used: false, card: { name: 'Tome of Experience', use: 'levelUp', after: 'discard' } }
+    const withTome = { ...state, heroes: state.heroes.map((h) => ({ ...h, items: [tome] })) }
+    const step = allyStep(withTome, { roll })
+    expect(step.action).toMatchObject({ type: 'USE_ITEM', itemId: 'i1' })
+    expect(gameReducer(withTome, step.action).heroes[0].level).toBe(2)
+    const potion = { id: 'i2', cardId: 'potion-of-rejuvenation', name: 'Potion of Rejuvenation', used: false, card: { name: 'Potion of Rejuvenation', use: 'refreshPower', after: 'discard' } }
+    const spent = { ...state, heroes: state.heroes.map((h) => ({ ...h, items: [potion], powers: h.powers.map((p) => (p.type === 'daily' ? { ...p, used: true } : p)) })) }
+    const daily = spent.heroes[0].powers.find((p) => p.type === 'daily')
+    expect(allyStep(spent, { roll }).action).toMatchObject({ type: 'USE_ITEM', itemId: 'i2', targetId: daily.id })
+  })
+})
+
 describe('the ally and traps', () => {
   const dart = (area) => ({ id: 'trap1', type: 'trap', cardId: 'poisoned-dart-trap', name: 'Poisoned Dart Trap', tile: area, card: { trap: { disable: 10 } } })
   const areaOf = (state, at) => boardGrid(state.board).get(`${at[0]},${at[1]}`).area

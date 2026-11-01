@@ -10,7 +10,7 @@
 //   null             nothing for the brain to decide: tap the turn screen's next button
 
 import { baseId, key, unexploredEdges } from '../board/grid.js'
-import { distances } from '../board/paths.js'
+import { adjacent, distances } from '../board/paths.js'
 import { boardGrid, heroEdges, heroReach, movesLeft, stayedOnBoard } from '../board/play.js'
 import { foeDistance, foesInRange, powerRange } from '../board/monsters.js'
 import { heroesInReach } from '../board/encounters.js'
@@ -22,7 +22,7 @@ import { powerNumber } from '../state/combat.js'
 import { foes } from '../state/gameHelpers.js'
 import { attackGone } from '../state/heroTurn.js'
 import { XP_TO_LEVEL_UP } from '../data/heroes.js'
-import { heroItems, itemTrapBonus } from '../data/items.js'
+import { attackItems, heroItems, itemTrapBonus } from '../data/items.js'
 import { boardMarkers, trapsToDisable } from '../board/markers.js'
 import { treasureInReach } from '../board/items.js'
 import { escapeBlockers } from '../state/adventure.js'
@@ -41,10 +41,19 @@ export function activeAlly(state) {
 // healing or a shield to hand out afterwards (followUp) or a move it may skip after it.
 // Powers that move figures first, ask a question first, or pass a monster on are left to
 // the players (the ally uses its other powers instead).
+const pullsFirst = (power) => {
+  const steps = effectsOf(power).board?.before ?? []
+  return steps.length > 0 && steps.every((m) => /^monster/.test(m.pick) && m.to === 'nextToSelf')
+}
+
 export function simpleAttack(power) {
   if (!power || power.used || !power.card || powerNumber(power.card.attack) === null) return false
   const e = effectsOf(power)
-  if (e.before || e.board?.before || e.ask || e.use || e.reaction || e.after === 'pass-monster') return false
+  // Holy Strike's and Valiant Strike's questions the board answers (askAnswers).
+  const asks = !e.ask || ['started-adjacent', 'adjacent-count'].includes(e.ask)
+  // Divine Challenge pulls a monster next to the hero first; with one there already, it's a
+  // plain attack on that one (the pull is optional, pullsFirst below).
+  if ((e.before && !pullsFirst(power)) || !asks || e.use || e.reaction || e.after === 'pass-monster') return false
   return true
 }
 
@@ -95,6 +104,44 @@ export function bonusAttack(state, hero, roll = d20) {
   return { action: { ...attackAction(state, hero, option, roll), bonusAttack: true }, say: option.say }
 }
 
+// Monster and villain figures next to the hero on the board (Valiant Strike's +1 each).
+function adjacentFoes(state, hero) {
+  const at = state.board?.tokens[hero.id]
+  if (!at) return 0
+  const grid = boardGrid(state.board)
+  const ids = new Set(foes(state).filter((m) => m.hp > 0 && !m.objective).map((m) => m.id))
+  return Object.entries(state.board.tokens).filter(([id, sq]) => ids.has(baseId(id)) && adjacent(grid, at, sq)).length
+}
+
+// The answers to a power's question before the roll, from the board: how many monsters are
+// next to the hero (Valiant Strike), and whether it started its Hero Phase next to the
+// monster (Holy Strike: it hasn't moved this turn and is next to it now).
+function askAnswers(state, hero, power) {
+  const ask = effectsOf(power).ask
+  if (ask === 'adjacent-count') return { adjacentCount: Math.max(1, adjacentFoes(state, hero)) }
+  if (ask === 'started-adjacent') return { startedAdjacent: Boolean(stayedOnBoard(state, hero)) }
+  return {}
+}
+
+// A free attack from an item (Ring of Shooting Stars, Throwing Shield: "it doesn't count as
+// your attack") at the weakest monster in reach, finishing one off if it can.
+export function freeItemAttack(state, hero, roll = d20) {
+  if (!state.board || !state.board.tokens[hero.id]) return null
+  const all = foes(state).filter((m) => m.ac && m.hp > 0 && !m.objective && onBoard(state, m))
+  for (const item of attackItems(hero, state.turn).filter((i) => i.card.freeAttack)) {
+    const range = powerRange(item.card.note ?? item.card.text) ?? 'within2'
+    const inReach = foesInRange(state, hero.id, range, all).sort((a, b) => Number(item.card.attack.damage >= figureHp(b)) - Number(item.card.attack.damage >= figureHp(a)) || figureHp(a) - figureHp(b))
+    const target = inReach[0]
+    if (!target) continue
+    const distance = foeDistance(state, hero.id, target.id)
+    return {
+      action: { type: 'HERO_ATTACK', heroId: hero.id, itemId: item.id, targets: [{ monsterId: target.id, roll: roll() }], bonusAttack: false, distances: distance ? { [target.id]: distance } : {}, stayed: stayedOnBoard(state, hero) ?? false },
+      say: `${hero.name} uses the ${item.card.name ?? item.name} on the ${target.name}.`,
+    }
+  }
+  return null
+}
+
 // Hit points the monster's next figure has left (a group card loses one figure at a time).
 function figureHp(monster) {
   const per = monster.card?.figures > 1 && !monster.villain ? monster.card.hp : monster.maxHp
@@ -113,11 +160,12 @@ export function attackOptions(state, hero, { atWill = false } = {}) {
   for (const power of hero.powers.filter((p) => simpleAttack(p) && (!atWill || p.type === 'at-will'))) {
     const effects = effectsOf(power)
     // A card that doesn't say how far it reaches is used on a monster next to the hero.
-    const range = powerRange(power.card.text) ?? 'adjacent'
+    const range = pullsFirst(power) ? 'adjacent' : powerRange(power.card.text) ?? 'adjacent'
     const inReach = foesInRange(state, hero.id, range, all)
     if (inReach.length === 0) continue
-    const bonus = powerNumber(power.card.attack)
-    const damage = powerNumber(power.card.damage) ?? 1
+    const answers = askAnswers(state, hero, power)
+    const bonus = powerNumber(power.card.attack) + (answers.adjacentCount ?? 0)
+    const damage = (powerNumber(power.card.damage) ?? 1) + (answers.startedAdjacent ? 1 : 0)
     const chance = (m) => Math.min(0.95, Math.max(0.05, (21 - (m.ac - bonus)) / 20))
     const kills = (m) => damage >= figureHp(m)
     // Finish off what it can, then the weakest, villains first among equals.
@@ -132,10 +180,12 @@ export function attackOptions(state, hero, { atWill = false } = {}) {
     const names = [...new Set(hit.map((m) => m.name))].join(' and the ')
     options.push({ power, targets: picked, score, finishes: hit.filter(kills).map((m) => m.id), villain: hit.some((m) => m.villain), say: `${hero.name} attacks the ${names} with ${power.name}.` })
   }
-  // Dailies are saved for a villain, or a monster no at-will power could finish off.
-  const atWillFinishes = new Set(options.filter((o) => o.power.type !== 'daily').flatMap((o) => o.finishes))
+  // Dailies are saved for a villain, or a monster no at-will power could finish off. With no
+  // at-will that can reach anything, the daily is better than doing nothing.
+  const atWills = options.filter((o) => o.power.type !== 'daily')
+  const atWillFinishes = new Set(atWills.flatMap((o) => o.finishes))
   return options
-    .filter((o) => o.power.type !== 'daily' || o.villain || o.finishes.some((id) => !atWillFinishes.has(id)))
+    .filter((o) => o.power.type !== 'daily' || atWills.length === 0 || o.villain || o.finishes.some((id) => !atWillFinishes.has(id)))
     .sort((a, b) => b.score - a.score)
 }
 
@@ -155,6 +205,7 @@ function attackAction(state, hero, option, roll) {
     bonusAttack: false,
     distances: dist,
     stayed: stayedOnBoard(state, hero) ?? false,
+    ...askAnswers(state, hero, option.power),
   }
 }
 
@@ -225,6 +276,13 @@ export function supportItem(state, hero) {
     if (card.use === 'heal') {
       const who = neediest(close.filter((h) => h.hp <= 2 && hurt(h) > 0))
       if (who) return { action: { type: 'USE_ITEM', heroId: hero.id, itemId: item.id, heroIds: [who.id] }, say: `${hero.name} uses the ${card.name} on ${who.id === hero.id ? 'itself' : who.name}.` }
+    }
+    // Tome of Experience: level up straight away.
+    if (card.use === 'levelUp' && hero.level === 1) return { action: { type: 'USE_ITEM', heroId: hero.id, itemId: item.id, heroIds: [] }, say: `${hero.name} reads the ${card.name} and levels up!` }
+    // Potion of Rejuvenation, Pearl of Power: a used daily power flips back up.
+    if (card.use === 'refreshPower' || card.use === 'refreshAny') {
+      const spent = hero.powers.find((p) => p.used && p.type === 'daily') ?? hero.powers.find((p) => p.used)
+      if (spent) return { action: { type: 'USE_ITEM', heroId: hero.id, itemId: item.id, heroIds: [], targetId: spent.id }, say: `${hero.name} uses the ${card.name}: ${spent.name} is ready again.` }
     }
     if (card.use === 'endCondition') {
       const who = close.find(endable)
@@ -402,6 +460,8 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
     if (token && !state.treasure && !state.turn.treasureOwed && !state.turn.tokenOwed) {
       return { action: { type: 'PICK_UP_TREASURE', id: token.id, heroId: hero.id }, say: `${hero.name} picks up the Treasure token.` }
     }
+    const free = freeItemAttack(state, hero, roll)
+    if (free) return free
     const disable = disableTrap(state, hero, roll)
     if (disable) return disable
     const option = attackOptions(state, hero)[0]
