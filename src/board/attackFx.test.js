@@ -76,10 +76,23 @@ describe('attack animations on the virtual board', () => {
     expect(heroLook('Heskan: Ray of Frost!')).toBe('frost')
     expect(heroLook('Vistra: Sure Strike!')).toBe('weapon')
     expect(heroLook('Tarak: Positioning Shot!')).toBe('arrow')
+    // JJ: the Throwing Shield is a thrown shield, not Quinn's holy light or Heskan's magic.
+    expect(['Quinn', 'Heskan', 'Vistra'].map((h) => heroLook(`${h}: Throwing Shield!`))).toEqual(['shield', 'shield', 'shield'])
     expect(['Dagger', 'Mace', 'Morning Star'].map(monsterLook)).toEqual(['slash', 'slash', 'slash'])
     expect(['Bite', 'Claws', 'Tentacles', 'Tail Sweep'].map(monsterLook)).toEqual(['bite', 'claw', 'claw', 'claw'])
     expect(['Arrow', 'Quills', 'Lightning', 'Windstorm', 'Gibbering', 'Fire Ray'].map(monsterLook)).toEqual(['arrow', 'arrow', 'zap', 'wind', 'psychic', 'ray'])
     expect(rayColor('Poison Ray')).not.toBe(rayColor('Fire Ray'))
+  })
+
+  it('clangs the Throwing Shield as it reaches the monster, with no spell sound', () => {
+    const fx = { look: 'shield', by: 'hero', from: [0, 2], shots: [{ to: [0, 0], result: 'hit', dealt: 1 }] }
+    const moment = { kind: 'roll', title: 'Quinn: Throwing Shield!', rolls: [{ monsterId: 'm1', label: 'Rat', value: 15, hit: true }], fx }
+    const sounds = momentSounds(moment)
+    expect(sounds.find(([s]) => s === 'weapon')[1]).toBe(FX_DELAY_MS + FX_IMPACT_MS)
+    expect(sounds.some(([s]) => s.startsWith('spell') || s === 'holy')).toBe(false)
+    const miss = momentSounds({ ...moment, rolls: [{ monsterId: 'm1', label: 'Rat', value: 4, hit: false }] })
+    expect(miss.map(([s]) => s)).toContain('whoosh')
+    expect(miss.map(([s]) => s)).not.toContain('fizzle')
   })
 
   it('times the sounds and the token moves to the hit', () => {
