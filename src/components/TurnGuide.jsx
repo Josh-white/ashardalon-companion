@@ -288,7 +288,7 @@ function VillainPhase({ state, hero, dispatch }) {
           <TrapTurns state={state} hero={hero} dispatch={dispatch} />
           {highAlert && state.monsters.some((m) => m.ownerId === hero.id) && (
             <Note>
-              <p className="mb-2">High Alert: pass one of your monster cards to the player on your right.</p>
+              {!state.board && <p className="mb-2">High Alert: pass one of your monster cards to the player on your right.</p>}
               <PassMonsters state={state} dispatch={dispatch} only={hero.id} />
             </Note>
           )}

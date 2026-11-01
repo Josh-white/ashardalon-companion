@@ -7,6 +7,7 @@ import { effectsOf, maxRolls } from '../data/powerEffects.js'
 import { queueFearMove, queueMoves } from '../board/powerMoves.js'
 import { clamp, findFoe, foes, heroLabel, markUsed, updateHero, updateMonster, validRoll, withCast, withLog, withMoment } from './gameHelpers.js'
 import { spendItem } from './treasureDeck.js'
+import { applyPasses, heroOnRight, thunderPass } from './passMonsters.js'
 import { defeatDetails, healHero, hurtMonster, offerBrutalRecovery, powerNumber, rollAgainst } from './combat.js'
 import { inHeroPhase, itemAttackIsMove, powerUsesAttack, removeCurse, spendAttack } from './heroTurn.js'
 
@@ -123,6 +124,13 @@ export function heroAttack(state, action) {
   if (itemMove && state.board && inHeroPhase(state, hero)) next = { ...next, turn: { ...next.turn, boardMoves: (next.turn.boardMoves ?? 0) + 1 } }
 
   // On the virtual board a power that moves a hero waits for the player to pick the square.
+  // Wrathful Thunder: on the virtual board the app picks the monster on the hero's tile and
+  // passes its card, so there's no question after the attack.
+  if (effects.after === 'pass-monster' && next.board) {
+    const pass = thunderPass(next, hero.id)
+    next = { ...next, turn: { ...next.turn, lastAttack: { ...next.turn.lastAttack, followUpDone: true } } }
+    next = pass ? applyPasses(next, [pass], `${hero.name}'s ${power.name}`) : withLog(next, `${hero.name}'s ${power.name}: no monster on ${hero.name}'s tile to pass.`)
+  }
   if (effects.board?.after) next = queueMoves(next, hero, power, effects.board.after, { attacked: targets.map((t) => t.monsterId), hit: anyHit })
   next = queueFearMove(next)
 
@@ -222,8 +230,8 @@ export function attackFollowUp(state, action) {
     const monster = state.monsters.find((m) => m.id === action.monsterId)
     if (!monster) return state
     // Turns go to the left, so the player on your right is the one who went before you.
-    const index = state.heroes.indexOf(hero)
-    const right = state.heroes[(index - 1 + state.heroes.length) % state.heroes.length]
+    const right = heroOnRight(state, hero.id)
+    if (!right) return state
     next = updateMonster(next, monster.id, () => ({ ownerId: right.id }))
     return withLog(next, `${hero.name}'s Wrathful Thunder sent the ${monster.name} to ${heroLabel(right)}.`)
   }
