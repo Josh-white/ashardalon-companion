@@ -4,22 +4,38 @@ A tablet-friendly helper for playing **Dungeons & Dragons: Wrath of Ashardalon**
 
 ## What it does
 
-- **One iPad per player:** after setup, each iPad picks "I'm Keyleth" (it remembers) and shows that hero's card, their monster cards, the party's HP, and the turn guide when it's their turn. The **table view** shows everything on one screen.
-- **Projector view:** a read-only big screen for a desktop on a projector or TV: a huge "Sam's turn" banner with the phase steps, every hero's HP, and the monsters as cards. Pick it on the "Who's playing" screen and press F11.
-- **Dice and big moments:** every player's iPad has a **Roll d20** button. Each roll flashes on every screen, including the projector, with special screens for a natural 20 or a 1, a defeated monster, a hero going down, and a level-up.
-- **Undo:** the top bar shows what the last change was (for example "Undo: Tarak −1 HP") and steps the game back for everyone, up to 30 changes. It can also undo an accidental *New game*. Dice rolls can't be undone, so there's no rerolling.
-- **Home-screen app:** on an iPad, open the site in Safari, then Share → Add to Home Screen. It opens full screen with its own icon.
+**Screens**
 
-- **Hero cards:** HP with big +/− buttons, AC, healing surge value, daily and utility powers you can name and tap to mark used, conditions, and level up for 5 XP.
-- **Turn guide:** "Your turn!" banner for the active player and a checklist for the Hero, Exploration, and Villain phases.
-- **Monsters:** add monsters as they're placed, track HP and conditions, see whose card each one is, and tap *Defeated!* to add its XP to the party pool.
-- **Party status:** shared XP and healing surges, a warning when surges run out, and win/lose screens.
+- **One iPad per player:** each iPad picks its hero ("Who's playing") and remembers it. It shows that hero's card, their monster cards and the turn guide on their turn, with tabs at the bottom for Turn, Monsters, Party, Quest and Log. A player who joins late can tap **➕ Join this game with a new hero**; the new hero goes next to whoever's turn it is.
+- **Table view:** every hero on one screen, for a game on one device or for testing everyone's turns.
+- **Big screen (projector or TV):** read-only, scaled to fit the window: whose turn it is, every hero's HP and boosts, the monsters, the board, music and the narrator. Only the big screen can start the game.
+- **Phones:** solo games fit a phone, folded or unfolded.
+- **Home-screen app:** on an iPad, open the site in Safari, then Share → Add to Home Screen. Screens stay awake during a game (the ☀️ switch turns that off), reload by themselves when a new version is out, and show a "Something went wrong" screen that reloads instead of going blank if a screen breaks.
 
-Starting hero stats are prefilled on the setup screen and can be adjusted there, so check them against your hero cards.
+**Starting a game**
+
+- **Several games at once:** the family game plus, say, a solo game on each boy's iPad. **Which game?** (or "Switch game" along the top) starts, renames or finishes one.
+- **Lobby:** a dragon intro, then each iPad picks a hero and a name; level-1 stats are locked and the rulebook's suggested powers are filled in but can be changed (no duplicates). Players tap Ready and the big screen enters the dungeon. Powers are only chosen here, not mid-game.
+- **Adventures:** all 13, with a briefing (goal, special rules) read by the narrator, and the two campaigns (Adventures 6 and 13): heroes keep their level, gold and items between chapters, with a night in town between them. **Free play** and a **Hero Swap Warm-up** (practice, no records) too.
+- **Difficulty:** 📖 Story, Easy, Normal or Hard, switchable mid-game.
+- **Board:** real tiles on the table, or the **virtual board** (solo or the whole party): tiles, hero and monster tokens, traps, doors, treasure tokens and markers, drawn and moved by the app. "Play solo on a virtual board" plays one to five heroes on one screen.
+- **Computer allies:** a hero nobody picked can be played by the computer ("Computer plays X"), and a tired player can hand their hero over mid-game ("Let the computer play") and take it back. Virtual board only.
+
+**Playing**
+
+- **Turns run by the app:** the turn guide walks each phase; exploring draws tiles and monsters, villain and encounter checks happen by themselves, and monster turns ask any board questions, roll against the hero's AC and apply damage. Hero attacks roll against the monster's AC, with power and item effects (matched by card name) automated.
+- **Decks:** monsters, encounters (traps, curses, hazards, events), treasure, villains and the tile stack are all virtual.
+- **Dice and big moments:** a 3D d20 for every roll, shown on every screen, with special screens for a natural 20 or a 1, a defeat, a hero going down and a level-up, and attack animations flying token to token on the board.
+- **Undo:** the top bar shows the last change and steps back for everyone, up to 30 changes. Dice rolls can't be undone.
+- **Sound:** sound effects, a sound board, background music by mood and area, and an ElevenLabs narrator with a voice for each villain (see below).
+- **After the game:** a recap screen, **Try again** after a loss, and the **Hall of Records**: player records, titles and a monster trophy book.
+- **Help for kids:** a hero coach, a "📘 How X works" cheat card for each hero, "Since your last turn", and tap a monster token to see its card.
+
+The house rules the app plays by (the Start tile counts as two tiles, a healing surge from 0 HP clears conditions and curses, a natural 20 only hits if the total beats AC) are in the code next to the rule.
 
 ## Power cards
 
-Each hero has two at-will, one utility, and one daily power slot. Tap **Choose powers** to pick each one from a dropdown, tap a used daily or utility power to flip it, and tap **Read** to see the card text. The cards come from `cards/cards.json`, a file that stays on your server and is ignored by git. See [cards/README.md](cards/README.md) for the format.
+Each hero has two at-will, one utility, and one daily power slot (more as they level up). Players pick them in the lobby before the game; during the game, tap a used daily or utility power to flip it, and tap **Read** to see the card text. The cards come from `cards/cards.json`, a file that stays on your server and is ignored by git. See [cards/README.md](cards/README.md) for the format.
 
 Open the app at `/#cards` to check `cards.json`: it lists cards the app couldn't read, and power and encounter cards the app looks for by name or id but can't find (a spelling difference quietly turns off that card's automation). The Pi also prints these to its log when it starts.
 
@@ -162,7 +178,7 @@ npm run robot        # the robot plays whole solo games by itself (see below)
 
 ### The robot
 
-`npm run robot` (`src/robot/robot.test.jsx`) plays a dozen whole solo games on the virtual board by itself: random adventure, one to three random heroes, then a few hundred random taps on the real screens, each one going through the real game rules. It doesn't try to win; it looks for a screen that crashes or a tap the rules can't take. It plays with made-up cards and tiles (`src/robot/robotCards.js`), so it runs anywhere. It isn't part of `npm test`, so the Pi's build doesn't take longer.
+`npm run robot` (`src/robot/robot.test.jsx`) plays 16 whole games by itself, mostly solo games on the virtual board plus party games (table screen) and a campaign: random adventure, one to three random heroes, then a few hundred random taps on the real screens, each one going through the real game rules. It doesn't try to win; it looks for a screen that crashes or a tap the rules can't take. It plays with made-up cards and tiles (`src/robot/robotCards.js`), so it runs anywhere. It isn't part of `npm test`, so the Pi's build doesn't take longer. `src/robot/allies.test.jsx` (also in `npm run robot`) plays games where the computer plays every hero, checking the game keeps moving until it's won or lost.
 
 Two of the games (seeds 6 and 14) play to win instead: a made-up clan campaign in easy mode (`easyCards` in `robotCards.js`: one-hit monsters and villains, the Chamber Entrance in the first few tiles), carried on through the recap, the campaign lobby on the big screen and the next adventure until the campaign is won. They check that the heroes keep their level, gold and items from one adventure to the next. To play Adventures 6 and 13 the same way with the full cards: `ROBOT_CARDS=cards/cards.json ROBOT_ADVENTURES=adventure-6,adventure-13 ROBOT_WIN=1 npm run robot` (`ROBOT_WIN_TAPS=20000` for a whole Assault on Firestorm Peak, `ROBOT_GAMELOG=log.txt` for each game's log).
 
@@ -170,9 +186,14 @@ Every game has a seed, so a failure can be played again exactly; the failure nam
 
 ### Checks on GitHub
 
-Every pull request runs `.github/workflows/ci.yml`: ESLint, the tests, the robot and the build, then the Docker image is built on an arm64 machine like the Pi and checked to answer `/health`. Merging to `main` puts it on the real game within 5 minutes, so wait for the green check before merging.
+Every pull request runs `.github/workflows/ci.yml`: ESLint, the tests, the robot and the build, then the Docker image is built on an arm64 machine like the Pi and checked to answer `/health`. Merging to `main` puts it on the real game within 5 minutes, so `main` only takes a pull request once both checks are green (a GitHub ruleset).
 
-## Not built yet
+## Hidden pages
 
-- Tile, encounter, and treasure deck trackers
-- Adventure picker
+Add these to the app's address:
+
+- `/#screens`: the big screen, iPads and a phone side by side, each acting as its own device, for testing.
+- `/#cards`: problems in `cards.json`, and cards the app looks for but can't find.
+- `/#tiles`: every dungeon tile layout, to check against the real tiles.
+- `/#ideas`: the ideas players sent from 💡.
+- `/#audition`: pick the takes for the recorded sound effects.
