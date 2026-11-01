@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { heroArt, heroCardArt } from '../data/art.js'
 import { CONDITIONS, HERO_COLORS, MAX_LEVEL, XP_TO_LEVEL_UP, hasAbility } from '../data/heroes.js'
+import { surgeHp } from '../data/difficulty.js'
 import { artUrl, useArt } from '../state/useArt.js'
 import { useCards } from '../state/useCards.js'
 import Art from './Art.jsx'
@@ -290,7 +291,7 @@ export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, 
         <div className="mt-3 rounded-xl bg-red-950/70 p-3 text-center">
           <p className="font-bold text-red-300">{hero.name} is down!</p>
           <Button variant={surges > 0 ? 'gold' : 'danger'} className="mt-2" onClick={() => dispatch({ type: 'USE_SURGE', heroId: hero.id })}>
-            {surges > 0 ? `Use a healing surge (heal to ${hero.surgeValue})` : 'No surges left: the party falls'}
+            {surges > 0 ? `Use a healing surge (heal to ${surgeHp(state, hero)})` : 'No surges left: the party falls'}
           </Button>
         </div>
       )}

@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { HERO_COLORS, XP_TO_LEVEL_UP } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
+import { surgeHp } from '../data/difficulty.js'
 import { CurseNotes, PhaseChecks, DisableTraps, EncounterStep, EnvironmentBanner, PassMonsters, encountersLeft, TrapTurns } from './Encounters.jsx'
 import HeroAttack, { AttackAftermath } from './HeroAttack.jsx'
 import { Doors, EscapeNote, RevealButtons } from './Adventure.jsx'
@@ -92,7 +93,7 @@ function HeroPhase({ state, hero, dispatch }) {
             className="mt-2"
             onClick={() => dispatch({ type: 'USE_SURGE', heroId: hero.id })}
           >
-            {state.surges > 0 ? `Use a healing surge (heal to ${hero.surgeValue})` : 'No surges left: the party falls'}
+            {state.surges > 0 ? `Use a healing surge (heal to ${surgeHp(state, hero)})` : 'No surges left: the party falls'}
           </Button>
         </Note>
       )}

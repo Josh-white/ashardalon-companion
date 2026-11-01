@@ -1,5 +1,5 @@
 import { withAttackFx } from '../board/attackFx.js'
-import { difficultyOf, encounterCancelCost } from '../data/difficulty.js'
+import { difficultyOf, encounterCancelCost, surgeHp } from '../data/difficulty.js'
 import { hasAbility, HERO_TEMPLATES, MAX_LEVEL, STARTING_SURGES, templateFor, XP_TO_LEVEL_UP } from '../data/heroes.js'
 import { monsterArt } from '../data/art.js'
 import { PHASES } from '../data/phases.js'
@@ -521,15 +521,17 @@ function reduce(state, action) {
       // since only the players know who is on Keyleth's tile.
       // JJ's house rule (2026-11-01): getting back up with a surge clears every condition
       // (Poisoned, Dazed and the rest) and every curse, so no poison or curse damage lands.
-      const own = hasAbility(hero, 'healing-hands') ? 1 : 0
+      // Story: a surge heals to full, so Healing Hands has nothing to add.
+      const full = difficultyOf(state.difficulty).fullSurge
+      const own = !full && hasAbility(hero, 'healing-hands') ? 1 : 0
       const cleared = hero.conditions ?? []
       let healed = updateHero({ ...state, surges: state.surges - 1 }, hero.id, (h) => ({
-        hp: Math.min(h.maxHp, h.surgeValue + own),
+        hp: Math.min(h.maxHp, surgeHp(state, h) + own),
         conditions: [],
       }))
-      if (!own && heroWith(state, 'healing-hands')) healed = addOffer(healed, 'healingHands', hero.id)
+      if (!own && !full && heroWith(state, 'healing-hands')) healed = addOffer(healed, 'healingHands', hero.id)
       healed = offerSavingGrace(healed, hero)
-      let logged = withLog(healed, `${hero.name} used a healing surge${own ? ', +1 HP from Healing Hands' : ''}.`)
+      let logged = withLog(healed, `${hero.name} used a healing surge${full ? ' and is back to full HP (Story)' : own ? ', +1 HP from Healing Hands' : ''}.`)
       if (cleared.length) logged = withLog(logged, `${hero.name} is no longer ${cleared.join(' or ')}.`)
       for (const curse of hero.curses ?? []) logged = removeCurse(logged, hero.id, curse.id, `${hero.name}'s ${curse.name} curse is over.`)
       if (state.turn.startDamageDue !== hero.id) return logged
