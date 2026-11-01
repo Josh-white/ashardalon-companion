@@ -64,4 +64,15 @@ describe('Easy / Normal / Hard', () => {
     const story = { ...start('story'), xp: 3 }
     expect(gameReducer(story, { type: 'CANCEL_ENCOUNTER' }).xp).toBe(0)
   })
+
+  it('heals a hero to full HP with a healing surge on Story', () => {
+    let state = start('story')
+    const hero = state.heroes[0]
+    state = gameReducer(state, { type: 'ADJUST_HP', heroId: hero.id, amount: -hero.hp })
+    const story = gameReducer(state, { type: 'USE_SURGE', heroId: hero.id })
+    expect(story.heroes[0].hp).toBe(hero.maxHp)
+    expect(story.surges).toBe(4)
+    const normal = gameReducer({ ...state, difficulty: 'normal' }, { type: 'USE_SURGE', heroId: hero.id })
+    expect(normal.heroes[0].hp).toBe(Math.min(hero.maxHp, hero.surgeValue + (hero.abilityEffects?.includes('healing-hands') ? 1 : 0)))
+  })
 })
