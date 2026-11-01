@@ -30,6 +30,7 @@ import { escapeBlockers } from '../state/adventure.js'
 import { escapeGoal, escapeHold, exitName, exitSquares } from '../board/exits.js'
 import { trapDisable } from '../state/encounterRules.js'
 import { cancelEncounter } from './cancelEncounter.js'
+import { castDaily, fearMove, figureHp, guardPower, placeHandToken, sphereStep } from './powers.js'
 
 // A d20 the way the screens roll one; tests pass their own.
 const d20 = () => Math.floor(Math.random() * 20) + 1
@@ -83,12 +84,15 @@ function followUp(state, hero) {
   }
 }
 
-// A move waiting on the board for one of the ally's figures: a power's own move afterwards
-// (Righteous Advance, Distracting Jab) is skipped; a move a monster's hit forces on the ally
-// goes to the first square the board allows.
+// A move waiting on the board for one of the ally's figures: Cause Fear's monsters run as
+// far from the party as they can; a power's own move afterwards (Righteous Advance,
+// Distracting Jab) is skipped; a move a monster's hit forces on the ally goes to the first
+// square the board allows.
 function pendingMove(state, hero) {
   const move = state.turn.boardMove
   if (!move || move.heroId !== hero.id) return null
+  const fear = fearMove(state, hero, moveChoices(state), (id) => moveTargets(state, id))
+  if (fear) return fear
   if (!move.from) return { action: { type: 'SKIP_BOARD_MOVE' }, say: `${hero.name} stays where it is.` }
   const id = moveChoices(state)[0]
   const to = id && moveTargets(state, id)[0]
@@ -143,13 +147,6 @@ export function freeItemAttack(state, hero, roll = d20) {
     }
   }
   return null
-}
-
-// Hit points the monster's next figure has left (a group card loses one figure at a time).
-function figureHp(monster) {
-  const per = monster.card?.figures > 1 && !monster.villain ? monster.card.hp : monster.maxHp
-  if (!per) return monster.hp
-  return monster.hp - per * (Math.ceil(monster.hp / per) - 1)
 }
 
 const onBoard = (state, foe) => Object.keys(state.board.tokens).some((id) => baseId(id) === foe.id)
@@ -571,6 +568,9 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
   // The new power after levelling up (any phase: it's picked when the hero levels).
   const pick = levelUpPick(hero, powers)
   if (pick) return { action: { type: 'SET_POWER_CARD', heroId: hero.id, powerId: pick.slot.id, card: pick.card }, say: `${hero.name} learns ${pick.card.name}.` }
+  // A Flaming Sphere or Blade Barrier just cast: put its tokens on the board.
+  const token = placeHandToken(state, hero)
+  if (token) return token
 
   const after = followUp(state, hero) ?? pendingMove(state, hero)
   if (after) return after
@@ -589,9 +589,9 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
     const care = supportItem(state, hero) ?? supportPower(state, hero)
     if (care) return care
     // A Treasure token on or next to the hero: pick it up (nothing else waiting to be handed out).
-    const token = treasureInReach(state, hero)
-    if (token && !state.treasure && !state.turn.treasureOwed && !state.turn.tokenOwed) {
-      return { action: { type: 'PICK_UP_TREASURE', id: token.id, heroId: hero.id }, say: `${hero.name} picks up the Treasure token.` }
+    const loot = treasureInReach(state, hero)
+    if (loot && !state.treasure && !state.turn.treasureOwed && !state.turn.tokenOwed) {
+      return { action: { type: 'PICK_UP_TREASURE', id: loot.id, heroId: hero.id }, say: `${hero.name} picks up the Treasure token.` }
     }
     const free = freeItemAttack(state, hero, roll)
     if (free) return free
@@ -602,11 +602,16 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
     if (unlock) return unlock
     const disable = disableTrap(state, hero, roll)
     if (disable) return disable
-    const option = attackOptions(state, hero)[0]
+    const options = attackOptions(state, hero)
+    // A daily that does more than an attack would (Flaming Sphere, Blade Barrier, Cause Fear).
+    const daily = attackGone(state, hero) ? null : castDaily(state, hero, options, (h) => attackOptions(state, h, { atWill: true }).length > 0)
+    if (daily) return daily
+    const option = options[0]
     if (option) return { action: attackAction(state, hero, option, roll), say: option.say }
     const move = bestMove(state, hero)
     if (move) return { action: { type: 'MOVE_HERO', heroId: hero.id, to: move.to }, say: move.say }
-    return null
+    // The end of the Hero Phase: the Flaming Sphere burns, and a hurt hero hides.
+    return sphereStep(state, hero) ?? guardPower(state, hero)
   }
   if (phase === 'exploration' && state.turn.explored !== true && state.turn.explored !== false && heroEdges(state).length === 0) {
     return { action: { type: 'SET_EXPLORED', explored: false, rolls: [roll(), roll()] }, say: `${hero.name} isn't on an unexplored edge.` }

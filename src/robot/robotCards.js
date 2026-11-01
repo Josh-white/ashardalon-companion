@@ -72,6 +72,14 @@ const POWERS = ['cleric', 'fighter', 'paladin', 'rogue', 'wizard'].flatMap((hero
   { id: `robot-${hero}-utility`, hero, type: 'utility', name: `Robot Utility (${hero})`, attack: '', damage: '', text: 'Made-up utility power.' },
   { id: `robot-${hero}-daily`, hero, type: 'daily', name: `Robot Daily (${hero})`, attack: '+8', damage: '2', text: 'Made-up daily power: attack one monster.' },
 ])
+// Powers named like real ones (made-up text), picked first, so the computer heroes play the
+// powers that put tokens down, hand out attacks, hide heroes or react on other turns.
+const NAMED = [
+  ['cleric', 'daily', 'Cause Fear'], ['cleric', 'utility', 'Astral Refuge'],
+  ['wizard', 'daily', 'Flaming Sphere'], ['wizard', 'utility', 'Invisibility'],
+  ['rogue', 'utility', 'Tumbling Escape'], ['fighter', 'utility', 'Inspiring Advice'],
+  ['paladin', 'daily', 'Blade Barrier'],
+].map(([hero, type, name]) => ({ id: `robot-${name.toLowerCase().replace(/\W+/g, '-')}`, hero, type, name, attack: '', damage: '', text: 'Made-up power.', suggested: true }))
 
 // A made-up campaign, so the robot plays campaign games too: the same adventure again and
 // again, with Treasure tokens for kills. No chambers, so beating it once ends the campaign.
@@ -115,7 +123,7 @@ export const ROBOT_CARD_FILE = {
   // Shop prices, so the shop between campaign adventures has something to sell.
   treasures: EXAMPLE.treasures.map((t, i) => ({ ...t, cost: 100 * (i + 1) })),
   treasureTokens: TREASURE_TOKENS,
-  powers: [...EXAMPLE.powers, ...POWERS],
+  powers: [...EXAMPLE.powers, ...POWERS, ...NAMED],
   monsters: [...EXAMPLE.monsters, ...MONSTERS],
   tiles: TILES,
 }
