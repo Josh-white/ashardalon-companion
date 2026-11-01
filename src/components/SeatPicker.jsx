@@ -1,9 +1,20 @@
+import { useState } from 'react'
 import { heroArt } from '../data/art.js'
 import { HERO_COLORS } from '../data/heroes.js'
 import Art from './Art.jsx'
+import JoinGame, { canJoin } from './JoinGame.jsx'
 import { Button } from './ui.jsx'
 
-export default function SeatPicker({ heroes, onPick, tableSeat, projectorSeat, onArt }) {
+// `state`, `dispatch` and `deviceId` let a new player join the game already going (JoinGame).
+export default function SeatPicker({ heroes, onPick, tableSeat, projectorSeat, onArt, state = null, dispatch = null, deviceId = null }) {
+  const [joining, setJoining] = useState(false)
+  if (joining && state && canJoin(state)) {
+    return (
+      <div className="mx-auto max-w-3xl p-4 sm:p-8">
+        <JoinGame state={state} dispatch={dispatch} deviceId={deviceId} onJoined={onPick} onCancel={() => setJoining(false)} />
+      </div>
+    )
+  }
   return (
     <div className="mx-auto max-w-3xl p-4 sm:p-8">
       <h1 className="text-center font-display text-4xl font-bold text-amber-400">Who's playing on this iPad?</h1>
@@ -29,6 +40,13 @@ export default function SeatPicker({ heroes, onPick, tableSeat, projectorSeat, o
           )
         })}
       </div>
+      {state && dispatch && canJoin(state) && (
+        <div className="mt-6 text-center">
+          <Button variant="gold" className="px-6 py-3 text-xl" onClick={() => setJoining(true)}>
+            ➕ Join this game with a new hero
+          </Button>
+        </div>
+      )}
       <div className="mt-6 flex flex-wrap justify-center gap-3">
         <Button onClick={() => onPick(tableSeat)}>Table view (everyone's heroes and monsters)</Button>
         <Button onClick={() => onPick(projectorSeat)}>Projector view (big screen, no buttons)</Button>
