@@ -82,7 +82,10 @@ function UsePanel({ state, hero, power, dispatch, onClose }) {
     setCondition(null)
   }
   const toggle = (id) => setChosen((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]))
-  const ready = use.endCondition ? Boolean(condition) : !use.pick || use.optional || chosen.length > 0
+  // One for the Team: there has to be another hero's encounter card to take.
+  const encounter = state.encounter
+  const takeable = Boolean(encounter && !encounter.attacked && encounter.heroId !== hero.id)
+  const ready = (use.endCondition ? Boolean(condition) : !use.pick || use.optional || chosen.length > 0) && (!use.takeEncounter || takeable)
 
   const apply = () => {
     dispatch({ type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: chosen, condition })
@@ -93,6 +96,10 @@ function UsePanel({ state, hero, power, dispatch, onClose }) {
     use.tokens?.mirrorImage && `${hero.name} gets 3 mirror images: +2 AC each until monsters miss.`,
     use.invisible && `Monsters won't count ${hero.name} as the closest hero until ${hero.name}'s next turn.`,
     use.note,
+    use.takeEncounter &&
+      (takeable
+        ? `${hero.name} takes ${encounter.card.name} from ${state.heroes.find((h) => h.id === encounter.heroId)?.name ?? 'the hero who drew it'}.`
+        : 'Use it when another hero draws an encounter card, before it is done.'),
   ].filter(Boolean)
   // A Daily or At-Will power is the hero's attack this turn.
   const usesAttack = powerUsesAttack(state, hero, power)

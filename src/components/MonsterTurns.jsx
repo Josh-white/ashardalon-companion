@@ -18,6 +18,7 @@ import { boardStep, boardTargetIds, closestTarget, foeDistance, squareAway, squa
 import { seesInvisible } from '../board/tactics.js'
 import { liveAc } from '../board/checks.js'
 import { hitMoveStep } from '../board/powerMoves.js'
+import { nobleShieldWorth } from '../ally/boardPowers.js'
 
 // Keyleth's Bravery: when a monster within 1 tile of her activates, she can step next to it and heal 1.
 function Bravery({ state, name, monsterId, token, dispatch }) {
@@ -241,6 +242,8 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
   }
   // Noble Shield: an attack on several heroes, one of them a paladin with the power unused.
   const shield = targetIds.length > 1 && reactionsFor(state.heroes.filter((h) => targetIds.includes(h.id)), 'noble-shield')[0]
+  // A computer paladin decides for itself (src/ally/boardPowers.js); the ally taps it on its own turn.
+  const shieldWanted = Boolean(shield) && table.length === 0 && nobleShieldWorth(state, shield.hero, targetIds, attack, foeBonus(state, attack))
   // The server's sums, so Mirror Image and Cleric's Shield are counted, and Tumbling Escape can change them.
   const last = state.turn.lastMonsterAttack
   const rows = results && last?.monsterId === monster.id ? last.results : []
@@ -393,8 +396,14 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
             <p className="text-sm text-zinc-400">The first die picks the ray: {table.map((a) => `${a.roll[0]}–${a.roll[1]} ${a.name}`).join(', ')}.</p>
           )}
           {shield && (
-            <Button className="w-full" onClick={() => roll({ heroId: shield.hero.id, powerId: shield.power.id })}>
+            <Button
+              variant={shieldWanted ? 'gold' : 'default'}
+              data-ally-pick={shieldWanted ? '' : undefined}
+              className="w-full"
+              onClick={() => roll({ heroId: shield.hero.id, powerId: shield.power.id })}
+            >
               🛡️ {shield.hero.name} uses Noble Shield: only {shield.hero.name} is attacked, and it counts as a 20
+              {shieldWanted && <span className="block text-sm font-normal">🤖 The computer plays {shield.hero.name} and wants to use it.</span>}
             </Button>
           )}
         </>

@@ -80,6 +80,11 @@ const NAMED = [
   ['rogue', 'utility', 'Tumbling Escape'], ['fighter', 'utility', 'Inspiring Advice'],
   ['paladin', 'daily', 'Blade Barrier'], ['cleric', 'utility', 'Perseverance'],
   ['fighter', 'at-will', 'Charge', '+6', '1'], ['fighter', 'at-will', 'Taunting Advance', '+6', '1'],
+  ['paladin', 'at-will', 'Divine Challenge', '+6', '1'], ['paladin', 'daily', 'Benign Transposition', '+7', '2'],
+  ['rogue', 'daily', "King's Castle", '+7', '2'], ['wizard', 'at-will', 'Hypnotism', '+5', '1'],
+  ['cleric', 'utility', 'Command'], ['rogue', 'utility', 'Distant Diversion'], ['fighter', 'utility', 'To Arms!'],
+  ['fighter', 'utility', 'One for the Team'], ['wizard', 'utility', 'Wizard Eye'], ['paladin', 'utility', 'Bravery'],
+  ['paladin', 'utility', 'Noble Shield'],
 ].map(([hero, type, name, attack = '', damage = '']) => ({ id: `robot-${name.toLowerCase().replace(/\W+/g, '-')}`, hero, type, name, attack, damage, text: 'Made-up power.', suggested: true }))
 
 // A made-up campaign, so the robot plays campaign games too: the same adventure again and

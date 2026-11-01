@@ -10,6 +10,7 @@ import { useCards } from '../state/useCards.js'
 import { serverNow } from '../state/useSharedGame.js'
 import { activeAlly, allyStep, bonusAttack } from './brain.js'
 import { allyReaction } from './powers.js'
+import { teamReaction } from './boardPowers.js'
 import { audioBusy } from '../audio/busy.js'
 import { isReading } from '../components/CardReading.jsx'
 
@@ -32,6 +33,9 @@ const label = (el) => (el.getAttribute('aria-label') || el.textContent || '').re
 // (data-primary, see ui.jsx), or the pinned "On to…" button once the step is done. A
 // question the board couldn't answer ("Yes…") is left for the players.
 export function nextButton(root = document) {
+  // A button the screen marks as the computer hero's own choice (Noble Shield) comes first.
+  const pick = root.querySelector('[data-ally-scope] button[data-ally-pick]:not(:disabled)')
+  if (pick) return { button: pick, label: label(pick) }
   // Never the party falling: a hero down in the middle of their turn just goes on.
   const buttons = [...root.querySelectorAll('[data-ally-scope] button[data-primary]:not(:disabled)')].filter((b) => !/No surges left/i.test(label(b)))
   const step = buttons.filter((b) => !b.closest('[data-turn-footer]'))
@@ -101,8 +105,8 @@ export function useAllyDriver(state, dispatch, drive) {
         return ALLY_STEP_MS
       }
       // A reaction or a hero card ability for a computer hero, on anyone's turn (Tumbling
-      // Escape, Furious Assault, Healing Hands...).
-      const reaction = allyReaction(s, rollD20)
+      // Escape, Furious Assault, Healing Hands, Bravery, To Arms!, One for the Team...).
+      const reaction = allyReaction(s, rollD20) ?? teamReaction(s)
       if (reaction) {
         setSay(reaction.say)
         send(reaction.action)
