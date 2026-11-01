@@ -565,6 +565,16 @@ describe('what a phase still needs', () => {
     expect(phaseTodo(state, decks)).toEqual([])
   })
 
+  it('shuffles the defeated monsters back in when the monster deck and its discards are empty', () => {
+    let state = gameReducer(next(startGame()), { type: 'SET_EXPLORED', explored: true })
+    const rat = { id: 'rat', name: 'Rat', copies: 2, hp: 1, ac: 10, xp: 1, figures: 1, attacks: [], tactics: [] }
+    state = { ...state, monsterDeck: { cards: { rat }, draw: [], discard: [] } }
+    state = gameReducer(state, { type: 'DRAW_MONSTER', heroId: state.heroes[0].id, random: [0.5, 0.5] })
+    expect(state.monsters.map((m) => m.name)).toEqual(['Rat'])
+    expect(state.monsterDeck.draw).toEqual(['rat'])
+    expect(state.log.some((l) => /shuffled into a new deck/.test(l.text))).toBe(true)
+  })
+
   it("goes on when there's no monster card left to draw", () => {
     let state = gameReducer(next(startGame()), { type: 'SET_EXPLORED', explored: true })
     state = { ...state, monsterDeck: { cards: {}, draw: [], discard: [] } }

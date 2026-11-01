@@ -25,6 +25,17 @@ export function monsterFromCard(card, ownerId) {
 // Draws a monster card for a hero. A hero never has two cards of the same monster, so
 // cards they already have are discarded until a new one turns up. The discards are
 // shuffled into a new deck when the deck runs out.
+// The monster cards not on the board now: each card's copies, less the monsters in play.
+function cardsNotInPlay(state, deck) {
+  const inPlay = state.monsters.map((m) => m.cardId)
+  const ids = []
+  for (const card of Object.values(deck.cards ?? {}).filter((c) => !c.adventure)) {
+    const copies = (card.copies ?? 1) - inPlay.filter((id) => id === card.id).length
+    for (let i = 0; i < copies; i++) ids.push(card.id)
+  }
+  return ids
+}
+
 export function drawMonster(state, heroId, random) {
   const hero = state.heroes.find((h) => h.id === heroId)
   const deck = state.monsterDeck
@@ -35,6 +46,12 @@ export function drawMonster(state, heroId, random) {
   let reshuffled = false
   const skipped = []
   let cardId = null
+  // Every card gone (the defeated ones sit in the XP pile, and the app keeps XP as a number):
+  // the cards of monsters not on the board come back as a new deck, so monsters keep coming.
+  if (draw.length === 0 && discard.length === 0) {
+    discard = cardsNotInPlay(state, deck)
+    if (discard.length > 0) next = withLog(next, 'The monster deck ran out: the defeated monsters were shuffled into a new deck.')
+  }
   while (cardId === null) {
     if (draw.length === 0) {
       if (discard.length === 0 || reshuffled) {
