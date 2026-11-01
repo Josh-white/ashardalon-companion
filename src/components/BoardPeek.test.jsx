@@ -87,7 +87,7 @@ describe('a monster picked in the attack box', () => {
 describe('the monster taking its Villain Phase turn', () => {
   it('glows on every screen while it acts, and stops once its turn is done', () => {
     let state = game()
-    expect(gameReducer(state, { type: 'START_ACTING', id: 'nobody' })).toBe(state)
+    expect(gameReducer(state, { type: 'START_ACTING', id: 'nobody' }).turn.acting).toBeUndefined()
     state = gameReducer(state, { type: 'START_ACTING', id: 'm1' })
     expect(state.turn.acting).toBe('m1')
     const c = render(<Board state={state} dispatch={vi.fn()} readOnly fill />)
@@ -95,7 +95,7 @@ describe('the monster taking its Villain Phase turn', () => {
     expect(token(c, state.heroes[0].id).querySelector('[data-acting]')).toBeNull()
     state = gameReducer(state, { type: 'MARK_ACTED', id: 'm1', name: 'Rat' })
     expect(state.turn.acting).toBeUndefined()
-    expect(gameReducer(state, { type: 'START_ACTING', id: 'm1' })).toBe(state) // it already went
+    expect(gameReducer(state, { type: 'START_ACTING', id: 'm1' }).turn.acting).toBeUndefined() // it already went
     c.rerender(<Board state={state} dispatch={vi.fn()} readOnly fill />)
     expect(token(c, 'm1').querySelector('[data-acting]')).toBeNull()
   })
