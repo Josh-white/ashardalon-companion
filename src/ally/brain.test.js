@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
 import { normalizeTiles } from '../board/tileDefs.js'
-import { allyHostSeat, allyStep, attackOptions, simpleAttack } from './brain.js'
+import { allyHostSeat, allyStep, attackOptions, simpleAttack, strayDistance } from './brain.js'
 import { boardGrid } from '../board/play.js'
 
 // A made-up Start tile: 3 floor columns and a wall column, open to the north.
@@ -295,5 +295,55 @@ describe('an ally back from a Time Leap', () => {
     const me = { ...base.heroes[0], curses: [{ id: 'c1', name: 'Time Leap', card: { removeAtTurnStart: true } }] }
     const state = { ...base, heroes: [me], board: { ...base.board, tokens: {} } }
     expect(allyStep(state, { roll })?.action?.type).not.toBe('MOVE_TOKEN')
+  })
+})
+
+describe('the party sticks together', () => {
+  const cleric = HERO_TEMPLATES.find((t) => t.key === 'cleric')
+  const jab = card('Jab', 'at-will', '+6', '1', 'Attack one adjacent monster.')
+  const cage = { id: 'c1', cardId: 'cage', name: 'Cage', text: '', card: { acPenalty: 2, removeRoll: { phase: 'action', target: 10, label: 'Try to open the cage' } } }
+  // Two computer heroes: the fighter (whose turn it is) and the cleric.
+  function two({ at = [[1, 1], [1, 6]] } = {}) {
+    const base = start({ powers: [jab] })
+    const other = { ...createHero(cleric), ally: true }
+    const heroes = [base.heroes[0], other]
+    const tokens = { ...base.board.tokens, [heroes[0].id]: at[0], [other.id]: at[1] }
+    return { ...base, heroes, board: { ...base.board, tokens } }
+  }
+  const caging = (state, i) => ({ ...state, heroes: state.heroes.map((h, n) => (n === i ? { ...h, curses: [cage] } : h)) })
+
+  it('walks to a caged friend on another tile and rolls to open the cage', () => {
+    // The Start tile counts as two tiles: the fighter is on the north half, the caged cleric on the south.
+    let state = caging(two(), 1)
+    const step = allyStep(state, { roll })
+    expect(step.action.type).toBe('MOVE_HERO')
+    expect(step.say).toMatch(/help/)
+    state = gameReducer(state, step.action)
+    expect(state.board.tokens[state.heroes[0].id][1]).toBeGreaterThanOrEqual(4)
+    const unlock = allyStep(state, { roll })
+    expect(unlock.action).toEqual({ type: 'CURSE_ROLL', heroId: state.heroes[1].id, curseId: 'c1', roll: 15 })
+    const freed = gameReducer(state, unlock.action)
+    expect(freed.heroes[1].curses).toEqual([])
+  })
+
+  it('tries to open its own cage instead of a plain attack, but finishes off a monster first', () => {
+    const base = caging(two({ at: [[1, 1], [1, 6]] }), 0)
+    expect(allyStep(base, { roll }).action).toMatchObject({ type: 'CURSE_ROLL', heroId: base.heroes[0].id })
+    const at = base.board.tokens[base.heroes[0].id]
+    const weak = withMonster(base, [at[0] + 1, at[1]], { hp: 1 })
+    expect(allyStep(weak, { roll }).action.type).toBe('HERO_ATTACK')
+  })
+
+  it("doesn't leave the caged hero behind to go exploring", () => {
+    const state = caging(two({ at: [[1, 6], [1, 1]] }), 1)
+    // Without the cage, the fighter heads north to explore; with it, it goes to the cleric's half.
+    expect(allyStep(state, { roll }).say).toMatch(/help/)
+  })
+
+  it('a straggler on an edge walks back toward the others', () => {
+    const state = two({ at: [[1, 0], [1, 7]] })
+    expect(strayDistance(state, state.heroes[0])).toBe(7)
+    // Close enough: it stays on the edge to explore.
+    expect(allyStep(state, { roll })).toBeNull()
   })
 })
