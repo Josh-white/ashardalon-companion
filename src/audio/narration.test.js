@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { allyLines, momentLines, narrationFor as linesFor } from './narration.js'
+import { allyLines, cardWords, momentLines, narrationFor as linesFor } from './narration.js'
 
 // Most tests only care about the words; the cast has its own test below.
 // Stage directions like [excited] are left out, as an older voice model would.
@@ -188,3 +188,58 @@ describe('the coach of a hero the computer plays', () => {
     expect(allyLines(base, { ...base, moment: won.moment }, 1000)).toEqual([])
   })
 })
+
+describe('heroes reading cards out loud', () => {
+  const party = [
+    { id: 'h1', key: 'paladin', name: 'Keyleth' },
+    { id: 'h2', key: 'rogue', name: 'Tarak' },
+  ]
+  const play = (change = {}) => ({ status: 'playing', heroes: party, turn: { heroIndex: 1, phase: 1, round: 2 }, moment: null, ...change })
+  const readLines = (before, after) => linesFor(before, after, NOW).filter((l) => l.read)
+
+  it('turns card text into one spoken line', () => {
+    expect(cardWords('You are cursed!\n• Take 1 damage\nThen discard this card.')).toBe('You are cursed! Take 1 damage. Then discard this card.')
+    expect(cardWords('OPEN THE CAGE: Roll 10+ against AC.')).toBe('Open The Cage: Roll 10+ against AC.')
+  })
+
+  it('has the hero who drew an encounter read what happens, after the narrator names it', () => {
+    const card = { name: 'Bloodlust', flavor: 'A red haze.', text: 'You are cursed!\nTake 1 damage.' }
+    const lines = momentLines({ kind: 'encounter', heroId: 'h1', title: 'Bloodlust' }, play({ encounter: { card } }))
+    expect(lines.map((l) => l.voice)).toEqual(['narrator', 'hero_paladin'])
+    expect(words(lines[1].text)).toBe('You are cursed! Take 1 damage.')
+    expect(lines[1]).toMatchObject({ read: true, heroId: 'h1' })
+  })
+
+  it('has the hero who found a treasure read what it does, but not the starting treasure', () => {
+    const card = { name: 'Potion of Healing', text: 'Regain 2 HP.' }
+    const lines = momentLines({ kind: 'treasure', heroId: 'h2', title: 'Potion of Healing' }, play({ treasure: { card } }))
+    expect(lines.map((l) => l.voice)).toEqual(['herald', 'hero_rogue'])
+    expect(momentLines({ kind: 'treasure', title: 'Starting treasure!' }, play()).map((l) => l.voice)).toEqual(['herald'])
+  })
+
+  it('reads a chamber card, its villagers and a tile event in the active hero\'s voice', () => {
+    const chamber = { id: 'c1', name: 'Hall', goal: 'Save them.', setup: ['Place the villagers.'] }
+    const villagers = [{ id: 'v1', name: 'Alek', card: { text: '• Alek moves adjacent.' } }]
+    const after = play({ adventure: { chamber: { card: chamber } }, villagers, turn: { heroIndex: 1, phase: 1, round: 2, tileEvent: { id: 'rat', text: 'A rat squeaks.' } }, tileEventsSeen: ['rat'] })
+    const lines = readLines(play(), after)
+    expect(lines.map((l) => [l.voice, words(l.text)])).toEqual([
+      ['hero_rogue', 'Save them. Place the villagers.'],
+      ['hero_rogue', 'Alek. Alek moves adjacent.'],
+      ['hero_rogue', 'A rat squeaks.'],
+    ])
+    // On the virtual board the app places the figures, so only the goal is read.
+    expect(words(readLines(play({ board: {} }), { ...after, board: {} })[0].text)).toBe('Save them.')
+    expect(readLines(after, after)).toEqual([])
+  })
+
+  it('reads a boon when it is used', () => {
+    const lines = momentLines({ kind: 'roll', title: 'Bypassed Guards', read: 'Draw the top tile.' }, play())
+    expect(lines.map((l) => [l.voice, words(l.text)])).toEqual([['hero_rogue', 'Draw the top tile.']])
+  })
+
+  it('reads nothing for a hero with no key', () => {
+    const card = { name: 'Bloodlust', text: 'Ouch.' }
+    expect(momentLines({ kind: 'encounter', heroId: 'h1', title: 'Bloodlust' }, game({ encounter: { card } })).map((l) => l.voice)).toEqual(['narrator'])
+  })
+})
+

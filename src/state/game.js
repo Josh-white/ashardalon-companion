@@ -177,6 +177,15 @@ function reduce(state, action) {
       if (!state.firstRoll) return state
       return { ...state, firstRoll: { ...state.firstRoll, narrating: action.type === 'FIRST_ROLL_NARRATING' } }
 
+    // A screen with sound on started or stopped a hero reading a card out loud, so every
+    // screen can show who's reading and offer Skip (src/components/CardReading.jsx).
+    case 'CARD_READING':
+      return { ...state, reading: action.on ? { heroId: action.heroId ?? null, at: action.at ?? null } : null }
+
+    // Someone tapped Skip: every screen reading a card stops.
+    case 'SKIP_READING':
+      return { ...state, reading: null, readSkips: (state.readSkips ?? 0) + 1 }
+
     // The "X goes first!" screen has finished: show what waited for it (the starting
     // treasure). Every screen sends this when its roll screen closes; only the first counts.
     case 'FIRST_ROLL_DONE':

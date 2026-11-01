@@ -179,3 +179,13 @@ describe('narrator endpoint', () => {
     expect(calls).toHaveLength(0)
   })
 })
+
+describe('hero voices', () => {
+  it('gives each hero in the box a voice of their own for reading cards', () => {
+    const heroes = ['cleric', 'fighter', 'paladin', 'rogue', 'wizard'].map((key) => DEFAULT_VOICES[`hero_${key}`])
+    expect(heroes.every(Boolean)).toBe(true)
+    const others = Object.entries(DEFAULT_VOICES).filter(([role]) => !role.startsWith('hero_')).map(([, id]) => id)
+    expect(new Set(heroes).size).toBe(5)
+    expect(heroes.some((id) => others.includes(id))).toBe(false)
+  })
+})

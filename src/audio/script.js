@@ -5,7 +5,8 @@
 import { ALLY_LINES, allyLine, coachLine } from '../data/coaches.js'
 import { heroTemplates } from '../data/heroes.js'
 import { VILLAIN_LINES } from '../data/villainLines.js'
-import { INTRO_LINE, firstTurnLine, momentLines, narrationFor, previouslyLine } from './narration.js'
+import { INTRO_LINE, firstTurnLine, momentLines, narrationFor, previouslyLine, readsCard } from './narration.js'
+import { TILE_EVENTS } from '../data/tileEvents.js'
 
 const article = (name) => (/^[aeiou]/i.test(name) ? 'An' : 'A')
 
@@ -98,3 +99,29 @@ export function narrationScript(cards) {
     return true
   })
 }
+
+// Every card a hero can read out loud, in the voices of the heroes named (all of them
+// when none are). Not part of the script above: all of it in every voice is more
+// ElevenLabs credits than a month has, so a card is recorded the first time a hero reads
+// it, or ahead of time with record-narration.js --cards=<hero,hero>.
+export function cardReadingScript(cards, heroKeys = null) {
+  const templates = (cards.heroes ?? heroTemplates()).filter((h) => !heroKeys || heroKeys.includes(h.key))
+  const lines = []
+  for (const template of templates) {
+    const hero = { id: template.key, key: template.key }
+    for (const card of cards.encounters ?? []) lines.push(readsCard(hero, card.text))
+    for (const card of cards.treasures ?? []) lines.push(readsCard(hero, card.text))
+    for (const card of cards.chambers ?? []) {
+      lines.push(readsCard(hero, card.goal))
+      lines.push(readsCard(hero, [card.goal, ...(card.setup ?? [])].filter(Boolean).join('\n')))
+    }
+    for (const card of cards.villagers ?? []) if (card.text) lines.push(readsCard(hero, `${card.name}.\n${card.text}`))
+    for (const card of cards.boons ?? []) lines.push(readsCard(hero, card.text))
+    for (const event of TILE_EVENTS) {
+      lines.push(readsCard(hero, event.text))
+    }
+  }
+  const seen = new Set()
+  return lines.filter((line) => line && !seen.has(`${line.voice}|${line.text}`) && seen.add(`${line.voice}|${line.text}`))
+}
+
