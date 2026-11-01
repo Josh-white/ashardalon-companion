@@ -753,6 +753,8 @@ function reduce(state, action) {
     case 'ENCOUNTER_ATTACK': {
       const encounter = state.encounter
       if (!encounter?.card.attack || encounter.attacked) return state
+      // Nobody it can reach (everyone in range is down at 0 HP, or no one is there).
+      if (action.nobody) return withLog({ ...state, encounter: { ...encounter, attacked: true } }, `${encounter.card.name} found nobody to attack.`)
       const next = attackHeroes(state, {
         who: encounter.card.name,
         attack: encounter.card.attack,

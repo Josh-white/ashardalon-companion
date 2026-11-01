@@ -17,11 +17,11 @@ const heroesOnBoard = (state) =>
 
 // Ids of the heroes an encounter or trap attack goes after, for the targets that depend
 // on the board ('activeTile', 'within1', 'trapTile', 'villainWithin1'). `hero` is the
-// active hero; `trap` is the marker for 'trapTile'.
+// active hero; `trap` is the marker for 'trapTile'. Heroes at 0 HP are down and skipped.
 export function encounterTargetIds(state, targets, hero, { trap } = {}) {
   if (!state.board) return null
   const grid = boardGrid(state.board)
-  const heroes = heroesOnBoard(state)
+  const heroes = heroesOnBoard(state).filter((h) => state.heroes.find((x) => x.id === h.id).hp > 0)
   const near = (from, n) => heroes.filter((h) => tilesBetween(grid, from, h.at) <= n).map((h) => h.id)
   if (targets === 'activeTile' || targets === 'within1') {
     const at = state.board.tokens[hero.id]

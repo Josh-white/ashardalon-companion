@@ -26,6 +26,15 @@ describe('encounter rules', () => {
     expect(fixedTargets(state, attack, hero)).toBeNull()
   })
 
+  it('skips heroes who are down at 0 HP', () => {
+    const state = game()
+    const down = { ...state, heroes: state.heroes.map((h, i) => (i === 1 ? { ...h, hp: 0 } : h)) }
+    const [a, b, c] = down.heroes
+    expect(fixedTargets(down, { targets: 'all' }, a)).toEqual([a.id, c.id])
+    expect(fixedTargets(down, { targets: 'active' }, b)).toEqual([])
+    expect(firstPicks(attack, b, null)).toEqual([])
+  })
+
   it("picks the board's heroes first, else the active hero, else nobody for a trap's tile", () => {
     const [hero] = game().heroes
     expect(firstPicks(attack, hero, ['x'])).toEqual(['x'])

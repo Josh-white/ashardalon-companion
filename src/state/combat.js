@@ -40,7 +40,8 @@ export function monsterAttack(state, action) {
   const all = (Array.isArray(action.targets) ? action.targets : []).filter((t) => validRoll(t?.roll))
   // Villagers count as heroes for monster tactics, so a monster can attack them too.
   const villagerTargets = all.filter((t) => aliveVillagers(state).some((v) => v.id === t.heroId))
-  let targets = all.filter((t) => state.heroes.some((h) => h.id === t.heroId))
+  // A hero at 0 HP is down and out of the fight: attacks skip them.
+  let targets = all.filter((t) => state.heroes.some((h) => h.id === t.heroId && h.hp > 0))
   if (!attack || targets.length + villagerTargets.length === 0) return state
 
   let next = table?.length ? withLog(state, `The ${monster.name} rolled ${action.tableRoll} for its ${action.attackId.replace(/-/g, ' ')}: ${attack.name}!`) : state
@@ -176,11 +177,11 @@ export function villagerAttack(state, action) {
 
 // An attack on one or more heroes, from a monster, an encounter card or a trap. Each
 // target comes with the d20 the device rolled for it. A hit deals the damage and
-// conditions; a miss deals the miss damage (and any miss conditions).
+// conditions; a miss deals the miss damage (and any miss conditions). Heroes at 0 HP are skipped.
 // `source` ({ kind: 'encounter' } or { kind: 'trap', trapId }) is remembered for Practiced Evasion.
 export function attackHeroes(state, { who, attack, targets: list, moment, tileGuarded, source }) {
   const targets = (Array.isArray(list) ? list : []).filter(
-    (t) => state.heroes.some((h) => h.id === t.heroId) && validRoll(t.roll),
+    (t) => state.heroes.some((h) => h.id === t.heroId && h.hp > 0) && validRoll(t.roll),
   )
   if (!attack || targets.length === 0) return state
 

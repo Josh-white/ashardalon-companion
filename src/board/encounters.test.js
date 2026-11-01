@@ -42,6 +42,13 @@ describe('encounter targets on the virtual board', () => {
     expect(encounterTargetIds(state, 'within1', heroes[0])).toEqual([heroes[0].id, heroes[1].id])
   })
 
+  it('leaves out a hero who is down at 0 HP', () => {
+    const { state, heroes } = game([1, -2])
+    const downed = { ...state, heroes: state.heroes.map((h, i) => (i === 1 ? { ...h, hp: 0 } : h)) }
+    expect(encounterTargetIds(downed, 'activeTile', heroes[0])).toEqual([heroes[0].id])
+    expect(encounterTargetIds(downed, 'within1', heroes[0])).toEqual([heroes[0].id, heroes[2].id])
+  })
+
   it('leaves out a hero in the Astral Refuge', () => {
     const { state, heroes } = game([1, -2])
     const away = { ...state, heroes: state.heroes.map((h, i) => (i === 1 ? { ...h, tokens: { ...h.tokens, refuge: true } } : h)) }
