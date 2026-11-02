@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { boardFigures, boardLayout } from '../board/scene3d.js'
+import { boardExtras, boardFigures, boardLayout } from '../board/scene3d.js'
 import { artUrl, useArt } from '../state/useArt.js'
 import { TOKEN_COLORS } from './Board.jsx'
 
@@ -92,9 +92,10 @@ function makeStage(mount) {
     g.fillRect(0, 0, w, w)
   })
   const dungeon = new THREE.Group()
+  const extras = new THREE.Group()
   const figures = new THREE.Group()
-  scene.add(dungeon, figures)
-  return { renderer, scene, camera, controls, moon, blob, dungeon, figures, nodes: new Map(), textures: new Map(), tweens: [], center: new THREE.Vector3() }
+  scene.add(dungeon, extras, figures)
+  return { renderer, scene, camera, controls, moon, blob, dungeon, extras, figures, nodes: new Map(), textures: new Map(), tweens: [], animators: [], center: new THREE.Vector3() }
 }
 
 const disposeTree = (root) =>
@@ -126,7 +127,8 @@ function buildDungeon(stage, layout) {
   floorMesh.count = floors.length
   floors.forEach((s, i) => {
     const [x, z] = at(s.x, s.y)
-    matrix.makeTranslation(x, -FLOOR_H / 2 + seeded(s.x * 7 + s.y) * 0.02, z)
+    // Stones sit a hair lower or higher, but never above 0, so marks on the floor always show.
+    matrix.makeTranslation(x, -FLOOR_H / 2 - seeded(s.x * 7 + s.y) * 0.02, z)
     floorMesh.setMatrixAt(i, matrix)
     const v = 0.34 + seeded(s.x * 31 + s.y * 17) * 0.1
     floorMesh.setColorAt(i, s.scorch ? color.setRGB(0.13, 0.09, 0.08) : color.setRGB(v * 1.05, v, v * 0.92))
@@ -251,6 +253,193 @@ function texture(stage, url, figure) {
   return stage.textures.get(cacheKey)
 }
 
+// An emoji on a round dark badge (a marker's), or bare (a condition), always facing the
+// camera and drawn over the walls so it never hides. Pictures are kept for reuse.
+function iconTexture(stage, icon, ring, count) {
+  const cacheKey = `icon:${icon}:${ring ?? ''}:${count ?? ''}`
+  if (!stage.textures.has(cacheKey)) {
+    stage.textures.set(
+      cacheKey,
+      canvasTexture(128, 128, (g, w) => {
+        if (ring) {
+          g.fillStyle = '#18181b'
+          g.strokeStyle = ring
+          g.lineWidth = 10
+          g.beginPath()
+          g.arc(w / 2, w / 2, w / 2 - 8, 0, Math.PI * 2)
+          g.fill()
+          g.stroke()
+        }
+        g.font = `${ring ? 62 : 92}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`
+        g.textAlign = 'center'
+        g.textBaseline = 'middle'
+        g.fillText(icon, w / 2, w / 2 + 4)
+        if (count) {
+          g.font = 'bold 44px sans-serif'
+          g.lineWidth = 8
+          g.strokeStyle = '#0a0c10'
+          g.fillStyle = '#fde68a'
+          g.strokeText(String(count), w - 26, 30)
+          g.fillText(String(count), w - 26, 30)
+        }
+      }),
+    )
+  }
+  return stage.textures.get(cacheKey)
+}
+
+function iconSprite(stage, icon, size, ring, count) {
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: iconTexture(stage, icon, ring, count), transparent: true, depthTest: false }))
+  sprite.scale.set(size, size, 1)
+  sprite.renderOrder = 10
+  return sprite
+}
+
+const squarePlane = (material, x, z, y, size = 0.96) => {
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(size, size), material)
+  plane.rotation.x = -Math.PI / 2
+  plane.position.set(x, y, z)
+  return plane
+}
+
+// Markers, tokens and the way out, rebuilt whenever one of them changes. Lava glows and
+// shimmers, vapors drift and the open way out pulses (all still with Reduce Motion on).
+function buildExtras(stage, extras) {
+  const group = stage.extras
+  disposeTree(group)
+  group.clear()
+  stage.animators = []
+  const at = stage.at
+  for (const m of extras.markers) {
+    const centre = m.squares.reduce((c, [x, y]) => [c[0] + x / m.squares.length, c[1] + y / m.squares.length], [0, 0])
+    if (m.floor === 'lava') {
+      const lava = new THREE.MeshStandardMaterial({ color: '#7f1d1d', emissive: '#ff4d00', emissiveIntensity: 1.1, roughness: 0.5 })
+      for (const [x, y] of m.squares) group.add(squarePlane(lava, ...at(x, y), 0.006))
+      const glow = new THREE.PointLight('#ff5a1f', 3, 5, 1.4)
+      const [gx, gz] = at(centre[0], centre[1])
+      glow.position.set(gx, 0.8, gz)
+      group.add(glow)
+      stage.animators.push((now) => {
+        lava.emissiveIntensity = 1 + Math.sin(now / 600) * 0.3 + Math.sin(now / 230) * 0.1
+        glow.intensity = 3 + Math.sin(now / 400) * 0.6
+      })
+    } else if (m.floor === 'vapors') {
+      const fog = new THREE.MeshBasicMaterial({ color: '#d9f99d', transparent: true, opacity: 0.34, depthWrite: false })
+      for (const [x, y] of m.squares) {
+        const [px, pz] = at(x, y)
+        const puff = squarePlane(fog, px, pz, 0.25 + seeded(x * 5 + y) * 0.15, 1)
+        group.add(puff)
+        const phase = seeded(x * 11 + y * 7) * 6
+        stage.animators.push((now) => {
+          puff.position.y = 0.25 + Math.sin(now / 900 + phase) * 0.08
+        })
+      }
+      stage.animators.push((now) => {
+        fog.opacity = 0.3 + Math.sin(now / 1100) * 0.08
+      })
+    } else if (m.floor === 'rubble') {
+      const stone = new THREE.MeshStandardMaterial({ color: '#78716c', roughness: 1 })
+      for (const [x, y] of m.squares) {
+        const [px, pz] = at(x, y)
+        for (let i = 0; i < 3; i++) {
+          const r = seeded(x * 17 + y * 5 + i)
+          const rock = new THREE.Mesh(new THREE.BoxGeometry(0.16 + r * 0.14, 0.1 + r * 0.1, 0.14 + r * 0.12), stone)
+          rock.position.set(px + (seeded(x + i * 3 + y * 13) - 0.5) * 0.6, 0.06, pz + (seeded(y + i * 7 + x * 3) - 0.5) * 0.6)
+          rock.rotation.y = r * 3
+          rock.castShadow = true
+          group.add(rock)
+        }
+      }
+    } else if (m.floor === 'pit') {
+      // One hole, on the square nearest the tile's middle that isn't the scorch mark.
+      const scorch = new Set(m.scorch.map(([x, y]) => `${x},${y}`))
+      const spot = m.squares.filter(([x, y]) => !scorch.has(`${x},${y}`)).sort((a, b) => Math.hypot(a[0] - centre[0], a[1] - centre[1]) - Math.hypot(b[0] - centre[0], b[1] - centre[1]))[0]
+      if (spot) {
+        const [px, pz] = at(...spot)
+        const rim = new THREE.Mesh(new THREE.CircleGeometry(0.46, 32), new THREE.MeshStandardMaterial({ color: '#3f2a1c', roughness: 1 }))
+        rim.rotation.x = -Math.PI / 2
+        rim.position.set(px, 0.006, pz)
+        const hole = new THREE.Mesh(new THREE.CircleGeometry(0.38, 32), new THREE.MeshBasicMaterial({ color: '#000000' }))
+        hole.rotation.x = -Math.PI / 2
+        hole.position.set(px, 0.008, pz)
+        group.add(rim, hole)
+      }
+    } else {
+      const tint = new THREE.MeshBasicMaterial({ color: m.color, transparent: true, opacity: 0.3, depthWrite: false })
+      for (const [x, y] of m.squares) group.add(squarePlane(tint, ...at(x, y), 0.006))
+      const xs = m.squares.map(([x]) => x)
+      const ys = m.squares.map(([, y]) => y)
+      const [x0, y0, x1, y1] = [Math.min(...xs), Math.min(...ys), Math.max(...xs) + 1, Math.max(...ys) + 1]
+      const [ox, oz] = at(x0 - 0.5, y0 - 0.5)
+      const edge = new THREE.MeshBasicMaterial({ color: m.color })
+      for (const [w, d, x, z] of [[x1 - x0, 0.05, (x1 - x0) / 2, 0.03], [x1 - x0, 0.05, (x1 - x0) / 2, y1 - y0 - 0.03], [0.05, y1 - y0, 0.03, (y1 - y0) / 2], [0.05, y1 - y0, x1 - x0 - 0.03, (y1 - y0) / 2]]) {
+        const line = new THREE.Mesh(new THREE.BoxGeometry(w, 0.02, d), edge)
+        line.position.set(ox + x, 0.012, oz + z)
+        group.add(line)
+      }
+    }
+    const badge = iconSprite(stage, m.icon, m.badge.small ? 0.4 : 0.8, m.color)
+    const [bx, bz] = at(m.badge.at[0], m.badge.at[1])
+    badge.position.set(bx, m.badge.small ? 0.3 : 0.5, bz)
+    group.add(badge)
+  }
+  for (const item of extras.items) {
+    const [px, pz] = at(item.at[0], item.at[1])
+    if (item.kind === 'carpet') {
+      const fringe = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.02, 0.96), new THREE.MeshStandardMaterial({ color: '#fbbf24' }))
+      fringe.position.set(px, 0.01, pz)
+      const rug = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.03, 0.88), new THREE.MeshStandardMaterial({ color: '#7c3aed', roughness: 0.9 }))
+      rug.position.set(px, 0.02, pz)
+      group.add(fringe, rug)
+    } else if (item.kind === 'treasure') {
+      const coin = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.06, 28), new THREE.MeshStandardMaterial({ color: '#f59e0b', metalness: 0.8, roughness: 0.3 }))
+      coin.position.set(px, 0.03, pz)
+      coin.castShadow = true
+      const icon = iconSprite(stage, '💰', 0.36)
+      icon.position.set(px, 0.32, pz)
+      group.add(coin, icon)
+    } else {
+      const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.05, 28), new THREE.MeshStandardMaterial({ color: item.color, roughness: 0.7 }))
+      disc.position.set(px, 0.025, pz)
+      const icon = iconSprite(stage, item.icon, 0.42, undefined, item.count)
+      icon.position.set(px, 0.36, pz)
+      group.add(disc, icon)
+    }
+  }
+  for (const q of extras.quests) {
+    const [px, pz] = at(q.at[0], q.at[1])
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.06, 28), new THREE.MeshStandardMaterial({ color: '#0e7490', emissive: '#0e7490', emissiveIntensity: 0.4 }))
+    disc.position.set(px, 0.03, pz)
+    const icon = iconSprite(stage, '⚙️', 0.45, '#fde047')
+    icon.position.set(px, 0.42, pz)
+    group.add(disc, icon)
+    stage.animators.push((now) => {
+      icon.position.y = 0.42 + Math.sin(now / 500) * 0.05
+    })
+  }
+  if (extras.exits.squares.length > 0) {
+    const open = extras.exits.open
+    const glow = new THREE.MeshBasicMaterial({ color: '#10b981', transparent: true, opacity: open ? 0.4 : 0.12, depthWrite: false })
+    for (const [x, y] of extras.exits.squares) group.add(squarePlane(glow, ...at(x, y), 0.02, 0.9))
+    if (open) stage.animators.push((now) => (glow.opacity = 0.3 + Math.sin(now / 320) * 0.15))
+  }
+}
+
+// Condition icons in a row over a figure's head.
+function setIcons(stage, node, icons) {
+  const wanted = icons.join('')
+  if (node.userData.iconKey === wanted) return
+  node.userData.iconKey = wanted
+  const row = node.userData.icons
+  disposeTree(row)
+  row.clear()
+  icons.forEach((icon, i) => {
+    const sprite = iconSprite(stage, icon, 0.4)
+    sprite.position.set((i - (icons.length - 1) / 2) * 0.36, 0, 0)
+    row.add(sprite)
+  })
+}
+
 // A standee: the round token standing up on a coloured base, with a soft shadow and a ring
 // that lights for the hero whose turn it is (gold) or the monster acting (orange).
 function makeStandee(stage, figure, url) {
@@ -281,14 +470,16 @@ function makeStandee(stage, figure, url) {
   card.userData.billboard = true
   body.add(base, card)
   if (figure.kind === 'villain') body.scale.setScalar(1.3)
-  node.add(shadow, ring, body)
+  const icons = new THREE.Group()
+  icons.position.y = figure.kind === 'villain' ? 1.45 : 1.12
+  node.add(shadow, ring, body, icons)
   if (figure.kind === 'hero') {
     const torch = new THREE.PointLight('#ff9a3c', 6, 8, 1.2)
     torch.position.set(0, 1.3, 0)
     node.add(torch)
     node.userData.torch = torch
   }
-  Object.assign(node.userData, { ring, body, card, baseMat, faceMat, url })
+  Object.assign(node.userData, { ring, body, card, baseMat, faceMat, url, icons })
   return node
 }
 
@@ -321,6 +512,7 @@ function syncFigures(stage, figures, art) {
     faceMat.opacity = f.faded ? 0.35 : 1
     baseMat.color.set(f.faded ? '#3f3f46' : figureColor(f))
     if (node.userData.torch) node.userData.torch.visible = !f.faded
+    setIcons(stage, node, f.icons ?? [])
   }
   for (const [id, node] of stage.nodes) {
     if (seen.has(id)) continue
@@ -379,6 +571,8 @@ export default function Board3D({ state, onFail }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const layout = useMemo(() => (board ? boardLayout(board) : null), [layoutKey])
   const figures = boardFigures(state)
+  const extras = boardExtras(state)
+  const extrasKey = JSON.stringify(extras)
 
   // Make the stage once; hand back to the flat board if this screen can't draw 3D.
   useEffect(() => {
@@ -401,6 +595,7 @@ export default function Board3D({ state, onFail }) {
         return k < 1
       })
       if (!stage.still) {
+        for (const animate of stage.animators) animate(now)
         for (const node of stage.nodes.values()) {
           const torch = node.userData.torch
           if (torch) torch.intensity = 6 + Math.sin(now / 90 + node.position.x) * 0.6 + Math.sin(now / 37 + node.position.z) * 0.4
@@ -413,7 +608,7 @@ export default function Board3D({ state, onFail }) {
       }
       stage.renderer.render(stage.scene, stage.camera)
       const torches = !stage.still && [...stage.nodes.values()].some((n) => n.userData.torch?.visible)
-      if (stage.tweens.length > 0 || torches) stage.render()
+      if (stage.tweens.length > 0 || torches || (!stage.still && stage.animators.length > 0)) stage.render()
     }
     stage.render = () => {
       if (!frame) frame = requestAnimationFrame(tick)
@@ -460,6 +655,14 @@ export default function Board3D({ state, onFail }) {
     fitCamera(stage, layout.bounds, stage.camera.aspect)
     stage.render()
   }, [ready, layout])
+
+  // Markers and tokens, when one of them changes (and after the dungeon is rebuilt).
+  useEffect(() => {
+    const stage = stageRef.current
+    if (!ready || !stage?.at) return
+    buildExtras(stage, JSON.parse(extrasKey))
+    stage.render()
+  }, [ready, layout, extrasKey])
 
   // Figures every time the game changes.
   useEffect(() => {

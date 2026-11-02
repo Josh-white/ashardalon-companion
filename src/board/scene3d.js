@@ -6,7 +6,20 @@
 import { boardSquares, key, OPPOSITE, STEP } from './grid.js'
 import { boardGrid, figureToken, figuresLeft } from './play.js'
 import { activeVillains } from '../state/game.js'
+import { escapeBlockers } from '../state/adventure.js'
 import { heroArt, monsterArt } from '../data/art.js'
+import { boardMarkers } from './markers.js'
+import { exitSquares } from './exits.js'
+import { adventureTokenSpots } from './items.js'
+import { HERO_TOKENS, isHeroToken } from './heroTokens.js'
+
+// The same small icons the flat board puts round a figure (BoardPieces.jsx figureBadges).
+const CONDITION_ICONS = { Dazed: '💫', Immobilized: '⛓️', Poisoned: '🧪', Slowed: '🐌', Weakened: '💔' }
+export function conditionIcons(figure) {
+  const icons = (figure?.conditions ?? []).filter((c) => CONDITION_ICONS[c]).map((c) => CONDITION_ICONS[c])
+  if (figure?.tokens?.invisible) icons.push('👻')
+  return icons
+}
 
 const SIDES = ['N', 'E', 'S', 'W']
 const EXIT_FEATURES = ['stairs', 'ladder']
@@ -61,7 +74,7 @@ export function boardFigures(state) {
   const activeId = state.heroes[state.turn.heroIndex]?.id
   const acting = state.turn.acting && !(state.turn.acted ?? []).includes(state.turn.acting) ? state.turn.acting : null
   const figures = [
-    ...state.heroes.map((h) => ({ id: h.id, kind: 'hero', label: h.name, color: h.color, art: heroArt(h.key), faded: h.hp <= 0, active: h.id === activeId })),
+    ...state.heroes.map((h) => ({ id: h.id, kind: 'hero', label: h.name, color: h.color, art: heroArt(h.key), faded: h.hp <= 0, active: h.id === activeId, icons: conditionIcons(h) })),
     ...state.monsters.flatMap((m) =>
       Array.from({ length: figuresLeft(m) }, (_, i) => ({
         id: figureToken(m.id, i + 1),
@@ -69,10 +82,54 @@ export function boardFigures(state) {
         label: figuresLeft(m) > 1 ? `${m.name} ${i + 1}` : m.name,
         art: monsterArt(m),
         acting: acting === m.id,
+        icons: conditionIcons(m),
       })),
     ),
-    ...activeVillains(state).map((v) => ({ id: v.id, kind: 'villain', label: v.name, art: monsterArt(v), acting: acting === v.id })),
-    ...(state.villagers ?? []).filter((v) => !v.removed).map((v) => ({ id: v.id, kind: 'villager', label: v.name, art: null })),
+    ...activeVillains(state).map((v) => ({ id: v.id, kind: 'villain', label: v.name, art: monsterArt(v), acting: acting === v.id, icons: conditionIcons(v) })),
+    ...(state.villagers ?? []).filter((v) => !v.removed).map((v) => ({ id: v.id, kind: 'villager', label: v.name, art: null, icons: [] })),
   ]
   return figures.filter((f) => board.tokens[f.id]).map((f) => ({ ...f, at: board.tokens[f.id] }))
+}
+
+// The hazards that change a tile's floor; any other marker tints its tile.
+const FLOORS = { 'lava-flow': 'lava', 'volcanic-vapors': 'vapors', 'cave-in': 'rubble', pit: 'pit' }
+
+// Everything else lying on the board: trap and hazard markers (with the floor they make and
+// a badge on a free square of their tile), Treasure tokens, the tokens heroes put down, the
+// Flying Carpet, adventure tokens waiting to be picked up, and the way out in an escape.
+export function boardExtras(state) {
+  const board = state.board
+  if (!board) return { markers: [], items: [], quests: [], exits: { squares: [], open: false } }
+  const items = (board.items ?? []).filter((i) => i.at)
+  const quests = adventureTokenSpots(state)
+  const taken = new Set([...Object.values(board.tokens), ...items.map((i) => i.at), ...quests.map((q) => q.at)].map((at) => key(at)))
+  const markers = boardMarkers(state)
+    .filter((m) => m.squares.length > 0)
+    .map(({ marker, look, squares, tile }) => {
+      // The badge goes on a free square of the marker's own tile, top-left first (like the
+      // flat board's), so it never stands on a figure; with none free it takes the corner.
+      const own = squares.filter((sq) => sq.area === tile)
+      const order = (own.length > 0 ? own : squares).slice().sort((a, b) => a.y - b.y || a.x - b.x)
+      const free = order.find((sq) => !taken.has(key([sq.x, sq.y])))
+      if (free) taken.add(key([free.x, free.y]))
+      const spot = free ?? order[0]
+      return {
+        id: marker.id,
+        floor: FLOORS[marker.cardId] ?? 'tint',
+        color: look.color,
+        icon: look.icon,
+        squares: squares.filter((sq) => sq.floor).map((sq) => [sq.x, sq.y]),
+        scorch: squares.filter((sq) => sq.scorch).map((sq) => [sq.x, sq.y]),
+        badge: { at: [spot.x, spot.y], small: !free },
+      }
+    })
+  const heroTokens = items.filter(isHeroToken).map((i) => {
+    const look = HERO_TOKENS[i.kind]
+    const count = i.kind === 'sphere' ? state.heroes.find((h) => h.id === i.owner)?.tokens?.flamingSphere : i.kind === 'pet' ? i.hp : null
+    return { id: i.id, kind: 'token', at: i.at, icon: i.icon ?? look.icon, color: look.color, count: count ?? null }
+  })
+  const others = items.filter((i) => !isHeroToken(i)).map((i) => ({ id: i.id, kind: i.kind === 'carpet' ? 'carpet' : 'treasure', at: i.at }))
+  const exits = [...exitSquares(state)].map((k) => k.split(',').map(Number))
+  const open = exits.length > 0 && !state.adventure?.escaped && escapeBlockers(state).length === 0
+  return { markers, items: [...others, ...heroTokens], quests, exits: { squares: exits, open } }
 }
