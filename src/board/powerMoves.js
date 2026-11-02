@@ -20,6 +20,9 @@
 // `each: 'heroOnTile' | 'monsterOnTile'` makes the step once for every such figure (Tune of Ice
 // and Wind, One Hundred Leaves). `minApart: n` only moves a figure at least n tiles from the
 // hero (Vicious Mockery). pick `otherHero` is any other hero on the board (Psionic Stride).
+// to `path` walks the hero one square per tap, up to `n` squares (or 'speed'), and keeps the
+// monsters next to every square on the way, the start too, in turn.powerPassed (Whirling
+// Mantis Step attacks each of them). The player can stop early (Done) or step back (PATH_BACK).
 
 import { baseId, key } from './grid.js'
 import { adjacent, distances, reachable, tilesBetween } from './paths.js'
@@ -48,7 +51,57 @@ export function queueMoves(state, hero, power, steps, { attacked = [], hit = fal
   }
   if (todo.length === 0) return state
   const move = { heroId: hero.id, source: power?.name ?? '', attacked, steps: todo, ...(tokens ? { tokens } : {}), ...(from ? { from, fromName } : {}), ...(prompt ? { prompt } : {}) }
-  return settle({ ...state, turn: { ...state.turn, boardMove: move } })
+  const queued = settle({ ...state, turn: { ...state.turn, boardMove: move } })
+  return queued.turn.boardMove?.steps[0]?.to === 'path' ? withPassed(queued) : queued
+}
+
+// Path steps (see the top): the squares walked so far, start first, and the steps left.
+export function pathOf(state) {
+  const move = state.turn.boardMove
+  const s = move?.steps?.[0]
+  const at = s?.to === 'path' && state.board?.tokens[move.heroId]
+  if (!at) return null
+  const hero = state.heroes.find((h) => h.id === move.heroId)
+  const total = s.n === 'speed' ? moveSpeed(hero) : s.n ?? 1
+  const trail = s.trail ?? [at]
+  return { trail, left: total - (trail.length - 1), total }
+}
+// The monsters (ids) next to any square of the path.
+function passedBy(state, trail) {
+  const grid = boardGrid(state.board)
+  const near = foeTokens(state).filter((f) => trail.some((sq) => adjacent(grid, sq, f.at)))
+  return [...new Set(near.map((f) => baseId(f.id)))]
+}
+function withPassed(state) {
+  const move = state.turn.boardMove
+  const path = pathOf(state)
+  if (!path) return state
+  return { ...state, turn: { ...state.turn, powerPassed: { source: move.source, heroId: move.heroId, ids: passedBy(state, path.trail) } } }
+}
+// The squares of a shortest walk to `to` (not the start), so the monsters next to the way count.
+function walkTo(state, id, to, limit) {
+  const grid = boardGrid(state.board)
+  const { stops } = occupied(state, id)
+  const from = state.board.tokens[id]
+  const far = distances(grid, from, { stops, limit })
+  const route = [to]
+  let at = to
+  for (let d = (far.get(key(to)) ?? 1) - 1; d > 0; d--) {
+    at = [...far.entries()].filter(([, n]) => n === d).map(([k]) => parse(k)).find((sq) => adjacent(grid, sq, at)) ?? at
+    route.unshift(at)
+  }
+  return route
+}
+
+// One step back along the path.
+export function pathBack(state) {
+  const path = pathOf(state)
+  if (!path || path.trail.length < 2) return state
+  const trail = path.trail.slice(0, -1)
+  const move = state.turn.boardMove
+  const placed = placeToken(state, move.heroId, trail[trail.length - 1])
+  const [s, ...rest] = move.steps
+  return withPassed({ ...placed, turn: { ...placed.turn, boardMove: { ...move, steps: [{ ...s, trail }, ...rest] } } })
 }
 
 // Cause Fear: once the allies' extra attacks are done (and no other move is waiting), each
@@ -222,6 +275,12 @@ export function moveTargets(state, id) {
       const blocked = isHero ? stops : new Set(heroTokens(state).map((h) => key(h.at)))
       return reachable(grid, at, n, { stops: blocked, taken })
     }
+    case 'path': {
+      // Up to the steps left, not through monsters. One square per tap picks the exact way.
+      const path = pathOf(state)
+      if (!path || path.left <= 0) return []
+      return reachable(grid, at, path.left, { stops, taken })
+    }
     case 'nextToSelf':
       return nextTo(self)
     case 'nextToHeroWithin2': {
@@ -333,6 +392,14 @@ export function boardMove(state, action) {
   }
   const to = Array.isArray(action.to) ? action.to : null
   if (!to || !moveTargets(state, id).includes(key(to))) return state
+  if (s.to === 'path') {
+    const path = pathOf(state)
+    const trail = [...path.trail, ...walkTo(state, id, to, path.left)]
+    const placed = placeToken(state, id, to)
+    const move = placed.turn.boardMove
+    const walked = withPassed({ ...placed, turn: { ...placed.turn, boardMove: { ...move, steps: [{ ...s, trail }, ...move.steps.slice(1)] } } })
+    return trail.length - 1 >= path.total ? nextStep(walked) : walked
+  }
   const placed = placeToken(state, id, to)
   // The last figure a power moved (Hypnotism attacks a monster next to it).
   const moved = { ...placed, turn: { ...placed.turn, powerMoved: { source: placed.turn.boardMove.source, id } } }
@@ -387,6 +454,11 @@ export function movePrompt(state) {
   const me = state.heroes.find((h) => h.id === move.heroId)?.name ?? 'the hero'
   const who = PICKS[s.pick]?.(me) ?? 'a figure'
   if (s.to === 'swap') return `Tap ${who} to swap places with ${me}.`
+  if (s.to === 'path') {
+    const path = pathOf(state)
+    const passed = state.turn.powerPassed?.ids.length ?? 0
+    return `Tap where ${me} walks, one square at a time for the exact way: ${path?.left ?? 0} of ${path?.total ?? 0} squares left. Monsters ${me} has been next to: ${passed}. Tap Done to stop early.`
+  }
   if (s.pick === 'listed') {
     const what = state.heroes.some((h) => (move.tokens ?? []).includes(h.id)) ? 'a hero' : 'a monster'
     const where = (WHERE[s.to] ?? WHERE.tileWithin)(s, me, move)

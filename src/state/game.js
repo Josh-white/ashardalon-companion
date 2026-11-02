@@ -17,7 +17,7 @@ import { escapeAtPhaseEnd, escapedHero } from '../board/exits.js'
 import { applyPasses, highAlertPass } from './passMonsters.js'
 import { dropItem, moveHeroToken, syncHeroTokens, trippedTokens } from '../board/heroTokens.js'
 import { moveHero, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
-import { boardMove, queueFearMove, queueFoeStep, queueHitMoves, queueMonsterControl, queueMoves, skipBoardMove } from '../board/powerMoves.js'
+import { boardMove, pathBack, queueFearMove, queueFoeStep, queueHitMoves, queueMonsterControl, queueMoves, skipBoardMove } from '../board/powerMoves.js'
 import { addTreasureToken, flyCarpet, pickUpTreasure, placeItem, removeItem } from '../board/items.js'
 import { trapStep } from '../board/traps.js'
 import { activeVillains, buildDeck, clamp, heroLabel, lose, markUsed, newId, shuffle, toggle, updateHero, updateMonster, validRoll, withCast, withLog, withMoment } from './gameHelpers.js'
@@ -306,6 +306,8 @@ function reduce(state, action) {
 
     case 'SKIP_BOARD_MOVE':
       return queueFearMove(skipBoardMove(state))
+    case 'PATH_BACK':
+      return pathBack(state)
 
     case 'SKIP_BONUS_ATTACK': {
       // An ally passes on a Cause Fear or Acrobatic Onslaught attack.

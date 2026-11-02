@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { heroArt, monsterArt } from '../data/art.js'
 import { boardGrid, figureToken, figuresLeft, moveSpeed, movesLeft, timeLeapt } from '../board/play.js'
-import { moveChoices, movePrompt } from '../board/powerMoves.js'
+import { moveChoices, movePrompt, pathOf } from '../board/powerMoves.js'
 import { key } from '../board/grid.js'
 import { adventureTokenSpots, canFlyCarpet } from '../board/items.js'
 import { HERO_TOKENS, isHeroToken, movableToken } from '../board/heroTokens.js'
@@ -50,7 +50,7 @@ export function boardBounds(board) {
 // screen keeps them moving. Attacks still fly and the active hero still glows.
 export default function Board({ state, dispatch, readOnly = false, fill = false, calm = false, extraButtons = null }) {
   const art = useArt()
-  const [picked, setPicked] = useState(null) // id of the figure being moved
+  const [pickedTap, setPicked] = useState(null) // id of the figure being moved
   const [byHand, setByHand] = useState(false)
   const [reading, setReading] = useState(null) // id of the trap or hazard marker whose card is open
   const [peek, setPeek] = useState(null) // token id of the monster whose card is open (tapped on the board)
@@ -110,6 +110,9 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   // A power that moves a hero (Righteous Advance) takes over the taps until it's done.
   const powerMove = !readOnly && !byHand && state.turn.boardMove
   const movable = powerMove ? moveChoices(state) : []
+  // Walking a power's path (Whirling Mantis Step): the hero stays picked, one square per tap.
+  const walking = powerMove?.steps?.[0]?.to === 'path' && movable.includes(powerMove.heroId)
+  const picked = walking ? powerMove.heroId : pickedTap
   const swap = powerMove?.steps?.[0]?.to === 'swap'
   // Watching someone else's turn, the board still zooms, and ✋ moves any figure by hand.
   const watching = readOnly && !byHand
@@ -249,10 +252,15 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
       {powerMove && (
         <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl bg-amber-950/60 p-2 text-amber-200">
           <p className="flex-1">
-            <b>{powerMove.source}:</b> {picked ? 'tap a lit square.' : movable.length === 0 ? 'nothing on the board can do this. Skip it.' : movePrompt(state)}
+            <b>{powerMove.source}:</b> {walking ? movePrompt(state) : picked ? 'tap a lit square.' : movable.length === 0 ? 'nothing on the board can do this. Skip it.' : movePrompt(state)}
           </p>
+          {walking && (pathOf(state)?.trail.length ?? 0) > 1 && (
+            <Button className="!py-1 text-sm" onClick={() => dispatch({ type: 'PATH_BACK' })}>
+              ↩ Back a step
+            </Button>
+          )}
           <Button className="!py-1 text-sm" onClick={() => { setPicked(null); dispatch({ type: 'SKIP_BOARD_MOVE' }) }}>
-            Skip
+            {walking ? 'Done moving' : 'Skip'}
           </Button>
         </div>
       )}
