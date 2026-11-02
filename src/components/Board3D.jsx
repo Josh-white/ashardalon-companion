@@ -106,7 +106,7 @@ function makeStage(mount, calm) {
   const figures = new THREE.Group()
   const lit = new THREE.Group()
   scene.add(dungeon, extras, lit, figures)
-  return { renderer, scene, camera, controls, hemi, moon, flash, torchLights, blob, dungeon, extras, lit, figures, nodes: new Map(), textures: new Map(), tweens: [], animators: [], center: new THREE.Vector3() }
+  return { renderer, scene, camera, controls, hemi, moon, flash, torchLights, blob, dungeon, extras, lit, figures, nodes: new Map(), textures: new Map(), tweens: [], animators: [], leaving: new Set(), center: new THREE.Vector3() }
 }
 
 const disposeTree = (root) =>
@@ -559,7 +559,7 @@ function makeStandee(stage, figure, url) {
     node.add(torch)
     node.userData.torch = torch
   }
-  Object.assign(node.userData, { ring, body, card, baseMat, faceMat, url, icons })
+  Object.assign(node.userData, { ring, body, card, baseMat, faceMat, url, icons, kind: figure.kind })
   return node
 }
 
@@ -630,9 +630,26 @@ function syncFigures(stage, figures, art, fallAt) {
   }
   for (const [id, node] of stage.nodes) {
     if (seen.has(id)) continue
+    stage.nodes.delete(id)
+    // A defeated monster's 3D figure stays standing until the blow that defeats it lands,
+    // then falls (board3dFx.js takes it). With no attack to play, it just goes.
+    if (node.userData.anim && !node.userData.anim.down && node.userData.kind !== 'hero') {
+      stage.leaving.add(node)
+      node.userData.ring.visible = false
+      node.userData.figId = null
+      const gone = () => {
+        clearTimeout(node.userData.leaveTimer)
+        if (!stage.leaving.delete(node)) return
+        stage.figures.remove(node)
+        forget(node)
+        stage.render()
+      }
+      node.userData.gone = gone
+      node.userData.leaveTimer = setTimeout(gone, FX_DELAY_MS + 1500)
+      continue
+    }
     stage.figures.remove(node)
     forget(node)
-    stage.nodes.delete(id)
   }
 }
 
@@ -901,7 +918,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
         }
       }
       // Hero figures breathe on the big screen, and make their moves everywhere.
-      const models = stepModels(stage.nodes.values(), last ? Math.min(0.1, (now - last) / 1000) : 0, stage.ambient)
+      const models = stepModels([...stage.nodes.values(), ...stage.leaving], last ? Math.min(0.1, (now - last) / 1000) : 0, stage.ambient)
       // Standees turn to face the camera.
       for (const node of stage.nodes.values()) {
         const p = node.position
@@ -981,6 +998,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
       forget(node)
     }
     stage.nodes.clear()
+    for (const node of [...stage.leaving]) node.userData.gone()
     stage.bounds = layout.bounds
     stage.resize()
     fitCamera(stage, layout.bounds, stage.camera.aspect)

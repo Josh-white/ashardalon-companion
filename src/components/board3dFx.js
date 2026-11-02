@@ -3,7 +3,7 @@ import { FX_MS } from '../board/attackFx.js'
 import { chained, IMPACT, msAt, shotOffset, slowMo } from './attackFxDraw.js'
 import { HEAL_MS } from './HealFx.jsx'
 import { attackMove } from '../board/heroModels.js'
-import { face, playMove } from './figureModels.js'
+import { face, playMove, setDown } from './figureModels.js'
 
 // Attacks and heals on the 3D board (Board3D.jsx), the same moments the flat board draws
 // (board/attackFx.js, board/healFx.js) on the same clock: lightning crackles from figure to
@@ -477,6 +477,9 @@ function once(at, run) {
   }
 }
 
+const leavingAt = (stage, square) =>
+  [...(stage.leaving ?? [])].find((n) => n.userData.at && n.userData.at[0] === square[0] && n.userData.at[1] === square[1] && !n.userData.claimed) ?? null
+
 const nodeAt = (stage, square) =>
   [...stage.nodes.values()].find((n) => n.userData.at && n.userData.at[0] === square[0] && n.userData.at[1] === square[1]) ?? null
 
@@ -500,9 +503,17 @@ export function playAttack3D(stage, fx, picture) {
   const text = stage.calm ? 0.42 : 0.5
 
   const aims = []
+  const claimed = []
   fx.shots.forEach((shot, i) => {
     const hitAt = IMPACT + shotOffset(fx, i)
-    const target = shot.result === 'kill' ? null : nodeAt(stage, shot.to)
+    // A defeated monster's 3D figure waits on the board for this blow (Board3D keeps it).
+    const fallen = shot.result === 'kill' ? leavingAt(stage, shot.to) : null
+    if (fallen) {
+      clearTimeout(fallen.userData.leaveTimer)
+      fallen.userData.claimed = true
+      claimed.push(fallen)
+    }
+    const target = shot.result === 'kill' ? fallen : nodeAt(stage, shot.to)
     const to = aimPoint(stage, shot.to, target)
     aims.push(to)
     const from = chained(fx) && i > 0 ? aims[i - 1] : origin
@@ -578,7 +589,15 @@ export function playAttack3D(stage, fx, picture) {
       const smoke = burst(stage, group, new THREE.Vector3(to.x, 0.3, to.z), '#57534e', Math.round(20 * fewer), { smoke: true, size: 0.55, speed: 0.8, lift: 0.9, gravity: -0.6, life: 1.4 })
       const stars = burst(stage, group, to, '#fde68a', Math.round(16 * fewer), { size: 0.14, speed: 1.8 })
       const smokeSec = msAt(hitAt + 0.2) / 1000
-      const fall = shot.art ? ghost(stage, group, to, picture(shot.art)) : null
+      // The figure staggers, falls, and sinks away; a standee's token falls over instead.
+      const fall = fallen
+        ? (p) => {
+            if (p > hitAt + 0.15 && !fallen.userData.anim.down) setDown(fallen, true)
+            fallen.userData.body.position.y = -seg(p, Math.min(0.9, hitAt + 0.3), 1) * 0.9
+          }
+        : shot.art
+          ? ghost(stage, group, to, picture(shot.art))
+          : null
       parts.push((p, sec) => {
         smoke(sec - smokeSec)
         stars(sec - smokeSec)
@@ -636,6 +655,7 @@ export function playAttack3D(stage, fx, picture) {
       body.rotation.z = 0
       faceMat.emissiveIntensity = 0
     }
+    for (const node of claimed) node.userData.gone?.()
     dispose()
     tween.start = -Infinity
     stage.render()
