@@ -6,12 +6,14 @@ import { PHASES } from '../data/phases.js'
 import { difficultyOf } from '../data/difficulty.js'
 import { heroItems } from '../data/items.js'
 import { aliveVillagers, objectiveInPlay } from './adventure.js'
-import { placeToken } from '../board/play.js'
+import { boardGrid, placeToken } from '../board/play.js'
+import { adjacent } from '../board/paths.js'
+import { baseId } from '../board/grid.js'
 import { boardAnswer } from '../board/checks.js'
 import { wrathPull } from '../board/monsters.js'
 import { queueMoves, queueWandOfFear } from '../board/powerMoves.js'
 import { addCarpet } from '../board/items.js'
-import { activeVillains, buildDeck, findFoe, heroLabel, lose, updateHero, validRoll, withLog, withMoment } from './gameHelpers.js'
+import { activeVillains, buildDeck, findFoe, foes, heroLabel, lose, updateHero, validRoll, withLog, withMoment } from './gameHelpers.js'
 import { discardMonsterCard, drawMonster } from './monsterDeck.js'
 import { discardEncounterCard } from './encounterDeck.js'
 import { spendItem } from './treasureDeck.js'
@@ -194,6 +196,34 @@ export function encounterCount(state, hero) {
   return Math.max(0, base + badLuck + adventure + encountersOwed - encountersDrawn)
 }
 
+// Fearless (a fan Battlemaster): on the virtual board, the monsters next to the hero as its Hero
+// Phase starts have -4 AC until the end of the turn (heroAttacks.js isFearlessTarget).
+function noteFearless(state, hero) {
+  const at = state.board?.tokens[hero?.id]
+  if (!at || !hasAbility(hero, 'fearless')) return state
+  const grid = boardGrid(state.board)
+  const ids = new Set(foes(state).map((f) => f.id))
+  const near = [...new Set(Object.entries(state.board.tokens).filter(([id, p]) => ids.has(baseId(id)) && adjacent(grid, at, p)).map(([id]) => baseId(id)))]
+  if (near.length === 0) return state
+  return withLog({ ...state, turn: { ...state.turn, fearless: { heroId: hero.id, foes: near } } }, `${hero.name} is Fearless: the monsters next to them have -4 AC this turn.`)
+}
+
+// Nature's Healing (a fan Druid): at the start of the Hero Phase, give up a move or the attack
+// for 1 HP, or the whole Hero Phase for 2 HP. Once a turn, before doing anything else.
+export function naturesHealingOk(state, hero) {
+  return hasAbility(hero, 'natures-healing') && inHeroPhase(state, hero) && !state.turn.naturesHealing && canSpendAttack(state, hero) && !(state.turn.boardMoves > 0) && hero.hp > 0
+}
+export function naturesHealing(state, action) {
+  const hero = state.heroes.find((h) => h.id === action.heroId)
+  const give = action.give
+  if (!naturesHealingOk(state, hero) || !['move', 'attack', 'phase'].includes(give)) return state
+  let next = { ...state, turn: { ...state.turn, naturesHealing: give } }
+  if (give !== 'move') next = spendAttack(next, hero, "Nature's Healing")
+  if (give !== 'attack' && state.board) next = { ...next, turn: { ...next.turn, boardMoves: (next.turn.boardMoves ?? 0) + (give === 'phase' ? 2 : 1) } }
+  const words = { move: 'a move', attack: 'the attack', phase: 'the whole Hero Phase' }[give]
+  return healHero(withLog(next, `${hero.name} gives up ${words} for Nature's Healing.`), hero.id, give === 'phase' ? 2 : 1, "Nature's Healing")
+}
+
 // Mind Over Body (a fan Monk's ability): each time the hero gets a condition, one roll; 11-20
 // ignores it. tokens.mindTried lists the conditions already rolled for, while they last.
 export const mindOverBodyChoices = (hero) =>
@@ -236,6 +266,7 @@ export function startTurn(state) {
   const hero = state.heroes[state.turn.heroIndex]
   state = returnFromPowers(state, hero)
   state = endBuffs(state, hero, (b) => b.untilTurnStart)
+  state = noteFearless(state, hero)
   for (const curse of (hero?.curses ?? []).filter((c) => c.card?.removeAtTurnStart)) {
     // On the virtual board the hero waits under "Not on the board yet" for a tap.
     const put = state.board ? `Tap ${hero.name} under "Not on the board yet", then any square.` : `Put ${hero.name} on any tile.`

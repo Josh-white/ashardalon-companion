@@ -6,7 +6,7 @@ import { hypnotized } from '../board/powerMoves.js'
 import { difficultyOf, hasSecondChance } from '../data/difficulty.js'
 import { asksIfStayed, attackItems, distanceChoices, heroItems, itemsWithUse } from '../data/items.js'
 import { effectsOf, maxRolls, onHitHeals, reactionsFor } from '../data/powerEffects.js'
-import { bardicSongsLeft } from '../state/heroAttacks.js'
+import { bardicSongsLeft, isFearlessTarget } from '../state/heroAttacks.js'
 import { rollD20 } from '../state/random.js'
 import { attackGone, attackNumbers, foes, powerNumber } from '../state/game.js'
 import { itemAttackIsMove } from '../state/heroTurn.js'
@@ -641,6 +641,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
                         startedAdjacent: answers.startedAdjacent,
                         distance: allDistances[monster.id],
                         stayed,
+                        fearless: isFearlessTarget(state, hero, monster.id),
                       })}
                     />
                   ))}

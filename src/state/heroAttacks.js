@@ -15,7 +15,7 @@ import { canSpendAttack, inHeroPhase, itemAttackIsMove, powerUsesAttack, removeC
 // One attack's numbers against a monster at this distance, with where each comes from so the
 // attack box can show the sum: { bonus, damage, miss, evenBonus, crits, parts }. parts.bonus and
 // parts.damage are [{ label, value }]; parts.crits are [{ label, from }] (+1 damage on a high roll).
-export function attackNumbers(hero, { item = null, power = null, extraAttack = null, adjacentCount = 0, startedAdjacent = false, distance, stayed = false } = {}) {
+export function attackNumbers(hero, { item = null, power = null, extraAttack = null, adjacentCount = 0, startedAdjacent = false, distance, stayed = false, fearless = false } = {}) {
   const effects = effectsOf(power)
   const source = item ?? power
   const bonusParts = [{ label: source.name, value: item ? item.card.attack.bonus : powerNumber(power.card?.attack) ?? 0 }]
@@ -23,14 +23,16 @@ export function attackNumbers(hero, { item = null, power = null, extraAttack = n
   const adjacent = effects.ask === 'adjacent-count' ? clamp(Number(adjacentCount) || 0, 0, 8) : 0
   if (adjacent) bonusParts.push({ label: adjacent === 1 ? '1 monster next to you' : `${adjacent} monsters next to you`, value: adjacent })
   if (effects.shadowBonus && hero.tokens?.shadow) bonusParts.push({ label: 'From the shadows', value: effects.shadowBonus })
-  for (const buff of hero.buffs ?? []) if (buff.attack) bonusParts.push({ label: buff.source, value: buff.attack })
+  for (const buff of hero.buffs ?? []) if (buff.attack && (!buff.only || source.name.startsWith(buff.only))) bonusParts.push({ label: buff.source, value: buff.attack })
+  // Fearless (a fan Battlemaster): a monster next to the hero when the turn started has -4 AC.
+  if (fearless) bonusParts.push({ label: 'Fearless (it has -4 AC)', value: 4 })
   for (const curse of hero.curses ?? []) if (curse.card?.attackPenalty) bonusParts.push({ label: curse.name, value: -curse.card.attackPenalty })
   const damageParts = [{ label: source.name, value: item ? item.card.attack.damage : powerNumber(power.card?.damage) ?? 0 }]
   if (effects.ask === 'started-adjacent' && startedAdjacent) damageParts.push({ label: 'Started next to it', value: 1 })
   const items = itemAttackParts(hero, distance, stayed)
   if (items.attack) bonusParts.push(items.attack)
   damageParts.push(...items.damage)
-  const crits = [...items.crits, ...levelCrits(hero)]
+  const crits = [...items.crits, ...levelCrits(hero), ...(effects.critFrom ? [{ label: source.name, from: effects.critFrom }] : [])]
   const total = (parts) => parts.reduce((n, p) => n + p.value, 0)
   return {
     bonus: total(bonusParts),
@@ -81,6 +83,7 @@ export function heroAttack(state, action) {
       startedAdjacent: action.startedAdjacent,
       distance: distances[monsterId],
       stayed: action.stayed === true,
+      fearless: isFearlessTarget(state, hero, monsterId),
     })
   const attack = numbers(null)
 
@@ -113,6 +116,10 @@ export function heroAttack(state, action) {
   if (item?.card.after) next = spendItem(next, hero.id, item.id)
   if (effects.onHit?.healSelf && anyHit) next = healHero(next, hero.id, effects.onHit.healSelf, power.name)
   if (effects.shadow) next = moveShadow(next, hero, effects, !anyHit)
+  if (effects.selfDamage > 0) {
+    const hp = Math.max(0, (next.heroes.find((h) => h.id === hero.id)?.hp ?? 0) - effects.selfDamage)
+    next = withLog(updateHero(next, hero.id, () => ({ hp })), `${hero.name} takes ${effects.selfDamage} damage from ${power.name}.`)
+  }
 
   let extras = extraAttack ? bonusAttacks.filter((b) => b !== extraAttack) : bonusAttacks
   if (effects.after === 'at-will') extras = [...extras, { heroId: hero.id, bonus: 0, source: power.name }]
@@ -298,8 +305,8 @@ export function powerDamage(state, action) {
 // A party or self bonus from a power (Song of Courage: all heroes +2 to attack until the end
 // of your next Hero Phase). Used in the caster's Hero Phase, that phase's end counts as one.
 function addBuff(next, state, hero, power, buff) {
-  const lasts = buff.lasts === 'turnStart' ? { untilTurnStart: true } : { phaseEnds: inHeroPhase(state, hero) ? 2 : 1 }
-  const entry = { source: power.name, casterId: hero.id, attack: Number(buff.attack) || 0, ac: Number(buff.ac) || 0, ...lasts }
+  const lasts = buff.lasts === 'turnStart' ? { untilTurnStart: true } : { phaseEnds: inHeroPhase(state, hero) && buff.lasts !== 'thisPhase' ? 2 : 1 }
+  const entry = { source: power.name, casterId: hero.id, attack: Number(buff.attack) || 0, ac: Number(buff.ac) || 0, ...lasts, ...(buff.only ? { only: String(buff.only) } : {}) }
   const who = buff.who === 'self' ? [hero.id] : next.heroes.map((h) => h.id)
   for (const id of who) {
     next = updateHero(next, id, (h) => ({ buffs: [...(h.buffs ?? []).filter((b) => b.source !== power.name), entry] }))
@@ -307,6 +314,19 @@ function addBuff(next, state, hero, power, buff) {
   const what = [entry.attack && `+${entry.attack} to attack`, entry.ac && `+${entry.ac} AC`].filter(Boolean).join(' and ')
   const until = lasts.untilTurnStart ? `the start of ${hero.name}'s next turn` : `the end of ${hero.name}'s ${lasts.phaseEnds === 2 ? 'next ' : ''}Hero Phase`
   return withLog(next, `${buff.who === 'self' ? hero.name : 'Every hero'} gets ${what} until ${until}.`)
+}
+
+// Fearless (a fan Battlemaster): turn.fearless lists the monsters next to the hero when its turn started.
+export const isFearlessTarget = (state, hero, monsterId) =>
+  Boolean(monsterId) && state.turn.fearless?.heroId === hero?.id && state.turn.fearless.foes.includes(monsterId)
+
+// A utility with tokens ({ uses: n }): each use takes a token, and it's flipped with the last one.
+export const usesLeft = (power) => Math.max(0, (effectsOf(power).uses ?? 1) - (power.usesSpent ?? 0))
+function spendUse(state, hero, power) {
+  const uses = effectsOf(power).uses ?? 1
+  const spent = (power.usesSpent ?? 0) + 1
+  if (spent >= uses) return markUsed(state, hero.id, power.id)
+  return updateHero(state, hero.id, (h) => ({ powers: h.powers.map((p) => (p.id === power.id ? { ...p, usesSpent: spent } : p)) }))
 }
 
 // Bardic Song (a fan Bard's ability): 3 songs a game, each lets any hero roll a missed attack again.
@@ -364,7 +384,7 @@ export function usePower(state, action) {
   const taken = use.takeEncounter ? state.encounter : null
   if (use.takeEncounter && (!taken || taken.attacked || taken.heroId === hero.id)) return state
 
-  let next = withCast(power.type === 'at-will' ? state : markUsed(state, hero.id, power.id), power)
+  let next = withCast(power.type === 'at-will' ? state : spendUse(state, hero, power), power)
   next = withLog(next, `${heroLabel(hero)} used ${power.name}.`)
   if (use.healSelf) next = healHero(next, hero.id, use.healSelf, power.name)
   if (use.heal && picked) next = healHero(next, picked.id, use.heal, power.name)

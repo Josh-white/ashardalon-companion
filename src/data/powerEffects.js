@@ -24,6 +24,9 @@ import { itemAc } from './items.js'
 //   shadowKeep  a daily that misses from the shadows isn't used up, and the hero leaves them instead.
 //   shadowBonus more attack while the hero is in the shadows.
 //   autoHit     hits without needing the roll to beat AC (a fan Bard's Guiding Strike).
+//   critFrom    +1 damage when the die shows this or more (a fan Ranger's Birch Arrow: 17).
+//   selfDamage  the hero takes this much damage after the attack (a fan Druid's Wolf Fangs).
+//   uses        a utility with n tokens: it's only flipped after the n-th use (power.usesSpent).
 //   onHit.even  the onHit heal only happens when a hit's die is even (War Song Strike).
 // Other powers have a `use`, done from the power's tile:
 //   healSelf, heal + pick ('other': one other hero; reach: 'sameTile', 'adjacent' or 'within2' on the
@@ -31,8 +34,9 @@ import { itemAc } from './items.js'
 //   cleanse: 'tile' (each hero on the caster's tile ends 1 condition, on the virtual board),
 //   takeEncounter (One for the Team: the hero takes another hero's encounter card, as if they drew it),
 //   move (it takes the place of a move, so on the virtual board it uses one up),
-//   buff { attack, ac, who: 'all' | 'self', lasts: 'heroPhaseEnd' | 'turnStart' }: a bonus that
-//   lasts until the end of the caster's next Hero Phase, or until the start of their next turn
+//   buff { attack, ac, who: 'all' | 'self', lasts: 'heroPhaseEnd' | 'thisPhase' | 'turnStart', only }: a
+//   bonus that lasts until the end of the caster's next Hero Phase (or this one), or the start of their
+//   next turn; `only` limits an attack bonus to powers whose name starts with it ('Longbow')
 //   (a fan Bard's Song of Courage, a fan Monk's Centered Defense). Kept on each hero as hero.buffs.
 // A card in cards.json can carry its own `effect` with these fields (a homebrew power);
 // a power listed below by name always uses the entry here instead.
@@ -141,7 +145,7 @@ BY_KEY.arcingstrike = BY_KEY.arcingsmite
 // The fields an effect can have, for checking a card's own `effect` in cards.json.
 export const EFFECT_FIELDS = [
   'targets', 'attacks', 'sameTarget', 'before', 'ask', 'evenBonus', 'onHit', 'after',
-  'note', 'hitNote', 'missNote', 'keepOnMiss', 'free', 'use', 'reaction', 'shadow', 'shadowBonus', 'shadowKeep', 'board', 'autoHit',
+  'note', 'hitNote', 'missNote', 'keepOnMiss', 'free', 'use', 'reaction', 'shadow', 'shadowBonus', 'shadowKeep', 'board', 'autoHit', 'critFrom', 'selfDamage', 'uses',
 ]
 
 const cardOf = (powerOrCard) => powerOrCard?.card ?? powerOrCard

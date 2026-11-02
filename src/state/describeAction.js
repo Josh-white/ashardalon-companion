@@ -56,6 +56,8 @@ export function describeAction(state, action) {
       return { furious: 'Furious Assault', bladeBarrier: 'Blade Barrier', flamingSphere: 'Flaming Sphere' }[action.source] ?? 'Power damage'
     case 'EVADE_HIT':
       return hero ? `${hero.name}'s Practiced Evasion` : 'Practiced Evasion'
+    case 'NATURES_HEALING':
+      return "Nature's Healing"
     case 'MIND_OVER_BODY':
       return 'Mind Over Body roll'
     case 'SET_SHADOW':

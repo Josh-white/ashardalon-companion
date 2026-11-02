@@ -7,7 +7,7 @@ import { artUrl, useArt } from '../state/useArt.js'
 import { useCards } from '../state/useCards.js'
 import Art from './Art.jsx'
 import { sphereOf, sphereVictims } from '../board/heroTokens.js'
-import { canSpendAttack, inHeroPhase, mindOverBodyChoices } from '../state/heroTurn.js'
+import { canSpendAttack, inHeroPhase, mindOverBodyChoices, naturesHealingOk } from '../state/heroTurn.js'
 import { BARDIC_SONGS, bardicSongsLeft } from '../state/heroAttacks.js'
 import { rollD20 } from '../state/random.js'
 import { MonsterChoice } from './Pickers.jsx'
@@ -58,12 +58,24 @@ function TokenDamage({ state, hero, source, label, prompt, many, disabled, dispa
 
 // Mind Over Body (a fan Monk): one roll per new condition, 11 or more shrugs it off.
 // Bardic Song (a fan Bard): how many songs are left (spent from a missed attack).
-function FanAbilities({ hero, dispatch }) {
+function FanAbilities({ state, hero, dispatch }) {
   const conditions = mindOverBodyChoices(hero)
   const songs = hasAbility(hero, 'bardic-song') ? bardicSongsLeft(hero) : null
-  if (conditions.length === 0 && songs === null) return null
+  const heal = naturesHealingOk(state, hero) && hero.hp < hero.maxHp
+  if (conditions.length === 0 && songs === null && !heal) return null
+  const give = (what) => dispatch({ type: 'NATURES_HEALING', heroId: hero.id, give: what })
   return (
     <div className="mt-3 space-y-2">
+      {heal && (
+        <div className="rounded-lg bg-emerald-950/60 p-3 text-sm text-emerald-200">
+          <p>🌿 Nature's Healing: before you do anything this turn, give up</p>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            <Button onClick={() => give('move')}>a move: +1 HP</Button>
+            <Button onClick={() => give('attack')}>your attack: +1 HP</Button>
+            <Button onClick={() => give('phase')}>the whole phase: +2 HP</Button>
+          </div>
+        </div>
+      )}
       {songs !== null && (
         <p className="rounded-lg bg-zinc-950/60 px-3 py-2 text-sm text-sky-200">
           🎶 Bardic Song: {songs} of {BARDIC_SONGS} left. When any hero misses, the attack box offers a song to roll again.
@@ -359,7 +371,7 @@ export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, 
 
       {state && <PowerMarkers state={state} hero={hero} dispatch={dispatch} />}
       {state && dispatch && <ShadowSwitch state={state} hero={hero} dispatch={dispatch} />}
-      {state && dispatch && <FanAbilities hero={hero} dispatch={dispatch} />}
+      {state && dispatch && <FanAbilities state={state} hero={hero} dispatch={dispatch} />}
       {state && dispatch && <AbilityOffers state={state} hero={hero} dispatch={dispatch} />}
 
       <PowerList state={state} hero={hero} dispatch={dispatch} tilesHidden={powersInTurnGuide} compact={compact} />

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { cardStats } from '../data/cards.js'
 import { effectsOf, pendingDodge } from '../data/powerEffects.js'
 import { attackGone, powerNumber, powerUsesAttack } from '../state/game.js'
+import { usesLeft } from '../state/heroAttacks.js'
 import { rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { HeroChoice, InReach } from './Pickers.jsx'
@@ -62,7 +63,9 @@ export function PowerTile({ power, onToggle, selected = false, compact = false }
           {card.damage && `Damage ${card.damage}`}
         </div>
       )}
-      {!power.used && effectsOf(power).use && <div className="mt-1 text-xs text-amber-400">Tap to use</div>}
+      {!power.used && effectsOf(power).use && (
+        <div className="mt-1 text-xs text-amber-400">Tap to use{effectsOf(power).uses > 1 ? ` (${usesLeft(power)} of ${effectsOf(power).uses} left)` : ''}</div>
+      )}
       {open && <p className="mt-2 whitespace-pre-line text-zinc-300">{card.text}</p>}
     </div>
   )

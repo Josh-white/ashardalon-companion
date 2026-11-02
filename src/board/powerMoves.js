@@ -11,7 +11,8 @@
 //         tileCloser (onto a tile 1 tile closer to the hero), swap; and for a villain's hit
 //         (move.from is the villain's token): awayFrom (`n` tiles farther from it), nextToFoe,
 //         triangle (the tile the hero's tile's triangle points to); nextToAttacked (next to a
-//         monster the power attacked: Crane's Wings, a fan hero's power)
+//         monster the power attacked: Crane's Wings, a fan hero's power), nextToMonsterWithin1
+//         (next to any monster within 1 tile: Willbreaker)
 // `hit: true` steps only happen when the attack hit, `miss: true` steps only when it missed,
 // `ifShadow: true` only when the hero attacked from the shadows (Shadowphage).
 // `each: 'heroOnTile' | 'monsterOnTile'` makes the step once for every such figure (Tune of Ice
@@ -248,6 +249,10 @@ export function moveTargets(state, id) {
     case 'nextToFoe': {
       const foeAt = state.board.tokens[move.from]
       return foeAt ? nextTo(foeAt) : []
+    }
+    case 'nextToMonsterWithin1': {
+      const near = heroesFor('within1', grid, self, foeTokens(state))
+      return [...new Set(near.flatMap((f) => nextTo(f.at)))]
     }
     case 'nextToAttacked': {
       const foes = foeTokens(state).filter((f) => (move.attacked ?? []).includes(baseId(f.id)))
