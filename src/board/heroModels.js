@@ -20,6 +20,7 @@ export const MODEL_PROPS = {
   Cave_Bear: [],
   Legion_Devil: [],
   Grell: [],
+  Kobold_Dragonlord: [],
   Gibbering_Mouther: [],
 }
 
@@ -51,12 +52,13 @@ export function heroModel(hero) {
   return { height: 1, ...pick }
 }
 
-// The monsters with their own 3D figure (made by scripts/models/make-monsters.py), by card
-// name. Any other monster gets null and stays a standee.
+// The monsters and villains with their own 3D figure (made by scripts/models/make-monsters.py),
+// by card name. Any other monster or villain gets null and stays a standee.
 export const MONSTER_FIGURES = [
   [/orc smasher/i, 'Orc_Smasher'],
   [/orc archer/i, 'Orc_Archer'],
   [/kobold dragonshield/i, 'Kobold_Dragonshield'],
+  [/kobold dragonlord/i, 'Kobold_Dragonlord'],
   [/cultist/i, 'Human_Cultist'],
   [/duergar guard/i, 'Duergar_Guard'],
   [/^snake$/i, 'Snake'],
@@ -65,6 +67,9 @@ export const MONSTER_FIGURES = [
   [/grell/i, 'Grell'],
   [/gibbering mouther/i, 'Gibbering_Mouther'],
 ]
+
+// The figures above that are villains (the #models page lists them as villains).
+export const VILLAIN_MODELS = new Set(['Kobold_Dragonlord'])
 
 // { model, gear, height } for a monster ({ name }), or null.
 export function monsterModel(monster) {

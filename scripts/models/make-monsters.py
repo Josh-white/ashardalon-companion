@@ -341,9 +341,11 @@ def build_bow():
     box("QuiverStrap", "leather", "body", (0, 0, 1.12), (0.12, 0.70, 0.95), bevel=0.02, rot=(0, -40, 0))
 
 
-def build_kobold():
+def build_kobold(lord=False):
     """A small red dragon-kin: snout, horns and crest, scale armour, a tail, a big shield with
-    a dragon's face on the left arm and a spear in the right hand."""
+    a dragon's face on the left arm and a spear in the right hand. The Kobold Dragonlord
+    (`lord`) wears gold, a crown and a crimson cape and carries a curved sword instead."""
+    metal = "gold" if lord else "iron"
     for side, tag in ((1, "L"), (-1, "R")):
         x = 0.2 * side
         leg = f"leg.{tag}"
@@ -364,24 +366,32 @@ def build_kobold():
     # Body: a pale belly under an iron breastplate with shoulder straps.
     box("Torso", "scale", "body", (0, 0, 0.95), (0.58, 0.42, 0.50), bevel=0.16, segments=3)
     box("Belly", "belly", "body", (0, -0.17, 0.85), (0.32, 0.10, 0.20), bevel=0.05)
-    box("Breastplate", "iron", "body", (0, -0.16, 1.04), (0.44, 0.12, 0.24), bevel=0.05)
+    box("Breastplate", metal, "body", (0, -0.16, 1.04), (0.44, 0.12, 0.24), bevel=0.05)
     box("PlateRivets", "iron_dark", "body", (0, -0.225, 1.04), (0.30, 0.02, 0.04), bevel=0.008)
     for side in (1, -1):
         box(f"Strap{side}", "leather", "body", (0.16 * side, 0, 1.08), (0.08, 0.46, 0.26), bevel=0.02)
-    box("Collar", "iron", "body", (0, 0, 1.18), (0.50, 0.40, 0.08), bevel=0.03)
+    box("Collar", metal, "body", (0, 0, 1.18), (0.50, 0.40, 0.08), bevel=0.03)
     sphere("Neck", "scale", "body", (0, -0.03, 1.24), 0.12, scale=(1, 1, 1.1))
 
     # Arms.
     for side, tag in ((1, "L"), (-1, "R")):
         arm = f"arm.{tag}"
-        sphere(f"Shoulder.{tag}", "iron", arm, (0.36 * side, 0, 1.08), 0.11, scale=(1.1, 1, 0.9))
+        sphere(f"Shoulder.{tag}", metal, arm, (0.36 * side, 0, 1.08), 0.11, scale=(1.1, 1, 0.9))
         box(f"Forearm.{tag}", "scale", arm, (0.41 * side, -0.02, 0.84), (0.14, 0.15, 0.26), bevel=0.05)
         sphere(f"Hand.{tag}", "scale_dark", arm, (0.43 * side, -0.04, 0.66), 0.085)
 
-    # A spear in the right hand, its point forward and a little up, a red tassel under the head.
     hand = Vector((-0.43, -0.04, 0.66))
     d = Vector((0, -0.97, 0.26))  # 15 degrees above forward
     tilt = (75, 0, 0)  # turns a +Z part to point along d
+    if lord:
+        build_lord_extras(hand, d, tilt)
+    else:
+        build_kobold_spear(hand, d, tilt)
+    build_kobold_shield_and_head(lord)
+
+
+def build_kobold_spear(hand, d, tilt):
+    """A spear in the right hand, its point forward and a little up, a red tassel under the head."""
     cone("SpearShaft", "wood", "arm.R", hand + d * 0.26, 0.04, 1.14, rot=tilt, sides=6, tip=0.03)
     cone("SpearButt", "iron_dark", "arm.R", hand - d * 0.32, 0.05, 0.06, rot=tilt, sides=6, tip=0.03)
     cone("SpearCollar", "iron_dark", "arm.R", hand + d * 0.82, 0.055, 0.06, rot=tilt, sides=6, tip=0.04)
@@ -389,10 +399,13 @@ def build_kobold():
     sphere("Tassel", "red", "arm.R", hand + d * 0.78 + Vector((0, 0, -0.07)), 0.055, scale=(0.8, 0.8, 1.4),
            segments=8, rings=6)
 
+
+def build_kobold_shield_and_head(lord):
     # The dragon shield on the left arm, facing forward.
+    metal = "gold" if lord else "iron"
     sc = Vector((0.47, -0.17, 0.80))
     box("Shield", "scale_dark", "arm.L", sc, (0.50, 0.07, 0.66), bevel=0.06, segments=3)
-    box("ShieldRim", "iron", "arm.L", sc + Vector((0, 0.01, 0)), (0.56, 0.05, 0.72), bevel=0.06, segments=3)
+    box("ShieldRim", metal, "arm.L", sc + Vector((0, 0.01, 0)), (0.56, 0.05, 0.72), bevel=0.06, segments=3)
     sphere("ShieldFace", "crest", "arm.L", sc + Vector((0, -0.05, 0.04)), 0.15, scale=(1, 0.5, 1.1))
     box("ShieldSnout", "crest", "arm.L", sc + Vector((0, -0.10, -0.08)), (0.14, 0.10, 0.14), bevel=0.04)
     for side in (1, -1):
@@ -417,8 +430,41 @@ def build_kobold():
         cone(f"Horn.{tag}", "bone", "head", (0.12 * x, 0.18, 1.62), 0.05, 0.30, rot=(-50, 0, -12 * x), sides=6)
         cone(f"Frill.{tag}", "crest", "head", (0.22 * x, 0.10, 1.48), 0.08, 0.22, rot=(0, 70 * x, 25 * x),
              scale=(1, 0.3, 1), sides=5)
+    if lord:
+        # A gold crown with five points and a red gem at the front.
+        cone("CrownBand", "gold", "head", (0, 0.02, 1.66), 0.22, 0.08, sides=12, tip=0.23)
+        for i in range(5):
+            a = DEG(-90 + i * 72)
+            cone(f"CrownPoint{i}", "gold", "head", (0.21 * math.cos(a), 0.02 + 0.21 * math.sin(a), 1.75), 0.045,
+                 0.13, rot=(0, 0, 0), sides=4)
+        sphere("CrownGem", "glow", "head", (0, -0.20, 1.67), 0.035, scale=(1, 0.6, 1.2), segments=8, rings=6)
+        return
     for i, (y, z, h) in enumerate(((-0.05, 1.70, 0.12), (0.08, 1.70, 0.15), (0.20, 1.64, 0.12))):
         cone(f"Crest{i}", "crest", "head", (0, y, z), 0.06, h, rot=(-15, 0, 0), scale=(0.3, 1, 1), sides=4)
+
+
+def build_lord_extras(hand, d, tilt):
+    """The Dragonlord's curved sword (raised in the right hand) and crimson cape."""
+    cone("SwordGrip", "leather_dark", "arm.R", hand, 0.035, 0.18, rot=tilt, sides=6, tip=0.035)
+    sphere("SwordPommel", "gold", "arm.R", hand - d * 0.11, 0.04, segments=8, rings=6)
+    box("SwordGuard", "gold", "arm.R", hand + d * 0.10, (0.24, 0.05, 0.05), bevel=0.015, rot=tilt)
+    # The blade bends upward as it goes: three straight pieces.
+    at, angle = hand + d * 0.12, 75
+    for i, length in enumerate((0.34, 0.30, 0.26)):
+        way = Vector((0, -math.sin(DEG(angle)), math.cos(DEG(angle))))
+        width = 0.14 - 0.02 * i
+        box(f"Blade{i}", "iron", "arm.R", at + way * length / 2, (0.025, width, length + 0.02), bevel=0.008,
+            rot=(angle, 0, 0))
+        at, angle = at + way * length, angle - 14
+    cone("BladeTip", "iron", "arm.R", at, 0.075, 0.13, rot=(angle, 0, 0), scale=(0.25, 1, 1), sides=4)
+
+    # The cape hangs from gold clasps behind the shoulders, a little flared at the bottom.
+    box("Cape", "red", "body", (0, 0.26, 0.86), (0.60, 0.05, 0.62), bevel=0.02, rot=(-10, 0, 0))
+    box("CapeHem", "robe", "body", (0, 0.32, 0.56), (0.66, 0.06, 0.06), bevel=0.02, rot=(-10, 0, 0))
+    box("CapeCollar", "red", "body", (0, 0.18, 1.20), (0.56, 0.12, 0.10), bevel=0.04)
+    for side in (1, -1):
+        sphere(f"Clasp{side}", "gold", "body", (0.24 * side, -0.12, 1.16), 0.05, scale=(1, 0.6, 1),
+               segments=8, rings=6)
 
 
 def build_cultist():
@@ -1368,10 +1414,12 @@ MOUTHER_MOVES = [
 ]
 
 # name, file, build, height, bones, extra moves (, own moves)
+# The board draws villains 1.3 times bigger, so a villain's height here is its real height / 1.3.
 MONSTERS = [
     ("orc-smasher", "orc-smasher.glb", lambda: build_orc("mace"), 2.4, ORC_BONES, []),
     ("orc-archer", "orc-archer.glb", lambda: build_orc("bow"), 2.4, ORC_BONES, ["1H_Ranged_Shoot"]),
     ("kobold-dragonshield", "kobold-dragonshield.glb", build_kobold, 1.9, KOBOLD_BONES, []),
+    ("kobold-dragonlord", "kobold-dragonlord.glb", lambda: build_kobold(lord=True), 1.85, KOBOLD_BONES, []),
     ("human-cultist", "human-cultist.glb", build_cultist, 2.5, CULTIST_BONES, []),
     ("duergar-guard", "duergar-guard.glb", build_duergar, 2.15, DUERGAR_BONES, []),
     ("snake", "snake.glb", build_snake, 1.75, SNAKE_BONES, [], SNAKE_MOVES),
