@@ -5,6 +5,7 @@ import { HERO_TEMPLATES } from '../data/heroes.js'
 import { normalizeTiles } from '../board/tileDefs.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
 import ProjectorBoard, { Board3DToggle, useBoard3D } from './ProjectorBoard.jsx'
+import { reloadBoard3D } from './board3dSwitch.js'
 
 const TILES = normalizeTiles(
   [{ id: 'start', kind: 'start', rows: ['....', '....', '....', '....', '....', '....', '....', '....'], exits: { N: 'oooo', S: 'oooo', W: 'oooooooo', E: 'oooooooo' } }],
@@ -23,6 +24,7 @@ beforeAll(() => {
 afterEach(() => {
   cleanup()
   localStorage.clear()
+  reloadBoard3D()
 })
 
 function Switchable({ state }) {

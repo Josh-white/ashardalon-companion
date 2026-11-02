@@ -16,6 +16,7 @@ import MonsterList, { VillainList } from './components/MonsterList.jsx'
 import ProjectorView from './components/ProjectorView.jsx'
 import Recap from './components/Recap.jsx'
 import Board from './components/Board.jsx'
+import { useBoard3D } from './components/board3dSwitch.js'
 import SeatPicker from './components/SeatPicker.jsx'
 import SinceLastTurn from './components/SinceLastTurn.jsx'
 import HeroCheatCard from './components/HeroCheatCard.jsx'
@@ -65,6 +66,8 @@ function PlayView({ state, dispatch, hero = null, soundBoard = null, allyHost = 
     scrollRef.current?.scrollTo({ top: 0 })
   }, [resetKey])
   const [bigBoard, setBigBoard] = useState(false)
+  // 🧊 flat <-> 3D starts the board afresh (its zoom and pinch belong to the flat drawing).
+  const [threeD] = useBoard3D()
   const heroCard = (h, showCardArt = false) => (
     <HeroCard
       key={h.id}
@@ -156,6 +159,7 @@ function PlayView({ state, dispatch, hero = null, soundBoard = null, allyHost = 
         {/* Only the active hero's iPad moves figures (or a power's move that's waiting on
             someone), so nobody moves a hero by mistake while watching. */}
         <Board
+          key={threeD ? '3d' : 'flat'}
           state={state}
           dispatch={dispatch}
           fill
