@@ -234,31 +234,37 @@ function UsePanel({ state, hero, power, dispatch, onClose }) {
 
 // Powers are chosen in the lobby before the heroes enter the dungeon. The one pick made
 // during a game is the extra daily from leveling up, so only an empty slot gets a picker.
-function PowerPicker({ hero, power, options, dispatch }) {
+// Each choice shows its whole card (hit, miss, effects) so players can compare before picking.
+export function PowerPicker({ hero, power, options, dispatch }) {
+  const article = power.type === 'at-will' ? 'an' : 'a'
   return (
-    <label className="block rounded-lg border border-amber-500 bg-zinc-950/60 px-3 py-2 text-xs uppercase tracking-wide text-amber-400">
-      New {power.type} power
-      <select
-        className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-2 text-sm normal-case tracking-normal text-zinc-100"
-        value=""
-        onChange={(e) =>
-          dispatch({
-            type: 'SET_POWER_CARD',
-            heroId: hero.id,
-            powerId: power.id,
-            card: options.find((c) => c.id === e.target.value) ?? null,
-          })
-        }
-      >
-        <option value="">Pick {power.type === 'at-will' ? 'an' : 'a'} {power.type} power…</option>
+    <section
+      className="col-span-2 rounded-lg border border-amber-500 bg-zinc-950/60 px-3 py-2"
+      aria-label={`Pick ${article} ${power.type} power`}
+    >
+      <h3 className="text-xs uppercase tracking-wide text-amber-400">New {power.type} power</h3>
+      <p className="mt-1 text-sm text-zinc-300">
+        Pick {article} {power.type} power for {hero.name}. Read each card, then take one.
+      </p>
+      <ul className="mt-2 space-y-2">
         {options.map((card) => (
-          <option key={card.id} value={card.id}>
-            {card.name}
-            {cardStats(card) && ` (${cardStats(card)})`}
-          </option>
+          <li key={card.id} className="rounded-lg border border-zinc-700 bg-zinc-900/80 px-3 py-2 text-sm">
+            <div className="font-semibold text-zinc-100">{card.name}</div>
+            {cardStats(card) && <div className="text-xs text-amber-500/90">{cardStats(card)}</div>}
+            {card.text && <p className="mt-1 whitespace-pre-line text-zinc-300">{card.text}</p>}
+            {/* A plain button, not a gold one: gold buttons are "the next step" that the turn
+                guide and computer allies press, and this choice is the player's to make. */}
+            <button
+              type="button"
+              className="mt-2 w-full rounded-xl border border-amber-500 bg-amber-500/15 px-4 py-2 font-semibold text-amber-300 transition hover:bg-amber-500/25 active:scale-95"
+              onClick={() => dispatch({ type: 'SET_POWER_CARD', heroId: hero.id, powerId: power.id, card })}
+            >
+              Take {card.name}
+            </button>
+          </li>
         ))}
-      </select>
-    </label>
+      </ul>
+    </section>
   )
 }
 
