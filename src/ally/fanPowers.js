@@ -7,15 +7,16 @@
 
 import { key } from '../board/grid.js'
 import { adjacent, tilesBetween } from '../board/paths.js'
-import { boardGrid } from '../board/play.js'
+import { boardGrid, heroReach, movesLeft } from '../board/play.js'
 import { moveChoices, moveTargets, queueMoves } from '../board/powerMoves.js'
 import { effectsOf } from '../data/powerEffects.js'
 import { hasAbility } from '../data/heroes.js'
 import { powerNumber } from '../state/combat.js'
 import { foes } from '../state/gameHelpers.js'
 import { bardicSongsLeft } from '../state/heroAttacks.js'
-import { canSpendAttack, mindOverBodyChoices } from '../state/heroTurn.js'
-import { tilesWithin1, trapsOnTile } from '../state/fanPowers.js'
+import { attackGone, canSpendAttack, mindOverBodyChoices } from '../state/heroTurn.js'
+import { fanUseBlocked, foesInReach, newestMonster, tilesWithin1, trapsOnTile } from '../state/fanPowers.js'
+import { encounterHarm } from './cancelEncounter.js'
 import { figureHp, foeFigures, standingHeroes, usable } from './powers.js'
 
 const d20 = () => Math.floor(Math.random() * 20) + 1
@@ -100,6 +101,11 @@ export function fanReaction(state, roll = d20) {
     if (condition) return { action: { type: 'MIND_OVER_BODY', heroId: hero.id, condition, roll: roll() }, say: `${hero.name} tries to shrug off being ${condition} (Mind Over Body).` }
   }
 
+  const tracked = trackersInstinct(state)
+  if (tracked) return tracked
+  const come = comeAndGetIt(state)
+  if (come) return come
+
   const last = state.turn.lastAttack
   const attacker = last && state.heroes.find((h) => h.id === last.heroId)
   if (!attacker?.ally) return null
@@ -118,6 +124,85 @@ export function fanReaction(state, roll = d20) {
     }
   }
   return null
+}
+
+// Tracker's Instinct (a fan Ranger's, 2 uses, no XP): cancels an encounter drawn for a tile
+// with a black triangle, when the card hurts (the same yardstick as cancelling with XP).
+function trackersInstinct(state) {
+  const encounter = state.encounter
+  if (!encounter || encounter.attacked || encounter.card?.noCancel || state.turn.triangle !== true) return null
+  const drawer = state.heroes.find((h) => h.id === encounter.heroId) ?? state.heroes[state.turn.heroIndex]
+  if (encounterHarm(state, encounter.card, drawer).score < 2) return null
+  for (const hero of state.heroes.filter((h) => h.ally && !h.escaped && h.hp > 0)) {
+    const power = usable(hero, (e) => Boolean(e.use?.cancelEncounter))
+    if (power && !fanUseBlocked(state, hero, effectsOf(power).use)) {
+      return { action: { type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: [] }, say: `${hero.name} saw it coming: ${power.name} cancels ${encounter.card.name}.` }
+    }
+  }
+  return null
+}
+
+// Come and Get It (a fan Battlemaster's): jump next to a monster that was just drawn within
+// 1 tile of a hurt friend, while the hero is above half HP and not already next to a monster.
+function comeAndGetIt(state) {
+  const newest = newestMonster(state)
+  if (!newest || !state.board || state.turn.boardMove) return null
+  const grid = boardGrid(state.board)
+  const tokens = state.board.tokens
+  const spots = foeFigures(state).filter((f) => f.foe.id === newest.id).map((f) => f.at)
+  if (spots.length === 0) return null
+  for (const hero of state.heroes.filter((h) => h.ally && !h.escaped && h.hp > 0 && !hurt(h) && tokens[h.id])) {
+    const power = usable(hero, (e) => e.use?.board?.some((s) => s.to === 'nextToNewMonster'))
+    if (!power || nextToFoe(state, tokens[hero.id])) continue
+    const friends = standingHeroes(state).filter((h) => h.id !== hero.id && hurt(h))
+    if (!friends.some((h) => spots.some((at) => tilesBetween(grid, at, tokens[h.id]) <= 1))) continue
+    const queued = queueMoves(state, hero, power, effectsOf(power).use.board)
+    if (!queued.turn.boardMove || moveTargets(queued, hero.id).length === 0) continue
+    return { action: { type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: [] }, say: `${hero.name}: "Come and get it!" (${power.name})` }
+  }
+  return null
+}
+
+// ---- Hjalmir (a fan Battlemaster) and Savryna (a fan Ranger) in the Hero Phase ----
+
+// Improvise, right after the hero's own attack missed: 1 damage to an adjacent monster that
+// finishes it, for 1 of the hero's HP (only while the hero has HP to spare).
+export function improvise(state, hero) {
+  if (hero.hp < 4 || !state.turn.lastAttack) return null
+  const power = usable(hero, (e) => Boolean(e.use?.afterMiss && e.use.hurt))
+  if (!power) return null
+  const use = effectsOf(power).use
+  if (fanUseBlocked(state, hero, use)) return null
+  const near = foesInReach(state, hero, use.hurtReach)
+  const target = foes(state).find((m) => near.includes(m.id) && m.hp > 0 && !m.objective && figureHp(m) <= use.hurt)
+  if (!target) return null
+  return { action: { type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: [], monsterIds: [target.id] }, say: `${hero.name} improvises and finishes the ${target.name}!` }
+}
+
+// Treetop at the end of the Hero Phase: a hurt hero with a monster next to them climbs a wall
+// (monsters next to them can't attack, and the next Hero Phase has Advantage).
+export function perchPower(state, hero) {
+  const at = state.board?.tokens[hero.id]
+  if (!at || !hurt(hero) || hero.tokens?.treetop || !nextToFoe(state, at)) return null
+  const power = usable(hero, (e) => Boolean(e.use?.perch))
+  if (!power) return null
+  return { action: { type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: [] }, say: `${hero.name} climbs up out of reach (${power.name}).` }
+}
+
+// Fearless: with the attack done and a move left, a hero above half HP steps next to a monster,
+// so it starts the next turn with -4 AC.
+export function fearlessStep(state, hero) {
+  const at = state.board?.tokens[hero.id]
+  if (!at || !hasAbility(hero, 'fearless') || hurt(hero) || !attackGone(state, hero) || movesLeft(state, hero) === 0 || nextToFoe(state, at)) return null
+  const grid = boardGrid(state.board)
+  const spots = foeFigures(state).map((f) => f.at)
+  const squares = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1])
+  const landing = heroReach(state, hero)
+    .map(parse)
+    .filter((sq) => spots.some((f) => adjacent(grid, sq, f)))
+    .sort((a, b) => squares(a, at) - squares(b, at))[0]
+  if (!landing) return null
+  return { action: { type: 'MOVE_HERO', heroId: hero.id, to: landing }, say: `${hero.name} stands up to the monster (Fearless).` }
 }
 
 // ---- Fesud (a fan Assassin): in and out of the shadows ----
@@ -220,6 +305,16 @@ export function fanMove(state, hero) {
   if (targets.length === 0) return null
   const tokens = state.board.tokens
   const person = state.heroes.find((h) => h.id === id)
+  if (person && person.id !== hero.id && move.source && effectsOf(hero.powers.find((p) => p.name === move.source)).follower) {
+    // Follow My Lead: the friend goes next to a monster (the closest such square) to attack it.
+    const grid = boardGrid(state.board)
+    const spots = foeFigures(state).map((f) => f.at)
+    if (nextToFoe(state, tokens[id])) return null
+    const from = tokens[id]
+    const next = targets.filter((sq) => spots.some((f) => adjacent(grid, sq, f))).sort((a, b) => Math.abs(a[0] - from[0]) + Math.abs(a[1] - from[1]) - Math.abs(b[0] - from[0]) - Math.abs(b[1] - from[1]))[0]
+    if (!next) return null
+    return { action: { type: 'BOARD_MOVE', id, to: next }, say: `${person.name} follows ${hero.name}'s lead.` }
+  }
   if (person) {
     if (/monster|attacked/i.test(s.to)) {
       if (hurt(person)) return null
