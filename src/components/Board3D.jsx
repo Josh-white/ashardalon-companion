@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { boardExtras, boardFigures, boardLayout } from '../board/scene3d.js'
+import { boardExtras, boardFigures, boardLayout, restFacing } from '../board/scene3d.js'
 import { artUrl, useArt } from '../state/useArt.js'
 import { TOKEN_COLORS } from './Board.jsx'
 import { useAttackFx } from './AttackFx.jsx'
@@ -548,8 +548,9 @@ function syncFigures(stage, figures, art, fallAt) {
       if (look) {
         const n = node
         attachModel(n, look, figureColor(f), () => {
-          // A new figure looks at the camera, so its face shows.
+          // A new figure looks at its foe, or at the camera (so its face shows) when there's none.
           face(n, stage.camera.position.x - n.position.x, stage.camera.position.z - n.position.z)
+          lookAtRest(stage, n, true)
           setDown(n, n.userData.faded)
           stage.render()
         })
@@ -581,6 +582,32 @@ function syncFigures(stage, figures, art, fallAt) {
   }
 }
 
+// A figure standing still turns (quickly) to look at its foe (restFacing in scene3d.js).
+// Walking, attacking or lying down it doesn't: those face their own way.
+function lookAtRest(stage, node, now = false) {
+  const anim = node.userData.anim
+  const target = node.userData.lookAt
+  if (!node.userData.model || !target || anim?.down || (anim?.busy && anim.state !== 'idle')) return
+  const [x, z] = stage.at(target[0], target[1])
+  const dx = x - node.position.x
+  const dz = z - node.position.z
+  if (Math.abs(dx) < 1e-3 && Math.abs(dz) < 1e-3) return
+  const model = node.userData.model
+  const from = model.rotation.y
+  // The short way round.
+  let to = Math.atan2(dx, dz)
+  to = from + ((((to - from + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI
+  if (Math.abs(to - from) < 0.01) return
+  stage.tweens = stage.tweens.filter((t) => t.turn !== node)
+  if (now || stage.still) {
+    model.rotation.y = to
+    stage.render()
+    return
+  }
+  stage.tweens.push({ turn: node, ms: 260, step: (k) => (model.rotation.y = from + (to - from) * (1 - (1 - k) * (1 - k))) })
+  stage.render()
+}
+
 // A figure hops to its new square (a hop per square, so a walk looks like steps).
 function glide(stage, node, to) {
   stage.tweens = stage.tweens.filter((t) => t.node !== node)
@@ -599,7 +626,10 @@ function glide(stage, node, to) {
     step: (k) => {
       node.position.lerpVectors(from, to, k)
       node.userData.body.position.y = stage.still || walker ? 0 : Math.abs(Math.sin(k * Math.PI * hops)) * 0.12
-      if (k >= 1 && walker) setWalking(node, false)
+      if (k >= 1 && walker) {
+        setWalking(node, false)
+        lookAtRest(stage, node)
+      }
     },
   })
   stage.render()
@@ -849,6 +879,12 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
     if (!ready || !stage?.at) return
     stage.heroModels = heroModels
     syncFigures(stage, figures, art, (f) => fallDelay(state.moment, f.at))
+    const looks = restFacing(figures)
+    for (const [id, node] of stage.nodes) {
+      node.userData.lookAt = looks[id] ?? null
+      const walking = stage.tweens.some((t) => t.node === node)
+      if (!walking) lookAtRest(stage, node)
+    }
     stage.render()
   })
 

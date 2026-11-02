@@ -3,7 +3,7 @@ import { HERO_TEMPLATES } from '../data/heroes.js'
 import { normalizeCardFile } from '../data/cards.js'
 import { normalizeTiles } from './tileDefs.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
-import { boardExtras, boardFigures, boardLayout } from './scene3d.js'
+import { boardExtras, boardFigures, boardLayout, restFacing } from './scene3d.js'
 
 const TILES = normalizeTiles(
   [
@@ -106,5 +106,26 @@ describe('markers and tokens on the 3D board', () => {
     const state = game()
     const sick = { ...state, heroes: state.heroes.map((h, i) => (i === 0 ? { ...h, conditions: ['Poisoned', 'Dazed'] } : h)) }
     expect(boardFigures(sick)[0].icons).toEqual(['🧪', '💫'])
+  })
+})
+
+describe('who the 3D figures look at', () => {
+  it('turns heroes to the nearest monster and monsters to the nearest hero still standing', () => {
+    const figures = [
+      { id: 'h1', kind: 'hero', at: [0, 0] },
+      { id: 'h2', kind: 'hero', at: [3, 3], faded: true },
+      { id: 'h3', kind: 'hero', at: [5, 0] },
+      { id: 'm1', kind: 'monster', at: [1, 0] },
+      { id: 'v1', kind: 'villain', at: [4, 4] },
+      { id: 'n1', kind: 'villager', at: [2, 2] },
+    ]
+    const looks = restFacing(figures)
+    expect(looks.h1).toEqual([1, 0])
+    expect(looks.h2).toEqual([4, 4])
+    expect(looks.m1).toEqual([0, 0])
+    // The villain looks past the fallen hero next to it.
+    expect(looks.v1).toEqual([5, 0])
+    expect(looks.n1).toBeUndefined()
+    expect(restFacing([{ id: 'h1', kind: 'hero', at: [0, 0] }])).toEqual({})
   })
 })
