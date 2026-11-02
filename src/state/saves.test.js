@@ -8,6 +8,14 @@ describe('migrating a saved game', () => {
     expect(migrateSave(saved)).toEqual(saved)
   })
 
+  it('clears a leftover ally pause when no hero is played by the computer', () => {
+    const turn = { ...initialState.turn, allyHelp: 'Which one?' }
+    const heroes = [{ id: 'h1', ally: false }]
+    expect(migrateSave({ ...initialState, heroes, allyPaused: true, turn })).toMatchObject({ allyPaused: false, turn: { allyHelp: null } })
+    const allies = [{ id: 'h1', ally: true }]
+    expect(migrateSave({ ...initialState, heroes: allies, allyPaused: true, turn })).toMatchObject({ allyPaused: true, turn: { allyHelp: 'Which one?' } })
+  })
+
   it('fills in fields an older save never had', () => {
     const old = { ...initialState, xp: 3 }
     delete old.tileStack

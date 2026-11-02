@@ -6,7 +6,7 @@ import Art from './Art.jsx'
 import { BoostBadges } from './StatBoosts.jsx'
 import { acParts, attackParts, speedParts } from '../data/statParts.js'
 import { liveAc, tileShieldNow } from '../board/checks.js'
-import { Button, HpBar, LevelBadge } from './ui.jsx'
+import { Button, HpBar, LevelBadge, useConfirm } from './ui.jsx'
 import { heroArt } from '../data/art.js'
 import { HERO_COLORS } from '../data/heroes.js'
 import { moveSpeed } from '../board/play.js'
@@ -60,13 +60,39 @@ export function AllyWatch({ state, dispatch }) {
 }
 
 // Hands a hero to the computer (a player who's had enough for tonight), or takes them back.
-// Only on the virtual board, where the computer can see where everything is.
-export function AllyToggle({ state, dispatch, hero }) {
+// Only on the virtual board, where the computer can see where everything is. While the
+// computer plays the hero it's a big button at the top, to take them back; otherwise it's a
+// quiet line at the bottom of the turn, asked once more before it hands the hero over, so it
+// doesn't sit on every screen looking like something to do.
+export function AllyToggle({ state, dispatch, hero, place = 'top' }) {
+  const [ask, dialog] = useConfirm()
   if (!state.board || !hero || state.status !== 'playing') return null
+  if (hero.ally) {
+    if (place !== 'top') return null
+    return (
+      <Button variant="ghost" className="w-full border border-zinc-800 text-sm" onClick={() => dispatch({ type: 'SET_ALLY', heroId: hero.id, ally: false })}>
+        🙋 I'll play {hero.name} again
+      </Button>
+    )
+  }
+  if (place !== 'bottom') return null
+  const handOver = () =>
+    ask(
+      {
+        title: `Let the computer play ${hero.name}?`,
+        body: [`The computer takes ${hero.name}'s turns until you tap "I'll play ${hero.name} again".`],
+        yes: `😴 Computer plays ${hero.name}`,
+        no: 'Keep playing',
+      },
+      () => dispatch({ type: 'SET_ALLY', heroId: hero.id, ally: true }),
+    )
   return (
-    <Button variant="ghost" className="w-full border border-zinc-800 text-sm" onClick={() => dispatch({ type: 'SET_ALLY', heroId: hero.id, ally: !hero.ally })}>
-      {hero.ally ? `🙋 I'll play ${hero.name} again` : `😴 Let the computer play ${hero.name}`}
-    </Button>
+    <>
+      <button type="button" className="block w-full py-2 text-center text-sm text-zinc-500 underline underline-offset-4" onClick={handOver}>
+        😴 Tired? Let the computer play {hero.name}
+      </button>
+      {dialog}
+    </>
   )
 }
 

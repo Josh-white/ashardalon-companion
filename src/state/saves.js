@@ -18,5 +18,13 @@ export function migrateSave(saved, migrations = MIGRATIONS, version = SAVE_VERSI
     if (typeof migrations[v] !== 'function') return null
     state = { ...migrations[v](state), version: v + 1 }
   }
-  return { ...initialState, ...state, version }
+  return tidyAllies({ ...initialState, ...state, version })
+}
+
+// A game with no computer heroes left keeps no ally pause or "help the computer" question
+// (a hero handed to the computer and taken back left them behind before 2026-11-02).
+function tidyAllies(state) {
+  if (!Array.isArray(state.heroes) || state.heroes.some((h) => h?.ally)) return state
+  if (!state.allyPaused && !state.turn?.allyHelp) return state
+  return { ...state, allyPaused: false, turn: state.turn ? { ...state.turn, allyHelp: null } : state.turn }
 }

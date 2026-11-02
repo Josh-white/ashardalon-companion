@@ -113,6 +113,7 @@ function PlayView({ state, dispatch, hero = null, soundBoard = null, allyHost = 
         <AllyToggle state={state} dispatch={dispatch} hero={hero} />
         {heroCard(hero, true)}
         <HeroCheatCard hero={hero} />
+        <AllyToggle state={state} dispatch={dispatch} hero={hero} place="bottom" />
       </>
     ) : (
       <>
@@ -120,6 +121,7 @@ function PlayView({ state, dispatch, hero = null, soundBoard = null, allyHost = 
         <AllyToggle state={state} dispatch={dispatch} hero={active} />
         {active && heroCard(active)}
         {active && <HeroCheatCard key={`cheat-${active.id}`} hero={active} />}
+        <AllyToggle state={state} dispatch={dispatch} hero={active} place="bottom" />
       </>
     ),
     monsters: (
