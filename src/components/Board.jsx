@@ -11,7 +11,7 @@ import { tapTargets } from '../board/taps.js'
 import { escapeBlockers } from '../state/adventure.js'
 import { activeVillains } from '../state/game.js'
 import { artUrl, useArt } from '../state/useArt.js'
-import { Carpet, Coin, ExitSquares, figureBadges, HeroTokenMark, heroTokenGroups, MarkerBadges, MarkerTiles, NewTileGlow, OpenEdges, PlacedTile, QuestToken, Token } from './BoardPieces.jsx'
+import { Carpet, Coin, ExitSquares, figureBadges, HeroTokenMark, heroTokenGroups, MarkerBadges, MarkerTiles, NewTileGlow, OpenEdges, PlacedTile, QuestToken, TileShadows, tileRects, Token } from './BoardPieces.jsx'
 import { useFreshTiles } from './useFreshTiles.js'
 import { ClosedDoor, SQUARE } from './TileDrawing.jsx'
 import { useBoardZoom } from './useBoardZoom.js'
@@ -59,6 +59,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   const activeId = state.heroes[state.turn.heroIndex]?.id
   const activeAt = board?.tokens[activeId]?.join(',')
   const bounds = board ? boardBounds(board) : null
+  const tiles = board ? tileRects(board) : []
   // Monsters picked in this screen's attack box glow red, and the last one picked is brought
   // into view at the zoom the board is at (a group like the Legion Devils glows together).
   const aimed = useAimed()
@@ -188,7 +189,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   const small = readOnly && !fill
 
   return (
-    <section className={`relative rounded-2xl border border-zinc-800 bg-zinc-950/80 ${fill ? 'flex h-full flex-col p-2' : 'p-3'}`}>
+    <section className={`relative rounded-2xl ${fill ? 'flex h-full flex-col p-2' : 'p-3'}`}>
       {tools && (
         <div className={`mb-2 flex items-center gap-2 ${fill ? '' : 'flex-wrap'}`}>
           <p className={`flex-1 text-zinc-300 ${fill ? 'text-xs leading-snug sm:text-sm' : 'text-sm'}`}>
@@ -396,22 +397,17 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
           role="img"
           aria-label="The dungeon board"
         >
-          <defs>
-            <pattern id="board-dots" width={SQUARE} height={SQUARE} patternUnits="userSpaceOnUse">
-              <circle cx={SQUARE / 2} cy={SQUARE / 2} r="1.5" fill="#334155" />
-            </pattern>
-          </defs>
           <g transform={spin ? `rotate(${spin})` : undefined}>
             <g ref={anchorRef} />
-            <rect x={bounds.x} y={bounds.y} width={bounds.w} height={bounds.h} fill="#0a0c10" />
-            <rect x={bounds.x} y={bounds.y} width={bounds.w} height={bounds.h} fill="url(#board-dots)" opacity="0.6" />
+            {/* No box behind the map: the area's artwork shows around the tiles (JJ's pick, 2026-11-02). */}
+            <TileShadows rects={tiles} />
             {board.tiles.map((placed) => board.defs[placed.tileId] && <PlacedTile key={placed.uid} placed={placed} def={board.defs[placed.tileId]} spin={spin} />)}
             <MarkerTiles markers={placedMarkers} />
             {(board.doors ?? []).map((door) => (
               <ClosedDoor key={door.id} squares={door.squares} kind={door.kind} special={Boolean(door.reveal)} spin={spin} />
             ))}
             {/* Open edges, exits, lit squares and figures stay on top of the dark. */}
-            {torch && <Torchlight bounds={bounds} lights={lightSources({ heroes: state.heroes, tokens: board.tokens, activeId, markers: placedMarkers })} />}
+            {torch && <Torchlight bounds={bounds} tiles={tiles} lights={lightSources({ heroes: state.heroes, tokens: board.tokens, activeId, markers: placedMarkers })} />}
             {fresh && <NewTileGlow key={fresh.key} grid={grid} uids={fresh.uids} />}
             <OpenEdges grid={grid} />
             <ExitSquares squares={exits} open={exitOpen} />
