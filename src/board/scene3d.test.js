@@ -3,7 +3,7 @@ import { HERO_TEMPLATES } from '../data/heroes.js'
 import { normalizeCardFile } from '../data/cards.js'
 import { normalizeTiles } from './tileDefs.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
-import { boardExtras, boardFigures, boardLayout, restFacing } from './scene3d.js'
+import { STAIR_TOP, boardExtras, boardFigures, boardLayout, restFacing, stairHeights, stairsRise } from './scene3d.js'
 
 const TILES = normalizeTiles(
   [
@@ -35,7 +35,7 @@ describe('the 3D board layout', () => {
     expect(layout.squares).toHaveLength(32)
     expect(layout.squares.filter((s) => !s.floor)).toHaveLength(8)
     expect(layout.bounds).toEqual({ x: 0, y: 0, w: 4, h: 8 })
-    expect(layout.exits).toEqual([{ type: 'stairs', squares: [[1, 3], [2, 3], [1, 4], [2, 4]] }])
+    expect(layout.exits).toEqual([{ type: 'stairs', squares: [[1, 3], [2, 3], [1, 4], [2, 4]], entrance: true }])
     // One open square on the north edge: where the next tile goes.
     expect(layout.openEdges).toEqual([{ x: 1, y: 0, side: 'N' }])
     // Shut edges round the floor get walls; rock squares don't need one.
@@ -127,5 +127,24 @@ describe('who the 3D figures look at', () => {
     expect(looks.v1).toEqual([5, 0])
     expect(looks.n1).toBeUndefined()
     expect(restFacing([{ id: 'h1', kind: 'hero', at: [0, 0] }])).toEqual({})
+  })
+})
+
+describe('stairs in 3D', () => {
+  it('rise toward the rock beyond them, or north when nothing tells', () => {
+    const layout = boardLayout(game().board)
+    const stairs = layout.exits[0].squares
+    // The Start tile here has rock down its west side, next to the stairs.
+    expect(stairsRise(layout, stairs)).toBe('W')
+    const open = { squares: [[0, 0], [1, 0], [0, 1], [1, 1], [2, 0], [2, 1], [-1, 0], [-1, 1], [0, -1], [1, -1], [0, 2], [1, 2]].map(([x, y]) => ({ x, y, floor: true })) }
+    expect(stairsRise(open, [[0, 0], [1, 0], [0, 1], [1, 1]])).toBe('N')
+  })
+
+  it('lift a figure higher on the squares nearer the top', () => {
+    const h = stairHeights([[1, 3], [2, 3], [1, 4], [2, 4]], 'N')
+    expect(h['1,3']).toBeGreaterThan(h['1,4'])
+    expect(h['1,3']).toBe(h['2,3'])
+    expect(h['1,3']).toBeLessThan(STAIR_TOP)
+    expect(h['1,4']).toBeGreaterThan(0)
   })
 })
