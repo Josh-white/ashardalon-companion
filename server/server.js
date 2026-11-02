@@ -22,6 +22,7 @@ import { setHeroTemplates } from '../src/data/heroes.js'
 import { describeAction } from '../src/state/describeAction.js'
 import { gameReducer, initialState } from '../src/state/game.js'
 import { migrateSave } from '../src/state/saves.js'
+import { refreshCardEffects } from '../src/state/cardRefresh.js'
 import { recordsReply, syncRecord } from '../src/state/records.js'
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -396,7 +397,9 @@ export function startServer({
       } catch {
         // Not saved yet.
       }
-      rooms.set(id, { id, file, state: loadSavedGame(file), history: [], seenActions: new Set(), updatedAt })
+      // A fix to how a card works (cards.json) reaches a game saved before it.
+      const state = refreshCardEffects(loadSavedGame(file), loadCards(cardsFile, exampleCardsFile))
+      rooms.set(id, { id, file, state, history: [], seenActions: new Set(), updatedAt })
     }
     return rooms.get(id)
   }
@@ -472,6 +475,7 @@ export function startServer({
     if (req.url === '/cards.json') {
       const cards = loadCards(cardsFile, exampleCardsFile)
       setHeroTemplates(cards.heroes)
+      refreshRooms(cards)
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(cards))
       return
     }
@@ -730,6 +734,24 @@ export function startServer({
     if (!r) return
     for (const client of screensIn(r)) if (client.who?.family === false && client.who.email === email) leaveGame(client)
     broadcastScreens(r)
+  }
+
+  // The card file changed how a power or a hero card ability works (a screen loads the
+  // cards after every edit): the games being played take the fix too, and every screen in
+  // them gets the new game. Only the card effects change; Undo steps keep the old ones.
+  function refreshRooms(cards) {
+    for (const r of rooms.values()) {
+      const next = refreshCardEffects(r.state, cards)
+      if (next === r.state) continue
+      r.state = next
+      try {
+        writeSave(r.file, r.state)
+      } catch (error) {
+        console.error('Could not save the game:', error.message)
+      }
+      console.log(`Cards: ${r.id} now uses the card file's latest power effects.`)
+      broadcast(r)
+    }
   }
 
   // Tells every "Which game?" screen that the list changed.
