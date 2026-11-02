@@ -3,7 +3,8 @@
 import { XP_TO_LEVEL_UP, hasAbility, levelCrits } from '../data/heroes.js'
 import { attackItems, heroItems, itemAttackParts } from '../data/items.js'
 import { hasSecondChance } from '../data/difficulty.js'
-import { effectsOf, maxRolls, onHitHeals, shadowAfter, shadowKept } from '../data/powerEffects.js'
+import { effectsOf, maxRolls, onHitHeals, shadowAfter, shadowKept, wolfBlocked } from '../data/powerEffects.js'
+import { addStatus, attackedStatus } from './monsterStatus.js'
 import { queueFearMove, queueMoves } from '../board/powerMoves.js'
 import { heroesInReach } from '../board/encounters.js'
 import { clamp, findFoe, foes, heroLabel, markUsed, updateHero, updateMonster, validRoll, withCast, withLog, withMoment } from './gameHelpers.js'
@@ -15,7 +16,7 @@ import { canSpendAttack, inHeroPhase, itemAttackIsMove, powerUsesAttack, removeC
 // One attack's numbers against a monster at this distance, with where each comes from so the
 // attack box can show the sum: { bonus, damage, miss, evenBonus, crits, parts }. parts.bonus and
 // parts.damage are [{ label, value }]; parts.crits are [{ label, from }] (+1 damage on a high roll).
-export function attackNumbers(hero, { item = null, power = null, extraAttack = null, adjacentCount = 0, startedAdjacent = false, distance, stayed = false, fearless = false } = {}) {
+export function attackNumbers(hero, { item = null, power = null, extraAttack = null, adjacentCount = 0, startedAdjacent = false, distance, stayed = false, fearless = false, pounce = false } = {}) {
   const effects = effectsOf(power)
   const source = item ?? power
   const bonusParts = [{ label: source.name, value: item ? item.card.attack.bonus : powerNumber(power.card?.attack) ?? 0 }]
@@ -26,6 +27,7 @@ export function attackNumbers(hero, { item = null, power = null, extraAttack = n
   for (const buff of hero.buffs ?? []) if (buff.attack && (!buff.only || source.name.startsWith(buff.only))) bonusParts.push({ label: buff.source, value: buff.attack })
   // Fearless (a fan Battlemaster): a monster next to the hero when the turn started has -4 AC.
   if (fearless) bonusParts.push({ label: 'Fearless (it has -4 AC)', value: 4 })
+  if (pounce && effects.wolf) bonusParts.push({ label: 'Pounce', value: -2 })
   for (const curse of hero.curses ?? []) if (curse.card?.attackPenalty) bonusParts.push({ label: curse.name, value: -curse.card.attackPenalty })
   const damageParts = [{ label: source.name, value: item ? item.card.attack.damage : powerNumber(power.card?.damage) ?? 0 }]
   if (effects.ask === 'started-adjacent' && startedAdjacent) damageParts.push({ label: 'Started next to it', value: 1 })
@@ -71,6 +73,7 @@ export function heroAttack(state, action) {
     .filter((t) => effects.ask !== 'moved-monster' || t.monsterId !== action.movedId)
     .slice(0, item ? 1 : maxRolls(power))
   if (!source || (baseBonus === null && !effects.autoHit) || power?.used || targets.length === 0) return state
+  if (power && wolfBlocked(hero, power)) return state
 
   // Magic weapons add to rolls against monsters close enough, so each target can differ.
   const distances = action.distances && typeof action.distances === 'object' ? action.distances : {}
@@ -84,6 +87,7 @@ export function heroAttack(state, action) {
       distance: distances[monsterId],
       stayed: action.stayed === true,
       fearless: isFearlessTarget(state, hero, monsterId),
+      pounce: action.pounce === true,
     })
   const attack = numbers(null)
 
@@ -108,6 +112,12 @@ export function heroAttack(state, action) {
     const hurt = hurtMonster(next, monster, result.dealt)
     next = hurt.state
     if (hurt.defeated) defeated.push(monster)
+    else {
+      // Being attacked wears a status down (Pacified ends, Trapped loses a token); a hit can add one.
+      next = attackedStatus(next, monsterId)
+      const status = effects.onHit?.status ?? (effects.wolf && action.pounce === true ? 'slowed' : null)
+      if (result.hit && status) next = addStatus(next, monsterId, status, source.name)
+    }
   }
   const anyHit = rolls.some((r) => r.hit)
 
@@ -375,7 +385,7 @@ export function usePower(state, action) {
   const hero = state.heroes.find((h) => h.id === action.heroId)
   const power = hero?.powers.find((p) => p.id === action.powerId)
   const use = effectsOf(power).use
-  if (!power || power.used || !use) return state
+  if (!power || power.used || !use || wolfBlocked(hero, power)) return state
   const heroIds = (Array.isArray(action.heroIds) ? action.heroIds : []).filter((id) => state.heroes.some((h) => h.id === id))
   const picked = heroIds[0] && state.heroes.find((h) => h.id === heroIds[0])
   if (use.pick && !picked && !use.optional) return state
@@ -429,8 +439,8 @@ export function dodgeHit(state, action) {
   const hero = state.heroes.find((h) => h.id === action.heroId)
   const power = hero?.powers.find((p) => p.id === action.powerId)
   const row = last?.results.find((r) => r.heroId === hero?.id && r.hit && !r.dodged)
-  if (!row || !power || power.used || effectsOf(power).reaction !== 'dodge') return state
-  let next = withCast(markUsed(state, hero.id, power.id), power)
+  if (!row || !power || power.used || effectsOf(power).reaction !== 'dodge' || wolfBlocked(hero, power)) return state
+  let next = withCast(spendUse(state, hero, power), power)
   next = updateHero(next, hero.id, (h) => ({
     hp: clamp(h.hp + row.dealt - row.miss, 0, h.maxHp),
     conditions: h.conditions.filter((c) => !row.conditions.includes(c)),

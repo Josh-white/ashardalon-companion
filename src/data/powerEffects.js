@@ -26,6 +26,10 @@ import { itemAc } from './items.js'
 //   autoHit     hits without needing the roll to beat AC (a fan Bard's Guiding Strike).
 //   critFrom    +1 damage when the die shows this or more (a fan Ranger's Birch Arrow: 17).
 //   selfDamage  the hero takes this much damage after the attack (a fan Druid's Wolf Fangs).
+//   wolf        the fan Druid's Wolf Form attack: only while the hero is the wolf (tokens.wolf), with a
+//               Bite/Pounce question (Pounce: -2, and a hit Slows the monster). wolfOnly: a power only
+//               the wolf can use (Lupine Lore). While the hero is the wolf, no other power can be used.
+//   onHit.status a status the monsters it hits get (monsterStatus.js): 'trapped', 'pacified', ...
 //   uses        a utility with n tokens: it's only flipped after the n-th use (power.usesSpent).
 //   onHit.even  the onHit heal only happens when a hit's die is even (War Song Strike).
 // Other powers have a `use`, done from the power's tile:
@@ -145,7 +149,7 @@ BY_KEY.arcingstrike = BY_KEY.arcingsmite
 // The fields an effect can have, for checking a card's own `effect` in cards.json.
 export const EFFECT_FIELDS = [
   'targets', 'attacks', 'sameTarget', 'before', 'ask', 'evenBonus', 'onHit', 'after',
-  'note', 'hitNote', 'missNote', 'keepOnMiss', 'free', 'use', 'reaction', 'shadow', 'shadowBonus', 'shadowKeep', 'board', 'autoHit', 'critFrom', 'selfDamage', 'uses',
+  'note', 'hitNote', 'missNote', 'keepOnMiss', 'free', 'use', 'reaction', 'shadow', 'shadowBonus', 'shadowKeep', 'board', 'autoHit', 'critFrom', 'selfDamage', 'uses', 'wolf', 'wolfOnly',
 ]
 
 const cardOf = (powerOrCard) => powerOrCard?.card ?? powerOrCard
@@ -169,8 +173,15 @@ export const POWER_EFFECT_NAMES = Object.keys(EFFECTS)
 // An unused power with this reaction, on any hero: [{ hero, power }].
 export function reactionsFor(heroes, reaction) {
   return heroes.flatMap((hero) =>
-    hero.powers.filter((p) => !p.used && effectsOf(p).reaction === reaction).map((power) => ({ hero, power })),
+    hero.powers.filter((p) => !p.used && effectsOf(p).reaction === reaction && !wolfBlocked(hero, p)).map((power) => ({ hero, power })),
   )
+}
+
+// Wolf Form (a fan Druid): as the wolf only the wolf's powers work, and those only as the wolf.
+export function wolfBlocked(hero, power) {
+  const effects = effectsOf(power)
+  const wolfy = Boolean(effects.wolf || effects.wolfOnly)
+  return hero?.tokens?.wolf ? !wolfy : wolfy
 }
 
 // Sacred Flame, War Song Strike: an attack that hit lets the hero heal someone on their tile.
@@ -206,7 +217,7 @@ export function heroAc(hero) {
 // Practiced Evasion (an encounter card's or trap's attack). Returns the action, or null.
 export function pendingDodge(state, hero, power) {
   const reaction = effectsOf(power).reaction
-  if (power.used || (reaction !== 'dodge' && reaction !== 'evade')) return null
+  if (power.used || (reaction !== 'dodge' && reaction !== 'evade') || wolfBlocked(hero, power)) return null
   const last = reaction === 'dodge' ? state.turn.lastMonsterAttack : state.turn.lastEventAttack
   const flag = reaction === 'dodge' ? 'dodged' : 'evaded'
   if (!last?.results.some((r) => r.heroId === hero.id && r.hit && !r[flag])) return null

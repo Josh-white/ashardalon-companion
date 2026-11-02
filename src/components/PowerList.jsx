@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { cardStats } from '../data/cards.js'
-import { effectsOf, pendingDodge } from '../data/powerEffects.js'
+import { effectsOf, pendingDodge, wolfBlocked } from '../data/powerEffects.js'
 import { attackGone, powerNumber, powerUsesAttack } from '../state/game.js'
 import { usesLeft } from '../state/heroAttacks.js'
 import { rollD20 } from '../state/random.js'
@@ -221,6 +221,8 @@ export default function PowerList({ state, hero, dispatch, tilesHidden = false, 
               // Tumbling Escape or Practiced Evasion right after a hit undoes that hit.
               const dodge = state && pendingDodge(state, hero, power)
               if (dodge) return dispatch({ ...dodge, disableRoll: rollD20() })
+              // Wolf Form: only the wolf's powers while Aldred is the wolf, and those only then.
+              if (state && !power.used && wolfBlocked(hero, power)) return
               // A power the app can do opens its panel; the rest just flip over (or back).
               if (state && !power.used && effectsOf(power).use) return setUsingId(power.id === usingId ? null : power.id)
               dispatch({ type: 'TOGGLE_POWER', heroId: hero.id, powerId: power.id })

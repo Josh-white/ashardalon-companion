@@ -5,7 +5,7 @@ import { figuresInRange, foeDistance, foesInRange, powerRange } from '../board/m
 import { hypnotized } from '../board/powerMoves.js'
 import { difficultyOf, hasSecondChance } from '../data/difficulty.js'
 import { asksIfStayed, attackItems, distanceChoices, heroItems, itemsWithUse } from '../data/items.js'
-import { effectsOf, maxRolls, onHitHeals, reactionsFor } from '../data/powerEffects.js'
+import { effectsOf, maxRolls, onHitHeals, reactionsFor, wolfBlocked } from '../data/powerEffects.js'
 import { bardicSongsLeft, isFearlessTarget } from '../state/heroAttacks.js'
 import { rollD20 } from '../state/random.js'
 import { attackGone, attackNumbers, foes, powerNumber } from '../state/game.js'
@@ -248,6 +248,20 @@ export function AttackAftermath({ state, last, dispatch }) {
 
 // The question some powers ask before the roll.
 function BeforeQuestion({ hero, effects, answers, setAnswers }) {
+  if (effects.wolf) {
+    return (
+      <div>
+        <p className="text-zinc-200">🐺 Bite a monster next to {hero.name}, or Pounce on one within 1 tile (move next to it first: -2, and a hit Slows it)?</p>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {[false, true].map((pounce) => (
+            <Button key={String(pounce)} variant={answers.pounce === pounce ? 'gold' : 'default'} onClick={() => setAnswers({ pounce })}>
+              {pounce ? 'Pounce' : 'Bite'}
+            </Button>
+          ))}
+        </div>
+      </div>
+    )
+  }
   if (effects.ask === 'started-adjacent') {
     return (
       <div>
@@ -355,7 +369,7 @@ function DistanceQuestion({ state, hero, chosen, distances, setDistances, fromBo
 // `extra` is a free at-will attack from Cause Fear or Acrobatic Onslaught.
 export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   const powers = hero.powers.filter(
-    (p) => !p.used && powerNumber(p.card?.attack) !== null && (!extra || p.type === 'at-will'),
+    (p) => !p.used && powerNumber(p.card?.attack) !== null && (!extra || p.type === 'at-will') && !wolfBlocked(hero, p),
   )
   // Items with their own attack (Crossbow of Speed) are picked like a power.
   // The Crossbow of Speed fires instead of moving, so once the board has seen the hero
@@ -407,7 +421,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   const stayed = stayedTap ?? boardStayed ?? false
   const unknownAc = targets.find((m) => chosen.includes(m.id) && !m.ac)
   const needsAnswer =
-    (effects.ask && Object.keys(asked).length === 0) || (choices && chosen.some((id) => !allDistances[id]))
+    ((effects.ask || effects.wolf) && Object.keys(asked).length === 0) || (choices && chosen.some((id) => !allDistances[id]))
   const last = state.turn.lastAttack
   const showResults = rolled && last && !last.bonus && last.heroId === hero.id
   // An item attack that isn't the hero's attack (Crossbow of Speed fires instead of moving,
@@ -642,6 +656,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
                         distance: allDistances[monster.id],
                         stayed,
                         fearless: isFearlessTarget(state, hero, monster.id),
+                        pounce: answers.pounce === true,
                       })}
                     />
                   ))}

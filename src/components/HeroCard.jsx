@@ -7,7 +7,7 @@ import { artUrl, useArt } from '../state/useArt.js'
 import { useCards } from '../state/useCards.js'
 import Art from './Art.jsx'
 import { sphereOf, sphereVictims } from '../board/heroTokens.js'
-import { canSpendAttack, inHeroPhase, mindOverBodyChoices, naturesHealingOk } from '../state/heroTurn.js'
+import { canBecomeWolf, canSpendAttack, inHeroPhase, mindOverBodyChoices, naturesHealingOk } from '../state/heroTurn.js'
 import { BARDIC_SONGS, bardicSongsLeft } from '../state/heroAttacks.js'
 import { rollD20 } from '../state/random.js'
 import { MonsterChoice } from './Pickers.jsx'
@@ -62,10 +62,25 @@ function FanAbilities({ state, hero, dispatch }) {
   const conditions = mindOverBodyChoices(hero)
   const songs = hasAbility(hero, 'bardic-song') ? bardicSongsLeft(hero) : null
   const heal = naturesHealingOk(state, hero) && hero.hp < hero.maxHp
-  if (conditions.length === 0 && songs === null && !heal) return null
+  const wolf = Boolean(hero.tokens?.wolf)
+  const canWolf = canBecomeWolf(state, hero)
+  if (conditions.length === 0 && songs === null && !heal && !wolf && !canWolf) return null
   const give = (what) => dispatch({ type: 'NATURES_HEALING', heroId: hero.id, give: what })
   return (
     <div className="mt-3 space-y-2">
+      {canWolf && (
+        <Button className="w-full" onClick={() => dispatch({ type: 'WOLF_FORM', heroId: hero.id, on: true })}>
+          🐺 Wolf Form: lose 1 HP and become the wolf
+        </Button>
+      )}
+      {wolf && (
+        <div className="rounded-lg bg-zinc-950/60 px-3 py-2 text-sm text-sky-200">
+          <p>🐺 You're the Ancient Wolf: Bite or Pounce with Wolf Form, and no other powers. You change back at your next turn or when you take damage.</p>
+          <Button variant="ghost" className="mt-1" onClick={() => dispatch({ type: 'WOLF_FORM', heroId: hero.id, on: false })}>
+            Change back now
+          </Button>
+        </div>
+      )}
       {heal && (
         <div className="rounded-lg bg-emerald-950/60 p-3 text-sm text-emerald-200">
           <p>🌿 Nature's Healing: before you do anything this turn, give up</p>

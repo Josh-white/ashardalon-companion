@@ -2,6 +2,7 @@
 // ending the Hero Phase, whether the hero still has an attack, levelling up, items and
 // the Scroll of Monster Control. The reducer is in game.js.
 import { addedSlot, hasAbility, templateFor } from '../data/heroes.js'
+import { effectsOf } from '../data/powerEffects.js'
 import { PHASES } from '../data/phases.js'
 import { difficultyOf } from '../data/difficulty.js'
 import { heroItems } from '../data/items.js'
@@ -239,15 +240,40 @@ export function mindOverBody(state, action) {
   next = withLog(next, `${hero.name}'s Mind Over Body: rolled ${action.roll}${ignored ? `, and shrugs off being ${action.condition}!` : `. Still ${action.condition}.`}`)
   return withMoment(next, { kind: 'roll', heroId: hero.id, value: action.roll, title: ignored ? 'Mind Over Body!' : `Still ${action.condition}`, detail: `${hero.name} needed 11 or more.` })
 }
-// A condition that's gone can be rolled for again the next time the hero gets it.
-export function pruneMindTried(state) {
-  if (!state?.heroes?.some((h) => h.tokens?.mindTried?.some((c) => !h.conditions.includes(c)))) return state
-  return {
-    ...state,
-    heroes: state.heroes.map((h) =>
-      h.tokens?.mindTried?.some((c) => !h.conditions.includes(c)) ? { ...h, tokens: { ...h.tokens, mindTried: h.tokens.mindTried.filter((c) => h.conditions.includes(c)) } } : h,
-    ),
+// After every action: a condition that's gone can be rolled for again the next time the hero
+// gets it (Mind Over Body), and a wolf that took damage changes back (Wolf Form).
+export function pruneFanTokens(state) {
+  if (!state?.heroes?.some((h) => h.tokens?.mindTried?.length || h.tokens?.wolf)) return state
+  let next = state
+  for (const h of state.heroes) {
+    const tokens = h.tokens ?? {}
+    const mindTried = tokens.mindTried?.filter((c) => h.conditions.includes(c))
+    const changed = mindTried && mindTried.length !== tokens.mindTried.length
+    const hurt = tokens.wolf && h.hp < tokens.wolf.hp
+    const healed = tokens.wolf && h.hp > tokens.wolf.hp
+    if (!changed && !hurt && !healed) continue
+    next = updateHero(next, h.id, (hero) => ({
+      tokens: { ...hero.tokens, ...(changed ? { mindTried } : {}), ...(hurt ? { wolf: null } : healed ? { wolf: { hp: h.hp } } : {}) },
+    }))
+    if (hurt) next = withLog(next, `${h.name} took damage and changes back from Wolf Form.`)
   }
+  return next
+}
+
+// Wolf Form (a fan Druid): at the start of the Hero Phase, lose 1 HP and become the wolf. The
+// wolf changes back at the hero's next turn or when it takes damage (pruneFanTokens).
+export const canBecomeWolf = (state, hero) =>
+  Boolean(hero) && !hero.tokens?.wolf && hero.powers.some((p) => effectsOf(p).wolf) && inHeroPhase(state, hero) && canSpendAttack(state, hero) && hero.hp > 1
+export function wolfForm(state, action) {
+  const hero = state.heroes.find((h) => h.id === action.heroId)
+  if (!hero) return state
+  if (!action.on) {
+    if (!hero.tokens?.wolf) return state
+    return withLog(updateHero(state, hero.id, (h) => ({ tokens: { ...h.tokens, wolf: null } })), `${hero.name} changes back from Wolf Form.`)
+  }
+  if (!canBecomeWolf(state, hero)) return state
+  const next = updateHero(state, hero.id, (h) => ({ hp: h.hp - 1, tokens: { ...h.tokens, wolf: { hp: h.hp - 1 } } }))
+  return withLog(next, `${hero.name} loses 1 HP and becomes the Ancient Wolf!`)
 }
 
 // Bonuses this hero's powers gave (Song of Courage...) that run out now.
@@ -267,6 +293,7 @@ export function startTurn(state) {
   state = returnFromPowers(state, hero)
   state = endBuffs(state, hero, (b) => b.untilTurnStart)
   state = noteFearless(state, hero)
+  if (hero?.tokens?.wolf) state = withLog(updateHero(state, hero.id, (h) => ({ tokens: { ...h.tokens, wolf: null } })), `${hero.name} changes back from Wolf Form.`)
   for (const curse of (hero?.curses ?? []).filter((c) => c.card?.removeAtTurnStart)) {
     // On the virtual board the hero waits under "Not on the board yet" for a tap.
     const put = state.board ? `Tap ${hero.name} under "Not on the board yet", then any square.` : `Put ${hero.name} on any tile.`
