@@ -14,11 +14,13 @@ import { DrawTileButton } from './Tiles.jsx'
 import { Button } from './ui.jsx'
 import { figureToken } from '../board/play.js'
 import { stoppedShort } from '../board/heroTokens.js'
+import { petsDue, petsOf } from '../state/pets.js'
 import { boardStep, boardTargetIds, closestTarget, foeDistance, squareAway, squareNextTo, squareToward } from '../board/monsters.js'
-import { seesInvisible, unseenByTactics } from '../board/tactics.js'
+import { outOfReach, seesInvisible, unseenByTactics } from '../board/tactics.js'
 import { liveAc } from '../board/checks.js'
 import { hitMoveStep } from '../board/powerMoves.js'
 import { nobleShieldWorth } from '../ally/boardPowers.js'
+import { STATUSES, cowardlyDue, mesmerizedDue, skipsTurn, statusesOf } from '../state/monsterStatus.js'
 
 // Keyleth's Bravery: when a monster within 1 tile of her activates, she can step next to it and heal 1.
 function Bravery({ state, name, monsterId, token, dispatch }) {
@@ -219,7 +221,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
 
   // An invisible hero isn't the closest hero, so only some steps can pick them.
   const unseen = seesInvisible(step) || step?.when === 'aloneByUnexploredEdge' || step?.explore ? [] : state.heroes.filter((h) => unseenByTactics(h) && !h.tokens?.refuge)
-  const targetable = monsterTargets(state).filter((h) => !unseen.includes(h))
+  const targetable = monsterTargets(state).filter((h) => !unseen.includes(h) && !outOfReach(h, step))
   const villagers = targetable.filter((h) => h.villager)
   const toggle = (heroId) => setChosen((list) => toggleTarget(list, heroId, tapsMany(step)))
   const { tapped, strongest, tied, top, targetIds } = chooseTargets(step, targetable, chosen, tiePick)
@@ -514,6 +516,67 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
   )
 }
 
+// Trapped, Pacified, Cowardly... (fan heroes' statuses, state/monsterStatus.js) on a monster's row.
+function StatusChips({ monster }) {
+  const list = statusesOf(monster)
+  if (list.length === 0) return null
+  return (
+    <span className="mt-1 flex flex-wrap gap-1">
+      {list.map((s) => (
+        <span key={s.kind} className="rounded-full bg-sky-950 px-2 py-0.5 text-xs text-sky-200">
+          {STATUSES[s.kind].icon} {STATUSES[s.kind].label} {'⌛'.repeat(s.tokens)}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+// What a status means for the monster's turn that's starting.
+function StatusBanner({ monster }) {
+  const list = statusesOf(monster).filter((s) => !STATUSES[s.kind].skip && !STATUSES[s.kind].roll)
+  if (list.length === 0) return null
+  return (
+    <div className="mb-2 space-y-1">
+      {list.map((s) => (
+        <p key={s.kind} className="rounded-lg bg-sky-950/70 px-3 py-2 text-sky-100">
+          {STATUSES[s.kind].icon} <b>{STATUSES[s.kind].label}:</b> {STATUSES[s.kind].text}
+        </p>
+      ))}
+    </div>
+  )
+}
+
+// The button on a monster's row: take its turn, or skip it (Pacified), or roll first (Cowardly).
+function TurnButton({ monster, onStart, onDone, dispatch, variant = 'danger' }) {
+  const skip = skipsTurn(monster)
+  if (skip) {
+    return (
+      <Button className="font-bold" onClick={onDone}>
+        {STATUSES[skip.kind].icon} {STATUSES[skip.kind].label}: skip its turn
+      </Button>
+    )
+  }
+  if (mesmerizedDue(monster)) {
+    return (
+      <Button className="font-bold" onClick={() => dispatch({ type: 'MESMERIZED_TURN', id: monster.id, roll: rollD20() })}>
+        🌀 Mesmerized: it attacks the nearest monster
+      </Button>
+    )
+  }
+  if (cowardlyDue(monster)) {
+    return (
+      <Button className="font-bold" onClick={() => dispatch({ type: 'COWARDLY_ROLL', id: monster.id, roll: rollD20() })}>
+        😨 Cowardly: roll (under 11 skips its turn)
+      </Button>
+    )
+  }
+  return (
+    <Button variant={variant} className="font-bold" onClick={onStart}>
+      Take its turn
+    </Button>
+  )
+}
+
 // The Villain Phase's monster activations for the active hero: each of their monster
 // cards takes a turn, one at a time.
 export default function MonsterTurns({ state, dispatch, hero }) {
@@ -526,14 +589,21 @@ export default function MonsterTurns({ state, dispatch, hero }) {
   const active = monsters.find((m) => m.id === state.turn.acting && !isDone(m))
 
   if (monsters.length === 0) {
-    return <p className="mt-4 rounded-xl bg-zinc-950/50 p-3 text-zinc-400">You have no monster cards, so no monster turns.</p>
+    return (
+      <>
+        <PetTurns state={state} hero={hero} dispatch={dispatch} />
+        <p className="mt-4 rounded-xl bg-zinc-950/50 p-3 text-zinc-400">You have no monster cards, so no monster turns.</p>
+      </>
+    )
   }
 
   return (
     <div className="mt-5">
+      <PetTurns state={state} hero={hero} dispatch={dispatch} />
       <h3 className="font-display text-xl font-bold text-zinc-200">Monster turns</h3>
       {active?.card ? (
         <div className="mt-2">
+          <StatusBanner monster={active} />
           <MonsterActivation
             key={active.id}
             monster={active}
@@ -549,13 +619,12 @@ export default function MonsterTurns({ state, dispatch, hero }) {
             <li key={monster.id} className="flex items-center justify-between gap-3 rounded-xl bg-zinc-950/50 p-3">
               <span className={`text-lg font-semibold ${isDone(monster) ? 'text-zinc-500 line-through' : 'text-red-300'}`}>
                 {monster.name}
+                <StatusChips monster={monster} />
               </span>
               {isDone(monster) ? (
                 <span className="text-zinc-500">✓ Done</span>
               ) : monster.card ? (
-                <Button variant="danger" className="font-bold" onClick={() => setActiveId(monster.id)}>
-                  Take its turn
-                </Button>
+                <TurnButton monster={monster} dispatch={dispatch} onStart={() => setActiveId(monster.id)} onDone={() => markDone(monster)} />
               ) : (
                 // The app has no card for it, so it's played from the physical card.
                 <span className="flex items-center gap-2 text-right text-sm text-zinc-400">
@@ -567,6 +636,32 @@ export default function MonsterTurns({ state, dispatch, hero }) {
           ))}
         </ul>
       )}
+    </div>
+  )
+}
+
+// A fan hero's allies on the board (Lizard & Lace): they go first in the hero's Villain Phase.
+function PetTurns({ state, hero, dispatch }) {
+  const pets = petsOf(state, hero.id)
+  if (pets.length === 0) return null
+  const due = petsDue(state, hero)
+  return (
+    <div className="mb-4 space-y-2 rounded-xl border border-emerald-700/60 bg-emerald-950/40 p-3">
+      <p className="font-semibold text-emerald-200">Allies: {pets.map((p) => `${p.icon ?? '🦎'} ${p.name} (${p.hp} HP)`).join(', ')}</p>
+      {due ? (
+        <Button variant="gold" className="w-full" onClick={() => dispatch({ type: 'PETS_ACT', heroId: hero.id, rolls: pets.map(() => rollD20()) })}>
+          {pets.map((p) => p.name).join(' and ')} take{pets.length === 1 ? 's' : ''} their turn first
+        </Button>
+      ) : (
+        <p className="text-sm text-emerald-300">✓ They've had their turn.</p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {pets.map((p) => (
+          <Button key={p.id} variant="ghost" onClick={() => dispatch({ type: 'PET_HURT', id: p.id, amount: 1 })}>
+            {p.name} lost 1 HP
+          </Button>
+        ))}
+      </div>
     </div>
   )
 }
@@ -587,6 +682,7 @@ export function VillainTurns({ state, dispatch, hero }) {
       <p className="text-zinc-400">Villains act at the start of every Villain Phase, before anything else.</p>
       {active ? (
         <div className="mt-2">
+          <StatusBanner monster={active} />
           <MonsterActivation key={active.id} monster={active} state={state} dispatch={dispatch} activeHeroId={hero.id} onDone={() => markDone(active)} />
         </div>
       ) : (
@@ -595,13 +691,12 @@ export function VillainTurns({ state, dispatch, hero }) {
             <li key={villain.id} className="flex items-center justify-between gap-3 rounded-xl border border-fuchsia-800 bg-zinc-950/50 p-3">
               <span className={`text-lg font-semibold ${isDone(villain) ? 'text-zinc-500 line-through' : 'text-fuchsia-300'}`}>
                 {villain.enraged ? `Enraged ${villain.name}` : villain.name}
+                <StatusChips monster={villain} />
               </span>
               {isDone(villain) ? (
                 <span className="text-zinc-500">✓ Done</span>
               ) : (
-                <Button variant="danger" className="font-bold" onClick={() => setActiveId(villain.id)}>
-                  Take its turn
-                </Button>
+                <TurnButton monster={villain} dispatch={dispatch} onStart={() => setActiveId(villain.id)} onDone={() => markDone(villain)} />
               )}
             </li>
           ))}

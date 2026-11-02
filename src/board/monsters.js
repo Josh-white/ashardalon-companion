@@ -4,7 +4,7 @@
 
 import { baseId, key, unexploredEdges } from './grid.js'
 import { adjacent, closest, distances, tilesBetween } from './paths.js'
-import { heroesFor, seesInvisible, tacticHolds, unseenByTactics } from './tactics.js'
+import { heroesFor, meleeStep, seesInvisible, tacticHolds, unseenByTactics } from './tactics.js'
 import { boardGrid } from './play.js'
 import { trapOnWay } from './heroTokens.js'
 
@@ -16,14 +16,15 @@ export function boardTargets(state) {
   const heroes = state.heroes.filter((h) => h.hp > 0 && !h.tokens?.refuge)
   return [...villagers.map((v) => ({ ...v, villager: true })), ...heroes]
     .filter((f) => tokens[f.id])
-    .map((f) => ({ id: f.id, at: tokens[f.id], hp: f.hp, villager: Boolean(f.villager), invisible: unseenByTactics(f) }))
+    .map((f) => ({ id: f.id, at: tokens[f.id], hp: f.hp, villager: Boolean(f.villager), invisible: unseenByTactics(f), perched: Boolean(f.tokens?.treetop) }))
 }
 
 // The figures one tactic step can go after: an invisible hero only counts for the steps
 // that don't look for the closest hero (and for "a tile with no Heroes", where they still stand).
 function stepTargets(state, step) {
   const all = boardTargets(state)
-  return seesInvisible(step) || step?.when === 'aloneByUnexploredEdge' ? all : all.filter((f) => !f.invisible)
+  const reachable = all.filter((f) => !(f.perched && meleeStep(step)))
+  return seesInvisible(step) || step?.when === 'aloneByUnexploredEdge' ? reachable : reachable.filter((f) => !f.invisible)
 }
 
 const squareOf = (state, id) => state.board?.tokens?.[id] ?? null

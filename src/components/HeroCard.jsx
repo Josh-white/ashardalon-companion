@@ -6,8 +6,9 @@ import { surgeHp } from '../data/difficulty.js'
 import { artUrl, useArt } from '../state/useArt.js'
 import { useCards } from '../state/useCards.js'
 import Art from './Art.jsx'
-import { sphereOf, sphereVictims } from '../board/heroTokens.js'
-import { canSpendAttack, inHeroPhase, mindOverBodyChoices } from '../state/heroTurn.js'
+import { HERO_TOKENS, sphereOf, sphereVictims } from '../board/heroTokens.js'
+import { canDropDarkness, pathKinds } from '../state/fanPowers.js'
+import { canBecomeWolf, canSpendAttack, inHeroPhase, mindOverBodyChoices, naturesHealingOk } from '../state/heroTurn.js'
 import { BARDIC_SONGS, bardicSongsLeft } from '../state/heroAttacks.js'
 import { rollD20 } from '../state/random.js'
 import { MonsterChoice } from './Pickers.jsx'
@@ -58,12 +59,57 @@ function TokenDamage({ state, hero, source, label, prompt, many, disabled, dispa
 
 // Mind Over Body (a fan Monk): one roll per new condition, 11 or more shrugs it off.
 // Bardic Song (a fan Bard): how many songs are left (spent from a missed attack).
-function FanAbilities({ hero, dispatch }) {
+function FanAbilities({ state, hero, dispatch }) {
   const conditions = mindOverBodyChoices(hero)
   const songs = hasAbility(hero, 'bardic-song') ? bardicSongsLeft(hero) : null
-  if (conditions.length === 0 && songs === null) return null
+  const heal = naturesHealingOk(state, hero) && hero.hp < hero.maxHp
+  const wolf = Boolean(hero.tokens?.wolf)
+  const canWolf = canBecomeWolf(state, hero)
+  const darkness = canDropDarkness(state, hero)
+  const paths = pathKinds(state, hero)
+  const perched = Boolean(hero.tokens?.treetop)
+  const advantage = state.turn.advantage === hero.id && inHeroPhase(state, hero)
+  const seekers = hero.tokens?.seekersLeft > 0 ? hero.tokens.seekersLeft : 0
+  if (conditions.length === 0 && songs === null && !heal && !wolf && !canWolf && !darkness && paths.length === 0 && !perched && !advantage && !seekers) return null
+  const give = (what) => dispatch({ type: 'NATURES_HEALING', heroId: hero.id, give: what })
   return (
     <div className="mt-3 space-y-2">
+      {perched && <p className="rounded-lg bg-zinc-950/60 px-3 py-2 text-sm text-emerald-200">🌳 Up on a wall: monsters next to {hero.name} can't attack until the next Hero Phase (ranged attacks still can).</p>}
+      {advantage && <p className="rounded-lg bg-zinc-950/60 px-3 py-2 text-sm text-emerald-200">🎯 Advantage: each attack this Hero Phase rolls two dice and keeps the better one.</p>}
+      {seekers > 0 && <p className="rounded-lg bg-zinc-950/60 px-3 py-2 text-sm text-violet-200">👤 Shadow Seekers: {seekers} left. One goes out each time {hero.name} slips into the shadows near a monster.</p>}
+      {darkness && (
+        <Button className="w-full" onClick={() => dispatch({ type: 'DROP_DARKNESS', heroId: hero.id })}>
+          🌑 Leave the shadows to put down a Darkness token ({hero.tokens.darknessLeft} left)
+        </Button>
+      )}
+      {paths.map((kind) => (
+        <Button key={kind} className="w-full" onClick={() => dispatch({ type: 'TAKE_PATH', heroId: hero.id, kind })}>
+          {HERO_TOKENS[kind].icon} {kind === 'darkness' ? 'Move through the Darkness to another token' : 'Take the Secret Path to the other token'} (uses a move)
+        </Button>
+      ))}
+      {canWolf && (
+        <Button className="w-full" onClick={() => dispatch({ type: 'WOLF_FORM', heroId: hero.id, on: true })}>
+          🐺 Wolf Form: lose 1 HP and become the wolf
+        </Button>
+      )}
+      {wolf && (
+        <div className="rounded-lg bg-zinc-950/60 px-3 py-2 text-sm text-sky-200">
+          <p>🐺 You're the Ancient Wolf: Bite or Pounce with Wolf Form, and no other powers. You change back at your next turn or when you take damage.</p>
+          <Button variant="ghost" className="mt-1" onClick={() => dispatch({ type: 'WOLF_FORM', heroId: hero.id, on: false })}>
+            Change back now
+          </Button>
+        </div>
+      )}
+      {heal && (
+        <div className="rounded-lg bg-emerald-950/60 p-3 text-sm text-emerald-200">
+          <p>🌿 Nature's Healing: before you do anything this turn, give up</p>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            <Button onClick={() => give('move')}>a move: +1 HP</Button>
+            <Button onClick={() => give('attack')}>your attack: +1 HP</Button>
+            <Button onClick={() => give('phase')}>the whole phase: +2 HP</Button>
+          </div>
+        </div>
+      )}
       {songs !== null && (
         <p className="rounded-lg bg-zinc-950/60 px-3 py-2 text-sm text-sky-200">
           🎶 Bardic Song: {songs} of {BARDIC_SONGS} left. When any hero misses, the attack box offers a song to roll again.
@@ -359,7 +405,7 @@ export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, 
 
       {state && <PowerMarkers state={state} hero={hero} dispatch={dispatch} />}
       {state && dispatch && <ShadowSwitch state={state} hero={hero} dispatch={dispatch} />}
-      {state && dispatch && <FanAbilities hero={hero} dispatch={dispatch} />}
+      {state && dispatch && <FanAbilities state={state} hero={hero} dispatch={dispatch} />}
       {state && dispatch && <AbilityOffers state={state} hero={hero} dispatch={dispatch} />}
 
       <PowerList state={state} hero={hero} dispatch={dispatch} tilesHidden={powersInTurnGuide} compact={compact} />

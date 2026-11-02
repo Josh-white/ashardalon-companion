@@ -282,6 +282,8 @@ function VillainPhase({ state, hero, dispatch }) {
           <EncounterStep state={state} hero={hero} dispatch={dispatch} />
         </>
       )}
+      {/* Swift Evasion (a fan Assassin) can give an at-will attack during a monster's turn. */}
+      <ExtraAttacks state={state} dispatch={dispatch} />
       {!state.encounter && (
         <>
           <MonsterTurns state={state} dispatch={dispatch} hero={hero} />

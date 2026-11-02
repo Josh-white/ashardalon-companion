@@ -56,6 +56,22 @@ export function describeAction(state, action) {
       return { furious: 'Furious Assault', bladeBarrier: 'Blade Barrier', flamingSphere: 'Flaming Sphere' }[action.source] ?? 'Power damage'
     case 'EVADE_HIT':
       return hero ? `${hero.name}'s Practiced Evasion` : 'Practiced Evasion'
+    case 'COWARDLY_ROLL':
+      return 'Cowardly roll'
+    case 'MESMERIZED_TURN':
+      return 'Mesmerized monster'
+    case 'PETS_ACT':
+      return 'Allies act'
+    case 'PET_HURT':
+      return 'Ally hurt'
+    case 'DROP_DARKNESS':
+      return 'Darkness token'
+    case 'TAKE_PATH':
+      return action.kind === 'darkness' ? 'Through the Darkness' : 'Secret Path'
+    case 'WOLF_FORM':
+      return action.on ? 'Wolf Form' : 'Back from Wolf Form'
+    case 'NATURES_HEALING':
+      return "Nature's Healing"
     case 'MIND_OVER_BODY':
       return 'Mind Over Body roll'
     case 'SET_SHADOW':

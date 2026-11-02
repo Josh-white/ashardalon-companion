@@ -5,9 +5,10 @@ import { figuresInRange, foeDistance, foesInRange, powerRange } from '../board/m
 import { hypnotized } from '../board/powerMoves.js'
 import { difficultyOf, hasSecondChance } from '../data/difficulty.js'
 import { asksIfStayed, attackItems, distanceChoices, heroItems, itemsWithUse } from '../data/items.js'
-import { effectsOf, maxRolls, onHitHeals, reactionsFor } from '../data/powerEffects.js'
-import { bardicSongsLeft } from '../state/heroAttacks.js'
+import { effectsOf, maxRolls, onHitHeals, reactionsFor, wolfBlocked } from '../data/powerEffects.js'
+import { bardicSongsLeft, isFearlessTarget } from '../state/heroAttacks.js'
 import { rollD20 } from '../state/random.js'
+import { targetAllowed } from '../state/fanPowers.js'
 import { attackGone, attackNumbers, foes, powerNumber } from '../state/game.js'
 import { itemAttackIsMove } from '../state/heroTurn.js'
 import { HeroChoice, InReach, MonsterChoice, monsterName } from './Pickers.jsx'
@@ -248,6 +249,20 @@ export function AttackAftermath({ state, last, dispatch }) {
 
 // The question some powers ask before the roll.
 function BeforeQuestion({ hero, effects, answers, setAnswers }) {
+  if (effects.wolf) {
+    return (
+      <div>
+        <p className="text-zinc-200">🐺 Bite a monster next to {hero.name}, or Pounce on one within 1 tile (move next to it first: -2, and a hit Slows it)?</p>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {[false, true].map((pounce) => (
+            <Button key={String(pounce)} variant={answers.pounce === pounce ? 'gold' : 'default'} onClick={() => setAnswers({ pounce })}>
+              {pounce ? 'Pounce' : 'Bite'}
+            </Button>
+          ))}
+        </div>
+      </div>
+    )
+  }
   if (effects.ask === 'started-adjacent') {
     return (
       <div>
@@ -355,7 +370,7 @@ function DistanceQuestion({ state, hero, chosen, distances, setDistances, fromBo
 // `extra` is a free at-will attack from Cause Fear or Acrobatic Onslaught.
 export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   const powers = hero.powers.filter(
-    (p) => !p.used && powerNumber(p.card?.attack) !== null && (!extra || p.type === 'at-will'),
+    (p) => !p.used && powerNumber(p.card?.attack) !== null && (!extra || p.type === 'at-will') && !wolfBlocked(hero, p),
   )
   // Items with their own attack (Crossbow of Speed) are picked like a power.
   // The Crossbow of Speed fires instead of moving, so once the board has seen the hero
@@ -383,13 +398,15 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   const moving = effects.ask === 'moved-monster'
   // On the virtual board only the monsters the power can reach are offered.
   const [showAll, setShowAll] = useState(false)
-  const range = state.board && !moving ? powerRange(item ? item.card.text : power?.card?.text) : null
+  const range = state.board && !moving ? (effects.range ?? powerRange(item ? item.card.text : power?.card?.text)) : null
   // On the virtual board Hypnotism's move is done there, and the board knows who it's next to.
   const trance = moving && power ? hypnotized(state, power.name) : null
   const asked = trance ? { movedId: trance.id } : answers
   const everyTarget = foes(state).filter((m) => !moving || (m.id !== asked.movedId && (!trance || trance.nextTo.includes(m.id))))
   const reachable = foesInRange(state, hero.id, range, everyTarget)
-  const targets = showAll ? everyTarget : reachable
+  // Fan powers: villains only, not your own tile, next to another hero, all on one tile.
+  const allowed = (m) => targetAllowed(state, hero, effects, m, chosen.filter((id) => id !== m.id))
+  const targets = (showAll ? everyTarget : reachable).filter((m) => showAll || allowed(m) || chosen.includes(m.id))
   // The board says how far each monster is, for magic weapons that care.
   // An item that only cares about "next to you" offers no "within 1 tile" answer, so the
   // board's within1 counts as farther. A player's tap beats the board.
@@ -407,7 +424,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   const stayed = stayedTap ?? boardStayed ?? false
   const unknownAc = targets.find((m) => chosen.includes(m.id) && !m.ac)
   const needsAnswer =
-    (effects.ask && Object.keys(asked).length === 0) || (choices && chosen.some((id) => !allDistances[id]))
+    ((effects.ask || effects.wolf) && Object.keys(asked).length === 0) || (choices && chosen.some((id) => !allDistances[id]))
   const last = state.turn.lastAttack
   const showResults = rolled && last && !last.bonus && last.heroId === hero.id
   // An item attack that isn't the hero's attack (Crossbow of Speed fires instead of moving,
@@ -448,7 +465,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   }
 
   const roll = () => {
-    const targets = chosen.map((monsterId) => ({ monsterId, roll: rollD20() }))
+    const targets = chosen.map((monsterId) => ({ monsterId, roll: rollD20(), roll2: rollD20() }))
     const source = item ? { itemId: item.id } : { powerId: power.id }
     dispatch({ type: 'HERO_ATTACK', heroId: hero.id, ...source, targets, bonusAttack: Boolean(extra), distances: allDistances, stayed, ...asked })
     setRolled(true)
@@ -602,13 +619,23 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
                 </p>
               )}
               {targets.length === 0 ? (
-                <p className="text-amber-300">No monster is {RANGE_WORDS[range]} {hero.name}. Move closer first, or pick another power.</p>
+                <p className="text-amber-300">{range ? `No monster is ${RANGE_WORDS[range]} ${hero.name}.` : `No monster this power can attack right now.`} Move closer first, or pick another power.</p>
               ) : (
                 <MonsterChoice state={state} monsters={targets} chosen={chosen} onToggle={tap} />
               )}
               </>
               )}
               <BeforeQuestion hero={hero} effects={effects} answers={answers} setAnswers={setAnswers} />
+              {effects.follower && (
+                <div>
+                  <p className="text-zinc-200">If it hits, which hero on {hero.name}'s tile follows the lead (moves next to a monster and makes an at-will attack)?</p>
+                  <InReach items={state.heroes.filter((h) => h.id !== hero.id && h.hp > 0)} near={heroesInReach(state, hero.id, 'sameTile')}>
+                    {(shown) => (
+                      <HeroChoice heroes={shown} chosen={answers.followerId ? [answers.followerId] : []} onToggle={(id) => setAnswers({ ...answers, followerId: answers.followerId === id ? undefined : id })} />
+                    )}
+                  </InReach>
+                </div>
+              )}
               {chosen.length > 0 && (
                 <DistanceQuestion
                   state={state}
@@ -641,6 +668,8 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
                         startedAdjacent: answers.startedAdjacent,
                         distance: allDistances[monster.id],
                         stayed,
+                        fearless: isFearlessTarget(state, hero, monster.id),
+                        pounce: answers.pounce === true,
                       })}
                     />
                   ))}

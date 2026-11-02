@@ -2,16 +2,19 @@
 // ending the Hero Phase, whether the hero still has an attack, levelling up, items and
 // the Scroll of Monster Control. The reducer is in game.js.
 import { addedSlot, hasAbility, templateFor } from '../data/heroes.js'
+import { effectsOf } from '../data/powerEffects.js'
 import { PHASES } from '../data/phases.js'
 import { difficultyOf } from '../data/difficulty.js'
 import { heroItems } from '../data/items.js'
 import { aliveVillagers, objectiveInPlay } from './adventure.js'
-import { placeToken } from '../board/play.js'
+import { boardGrid, placeToken } from '../board/play.js'
+import { adjacent } from '../board/paths.js'
+import { baseId } from '../board/grid.js'
 import { boardAnswer } from '../board/checks.js'
 import { wrathPull } from '../board/monsters.js'
 import { queueMoves, queueWandOfFear } from '../board/powerMoves.js'
 import { addCarpet } from '../board/items.js'
-import { activeVillains, buildDeck, findFoe, heroLabel, lose, updateHero, validRoll, withLog, withMoment } from './gameHelpers.js'
+import { activeVillains, buildDeck, findFoe, foes, heroLabel, lose, updateHero, validRoll, withLog, withMoment } from './gameHelpers.js'
 import { discardMonsterCard, drawMonster } from './monsterDeck.js'
 import { discardEncounterCard } from './encounterDeck.js'
 import { spendItem } from './treasureDeck.js'
@@ -194,6 +197,34 @@ export function encounterCount(state, hero) {
   return Math.max(0, base + badLuck + adventure + encountersOwed - encountersDrawn)
 }
 
+// Fearless (a fan Battlemaster): on the virtual board, the monsters next to the hero as its Hero
+// Phase starts have -4 AC until the end of the turn (heroAttacks.js isFearlessTarget).
+function noteFearless(state, hero) {
+  const at = state.board?.tokens[hero?.id]
+  if (!at || !hasAbility(hero, 'fearless')) return state
+  const grid = boardGrid(state.board)
+  const ids = new Set(foes(state).map((f) => f.id))
+  const near = [...new Set(Object.entries(state.board.tokens).filter(([id, p]) => ids.has(baseId(id)) && adjacent(grid, at, p)).map(([id]) => baseId(id)))]
+  if (near.length === 0) return state
+  return withLog({ ...state, turn: { ...state.turn, fearless: { heroId: hero.id, foes: near } } }, `${hero.name} is Fearless: the monsters next to them have -4 AC this turn.`)
+}
+
+// Nature's Healing (a fan Druid): at the start of the Hero Phase, give up a move or the attack
+// for 1 HP, or the whole Hero Phase for 2 HP. Once a turn, before doing anything else.
+export function naturesHealingOk(state, hero) {
+  return hasAbility(hero, 'natures-healing') && inHeroPhase(state, hero) && !state.turn.naturesHealing && canSpendAttack(state, hero) && !(state.turn.boardMoves > 0) && hero.hp > 0
+}
+export function naturesHealing(state, action) {
+  const hero = state.heroes.find((h) => h.id === action.heroId)
+  const give = action.give
+  if (!naturesHealingOk(state, hero) || !['move', 'attack', 'phase'].includes(give)) return state
+  let next = { ...state, turn: { ...state.turn, naturesHealing: give } }
+  if (give !== 'move') next = spendAttack(next, hero, "Nature's Healing")
+  if (give !== 'attack' && state.board) next = { ...next, turn: { ...next.turn, boardMoves: (next.turn.boardMoves ?? 0) + (give === 'phase' ? 2 : 1) } }
+  const words = { move: 'a move', attack: 'the attack', phase: 'the whole Hero Phase' }[give]
+  return healHero(withLog(next, `${hero.name} gives up ${words} for Nature's Healing.`), hero.id, give === 'phase' ? 2 : 1, "Nature's Healing")
+}
+
 // Mind Over Body (a fan Monk's ability): each time the hero gets a condition, one roll; 11-20
 // ignores it. tokens.mindTried lists the conditions already rolled for, while they last.
 export const mindOverBodyChoices = (hero) =>
@@ -209,15 +240,40 @@ export function mindOverBody(state, action) {
   next = withLog(next, `${hero.name}'s Mind Over Body: rolled ${action.roll}${ignored ? `, and shrugs off being ${action.condition}!` : `. Still ${action.condition}.`}`)
   return withMoment(next, { kind: 'roll', heroId: hero.id, value: action.roll, title: ignored ? 'Mind Over Body!' : `Still ${action.condition}`, detail: `${hero.name} needed 11 or more.` })
 }
-// A condition that's gone can be rolled for again the next time the hero gets it.
-export function pruneMindTried(state) {
-  if (!state?.heroes?.some((h) => h.tokens?.mindTried?.some((c) => !h.conditions.includes(c)))) return state
-  return {
-    ...state,
-    heroes: state.heroes.map((h) =>
-      h.tokens?.mindTried?.some((c) => !h.conditions.includes(c)) ? { ...h, tokens: { ...h.tokens, mindTried: h.tokens.mindTried.filter((c) => h.conditions.includes(c)) } } : h,
-    ),
+// After every action: a condition that's gone can be rolled for again the next time the hero
+// gets it (Mind Over Body), and a wolf that took damage changes back (Wolf Form).
+export function pruneFanTokens(state) {
+  if (!state?.heroes?.some((h) => h.tokens?.mindTried?.length || h.tokens?.wolf)) return state
+  let next = state
+  for (const h of state.heroes) {
+    const tokens = h.tokens ?? {}
+    const mindTried = tokens.mindTried?.filter((c) => h.conditions.includes(c))
+    const changed = mindTried && mindTried.length !== tokens.mindTried.length
+    const hurt = tokens.wolf && h.hp < tokens.wolf.hp
+    const healed = tokens.wolf && h.hp > tokens.wolf.hp
+    if (!changed && !hurt && !healed) continue
+    next = updateHero(next, h.id, (hero) => ({
+      tokens: { ...hero.tokens, ...(changed ? { mindTried } : {}), ...(hurt ? { wolf: null } : healed ? { wolf: { hp: h.hp } } : {}) },
+    }))
+    if (hurt) next = withLog(next, `${h.name} took damage and changes back from Wolf Form.`)
   }
+  return next
+}
+
+// Wolf Form (a fan Druid): at the start of the Hero Phase, lose 1 HP and become the wolf. The
+// wolf changes back at the hero's next turn or when it takes damage (pruneFanTokens).
+export const canBecomeWolf = (state, hero) =>
+  Boolean(hero) && !hero.tokens?.wolf && hero.powers.some((p) => effectsOf(p).wolf) && inHeroPhase(state, hero) && canSpendAttack(state, hero) && hero.hp > 1
+export function wolfForm(state, action) {
+  const hero = state.heroes.find((h) => h.id === action.heroId)
+  if (!hero) return state
+  if (!action.on) {
+    if (!hero.tokens?.wolf) return state
+    return withLog(updateHero(state, hero.id, (h) => ({ tokens: { ...h.tokens, wolf: null } })), `${hero.name} changes back from Wolf Form.`)
+  }
+  if (!canBecomeWolf(state, hero)) return state
+  const next = updateHero(state, hero.id, (h) => ({ hp: h.hp - 1, tokens: { ...h.tokens, wolf: { hp: h.hp - 1 } } }))
+  return withLog(next, `${hero.name} loses 1 HP and becomes the Ancient Wolf!`)
 }
 
 // Bonuses this hero's powers gave (Song of Courage...) that run out now.
@@ -236,6 +292,14 @@ export function startTurn(state) {
   const hero = state.heroes[state.turn.heroIndex]
   state = returnFromPowers(state, hero)
   state = endBuffs(state, hero, (b) => b.untilTurnStart)
+  state = noteFearless(state, hero)
+  // Treetop (a fan Ranger): down from the wall, with Advantage this Hero Phase.
+  if (hero?.tokens?.treetop) {
+    state = updateHero(state, hero.id, (h) => ({ tokens: { ...h.tokens, treetop: false } }))
+    state = withLog({ ...state, turn: { ...state.turn, advantage: hero.id } }, `${hero.name} drops down from the wall onto any square of the tile, with Advantage on attacks this Hero Phase!`)
+    state = queueMoves(state, hero, { name: 'Treetop' }, [{ pick: 'self', to: 'ownTile' }])
+  }
+  if (hero?.tokens?.wolf) state = withLog(updateHero(state, hero.id, (h) => ({ tokens: { ...h.tokens, wolf: null } })), `${hero.name} changes back from Wolf Form.`)
   for (const curse of (hero?.curses ?? []).filter((c) => c.card?.removeAtTurnStart)) {
     // On the virtual board the hero waits under "Not on the board yet" for a tap.
     const put = state.board ? `Tap ${hero.name} under "Not on the board yet", then any square.` : `Put ${hero.name} on any tile.`
@@ -319,7 +383,7 @@ export function attackGone(state, hero) {
 }
 
 // Whether using this power takes the place of the hero's attack right now.
-export const powerUsesAttack = (state, hero, power) => inHeroPhase(state, hero) && (power?.type === 'at-will' || power?.type === 'daily')
+export const powerUsesAttack = (state, hero, power) => inHeroPhase(state, hero) && (power?.type === 'at-will' || power?.type === 'daily' || Boolean(effectsOf(power).costsAttack))
 
 // Opening the Cage or disabling a trap takes the place of the active hero's attack:
 // once per Hero Phase, and not after they've attacked (or moved twice).

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { onHitHeals } from '../data/powerEffects.js'
-import { bardicSongsLeft } from './heroAttacks.js'
+import { attackNumbers, bardicSongsLeft } from './heroAttacks.js'
 import { mindOverBodyChoices } from './heroTurn.js'
-import { createHero, gameReducer, initialState } from './game.js'
+import { attackGone, createHero, gameReducer, initialState } from './game.js'
 
 // A fan Bard (hero 0) and a fan Monk (hero 1), built on box templates.
 const BARD = { ...HERO_TEMPLATES[0], key: 'bard', name: 'Berryloaf', abilityEffects: ['bardic-song'] }
@@ -67,5 +67,54 @@ describe('fan powers', () => {
     expect(onHitHeals(effects, [{ hit: true, value: 13 }])).toBe(false)
     expect(onHitHeals(effects, [{ hit: false, value: 14 }])).toBe(false)
     expect(onHitHeals({ onHit: { heal: 1 } }, [{ hit: true, value: 13 }])).toBe(true)
+  })
+})
+
+describe('more fan hero rules', () => {
+  const DRUID = { ...HERO_TEMPLATES[2], key: 'druid', name: 'Aldred', abilityEffects: ['natures-healing'] }
+  const druidGame = () => gameReducer(initialState, { type: 'START_GAME', heroes: [createHero(DRUID), createHero(MONK)] })
+
+  it("Nature's Healing: give up the attack for 1 HP, once, before doing anything", () => {
+    let state = druidGame()
+    const id = state.heroes[0].id
+    state = gameReducer(state, { type: 'ADJUST_HP', heroId: id, amount: -3 })
+    const hp = state.heroes[0].hp
+    state = gameReducer(state, { type: 'NATURES_HEALING', heroId: id, give: 'attack' })
+    expect(state.heroes[0].hp).toBe(hp + 1)
+    expect(attackGone(state, state.heroes[0])).toBeTruthy()
+    expect(gameReducer(state, { type: 'NATURES_HEALING', heroId: id, give: 'move' })).toBe(state)
+    // Darna doesn't have it.
+    const other = druidGame()
+    expect(gameReducer(other, { type: 'NATURES_HEALING', heroId: other.heroes[1].id, give: 'phase' })).toBe(other)
+  })
+
+  it('a utility with uses flips only after the last one, and critFrom adds +1 on a high die', () => {
+    let { state, id } = give(start(), 0, { name: 'Healing Herbs', effect: { uses: 3, use: { healSelf: 1 } } }, 'utility')
+    const use = () => { state = gameReducer(state, { type: 'USE_POWER', heroId: state.heroes[0].id, powerId: id, heroIds: [] }) }
+    use(); use()
+    expect(state.heroes[0].powers.find((p) => p.id === id).used).toBeFalsy()
+    use()
+    expect(state.heroes[0].powers.find((p) => p.id === id).used).toBe(true)
+
+    const arrow = give(start(), 0, { name: 'Birch Arrow', attack: '+6', damage: '1', effect: { critFrom: 17 } })
+    expect(attack(arrow.state, 0, arrow.id, 17).monsters[0].hp).toBe(7)
+    expect(attack(arrow.state, 0, arrow.id, 16).monsters[0].hp).toBe(8)
+  })
+
+  it('Fearless: +4 against a monster listed at the start of the turn', () => {
+    let { state, id } = give(start(), 0, { name: 'Strike', attack: '+5', damage: '1' })
+    // Roll 6 + 5 = 11 misses AC 15; with Fearless 15 hits.
+    expect(attack(state, 0, id, 6).monsters[0].hp).toBe(9)
+    state = { ...state, turn: { ...state.turn, fearless: { heroId: state.heroes[0].id, foes: [state.monsters[0].id] } } }
+    expect(attack(state, 0, id, 6).monsters[0].hp).toBe(8)
+  })
+
+  it('Power of Earth: a Longbow-only buff for this phase', () => {
+    let { state, id } = give(start(), 0, { name: 'Power of Earth', effect: { use: { buff: { attack: 2, who: 'self', lasts: 'thisPhase', only: 'Longbow' } } } }, 'utility')
+    state = gameReducer(state, { type: 'USE_POWER', heroId: state.heroes[0].id, powerId: id, heroIds: [] })
+    const hero = state.heroes[0]
+    expect(attackNumbers(hero, { power: { name: 'Longbow: Oak Arrow', card: { attack: '+11' } } }).bonus).toBe(13)
+    expect(attackNumbers(hero, { power: { name: 'Shortsword', card: { attack: '+8' } } }).bonus).toBe(8)
+    expect(hero.buffs[0].phaseEnds).toBe(1)
   })
 })
