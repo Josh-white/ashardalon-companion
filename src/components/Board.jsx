@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { heroArt, monsterArt } from '../data/art.js'
-import { boardGrid, figureToken, figuresLeft, moveSpeed, movesLeft, timeLeapt } from '../board/play.js'
+import { boardGrid, figureToken, figuresLeft, walkSpeed, movesLeft, timeLeapt } from '../board/play.js'
 import { moveChoices, movePrompt, pathOf } from '../board/powerMoves.js'
 import { key } from '../board/grid.js'
 import { adventureTokenSpots, canFlyCarpet } from '../board/items.js'
@@ -217,7 +217,7 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
                 ? 'Tap a free square to put it there.'
                 : 'Moving by hand: tap any figure, then a square.'
               : picked
-                ? `Tap a lit square. ${active.name} moves up to ${moveSpeed(active)} squares.`
+                ? `Tap a lit square. ${active.name} moves up to ${walkSpeed(state, active)} squares.`
                 : left > 0
                   ? `Tap ${active.name} to move (${left} ${left === 1 ? 'move' : 'moves'} left this turn).`
                   : state.turn.phase === 0

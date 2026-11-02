@@ -373,6 +373,13 @@ export function moveSpeed(hero) {
   return has(hero, 'Slowed') ? Math.min(2, speed) : speed
 }
 
+// How far the hero can walk now: its speed, less any squares a power cost it this turn
+// (Yer Own Size! forfeits 2 movement points, taken off the hero's next walk).
+export function walkSpeed(state, hero) {
+  const loss = state.turn?.speedLoss?.heroId === hero.id ? state.turn.speedLoss.n : 0
+  return Math.max(0, moveSpeed(hero) - loss)
+}
+
 // Whether the active hero can still move this Hero Phase: move twice, or move and attack
 // (in either order). A Dazed hero gets one action; an Immobilized or caged hero can't move.
 export function movesLeft(state, hero) {
@@ -401,7 +408,7 @@ export function occupied(state, exceptId) {
 export function heroReach(state, hero) {
   const at = state.board?.tokens[hero.id]
   if (!at || movesLeft(state, hero) === 0) return []
-  return reachable(boardGrid(state.board), at, moveSpeed(hero), occupied(state, hero.id))
+  return reachable(boardGrid(state.board), at, walkSpeed(state, hero), occupied(state, hero.id))
 }
 
 // Puts a figure on a square. A hero that moves is listed in state.turn.heroesMoved (A Gap in
@@ -447,7 +454,8 @@ export function moveHero(state, action) {
   const to = Array.isArray(action.to) ? action.to : null
   if (!hero || !to || !heroReach(state, hero).includes(key(to))) return state
   const moved = placeToken(state, hero.id, to)
-  return { ...moved, turn: { ...moved.turn, boardMoves: (state.turn.boardMoves ?? 0) + 1 } }
+  const speedLoss = state.turn.speedLoss?.heroId === hero.id ? null : state.turn.speedLoss
+  return { ...moved, turn: { ...moved.turn, boardMoves: (state.turn.boardMoves ?? 0) + 1, speedLoss } }
 }
 
 // Moving any figure by hand, for anything the app doesn't move itself yet: onto any free

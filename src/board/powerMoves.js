@@ -17,6 +17,8 @@
 //         `kind` token the hero stands on or next to, to another one: Secret Paths, Paths of Darkness)
 // `hit: true` steps only happen when the attack hit, `miss: true` steps only when it missed,
 // `ifShadow: true` only when the hero attacked from the shadows (Shadowphage).
+// `nextToMonster: true` only offers figures standing next to a monster, and on a swap step
+// `speedCost: n` takes n squares off the hero's next walk this turn (Yer Own Size!).
 // `each: 'heroOnTile' | 'monsterOnTile'` makes the step once for every such figure (Tune of Ice
 // and Wind, One Hundred Leaves). `minApart: n` only moves a figure at least n tiles from the
 // hero (Vicious Mockery). pick `otherHero` is any other hero on the board (Psionic Stride).
@@ -206,11 +208,17 @@ function foeTokens(state) {
 // Which figures the current step can move (token ids).
 export function moveChoices(state) {
   const s = step(state)
-  const list = choicesFor(state)
-  if (!s?.minApart || list.length === 0) return list
+  let list = choicesFor(state)
+  if (list.length === 0 || (!s?.minApart && !s?.nextToMonster)) return list
   const grid = boardGrid(state.board)
   const self = state.board.tokens[state.turn.boardMove.heroId]
-  return list.filter((id) => tilesBetween(grid, state.board.tokens[id], self) >= s.minApart)
+  if (s.minApart) list = list.filter((id) => tilesBetween(grid, state.board.tokens[id], self) >= s.minApart)
+  // Only figures standing next to a monster (Yer Own Size!).
+  if (s.nextToMonster) {
+    const foes = foeTokens(state)
+    list = list.filter((id) => foes.some((f) => adjacent(grid, state.board.tokens[id], f.at)))
+  }
+  return list
 }
 function choicesFor(state) {
   const move = state.turn.boardMove
@@ -390,7 +398,10 @@ export function boardMove(state, action) {
     const me = state.turn.boardMove.heroId
     if (!moveChoices(state).includes(id)) return state
     const [a, b] = [state.board.tokens[me], state.board.tokens[id]]
-    return nextStep(placeToken(placeToken(state, me, b), id, a))
+    const swapped = placeToken(placeToken(state, me, b), id, a)
+    // `speedCost: n`: the swap costs the hero n squares of its next walk (Yer Own Size!).
+    const cost = s.speedCost > 0 ? { ...swapped, turn: { ...swapped.turn, speedLoss: { heroId: me, n: s.speedCost } } } : swapped
+    return nextStep(cost)
   }
   const to = Array.isArray(action.to) ? action.to : null
   if (!to || !moveTargets(state, id).includes(key(to))) return state
