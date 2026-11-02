@@ -118,3 +118,21 @@ describe('more fan hero rules', () => {
     expect(hero.buffs[0].phaseEnds).toBe(1)
   })
 })
+
+describe('Whirling Mantis Step while Dazed', () => {
+  it("lets a Dazed hero who already walked still use a power whose move is part of the attack", () => {
+    const state = druidless()
+    const hero = { ...state.heroes[0], conditions: ['Dazed'] }
+    const walked = { ...state, board: {}, turn: { ...state.turn, boardMoves: 1 } }
+    const mantis = { name: 'Whirling Mantis Step', type: 'daily', card: { name: 'Whirling Mantis Step', effect: { board: { before: [{ pick: 'self', to: 'squares', n: 'speed' }] } } } }
+    const plain = { name: 'Strike', type: 'at-will', card: { name: 'Strike' } }
+    expect(attackGone(walked, hero)).toMatch(/Dazed and already moved/)
+    expect(attackGone(walked, hero, plain)).toMatch(/Dazed and already moved/)
+    expect(attackGone(walked, hero, mantis)).toBeNull()
+    // Walking twice (not Dazed) still uses up the attack.
+    expect(attackGone({ ...walked, turn: { ...walked.turn, boardMoves: 2 } }, { ...hero, conditions: [] }, mantis)).toMatch(/moved twice/)
+  })
+})
+function druidless() {
+  return gameReducer(initialState, { type: 'START_GAME', heroes: [createHero(MONK)] })
+}

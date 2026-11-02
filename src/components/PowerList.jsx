@@ -134,7 +134,7 @@ function UsePanel({ state, hero, power, dispatch, onClose }) {
   ].filter(Boolean)
   // A Daily or At-Will power is the hero's attack this turn.
   const usesAttack = powerUsesAttack(state, hero, power)
-  const gone = usesAttack && attackGone(state, hero)
+  const gone = usesAttack && attackGone(state, hero, power)
 
   return (
     <div className="col-span-2 space-y-3 rounded-xl border-2 border-amber-500 bg-zinc-950/80 p-3">

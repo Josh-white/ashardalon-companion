@@ -369,14 +369,19 @@ function DistanceQuestion({ state, hero, chosen, distances, setDistances, fromBo
 // app rolls against each monster's AC, takes off the damage and hands out XP.
 // `extra` is a free at-will attack from Cause Fear or Acrobatic Onslaught.
 export default function HeroAttack({ state, hero, dispatch, extra = null }) {
-  const powers = hero.powers.filter(
+  const usable = hero.powers.filter(
     (p) => !p.used && powerNumber(p.card?.attack) !== null && (!extra || p.type === 'at-will') && !wolfBlocked(hero, p),
   )
+  // A Dazed hero who already walked can still use a power whose move is part of the attack
+  // (Whirling Mantis Step): that walk was the power's move. Only those powers are offered.
+  const plainGone = extra ? null : attackGone(state, hero)
+  const walked = plainGone ? usable.filter((p) => !attackGone(state, hero, p)) : []
+  const powers = walked.length > 0 ? walked : usable
   // Items with their own attack (Crossbow of Speed) are picked like a power.
   // The Crossbow of Speed fires instead of moving, so once the board has seen the hero
   // move this Hero Phase it's off the list. Off the board the app can't tell, so it stays.
   const moved = stayedOnBoard(state, hero) === false
-  const items = extra ? [] : attackItems(hero, state.turn).filter((i) => !(moved && itemAttackIsMove(i.card)))
+  const items = extra || walked.length > 0 ? [] : attackItems(hero, state.turn).filter((i) => !(moved && itemAttackIsMove(i.card)))
   const [powerId, setPowerId] = useState(null)
   const [chosen, setChosen] = useState([])
   // The board on this screen lights up the picked monsters and brings the last one into view.
@@ -388,7 +393,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   const [rolled, setRolled] = useState(false)
   // Tapped "Attack anyway" past a used-up attack. Each extra attack needs its own tap.
   const [anyway, setAnyway] = useState(false)
-  const gone = extra ? null : attackGone(state, hero)
+  const gone = walked.length > 0 ? null : plainGone
   const item = items.find((i) => i.id === powerId)
   // An item's attack reads like a power's: a name, an attack number and damage.
   const power = powers.find((p) => p.id === powerId) ?? (item && { ...item, type: 'item', card: { attack: `+${item.card.attack.bonus}`, damage: String(item.card.attack.damage), text: item.card.text } })
@@ -566,7 +571,9 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
                 <div className="rounded-lg bg-amber-950/60 p-3 text-amber-200">
                   <p>{effects.before}</p>
                   {/* On the virtual board the move is done there, before the roll. */}
-                  {state.board && effects.board?.before && !item && (
+                  {walked.length > 0 ? (
+                    <p className="mt-2 font-semibold">💫 {hero.name} is Dazed and already walked: that walk was this power's move. Pick the monsters.</p>
+                  ) : state.board && effects.board?.before && !item && (
                     state.turn.boardMove?.source === power.name ? (
                       <p className="mt-2 font-semibold">📍 Do it on the board, then pick the monster.</p>
                     ) : (

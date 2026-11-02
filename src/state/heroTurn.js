@@ -362,12 +362,19 @@ const itemReplacesAttack = (card) => /instead of an attack/i.test(card?.text ?? 
 
 export const inHeroPhase = (state, hero) => Boolean(hero) && PHASES[state.turn.phase]?.key === 'hero' && state.heroes[state.turn.heroIndex]?.id === hero.id
 
+// An attack power whose move is part of the attack (Whirling Mantis Step: "move your speed,
+// then attack..."): the hero moves first, on the board or by hand.
+export const moveIsPartOfPower = (power) =>
+  Boolean(effectsOf(power).board?.before?.some((s) => s.pick === 'self' && s.to === 'squares'))
+
 // Why the active hero has no attack left this Hero Phase, or null while they still have one.
 // A Hero Phase is move and attack, attack and move, or move twice (a Dazed hero gets one
 // of those). Using an At-Will or Daily power is the attack, even one without a roll
 // (Cause Fear, Blade Barrier); utility powers don't use it. The app only counts moves made
 // on the virtual board. Players can still attack anyway when a card says they can.
-export function attackGone(state, hero) {
+// With `power`: a Dazed hero who walked before picking a power whose move is part of its
+// attack still has it; that walk was the power's move, so it's still their one action.
+export function attackGone(state, hero, power = null) {
   if (!inHeroPhase(state, hero)) return null
   const dazed = hero.conditions.includes('Dazed')
   const spent = state.turn.attackSpent
@@ -377,6 +384,7 @@ export function attackGone(state, hero) {
     return dazed ? `${hero.name} is Dazed, so that was the one action this turn.` : `${hero.name} already attacked this turn.`
   }
   const moves = state.board ? state.turn.boardMoves ?? 0 : 0
+  if (dazed && moves === 1 && moveIsPartOfPower(power)) return null
   if (dazed && moves >= 1) return `${hero.name} is Dazed and already moved, so there's no attack this turn.`
   if (moves >= 2) return `${hero.name} moved twice, so there's no attack this turn.`
   return null
