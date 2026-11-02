@@ -58,7 +58,7 @@ export const ABILITY_EFFECTS = [
   'mage-hand', // opens doors anywhere on the hero's tile (Heskan)
   'fearless', // monsters next to the hero when its Hero Phase starts have -4 AC this turn (Hjalmir, a fan hero)
   'natures-healing', // give up a move or the attack for 1 HP, or the whole Hero Phase for 2 (Aldred, a fan hero)
-  'bardic-song', // 3 tokens: any hero may roll a missed attack again (Berryloaf, a fan hero)
+  'bardic-song', // 3 tokens: any hero may roll a missed attack or a failed roll again (Berryloaf, a fan hero)
   'mind-over-body', // roll 11+ to ignore a condition (Darna, a fan hero)
   'shadowphage', // a Shadow switch: +2 AC, and monsters' tactics skip him as the closest hero (Fesud, a fan hero)
 ]
@@ -72,7 +72,7 @@ export const ABILITY_HINTS = {
   'mage-hand': { name: 'Mage Hand', hint: 'Open doors anywhere on your tile, not just next to you.' },
   fearless: { name: 'Fearless', hint: 'Monsters next to you when your turn starts are easier to hit (+4).' },
   'natures-healing': { name: "Nature's Healing", hint: 'Skip your move or attack for 1 HP, or your whole Hero Phase for 2.' },
-  'bardic-song': { name: 'Bardic Song', hint: "3 songs a game: any hero who misses can roll again." },
+  'bardic-song': { name: 'Bardic Song', hint: '3 songs a game: any hero who misses or fails a roll can roll again.' },
   'mind-over-body': { name: 'Mind Over Body', hint: 'Got a condition? Roll 11 or more and ignore it.' },
   shadowphage: { name: 'Shadowphage', hint: 'Instead of attacking, slip into the shadows: +2 AC, and monsters skip you when they look for the closest hero.' },
 }
