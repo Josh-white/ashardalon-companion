@@ -33,7 +33,9 @@ describe("the heroes' 3D figures", () => {
     // Not the villain: Kobold Dragonlord gets his own figure later.
     expect(monsterModel({ name: 'Kobold Dragonlord' })).toBeNull()
     expect(monsterModel({ name: 'Human Cultist' }).model).toBe('Human_Cultist')
+    expect(monsterModel({ name: 'Duergar Guard' }).model).toBe('Duergar_Guard')
+    expect(monsterModel({ name: 'Duergar Captain' })).toBeNull()
     expect(monsterModel({ name: 'Grell' })).toBeNull()
-    for (const name of ['Orc_Smasher', 'Orc_Archer', 'Kobold_Dragonshield', 'Human_Cultist']) expect(MODEL_PROPS[name]).toEqual([])
+    for (const name of ['Orc_Smasher', 'Orc_Archer', 'Kobold_Dragonshield', 'Human_Cultist', 'Duergar_Guard']) expect(MODEL_PROPS[name]).toEqual([])
   })
 })

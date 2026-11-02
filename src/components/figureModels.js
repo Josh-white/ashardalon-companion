@@ -11,6 +11,7 @@ import OrcSmasher from '../models/Orc_Smasher.glb?url'
 import OrcArcher from '../models/Orc_Archer.glb?url'
 import KoboldDragonshield from '../models/Kobold_Dragonshield.glb?url'
 import HumanCultist from '../models/Human_Cultist.glb?url'
+import DuergarGuard from '../models/Duergar_Guard.glb?url'
 
 // The 3D figures on the 3D board: the heroes are KayKit Adventurers (CC0, src/models, trimmed
 // to the moves used here by scripts/models/trim-models.mjs); the monsters are our own, made in
@@ -31,6 +32,7 @@ const FILES = {
   Orc_Archer: OrcArcher,
   Kobold_Dragonshield: KoboldDragonshield,
   Human_Cultist: HumanCultist,
+  Duergar_Guard: DuergarGuard,
 }
 // The figures are about 2.5 units tall: this makes them one square tall.
 const SCALE = 0.44

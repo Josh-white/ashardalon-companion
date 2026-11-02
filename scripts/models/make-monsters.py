@@ -1,6 +1,7 @@
 """Builds the monsters' 3D figures for the 3D board as .glb files: Orc Smasher (a big
 spiked mace), Orc Archer (a bow and a quiver), Kobold Dragonshield (a dragon shield
-and a spear) and Human Cultist (hooded robes, a sun sceptre and a dagger).
+and a spear) Human Cultist (hooded robes, a sun sceptre and a dagger)
+and Duergar Guard (a helmet, a beard, a round shield and a warhammer).
 
 Run it in Blender (tested headless on 5.2; written for 3.6 and newer):
   * Scripting workspace: open this file (or paste it), press Run Script (Alt+P).
@@ -65,6 +66,8 @@ PALETTE = {
     "gold": "c9a23a",
     "skin_pale": "c7a68c",
     "glow": "ff3b2e",
+    "skin_grey": "7e8087",   # duergar
+    "beard": "35363b",
 }
 
 argv = sys.argv
@@ -462,6 +465,80 @@ def build_cultist():
             rot=(0, -(90 + a), 0))
 
 
+def build_duergar():
+    """A stocky grey dwarf in dark iron: a nose-guard helmet with a spike, glowing red eyes, a
+    huge braided beard, a round shield on the left arm and a warhammer in the right fist."""
+    for side, tag in ((1, "L"), (-1, "R")):
+        leg = f"leg.{tag}"
+        box(f"Boot.{tag}", "iron_dark", leg, (0.24 * side, -0.05, 0.10), (0.30, 0.42, 0.20), bevel=0.07)
+        box(f"Leg.{tag}", "leather", leg, (0.24 * side, 0, 0.33), (0.26, 0.28, 0.28), bevel=0.08)
+
+    # Hips: a mail skirt and a broad belt.
+    cone("MailSkirt", "iron_dark", "hips", (0, 0, 0.56), 0.50, 0.32, sides=12, tip=0.42)
+    box("Belt", "leather", "hips", (0, 0, 0.72), (0.90, 0.64, 0.11), bevel=0.04)
+    box("Buckle", "gold", "hips", (0, -0.33, 0.72), (0.20, 0.06, 0.15), bevel=0.02)
+    box("Tabard", "red", "hips", (0, -0.30, 0.52), (0.30, 0.05, 0.34), bevel=0.02, rot=(-8, 0, 0))
+
+    # A barrel of an iron breastplate with heavy pauldrons.
+    box("Torso", "iron", "body", (0, 0, 1.02), (1.00, 0.68, 0.62), bevel=0.24, segments=3)
+    box("PlateRidge", "iron_dark", "body", (0, -0.335, 1.02), (0.08, 0.04, 0.50), bevel=0.015)
+    for side in (1, -1):
+        sphere(f"Pauldron{side}", "iron_dark", "body", (0.52 * side, 0, 1.26), 0.26, scale=(1.1, 1.05, 0.7))
+        for i, y in enumerate((-0.12, 0.0, 0.12)):
+            sphere(f"Rivet{side}{i}", "gold", "body", (0.62 * side, y, 1.42), 0.03, segments=6, rings=4)
+
+    # Arms: grey skin, iron gauntlets and fists.
+    for side, tag in ((1, "L"), (-1, "R")):
+        arm = f"arm.{tag}"
+        sphere(f"UpperArm.{tag}", "skin_grey", arm, (0.60 * side, 0, 1.05), 0.15, scale=(1, 1, 1.2))
+        box(f"Gauntlet.{tag}", "iron_dark", arm, (0.63 * side, -0.02, 0.83), (0.27, 0.27, 0.28), bevel=0.07)
+        sphere(f"Fist.{tag}", "iron_dark", arm, (0.64 * side, -0.05, 0.64), 0.15)
+
+    # Warhammer in the right fist, its head resting forward and down.
+    fist = Vector((-0.64, -0.05, 0.64))
+    d = Vector((0, -0.866, -0.5))
+    tilt = (120, 0, 0)
+    cone("HammerHaft", "wood", "arm.R", fist + d * 0.22, 0.045, 0.70, rot=tilt, sides=6, tip=0.045)
+    cone("HammerPommel", "iron_dark", "arm.R", fist - d * 0.15, 0.06, 0.07, rot=tilt, sides=6, tip=0.04)
+    head = fist + d * 0.58
+    box("HammerHead", "iron_dark", "arm.R", head, (0.20, 0.20, 0.40), bevel=0.04, rot=(30, 0, 0))
+    box("HammerFace", "iron", "arm.R", head + Vector((0, 0.10, 0.17)), (0.22, 0.10, 0.10), bevel=0.02,
+        rot=(30, 0, 0))
+    cone("HammerSpike", "iron", "arm.R", head + Vector((0, -0.08, -0.26)), 0.07, 0.18, rot=(150, 0, 0), sides=4)
+
+    # A round wooden shield with an iron rim and boss, facing forward on the left arm.
+    sc = Vector((0.66, -0.22, 0.86))
+    cone("Shield", "wood", "arm.L", sc, 0.40, 0.08, rot=(90, 0, 0), sides=16, tip=0.40)
+    cone("ShieldRim", "iron_dark", "arm.L", sc + Vector((0, 0.01, 0)), 0.43, 0.06, rot=(90, 0, 0), sides=16, tip=0.43)
+    sphere("ShieldBoss", "iron", "arm.L", sc + Vector((0, -0.05, 0)), 0.12, scale=(1, 0.6, 1))
+    for i in range(6):
+        a = DEG(i * 60)
+        sphere(f"ShieldStud{i}", "iron", "arm.L", sc + Vector((math.cos(a) * 0.30, -0.05, math.sin(a) * 0.30)),
+               0.03, segments=6, rings=4)
+
+    # Head: grey face under a spiked nose-guard helm, red eyes, a big braided beard.
+    sphere("Face", "skin_grey", "head", (0, -0.04, 1.62), 0.33, scale=(1.05, 0.95, 1.0), segments=16, rings=10)
+    sphere("Helm", "iron", "head", (0, 0.0, 1.80), 0.37, scale=(1.05, 1.02, 0.78), segments=16, rings=10)
+    cone("HelmBrim", "gold", "head", (0, 0.0, 1.77), 0.385, 0.06, sides=16, tip=0.385)
+    box("NoseGuard", "iron_dark", "head", (0, -0.37, 1.69), (0.06, 0.05, 0.16), bevel=0.02)
+    cone("HelmSpike", "iron_dark", "head", (0, 0.0, 2.12), 0.07, 0.20, sides=6)
+    for side in (1, -1):
+        cone(f"HelmWing{side}", "iron_dark", "head", (0.36 * side, 0.02, 1.86), 0.06, 0.22,
+             rot=(0, 55 * side, 0), scale=(1, 0.35, 1), sides=4)
+        box(f"Brow{side}", "beard", "head", (0.13 * side, -0.32, 1.70), (0.15, 0.06, 0.05), bevel=0.02,
+            rot=(0, -12 * side, 0))
+        sphere(f"Eye{side}", "glow", "head", (0.12 * side, -0.33, 1.63), 0.035, scale=(1.2, 0.5, 0.8),
+               segments=8, rings=6)
+        box(f"Moustache{side}", "beard", "head", (0.10 * side, -0.36, 1.45), (0.18, 0.08, 0.07), bevel=0.03,
+            rot=(0, 18 * side, 0))
+        cone(f"Braid{side}", "beard", "head", (0.10 * side, -0.30, 0.90), 0.055, 0.22, rot=(180, 0, 0), sides=6,
+             tip=0.02)
+        sphere(f"BraidRing{side}", "gold", "head", (0.10 * side, -0.30, 1.02), 0.05, scale=(1, 1, 0.6),
+               segments=8, rings=5)
+    box("Nose", "skin_grey", "head", (0, -0.36, 1.55), (0.12, 0.10, 0.12), bevel=0.045)
+    sphere("Beard", "beard", "head", (0, -0.18, 1.28), 0.30, scale=(1.05, 0.62, 1.3), segments=12, rings=8)
+
+
 # ---- 4. Join, size it, origin on the floor --------------------------------------------------
 
 def join_parts(name, mat, height):
@@ -510,6 +587,16 @@ CULTIST_BONES = [
     ("arm.R", (-0.38, 0, 1.30), (-0.46, 0, 0.74), "body"),
     ("leg.L", (0.16, 0, 0.45), (0.16, 0, 0.05), "hips"),
     ("leg.R", (-0.16, 0, 0.45), (-0.16, 0, 0.05), "hips"),
+]
+DUERGAR_BONES = [
+    ("root", (0, 0, 0), (0, 0, 0.2), None),
+    ("hips", (0, 0, 0.45), (0, 0, 0.74), "root"),
+    ("body", (0, 0, 0.74), (0, 0, 1.40), "hips"),
+    ("head", (0, 0, 1.40), (0, 0, 2.10), "body"),
+    ("arm.L", (0.56, 0, 1.22), (0.64, 0, 0.64), "body"),
+    ("arm.R", (-0.56, 0, 1.22), (-0.64, 0, 0.64), "body"),
+    ("leg.L", (0.24, 0, 0.48), (0.24, 0, 0.05), "hips"),
+    ("leg.R", (-0.24, 0, 0.48), (-0.24, 0, 0.05), "hips"),
 ]
 KOBOLD_BONES = [
     ("root", (0, 0, 0), (0, 0, 0.2), None),
@@ -678,6 +765,7 @@ MONSTERS = [
     ("orc-archer", "orc-archer.glb", lambda: build_orc("bow"), 2.4, ORC_BONES, ["1H_Ranged_Shoot"]),
     ("kobold-dragonshield", "kobold-dragonshield.glb", build_kobold, 1.9, KOBOLD_BONES, []),
     ("human-cultist", "human-cultist.glb", build_cultist, 2.5, CULTIST_BONES, []),
+    ("duergar-guard", "duergar-guard.glb", build_duergar, 2.15, DUERGAR_BONES, []),
 ]
 # Moves only some figures have.
 EXTRA_MOVES = {"1H_Ranged_Shoot"}
