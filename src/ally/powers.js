@@ -15,6 +15,7 @@ import { effectsOf, pendingDodge, wolfBlocked, wolfDodge } from '../data/powerEf
 import { hasAbility } from '../data/heroes.js'
 import { powerNumber } from '../state/combat.js'
 import { foes } from '../state/gameHelpers.js'
+import { mesmerizeTargets } from '../state/fanPowers.js'
 
 const d20 = () => Math.floor(Math.random() * 20) + 1
 const parse = (k) => k.split(',').map(Number)
@@ -65,6 +66,15 @@ function bestTokenSquare(state, item) {
     const score = (k) => (toFoe.get(k) ?? 99) + (toParty.get(k) ?? 99)
     return [...targets].sort((a, b) => score(a) - score(b) || (toParty.get(a) ?? 99) - (toParty.get(b) ?? 99))[0]
   }
+  // Boobytraps, Spiked Growth: on the tiles the monsters coming at the party will walk onto.
+  if ((item.kind === 'boobytrap' || item.kind === 'spike') && figures.length > 0) {
+    const ways = pathTiles(state)
+    const mine = new Set(items(state).filter((i) => i.kind === item.kind && i.owner === item.owner && i.at).map((i) => areaAt(grid, i.at)))
+    const near = distances(grid, state.board.tokens[item.owner])
+    const score = (k) => (mine.has(areaAt(grid, parse(k))) ? 0 : ways.get(areaAt(grid, parse(k))) ?? 0)
+    const best = [...targets].sort((a, b) => score(b) - score(a) || (near.get(a) ?? 99) - (near.get(b) ?? 99))[0]
+    if (score(best) > 0) return best
+  }
   const near = distances(grid, state.board.tokens[item.owner])
   // The Wizard Eye: on a tile with an unexplored edge, so the wizard can explore from there.
   if (item.kind === 'eye') {
@@ -73,6 +83,28 @@ function bestTokenSquare(state, item) {
     if (onEdge.length > 0) return [...onEdge].sort((a, b) => (near.get(a) ?? 99) - (near.get(b) ?? 99))[0]
   }
   return [...targets].sort((a, b) => (near.get(a) ?? 99) - (near.get(b) ?? 99))[0]
+}
+
+// For each tile, how many monster figures (not yet next to a hero) would walk onto it on their
+// shortest way to the nearest hero: { area: count }.
+export function pathTiles(state) {
+  const grid = boardGrid(state.board)
+  const heroes = standingHeroes(state).map((h) => state.board.tokens[h.id])
+  const ways = new Map()
+  for (const f of foeFigures(state)) {
+    const from = distances(grid, f.at)
+    const steps = heroes.map((at) => ({ at, d: from.get(key(at)) ?? 99 })).sort((a, b) => a.d - b.d)[0]
+    if (!steps || steps.d <= 1 || steps.d >= 99) continue
+    const to = distances(grid, steps.at)
+    const own = areaAt(grid, f.at)
+    const areas = new Set()
+    for (const sq of grid.values()) {
+      const k = key([sq.x, sq.y])
+      if (sq.floor && sq.area !== own && (from.get(k) ?? 99) + (to.get(k) ?? 99) === steps.d) areas.add(sq.area)
+    }
+    for (const a of areas) ways.set(a, (ways.get(a) ?? 0) + (f.foe.villain ? 2 : 1))
+  }
+  return ways
 }
 
 // A token the hero just got from a power, still in hand: put it down.
@@ -168,6 +200,22 @@ export function castDaily(state, hero, options, canAttack = () => false) {
     }
   }
 
+  // Boobytraps, Spiked Growth (fan heroes'): like the Blade Barrier, on monsters coming at the party.
+  const snare = usable(hero, (e) => e.use?.tokens?.boobytraps || e.use?.tokens?.spikedGrowth)
+  if (snare && !(hero.tokens?.boobytraps > 0) && !(hero.tokens?.spikedGrowth > 0)) {
+    const coming = pathTiles(state).size > 0 ? approaching(state, hero).length : 0
+    if (coming >= 2 || (coming === 1 && atWills.length === 0)) {
+      return { action: { type: 'USE_POWER', heroId: hero.id, powerId: snare.id, heroIds: [] }, say: `${hero.name} sets ${snare.name} in the monsters' way.` }
+    }
+  }
+
+  // Beast Ally (a fan Ranger's): a Pacified or Trapped beast with another monster near it
+  // turns on that monster.
+  const ally = usable(hero, (e) => e.use?.mesmerize)
+  if (ally && beastWithPrey(state, effectsOf(ally).use.mesmerize)) {
+    return { action: { type: 'USE_POWER', heroId: hero.id, powerId: ally.id, heroIds: [] }, say: `${hero.name} calls on ${ally.name}: the beast turns on the other monsters!` }
+  }
+
   const fear = usable(hero, (e) => e.use?.causeFear)
   if (fear) {
     const helpers = fearHelpers(state, hero, canAttack)
@@ -179,6 +227,14 @@ export function castDaily(state, hero, options, canAttack = () => false) {
     }
   }
   return null
+}
+
+function beastWithPrey(state, rule) {
+  const grid = boardGrid(state.board)
+  const figures = foeFigures(state)
+  return mesmerizeTargets(state, rule).some((beast) =>
+    figures.filter((f) => f.foe.id === beast.id).some((b) => figures.some((o) => o.foe.id !== beast.id && tilesBetween(grid, b.at, o.at) <= 1)),
+  )
 }
 
 // ---- Keeping heroes alive (utilities, end of the Hero Phase) ----

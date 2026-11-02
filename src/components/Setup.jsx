@@ -19,6 +19,7 @@ import { HeroHall, HoldToPick } from './HeroHall.jsx'
 import { HallOfRecords, PlayerTitle } from './Records.jsx'
 import ScreenChoice from './ScreenChoice.jsx'
 import { Button } from './ui.jsx'
+import { allyPicks } from '../ally/picks.js'
 
 // Fills a new claim's slots with the cards the hero always has, then the
 // rulebook's suggested picks. Players can swap any suggested card.
@@ -471,7 +472,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
 
   // A hero nobody picked, played by the computer (src/ally/): ready at once, with the suggested powers.
   const addAlly = (template) =>
-    dispatch({ type: 'CLAIM_HERO', deviceId: `ally~${template.key}`, heroKey: template.key, picks: startingPicks(template, cards.powers), ally: true })
+    dispatch({ type: 'CLAIM_HERO', deviceId: `ally~${template.key}`, heroKey: template.key, picks: allyPicks(template, cards.powers), ally: true })
   const claim = (template) => {
     const player = rememberedName()
     dispatch({ type: 'CLAIM_HERO', deviceId, heroKey: template.key, picks: startingPicks(template, cards.powers), player })
