@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { monsterArt } from '../data/art.js'
 import { HERO_COLORS } from '../data/heroes.js'
 import { itemsWithUse } from '../data/items.js'
-import { heroAc, reactionsFor } from '../data/powerEffects.js'
+import { heroAc, pendingDodge, reactionsFor } from '../data/powerEffects.js'
 import { foeBonus } from '../data/difficulty.js'
 import { activeVillains } from '../state/game.js'
 import { attackEffect, chooseTargets, currentStepIndex, figureCount, inRefuge, monsterTargets, nobodyToAttack, stepAttack, tapsMany, toggleTarget, towardHero as towardHeroFor } from '../state/monsterTurn.js'
@@ -434,19 +434,19 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
               }
               const hero = state.heroes.find((h) => h.id === row.heroId)
               const hit = row.hit && !row.dodged
-              const escape = row.hit && !row.dodged && reactionsFor([hero], 'dodge')[0]
+              const escape = hit && hero.powers.filter((p) => p.card && pendingDodge(state, hero, p)?.type === 'DODGE_HIT').map((power) => ({ hero, power }))[0]
               const [bracers] = row.hit && !row.dodged && row.dealt > 0 ? itemsWithUse([hero], 'reduceDamage') : []
               return (
                 <li key={row.heroId} className={`rounded-xl p-3 text-lg ${hit ? 'bg-red-950' : 'bg-zinc-900'}`}>
                   The {name} rolled {row.value} + {row.bonus ?? used.bonus} = {row.total} against{' '}
                   <span className={`font-bold ${HERO_COLORS[hero.color].text}`}>{hero.name}</span>'s AC {row.ac}.{' '}
-                  <b className={hit ? 'text-red-300' : 'text-emerald-300'}>{row.dodged ? 'Tumbling Escape: a miss!' : hit ? 'Hit!' : 'Miss!'}</b>{' '}
+                  <b className={hit ? 'text-red-300' : 'text-emerald-300'}>{row.dodged ? 'Dodged: a miss!' : hit ? 'Hit!' : 'Miss!'}</b>{' '}
                   {hero.name} takes {effect(hit)}.
                   {hit && used.effect && <span className="mt-1 block font-semibold text-amber-200">{used.effect}</span>}
                   {hit && pushes && <span className="mt-1 block text-emerald-200">📍 The board lights the squares to move {hero.name} to when you tap Done.</span>}
                   {escape && (
                     <Button className="mt-2 w-full" onClick={() => dispatch({ type: 'DODGE_HIT', heroId: hero.id, powerId: escape.power.id })}>
-                      🤸 {hero.name} uses Tumbling Escape: the attack misses
+                      🤸 {hero.name} uses {escape.power.name}: the attack misses
                     </Button>
                   )}
                   {bracers && (

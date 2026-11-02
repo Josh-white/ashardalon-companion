@@ -7,6 +7,7 @@ import { boardGrid } from '../board/play.js'
 import { attackOptions, allyStep } from './brain.js'
 import { fanReaction } from './fanPowers.js'
 import { offTurnMove } from './brain.js'
+import { allyReaction } from './powers.js'
 
 // A made-up Start tile (its two halves count as two tiles), open to the north.
 const TILES = normalizeTiles(
@@ -61,6 +62,8 @@ describe('Wolf Form (a fan Druid)', () => {
     let state = start([[DRUID, [bite, jab]]])
     state = place(state, hero(state, 0).id, [0, 6])
     state = withMonsters(state, [[0, 5]])
+    // At half HP he stays himself.
+    state = { ...state, heroes: state.heroes.map((h) => ({ ...h, hp: Math.ceil(h.maxHp / 2) })) }
     expect(attackOptions(state, hero(state, 0)).map((o) => o.power.name)).toEqual(['Jab'])
     const step = allyStep(state, { roll })
     expect(step.action).toMatchObject({ type: 'HERO_ATTACK', powerId: powerId(state, 0, 'Jab') })
@@ -73,6 +76,121 @@ describe('Wolf Form (a fan Druid)', () => {
     state = withMonsters(state, [[0, 5]])
     state = { ...state, heroes: state.heroes.map((h) => ({ ...h, tokens: { ...h.tokens, wolf: { hp: h.hp } } })) }
     expect(attackOptions(state, hero(state, 0)).map((o) => o.power.name)).toEqual(['Wolf Form'])
+  })
+
+  it('turns wolf above half HP with a monster next to him, then bites', () => {
+    let state = start([[DRUID, [bite, jab]]])
+    state = place(state, hero(state, 0).id, [0, 6])
+    state = withMonsters(state, [[0, 5]], 3)
+    const step = allyStep(state, { roll })
+    expect(step.action).toMatchObject({ type: 'WOLF_FORM', on: true })
+    state = run(state, step)
+    expect(hero(state, 0).tokens.wolf).toBeTruthy()
+    const bite1 = allyStep(state, { roll })
+    expect(bite1.action).toMatchObject({ type: 'HERO_ATTACK', powerId: powerId(state, 0, 'Wolf Form'), pounce: false })
+    // A monster next to a hurt friend gets Pounced (Slowed on a hit).
+    const friend = start([[DRUID, [bite, jab]], [HERO_TEMPLATES[0], [jab], false]])
+    let pounce = place(friend, hero(friend, 0).id, [0, 6])
+    pounce = place(pounce, hero(pounce, 1).id, [1, 4])
+    pounce = withMonsters(pounce, [[0, 5]], 3)
+    pounce = { ...pounce, heroes: pounce.heroes.map((h, i) => (i === 1 ? { ...h, hp: 2 } : { ...h, tokens: { ...h.tokens, wolf: { hp: h.hp } } })) }
+    expect(allyStep(pounce, { roll }).action).toMatchObject({ type: 'HERO_ATTACK', pounce: true })
+  })
+
+  it('Lupine Lore dodges the monster hit that ended Wolf Form, and he stays the wolf', () => {
+    const lore = card('Lupine Lore', 'utility', '', '', { wolfOnly: true, reaction: 'dodge', uses: 2 })
+    let state = start([[DRUID, [bite, lore]], [HERO_TEMPLATES[0], [jab], false]])
+    state = place(state, hero(state, 0).id, [0, 6])
+    const hp = hero(state, 0).hp
+    state = { ...state, heroes: state.heroes.map((h, i) => (i === 0 ? { ...h, tokens: { ...h.tokens, wolf: { hp } } } : h)) }
+    const ogre = { id: 'ogre', name: 'Ogre', copies: 1, ac: 15, hp: 9, xp: 2, attacks: [{ id: 'club', name: 'Club', bonus: 5, damage: 2, miss: 0, conditions: [] }], tactics: [{ move: 'toward' }] }
+    state = gameReducer(state, { type: 'DRAW_MONSTER', heroId: hero(state, 1).id, cards: [ogre], random: [] })
+    const monsterId = state.monsters.at(-1).id
+    state = gameReducer(state, { type: 'MONSTER_ATTACK', monsterId, attackId: 'club', targets: [{ heroId: hero(state, 0).id, roll: 19 }] })
+    expect(hero(state, 0).hp).toBe(hp - 2)
+    expect(hero(state, 0).tokens.wolf).toBeFalsy()
+    const step = allyReaction(state)
+    expect(step.action).toMatchObject({ type: 'DODGE_HIT', heroId: hero(state, 0).id })
+    state = run(state, step)
+    expect(hero(state, 0).hp).toBe(hp)
+    expect(hero(state, 0).tokens.wolf).toEqual({ hp })
+  })
+})
+
+describe("Aldred's other cards (a fan Druid)", () => {
+  const DRUID = { ...fan(2, 'druid', ['natures-healing']), powerSlots: ['at-will', 'utility', 'utility', 'daily'] }
+  const charm = card('Charm Beast', 'utility', '', '', { use: { charm: { types: ['Animal'] } } })
+  const gifts = card("Nature's Gifts", 'utility', '', '', { use: { choose: [{ label: 'Heal', pick: 'any', heal: 2, count: 2, reach: 'sameTile' }, { label: 'End a condition', pick: 'any', endCondition: true }] } })
+  const circle = card('Druid Circle', 'utility', '', '', { use: { board: [{ each: 'heroOnTile', to: 'tileWithin', n: 3 }] } })
+  const lizard = card('Lizard and Lace', 'daily', '', '', { use: { summon: [{ name: 'Lace', hp: 2, ac: 11, strong: { name: 'Fang', bonus: 7, damage: 1 }, weak: { name: 'Claw', bonus: 6, damage: 0 } }] } })
+
+  it("Nature's Healing: gives up the attack for 1 HP when nothing is in reach", () => {
+    let state = start([[DRUID, [jab]]])
+    state = place(state, hero(state, 0).id, [0, 7])
+    state = withMonsters(state, [[0, 0]], 3)
+    state = { ...state, heroes: state.heroes.map((h) => ({ ...h, hp: h.maxHp - 1, conditions: ['Slowed'] })) }
+    const step = allyStep(state, { roll })
+    expect(step.action).toMatchObject({ type: 'NATURES_HEALING', give: 'attack' })
+  })
+
+  it('Charm Beast: a drawn monster that is no beast is sent away', () => {
+    let state = start([[HERO_TEMPLATES[0], [jab], false], [DRUID, [jab, charm]]])
+    state = withMonsters(state, [[0, 0], [0, 2]], 3)
+    const step = fanReaction(state, () => 12)
+    expect(step.action).toMatchObject({ type: 'USE_POWER', heroId: hero(state, 1).id, monsterIds: ['m2'] })
+    state = run(state, step)
+    expect(state.monsters.map((m) => m.id)).toEqual(['m1'])
+  })
+
+  it("Nature's Gifts heals two hurt heroes on his tile", () => {
+    let state = start([[DRUID, [jab, gifts]], [HERO_TEMPLATES[0], [jab], false]])
+    state = place(state, hero(state, 0).id, [0, 6])
+    state = place(state, hero(state, 1).id, [1, 6])
+    state = withMonsters(state, [[0, 5]], 3)
+    state = { ...state, heroes: state.heroes.map((h) => ({ ...h, hp: h.maxHp - 3 })) }
+    const step = allyStep(state, { roll })
+    expect(step.action).toMatchObject({ type: 'USE_POWER', option: 0 })
+    expect(step.action.heroIds).toHaveLength(2)
+  })
+
+  it('Druid Circle brings everyone to a hurt friend alone with a monster', () => {
+    let state = start([[DRUID, [jab, circle]], [HERO_TEMPLATES[1], [jab]], [HERO_TEMPLATES[0], [jab], false]])
+    state = place(state, hero(state, 0).id, [0, 6])
+    state = place(state, hero(state, 1).id, [1, 6])
+    state = place(state, hero(state, 2).id, [0, 1])
+    state = withMonsters(state, [[0, 0]], 3)
+    state = { ...state, heroes: state.heroes.map((h, i) => (i === 2 ? { ...h, hp: 2 } : h)) }
+    const step = allyStep(state, { roll })
+    expect(step.action).toMatchObject({ type: 'USE_POWER', powerId: powerId(state, 0, 'Druid Circle') })
+    state = run(state, step)
+    const move = allyStep(state, { roll })
+    expect(move.action.type).toBe('BOARD_MOVE')
+    expect(move.action.to[1]).toBeLessThan(4)
+  })
+
+  it('Lizard and Lace come out with a monster about, and take their turn in the Villain Phase', () => {
+    let state = start([[DRUID, [jab, lizard]]])
+    state = place(state, hero(state, 0).id, [0, 7])
+    state = withMonsters(state, [[0, 0]], 3)
+    state = { ...state, heroes: state.heroes.map((h) => ({ ...h, conditions: ['Immobilized'] })) }
+    const step = allyStep(state, { roll })
+    expect(step.action).toMatchObject({ type: 'USE_POWER', powerId: powerId(state, 0, 'Lizard and Lace') })
+    state = run(state, step)
+    state = { ...state, turn: { ...state.turn, phase: 2 } }
+    expect(allyStep(state, { roll }).action.type).toBe('PETS_ACT')
+  })
+})
+
+describe("Berryloaf's Chorus of Recovery", () => {
+  it('ends a Dazed on his tile', () => {
+    const chorus = card('Chorus of Recovery', 'utility', '', '', { use: { cleanse: 'tile' } })
+    let state = start([[{ ...fan(0, 'bard', ['bardic-song']), powerSlots: ['at-will', 'utility'] }, [jab, chorus]], [HERO_TEMPLATES[1], [jab], false]])
+    state = place(state, hero(state, 0).id, [0, 6])
+    state = place(state, hero(state, 1).id, [1, 6])
+    state = gameReducer(state, { type: 'TOGGLE_HERO_CONDITION', heroId: hero(state, 1).id, condition: 'Dazed' })
+    const step = allyStep(state, { roll })
+    expect(step.action).toMatchObject({ type: 'USE_POWER', powerId: powerId(state, 0, 'Chorus of Recovery') })
+    expect(hero(run(state, step), 1).conditions).toEqual([])
   })
 })
 

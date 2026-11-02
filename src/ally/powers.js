@@ -11,7 +11,7 @@ import { boardGrid } from '../board/play.js'
 import { HERO_TOKENS, movableToken, sphereOf, sphereVictims, tokenMoveTargets, tokenTargets } from '../board/heroTokens.js'
 import { heroesInReach } from '../board/encounters.js'
 import { foesInRange } from '../board/monsters.js'
-import { effectsOf, pendingDodge, wolfBlocked } from '../data/powerEffects.js'
+import { effectsOf, pendingDodge, wolfBlocked, wolfDodge } from '../data/powerEffects.js'
 import { hasAbility } from '../data/heroes.js'
 import { powerNumber } from '../state/combat.js'
 import { foes } from '../state/gameHelpers.js'
@@ -247,7 +247,9 @@ export function allyReaction(state, roll = d20) {
       const dodge = pendingDodge(state, hero, power)
       if (!dodge) continue
       const last = dodge.type === 'DODGE_HIT' ? state.turn.lastMonsterAttack : state.turn.lastEventAttack
-      if (!worthDodging(hero, last.results.find((r) => r.heroId === hero.id && r.hit))) continue
+      const row = last.results.find((r) => r.heroId === hero.id && r.hit && !r.dodged && !r.evaded)
+      // Lupine Lore: any hit that ended Wolf Form is worth dodging.
+      if (!wolfDodge(hero, power, row) && !worthDodging(hero, row)) continue
       return { action: dodge.type === 'EVADE_HIT' ? { ...dodge, disableRoll: roll() } : dodge, say: `${hero.name} uses ${power.name}: the attack misses!` }
     }
 
