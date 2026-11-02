@@ -56,6 +56,16 @@ describe("Whirling Mantis Step's walk", () => {
     expect(s.turn.boardMoves ?? 0).toBe(0)
   })
 
+  it('counts each figure of a group card it walks past (Legion Devils)', () => {
+    let { s, hero, power } = setup()
+    // m0 has two figures: one at the top right, one at [3, 1].
+    s = { ...s, monsters: s.monsters.map((m) => (m.id === 'm0' ? { ...m, hp: 3, maxHp: 3, card: { ...m.card, hp: 1, figures: 3 } } : m)) }
+    s = { ...s, board: { ...s.board, tokens: { ...s.board.tokens, 'm0#2': [3, 1] } } }
+    s = gameReducer(s, { type: 'START_BOARD_MOVE', heroId: hero.id, powerId: power.id })
+    s = walk(s, hero, [2, 0])
+    expect(s.turn.powerPassed.ids).toEqual(['m0', 'm0'])
+  })
+
   it('ends by itself when the steps run out, and works for a Dazed hero', () => {
     let { s, hero, power } = setup()
     s = { ...s, heroes: s.heroes.map((h) => ({ ...h, conditions: ['Dazed'] })) }
