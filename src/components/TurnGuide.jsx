@@ -386,7 +386,7 @@ export default function TurnGuide({ state, dispatch }) {
       )}
       {helping && !hero.ally && <FirstGameHelp hero={hero} phaseKey={current.key} stepKey={stepKey} onHide={() => setHelping(false)} />}
 
-      <EnvironmentBanner environment={state.environment} className="mt-4" />
+      <EnvironmentBanner environment={state.environment} dispatch={hero.ally ? undefined : dispatch} className="mt-4" />
       <SongRollOffer state={state} dispatch={dispatch} className="mt-4" />
 
       {current.key === 'hero' && <HeroPhase key={stepKey} state={state} hero={hero} dispatch={dispatch} />}

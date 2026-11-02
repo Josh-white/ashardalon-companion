@@ -92,6 +92,10 @@ export function describeAction(state, action) {
       return `XP ${signed(action.amount)}`
     case 'CANCEL_ENCOUNTER':
       return 'Cancelling the encounter'
+    case 'SKIP_ENCOUNTER':
+      return state.encounter ? `Skipping ${state.encounter.card.name}` : 'Skipping the encounter'
+    case 'DISCARD_ENVIRONMENT':
+      return state.environment ? `Discarding ${state.environment.name}` : 'Discarding the environment'
     case 'DRAW_ENCOUNTER':
       return 'Drawing an encounter'
     case 'ENCOUNTER_ATTACK':

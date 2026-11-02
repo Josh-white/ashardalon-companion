@@ -78,7 +78,7 @@ describe('the encounter step', () => {
 
   it('resolves an event card with the gold button', () => {
     const dispatch = show(game({ card: EVENT }))
-    const buttons = screen.getAllByRole('button')
+    const buttons = screen.getAllByRole('button').filter((b) => !b.hasAttribute('data-skip-encounter'))
     fireEvent.click(buttons.at(-1))
     expect(lastAction(dispatch)).toMatchObject({ type: 'RESOLVE_ENCOUNTER', monsterOnTile: false })
   })
@@ -97,5 +97,34 @@ describe('the encounter step', () => {
     expect(screen.getByText(/Is a monster on .* tile\?/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Yes: 2 damage/ }))
     expect(lastAction(dispatch)).toMatchObject({ type: 'RESOLVE_ENCOUNTER', monsterOnTile: true })
+  })
+})
+
+describe('skipping a card (house rule)', () => {
+  it('asks once more, then skips the drawn card for free', () => {
+    const state = game({ xp: 0, card: LOCKED })
+    const dispatch = show(state)
+    fireEvent.click(screen.getByText('Skip this card (no XP)'))
+    expect(dispatch).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByText('Skip it'))
+    expect(lastAction(dispatch)).toEqual({ type: 'SKIP_ENCOUNTER' })
+  })
+
+  it('puts the skipped card in the discards without spending XP', () => {
+    const base = game({ xp: 3, card: LOCKED })
+    const state = { ...base, encounterDeck: { draw: [], discard: [] } }
+    const next = gameReducer(state, { type: 'SKIP_ENCOUNTER' })
+    expect(next.encounter).toBeNull()
+    expect(next.xp).toBe(3)
+    expect(next.encounterDeck.discard).toEqual(['doom'])
+  })
+
+  it('discards the environment in play', () => {
+    const snipers = { id: 'hidden-snipers', name: 'Hidden Snipers', type: 'environment', text: 'Ouch.', checks: [] }
+    const base = game()
+    const state = { ...base, environment: { cardId: snipers.id, name: snipers.name, card: snipers }, encounterDeck: { draw: [], discard: [] } }
+    const next = gameReducer(state, { type: 'DISCARD_ENVIRONMENT' })
+    expect(next.environment).toBeNull()
+    expect(next.encounterDeck.discard).toEqual(['hidden-snipers'])
   })
 })
