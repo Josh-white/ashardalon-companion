@@ -21,6 +21,8 @@ import { Button } from './ui.jsx'
 import AttackFx, { quakeDelay, quakes, tokenFx, useAttackFx } from './AttackFx.jsx'
 import { HealFloat, useHealFx } from './HealFx.jsx'
 import MonsterPeek, { peekTarget } from './MonsterPeek.jsx'
+import Board3DLazy from './Board3DLazy.jsx'
+import { setBoard3D, useBoard3D, useBoard3DNote } from './board3dSwitch.js'
 
 // The virtual board (a solo game's, or the party's on the projector and iPads): the tiles laid so far and every figure on its square.
 // Tap your hero to see where it can go, then tap a square to move there. "Move by hand"
@@ -55,6 +57,8 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   const [reading, setReading] = useState(null) // id of the trap or hazard marker whose card is open
   const [peek, setPeek] = useState(null) // token id of the monster whose card is open (tapped on the board)
   const [torch, toggleTorch] = useTorchlight()
+  const [threeD, toggle3D] = useBoard3D()
+  const [note3D, clearNote3D] = useBoard3DNote()
   const board = state.board
   const activeId = state.heroes[state.turn.heroIndex]?.id
   const activeAt = board?.tokens[activeId]?.join(',')
@@ -191,9 +195,94 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
     setPicked(picked === id ? null : id)
   }
 
+  // 🧊 The 3D board, on a screen that moves figures (the projector has its own switch).
+  const show3D = threeD && tools && fill
   const left = active ? movesLeft(state, active) : 0
   // Read only and not filling a box: a small board to glance at.
   const small = readOnly && !fill
+
+  const flat = (
+    <>
+      {/* A tap anywhere on the board but a figure closes the monster's card. */}
+      <div ref={boxRef} onClick={peek ? (e) => { if (!e.target.closest?.('[data-token]')) setPeek(null) } : undefined} className={fill ? 'min-h-0 flex-1 touch-pan-x touch-pan-y overflow-auto' : readOnly ? '' : 'max-h-[70vh] overflow-auto'}>
+        <svg
+          ref={svgRef}
+          viewBox={viewBox}
+          width={small || fit ? '100%' : viewW * scale}
+          height={small ? undefined : fit ? '100%' : viewH * scale}
+          className={`${small ? 'mx-auto max-h-[45vh]' : fit ? 'block' : 'mx-auto'} ${quakes(playing) ? 'fx-quake' : ''} ${calm ? 'board-calm' : ''}`}
+          style={quakes(playing) ? { '--fx-delay': quakeDelay() } : undefined}
+          role="img"
+          aria-label="The dungeon board"
+        >
+          <g transform={spin ? `rotate(${spin})` : undefined}>
+            <g ref={anchorRef} />
+            {/* No box behind the map: the area's artwork shows around the tiles (JJ's pick, 2026-11-02).
+                A tile still dropping in gets its shadow once it lands. */}
+            <TileShadows rects={tiles.filter((t) => !freshUids.has(t.id))} />
+            {/* A tile just laid waits for the board to move, then drops in (useFreshTiles). */}
+            {board.tiles.map((placed) => board.defs[placed.tileId] && (
+              <g key={placed.uid} className={freshUids.has(placed.uid) ? 'tile-drop' : undefined} style={freshUids.has(placed.uid) ? dropStyle : undefined} data-dropping={freshUids.has(placed.uid) ? '' : undefined}>
+                <PlacedTile placed={placed} def={board.defs[placed.tileId]} spin={spin} />
+              </g>
+            ))}
+            <MarkerTiles markers={placedMarkers} />
+            {(board.doors ?? []).map((door) => (
+              <ClosedDoor key={door.id} squares={door.squares} kind={door.kind} special={Boolean(door.reveal)} spin={spin} />
+            ))}
+            {/* Open edges, exits, lit squares and figures stay on top of the dark. */}
+            {torch && <Torchlight bounds={bounds} tiles={tiles} lights={lightSources({ heroes: state.heroes, tokens: board.tokens, activeId, markers: placedMarkers })} />}
+            {fresh && <NewTileGlow key={fresh.key} grid={grid} uids={fresh.uids} style={dropStyle} />}
+            <OpenEdges grid={grid} />
+            <ExitSquares squares={exits} open={exitOpen} />
+            {targets.map((k) => {
+              const [x, y] = k.split(',').map(Number)
+              return (
+                <rect
+                  key={k}
+                  x={x * SQUARE + 2}
+                  y={y * SQUARE + 2}
+                  width={SQUARE - 4}
+                  height={SQUARE - 4}
+                  rx="6"
+                  fill="#34d399"
+                  fillOpacity="0.45"
+                  stroke="#059669"
+                  className="cursor-pointer"
+                  onClick={() => tapSquare([x, y])}
+                />
+              )
+            })}
+            {questTokens.map((spot) => (
+              <QuestToken key={spot.name} spot={spot} spin={spin} />
+            ))}
+            {items.filter((i) => i.at && i.kind === 'carpet').map((i) => (
+              <Carpet key={i.id} item={i} selected={picked === i.id} onTap={tools ? () => setPicked(picked === i.id ? null : i.id) : undefined} />
+            ))}
+            {items.filter((i) => i.at && isHeroToken(i)).map((i) => (
+              <HeroTokenMark key={i.id} item={i} spin={spin} count={i.kind === 'sphere' ? state.heroes.find((h) => h.id === i.owner)?.tokens?.flamingSphere : null} selected={picked === i.id} onTap={tools ? () => setPicked(picked === i.id ? null : i.id) : undefined} />
+            ))}
+            {items.filter((i) => i.at && i.kind === 'treasure').map((i) => (
+              <Coin key={i.id} item={i} spin={spin} selected={picked === i.id} onTap={tools ? () => setPicked(picked === i.id ? null : i.id) : undefined} />
+            ))}
+            {/* The active hero is drawn last so its glow sits on top of its neighbours. */}
+            {[...onBoard.filter((f) => f.id !== activeId), ...onBoard.filter((f) => f.id === activeId)].map((f) => (
+              // An attack makes its target flinch or dodge, and a sword swing lunges in.
+              <g key={f.id} {...tokenFx(playing, board.tokens[f.id])}>
+                <g className={arriving(board.tokens[f.id]) ? 'figure-arrive' : undefined} style={arriving(board.tokens[f.id]) ? dropStyle : undefined}>
+                <Token {...f} spin={spin} at={board.tokens[f.id]} active={f.id === activeId} aimed={aimed.includes(f.id.split('#')[0])} acting={acting === f.id.split('#')[0]} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)} onTap={watching && !peekTarget(state, f.id) ? undefined : () => tapFigure(f.id)} />
+                </g>
+              </g>
+            ))}
+            <MarkerBadges markers={placedMarkers} spin={spin} taken={new Set([...Object.values(board.tokens), ...items.filter((i) => i.at).map((i) => i.at), ...questTokens.map((q) => q.at)].map(key))} onTap={(id) => { setPeek(null); setReading(reading === id ? null : id) }} />
+            {heals.filter((h) => board.tokens[h.heroId]).map((h) => (
+              <HealFloat key={h.key} at={board.tokens[h.heroId]} amount={h.amount} delay={h.delay} spin={spin} />
+            ))}
+          </g>
+        </svg>
+      </div>
+    </>
+  )
 
   return (
     <section className={`relative rounded-2xl ${fill ? 'flex h-full flex-col p-2' : 'p-3'}`}>
@@ -224,8 +313,12 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
                     ? `${active?.name ?? 'The hero'} has no moves left this turn.`
                     : 'Heroes move in their Hero Phase.'}
           </p>
-          <Button className="min-h-10 min-w-10 !px-3 !py-1" disabled={zoomOut === null} onClick={() => zoomTo(zoomOut)} aria-label="Zoom out">−</Button>
-          <Button className="min-h-10 min-w-10 !px-3 !py-1" disabled={zoomIn === null} onClick={() => zoomTo(zoomIn)} aria-label="Zoom in">+</Button>
+          {!show3D && (
+            <>
+              <Button className="min-h-10 min-w-10 !px-3 !py-1" disabled={zoomOut === null} onClick={() => zoomTo(zoomOut)} aria-label="Zoom out">−</Button>
+              <Button className="min-h-10 min-w-10 !px-3 !py-1" disabled={zoomIn === null} onClick={() => zoomTo(zoomIn)} aria-label="Zoom in">+</Button>
+            </>
+          )}
           <Button
             variant={byHand ? 'gold' : 'default'}
             className={`min-h-10 min-w-10 !py-1 text-sm ${fill ? '!px-2' : ''}`}
@@ -237,16 +330,37 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
           >
             {fill ? '✋' : '✋ Move by hand'}
           </Button>
-          <Button
-            variant={torch ? 'gold' : 'default'}
-            className={`min-h-10 min-w-10 !py-1 text-sm ${fill ? '!px-2' : ''}`}
-            title={torch ? 'Turn torchlight off' : 'Turn torchlight on'}
-            aria-pressed={torch}
-            onClick={toggleTorch}
-          >
-            {fill ? '🔥' : '🔥 Torchlight'}
-          </Button>
+          {!show3D && (
+            <Button
+              variant={torch ? 'gold' : 'default'}
+              className={`min-h-10 min-w-10 !py-1 text-sm ${fill ? '!px-2' : ''}`}
+              title={torch ? 'Turn torchlight off' : 'Turn torchlight on'}
+              aria-pressed={torch}
+              onClick={toggleTorch}
+            >
+              {fill ? '🔥' : '🔥 Torchlight'}
+            </Button>
+          )}
+          {fill && (
+            <Button
+              variant={threeD ? 'gold' : 'default'}
+              className="min-h-10 min-w-10 !px-2 !py-1 text-sm"
+              title={threeD ? 'Show the flat board' : 'Show the board in 3D'}
+              aria-pressed={threeD}
+              onClick={toggle3D}
+            >
+              🧊
+            </Button>
+          )}
           {extraButtons}
+        </div>
+      )}
+      {note3D && (
+        <div className="mb-2 flex items-center gap-2 rounded-xl bg-sky-950/60 p-2 text-sm text-sky-200">
+          <p className="flex-1">{note3D === 'slow' ? '🧊 The 3D board was too slow on this screen, so it went back to the flat board.' : "🧊 This screen can't draw the 3D board, so it shows the flat board."}</p>
+          <Button className="!px-3 !py-1 text-sm" onClick={clearNote3D} aria-label="Close">
+            ✕
+          </Button>
         </div>
       )}
       {powerMove && (
@@ -397,84 +511,29 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
         </div>
       )}
       {peek && <MonsterPeek state={state} tokenId={peek} fill={fill} onClose={() => setPeek(null)} />}
-      {/* A tap anywhere on the board but a figure closes the monster's card. */}
-      <div ref={boxRef} onClick={peek ? (e) => { if (!e.target.closest?.('[data-token]')) setPeek(null) } : undefined} className={fill ? 'min-h-0 flex-1 touch-pan-x touch-pan-y overflow-auto' : readOnly ? '' : 'max-h-[70vh] overflow-auto'}>
-        <svg
-          ref={svgRef}
-          viewBox={viewBox}
-          width={small || fit ? '100%' : viewW * scale}
-          height={small ? undefined : fit ? '100%' : viewH * scale}
-          className={`${small ? 'mx-auto max-h-[45vh]' : fit ? 'block' : 'mx-auto'} ${quakes(playing) ? 'fx-quake' : ''} ${calm ? 'board-calm' : ''}`}
-          style={quakes(playing) ? { '--fx-delay': quakeDelay() } : undefined}
-          role="img"
-          aria-label="The dungeon board"
-        >
-          <g transform={spin ? `rotate(${spin})` : undefined}>
-            <g ref={anchorRef} />
-            {/* No box behind the map: the area's artwork shows around the tiles (JJ's pick, 2026-11-02).
-                A tile still dropping in gets its shadow once it lands. */}
-            <TileShadows rects={tiles.filter((t) => !freshUids.has(t.id))} />
-            {/* A tile just laid waits for the board to move, then drops in (useFreshTiles). */}
-            {board.tiles.map((placed) => board.defs[placed.tileId] && (
-              <g key={placed.uid} className={freshUids.has(placed.uid) ? 'tile-drop' : undefined} style={freshUids.has(placed.uid) ? dropStyle : undefined} data-dropping={freshUids.has(placed.uid) ? '' : undefined}>
-                <PlacedTile placed={placed} def={board.defs[placed.tileId]} spin={spin} />
-              </g>
-            ))}
-            <MarkerTiles markers={placedMarkers} />
-            {(board.doors ?? []).map((door) => (
-              <ClosedDoor key={door.id} squares={door.squares} kind={door.kind} special={Boolean(door.reveal)} spin={spin} />
-            ))}
-            {/* Open edges, exits, lit squares and figures stay on top of the dark. */}
-            {torch && <Torchlight bounds={bounds} tiles={tiles} lights={lightSources({ heroes: state.heroes, tokens: board.tokens, activeId, markers: placedMarkers })} />}
-            {fresh && <NewTileGlow key={fresh.key} grid={grid} uids={fresh.uids} style={dropStyle} />}
-            <OpenEdges grid={grid} />
-            <ExitSquares squares={exits} open={exitOpen} />
-            {targets.map((k) => {
-              const [x, y] = k.split(',').map(Number)
-              return (
-                <rect
-                  key={k}
-                  x={x * SQUARE + 2}
-                  y={y * SQUARE + 2}
-                  width={SQUARE - 4}
-                  height={SQUARE - 4}
-                  rx="6"
-                  fill="#34d399"
-                  fillOpacity="0.45"
-                  stroke="#059669"
-                  className="cursor-pointer"
-                  onClick={() => tapSquare([x, y])}
-                />
-              )
-            })}
-            {questTokens.map((spot) => (
-              <QuestToken key={spot.name} spot={spot} spin={spin} />
-            ))}
-            {items.filter((i) => i.at && i.kind === 'carpet').map((i) => (
-              <Carpet key={i.id} item={i} selected={picked === i.id} onTap={tools ? () => setPicked(picked === i.id ? null : i.id) : undefined} />
-            ))}
-            {items.filter((i) => i.at && isHeroToken(i)).map((i) => (
-              <HeroTokenMark key={i.id} item={i} spin={spin} count={i.kind === 'sphere' ? state.heroes.find((h) => h.id === i.owner)?.tokens?.flamingSphere : null} selected={picked === i.id} onTap={tools ? () => setPicked(picked === i.id ? null : i.id) : undefined} />
-            ))}
-            {items.filter((i) => i.at && i.kind === 'treasure').map((i) => (
-              <Coin key={i.id} item={i} spin={spin} selected={picked === i.id} onTap={tools ? () => setPicked(picked === i.id ? null : i.id) : undefined} />
-            ))}
-            {/* The active hero is drawn last so its glow sits on top of its neighbours. */}
-            {[...onBoard.filter((f) => f.id !== activeId), ...onBoard.filter((f) => f.id === activeId)].map((f) => (
-              // An attack makes its target flinch or dodge, and a sword swing lunges in.
-              <g key={f.id} {...tokenFx(playing, board.tokens[f.id])}>
-                <g className={arriving(board.tokens[f.id]) ? 'figure-arrive' : undefined} style={arriving(board.tokens[f.id]) ? dropStyle : undefined}>
-                <Token {...f} spin={spin} at={board.tokens[f.id]} active={f.id === activeId} aimed={aimed.includes(f.id.split('#')[0])} acting={acting === f.id.split('#')[0]} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)} onTap={watching && !peekTarget(state, f.id) ? undefined : () => tapFigure(f.id)} />
-                </g>
-              </g>
-            ))}
-            <MarkerBadges markers={placedMarkers} spin={spin} taken={new Set([...Object.values(board.tokens), ...items.filter((i) => i.at).map((i) => i.at), ...questTokens.map((q) => q.at)].map(key))} onTap={(id) => { setPeek(null); setReading(reading === id ? null : id) }} />
-            {heals.filter((h) => board.tokens[h.heroId]).map((h) => (
-              <HealFloat key={h.key} at={board.tokens[h.heroId]} amount={h.amount} delay={h.delay} spin={spin} />
-            ))}
-          </g>
-        </svg>
-      </div>
+      {show3D ? (
+        <Board3DLazy
+          state={state}
+          calm={calm}
+          flat={flat}
+          onFail={() => setBoard3D(false, 'no-3d')}
+          onSlow={() => setBoard3D(false, 'slow')}
+          taps={{
+            targets,
+            selected: new Set(onBoard.filter((f) => picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)).map((f) => f.id)),
+            onSquare: tapSquare,
+            onFigure: (id) => (watching && !peekTarget(state, id) ? setPeek(null) : tapFigure(id)),
+            onItem: (id) => setPicked(picked === id ? null : id),
+            onMarker: (id) => {
+              setPeek(null)
+              setReading(reading === id ? null : id)
+            },
+            onBackground: () => setPeek(null),
+          }}
+        />
+      ) : (
+        flat
+      )}
       <AttackFx playing={playing} anchorRef={anchorRef} artFor={(name) => artUrl(art, name)} />
     </section>
   )

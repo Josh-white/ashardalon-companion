@@ -15,7 +15,7 @@ import { TOKEN_COLORS } from './Board.jsx'
 // `onFail` hands the screen back to the flat board when this device can't draw 3D.
 
 const FLOOR_H = 0.16
-const ROCK_H = 0.8
+const ROCK_H = 0.55
 const WALL_H = 0.55
 const STEP_MS = 180
 
@@ -57,11 +57,13 @@ const FIGURE_COLORS = { monster: '#7f1d1d', villain: '#581c87', villager: '#065f
 const figureColor = (f) => (f.kind === 'hero' ? TOKEN_COLORS[f.color] ?? '#71717a' : FIGURE_COLORS[f.kind])
 
 // Everything three.js needs, made once when the board opens.
-function makeStage(mount) {
+// `calm` (iPads, phones, the table screen): no shadows, a little less sharp, and nothing
+// moves unless a figure does, so the board costs nothing between moves (the iPad lag lesson).
+function makeStage(mount, calm) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, calm ? 1.5 : 2))
   renderer.toneMapping = THREE.ACESFilmicToneMapping
-  renderer.shadowMap.enabled = true
+  renderer.shadowMap.enabled = !calm
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
   renderer.domElement.style.display = 'block'
   renderer.domElement.style.width = '100%'
@@ -80,7 +82,7 @@ function makeStage(mount) {
 
   scene.add(new THREE.HemisphereLight('#8a9bc4', '#2a1d12', 0.9))
   const moon = new THREE.DirectionalLight('#c9d4ff', 0.55)
-  moon.castShadow = true
+  moon.castShadow = !calm
   moon.shadow.mapSize.set(2048, 2048)
   scene.add(moon, moon.target)
 
@@ -94,8 +96,9 @@ function makeStage(mount) {
   const dungeon = new THREE.Group()
   const extras = new THREE.Group()
   const figures = new THREE.Group()
-  scene.add(dungeon, extras, figures)
-  return { renderer, scene, camera, controls, moon, blob, dungeon, extras, figures, nodes: new Map(), textures: new Map(), tweens: [], animators: [], center: new THREE.Vector3() }
+  const lit = new THREE.Group()
+  scene.add(dungeon, extras, lit, figures)
+  return { renderer, scene, camera, controls, moon, blob, dungeon, extras, lit, figures, nodes: new Map(), textures: new Map(), tweens: [], animators: [], center: new THREE.Vector3() }
 }
 
 const disposeTree = (root) =>
@@ -134,6 +137,8 @@ function buildDungeon(stage, layout) {
     floorMesh.setColorAt(i, s.scorch ? color.setRGB(0.13, 0.09, 0.08) : color.setRGB(v * 1.05, v, v * 0.92))
   })
   floorMesh.receiveShadow = true
+  floorMesh.userData.squares = floors.map((f) => [f.x, f.y])
+  stage.floor = floorMesh
   dungeon.add(floorMesh)
 
   const rockMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, ROCK_H, 1), new THREE.MeshStandardMaterial({ roughness: 1 }), Math.max(rocks.length, 1))
@@ -379,12 +384,14 @@ function buildExtras(stage, extras) {
       }
     }
     const badge = iconSprite(stage, m.icon, m.badge.small ? 0.4 : 0.8, m.color)
+    badge.userData.markerId = m.id
     const [bx, bz] = at(m.badge.at[0], m.badge.at[1])
     badge.position.set(bx, m.badge.small ? 0.3 : 0.5, bz)
     group.add(badge)
   }
   for (const item of extras.items) {
     const [px, pz] = at(item.at[0], item.at[1])
+    const before = group.children.length
     if (item.kind === 'carpet') {
       const fringe = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.02, 0.96), new THREE.MeshStandardMaterial({ color: '#fbbf24' }))
       fringe.position.set(px, 0.01, pz)
@@ -405,6 +412,7 @@ function buildExtras(stage, extras) {
       icon.position.set(px, 0.36, pz)
       group.add(disc, icon)
     }
+    for (const part of group.children.slice(before)) part.userData.itemId = item.id
   }
   for (const q of extras.quests) {
     const [px, pz] = at(q.at[0], q.at[1])
@@ -422,6 +430,20 @@ function buildExtras(stage, extras) {
     const glow = new THREE.MeshBasicMaterial({ color: '#10b981', transparent: true, opacity: open ? 0.4 : 0.12, depthWrite: false })
     for (const [x, y] of extras.exits.squares) group.add(squarePlane(glow, ...at(x, y), 0.02, 0.9))
     if (open) stage.animators.push((now) => (glow.opacity = 0.3 + Math.sin(now / 320) * 0.15))
+  }
+}
+
+// The squares a tap can go to, lit green like the flat board's.
+function buildLit(stage, targets) {
+  const group = stage.lit
+  disposeTree(group)
+  group.clear()
+  const mat = new THREE.MeshBasicMaterial({ color: '#34d399', transparent: true, opacity: 0.6, depthWrite: false })
+  for (const k of targets) {
+    const [x, y] = k.split(',').map(Number)
+    const plane = squarePlane(mat, ...stage.at(x, y), 0.04, 0.9)
+    plane.userData.square = [x, y]
+    group.add(plane)
   }
 }
 
@@ -444,6 +466,7 @@ function setIcons(stage, node, icons) {
 // that lights for the hero whose turn it is (gold) or the monster acting (orange).
 function makeStandee(stage, figure, url) {
   const node = new THREE.Group()
+  node.userData.figId = figure.id
   const shadow = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.95), new THREE.MeshBasicMaterial({ map: stage.blob, transparent: true, depthWrite: false }))
   shadow.rotation.x = -Math.PI / 2
   shadow.position.y = 0.005
@@ -507,8 +530,8 @@ function syncFigures(stage, figures, art) {
       glide(stage, node, to)
     }
     const { ring, faceMat, baseMat } = node.userData
-    ring.visible = Boolean(f.active || f.acting)
-    ring.material.color.set(f.acting ? '#fb923c' : '#fbbf24')
+    ring.visible = Boolean(f.active || f.acting || f.selected)
+    ring.material.color.set(f.selected ? '#34d399' : f.acting ? '#fb923c' : '#fbbf24')
     faceMat.opacity = f.faded ? 0.35 : 1
     baseMat.color.set(f.faded ? '#3f3f46' : figureColor(f))
     if (node.userData.torch) node.userData.torch.visible = !f.faded
@@ -541,8 +564,11 @@ function glide(stage, node, to) {
 
 // The camera looks over the whole dungeon from one side, tilted so the walls and standees
 // stand up. A long dungeon on a wide screen is looked at from its side, so it runs across.
-const TILT = 0.8 // radians from straight down
+// iPads look more from above, so the near rock doesn't hide the squares you tap.
+const TILT_BIG = 0.8 // radians from straight down
+const CALM_TILT = 0.6
 function fitCamera(stage, bounds, aspect) {
+  const TILT = stage.calm ? CALM_TILT : TILT_BIG
   const sideways = bounds.h > bounds.w * 1.2 && aspect > 1.1
   const across = (sideways ? bounds.h : bounds.w) + 1
   const deep = (sideways ? bounds.w : bounds.h) + 1
@@ -560,9 +586,40 @@ function fitCamera(stage, bounds, aspect) {
 
 const stillWanted = () => typeof window !== 'undefined' && Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
 
-export default function Board3D({ state, onFail }) {
+// Drawing slower than this on average (milliseconds a frame, while something moves) means
+// this device is better off with the flat board.
+const SLOW_FRAME_MS = 45
+const SLOW_SAMPLE = 40
+// A finger that moves further than this (pixels) is turning the camera, not tapping.
+const TAP_SLOP = 10
+
+// What a tap at this point on the screen lands on: a figure, a marker's badge, a token,
+// a lit square or a floor square (nearest first).
+function tapHit(stage, event) {
+  const r = stage.renderer.domElement.getBoundingClientRect()
+  const pointer = new THREE.Vector2(((event.clientX - r.left) / r.width) * 2 - 1, -((event.clientY - r.top) / r.height) * 2 + 1)
+  const ray = new THREE.Raycaster()
+  ray.setFromCamera(pointer, stage.camera)
+  const hits = ray.intersectObjects([stage.figures, stage.extras, stage.lit, stage.dungeon], true)
+  for (const hit of hits) {
+    for (let o = hit.object; o; o = o.parent) {
+      if (o.userData.figId) return { figure: o.userData.figId }
+      if (o.userData.markerId) return { marker: o.userData.markerId }
+      if (o.userData.itemId) return { item: o.userData.itemId }
+      if (o.userData.square) return { square: o.userData.square }
+      if (o === stage.floor && hit.instanceId !== undefined) return { square: stage.floor.userData.squares[hit.instanceId] }
+    }
+  }
+  return {}
+}
+
+// `taps` (a board that moves figures): { targets, selected, onSquare, onFigure, onItem,
+// onMarker, onBackground }, the same handlers the flat board uses. `calm`: see makeStage.
+export default function Board3D({ state, onFail, onSlow, taps = null, calm = false }) {
   const mountRef = useRef(null)
   const stageRef = useRef(null)
+  const tapsRef = useRef(taps)
+  tapsRef.current = taps
   const art = useArt()
   const [ready, setReady] = useState(false)
   const board = state.board
@@ -570,31 +627,48 @@ export default function Board3D({ state, onFail }) {
   const layoutKey = board ? `${board.tiles.map((t) => t.uid).join()}|${(board.doors ?? []).map((d) => d.id).join()}` : ''
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const layout = useMemo(() => (board ? boardLayout(board) : null), [layoutKey])
-  const figures = boardFigures(state)
+  const selected = taps?.selected ?? new Set()
+  const figures = boardFigures(state).map((f) => ({ ...f, selected: selected.has(f.id) }))
   const extras = boardExtras(state)
   const extrasKey = JSON.stringify(extras)
+  const targetsKey = (taps?.targets ?? []).join(' ')
 
   // Make the stage once; hand back to the flat board if this screen can't draw 3D.
   useEffect(() => {
     const mount = mountRef.current
     let stage
     try {
-      stage = makeStage(mount)
+      stage = makeStage(mount, calm)
     } catch {
       onFail?.()
       return undefined
     }
     stage.still = stillWanted()
+    stage.calm = calm
+    // Torch flicker, lava and fog keep the board drawing all the time: only on the big screen.
+    stage.ambient = !stage.still && !calm
     let frame = 0
+    let last = 0
+    const slow = { frames: 0, ms: 0, done: !onSlow }
     const tick = (now) => {
       frame = 0
+      // How long frames take while something keeps moving (a walk, the camera turning).
+      // Frames closer than 200 ms apart are one run of drawing; a pause starts a new run.
+      if (!slow.done && last && now - last < 200) {
+        slow.frames++
+        slow.ms += now - last
+        if (slow.frames >= SLOW_SAMPLE) {
+          slow.done = true
+          if (slow.ms / slow.frames > SLOW_FRAME_MS) onSlow()
+        }
+      }
       stage.tweens = stage.tweens.filter((t) => {
         t.start ??= now
         const k = Math.min(1, (now - t.start) / t.ms)
         t.step(k)
         return k < 1
       })
-      if (!stage.still) {
+      if (stage.ambient) {
         for (const animate of stage.animators) animate(now)
         for (const node of stage.nodes.values()) {
           const torch = node.userData.torch
@@ -607,8 +681,10 @@ export default function Board3D({ state, onFail }) {
         node.userData.card.rotation.set(-0.3, Math.atan2(stage.camera.position.x - p.x, stage.camera.position.z - p.z), 0, 'YXZ')
       }
       stage.renderer.render(stage.scene, stage.camera)
-      const torches = !stage.still && [...stage.nodes.values()].some((n) => n.userData.torch?.visible)
-      if (stage.tweens.length > 0 || torches || (!stage.still && stage.animators.length > 0)) stage.render()
+      const torches = stage.ambient && [...stage.nodes.values()].some((n) => n.userData.torch?.visible)
+      const keepGoing = stage.tweens.length > 0 || torches || (stage.ambient && stage.animators.length > 0)
+      last = now
+      if (keepGoing) stage.render()
     }
     stage.render = () => {
       if (!frame) frame = requestAnimationFrame(tick)
@@ -625,17 +701,39 @@ export default function Board3D({ state, onFail }) {
     const observer = new ResizeObserver(resize)
     observer.observe(mount)
     stage.controls.addEventListener('change', stage.render)
+
+    // A tap (not a drag) on the board goes to the same handlers as the flat board's.
+    const canvas = stage.renderer.domElement
+    let down = null
+    const press = (e) => {
+      down = e.isPrimary ? { x: e.clientX, y: e.clientY } : null
+    }
+    const release = (e) => {
+      const t = tapsRef.current
+      if (!t || !down || !e.isPrimary || Math.hypot(e.clientX - down.x, e.clientY - down.y) > TAP_SLOP) return
+      down = null
+      const hit = tapHit(stage, e)
+      if (hit.figure) t.onFigure?.(hit.figure)
+      else if (hit.marker) t.onMarker?.(hit.marker)
+      else if (hit.item) t.onItem?.(hit.item)
+      else if (hit.square) t.onSquare?.(hit.square)
+      else t.onBackground?.()
+    }
+    canvas.addEventListener('pointerdown', press)
+    canvas.addEventListener('pointerup', release)
     stageRef.current = stage
     setReady(true)
     return () => {
       cancelAnimationFrame(frame)
       observer.disconnect()
+      canvas.removeEventListener('pointerdown', press)
+      canvas.removeEventListener('pointerup', release)
       stage.controls.dispose()
       disposeTree(stage.scene)
       for (const tex of stage.textures.values()) tex.dispose()
       stage.blob.dispose()
       stage.renderer.dispose()
-      stage.renderer.domElement.remove()
+      canvas.remove()
       stageRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -664,6 +762,14 @@ export default function Board3D({ state, onFail }) {
     stage.render()
   }, [ready, layout, extrasKey])
 
+  // The squares a tap can go to.
+  useEffect(() => {
+    const stage = stageRef.current
+    if (!ready || !stage?.at) return
+    buildLit(stage, targetsKey ? targetsKey.split(' ') : [])
+    stage.render()
+  }, [ready, layout, targetsKey])
+
   // Figures every time the game changes.
   useEffect(() => {
     const stage = stageRef.current
@@ -681,12 +787,12 @@ export default function Board3D({ state, onFail }) {
 
   if (!board) return null
   return (
-    <section className="relative h-full overflow-hidden rounded-2xl" data-board3d>
+    <section className="relative h-full min-h-0 flex-1 overflow-hidden rounded-2xl" data-board3d>
       <div ref={mountRef} className="h-full w-full" />
       <button
         type="button"
         onClick={fit}
-        className="absolute right-[0.8vw] top-[0.8vw] rounded-lg border border-zinc-700 bg-zinc-950/70 px-[0.8vw] py-[0.3vw] text-[0.9vw] text-zinc-300 hover:text-white"
+        className={`absolute right-2 top-2 rounded-lg border border-zinc-700 bg-zinc-950/70 text-zinc-300 hover:text-white ${calm ? 'px-3 py-1 text-sm' : 'px-[0.8vw] py-[0.3vw] text-[0.9vw]'}`}
       >
         Fit
       </button>
