@@ -80,6 +80,7 @@ function PowerMarkers({ state, hero, dispatch }) {
     caster && `🛡️ +2 AC from ${caster.name}'s Cleric's Shield`,
     tokens.mirrorImage > 0 && `🪞 ${tokens.mirrorImage} mirror image${tokens.mirrorImage > 1 ? 's' : ''}: +${2 * tokens.mirrorImage} AC. A miss pops one.`,
     tokens.invisible && "👻 Invisible: monsters don't count you as the closest hero until your next turn.",
+    ...(hero.buffs ?? []).map((b) => `🎵 ${b.source}: ${[b.attack && `+${b.attack} to attack`, b.ac && `+${b.ac} AC`].filter(Boolean).join(', ')} (${b.untilTurnStart ? 'until the start of the caster\'s next turn' : `until the end of the caster's ${b.phaseEnds > 1 ? 'next ' : ''}Hero Phase`}).`),
     tokens.shadow && "🌑 In the shadows: +2 AC, and monsters don't count you as the closest hero.",
     tokens.refuge && '✨ In the Astral Refuge: off the board until your next turn.',
     // On the virtual board the Blade Barrier and Caltrop tokens go off by themselves.

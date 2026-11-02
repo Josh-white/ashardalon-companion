@@ -194,11 +194,22 @@ export function encounterCount(state, hero) {
   return Math.max(0, base + badLuck + adventure + encountersOwed - encountersDrawn)
 }
 
+// Bonuses this hero's powers gave (Song of Courage...) that run out now.
+function endBuffs(state, caster, ends) {
+  if (!caster) return state
+  const done = (b) => b.casterId === caster.id && ends(b)
+  const gone = [...new Set(state.heroes.flatMap((h) => (h.buffs ?? []).filter(done).map((b) => b.source)))]
+  if (gone.length === 0) return state
+  const next = { ...state, heroes: state.heroes.map((h) => (h.buffs?.some(done) ? { ...h, buffs: h.buffs.filter((b) => !done(b)) } : h)) }
+  return gone.reduce((s, source) => withLog(s, `${caster.name}'s ${source} wears off.`), next)
+}
+
 // Poison (and Bloodlust) hurt at the start of the hero's turn, and a hero lost in a Time
 // Leap comes back.
 export function startTurn(state) {
   const hero = state.heroes[state.turn.heroIndex]
   state = returnFromPowers(state, hero)
+  state = endBuffs(state, hero, (b) => b.untilTurnStart)
   for (const curse of (hero?.curses ?? []).filter((c) => c.card?.removeAtTurnStart)) {
     // On the virtual board the hero waits under "Not on the board yet" for a tap.
     const put = state.board ? `Tap ${hero.name} under "Not on the board yet", then any square.` : `Put ${hero.name} on any tile.`
@@ -321,7 +332,10 @@ export function endPhaseCurses(state, hero, phaseKey, rolls = []) {
 // the d20 with the action) to shake off the poison on a 10 or more.
 export function endHeroPhase(state, hero, roll) {
   if (!hero) return state
-  let next = state
+  let next = endBuffs(state, hero, (b) => b.phaseEnds === 1)
+  next = { ...next, heroes: next.heroes.map((h) => (h.buffs?.some((b) => b.casterId === hero.id && b.phaseEnds > 1)
+    ? { ...h, buffs: h.buffs.map((b) => (b.casterId === hero.id && b.phaseEnds > 1 ? { ...b, phaseEnds: b.phaseEnds - 1 } : b)) }
+    : h)) }
   if (hero.conditions.includes('Dazed')) {
     next = withLog(
       updateHero(next, hero.id, (h) => ({ conditions: h.conditions.filter((c) => c !== 'Dazed') })),

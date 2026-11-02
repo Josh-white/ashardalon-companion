@@ -22,6 +22,7 @@ export function attackNumbers(hero, { item = null, power = null, extraAttack = n
   const adjacent = effects.ask === 'adjacent-count' ? clamp(Number(adjacentCount) || 0, 0, 8) : 0
   if (adjacent) bonusParts.push({ label: adjacent === 1 ? '1 monster next to you' : `${adjacent} monsters next to you`, value: adjacent })
   if (effects.shadowBonus && hero.tokens?.shadow) bonusParts.push({ label: 'From the shadows', value: effects.shadowBonus })
+  for (const buff of hero.buffs ?? []) if (buff.attack) bonusParts.push({ label: buff.source, value: buff.attack })
   for (const curse of hero.curses ?? []) if (curse.card?.attackPenalty) bonusParts.push({ label: curse.name, value: -curse.card.attackPenalty })
   const damageParts = [{ label: source.name, value: item ? item.card.attack.damage : powerNumber(power.card?.damage) ?? 0 }]
   if (effects.ask === 'started-adjacent' && startedAdjacent) damageParts.push({ label: 'Started next to it', value: 1 })
@@ -289,6 +290,20 @@ export function powerDamage(state, action) {
 }
 
 // A power used from its tile: healing, tokens, ending a condition, and so on.
+// A party or self bonus from a power (Song of Courage: all heroes +2 to attack until the end
+// of your next Hero Phase). Used in the caster's Hero Phase, that phase's end counts as one.
+function addBuff(next, state, hero, power, buff) {
+  const lasts = buff.lasts === 'turnStart' ? { untilTurnStart: true } : { phaseEnds: inHeroPhase(state, hero) ? 2 : 1 }
+  const entry = { source: power.name, casterId: hero.id, attack: Number(buff.attack) || 0, ac: Number(buff.ac) || 0, ...lasts }
+  const who = buff.who === 'self' ? [hero.id] : next.heroes.map((h) => h.id)
+  for (const id of who) {
+    next = updateHero(next, id, (h) => ({ buffs: [...(h.buffs ?? []).filter((b) => b.source !== power.name), entry] }))
+  }
+  const what = [entry.attack && `+${entry.attack} to attack`, entry.ac && `+${entry.ac} AC`].filter(Boolean).join(' and ')
+  const until = lasts.untilTurnStart ? `the start of ${hero.name}'s next turn` : `the end of ${hero.name}'s ${lasts.phaseEnds === 2 ? 'next ' : ''}Hero Phase`
+  return withLog(next, `${buff.who === 'self' ? hero.name : 'Every hero'} gets ${what} until ${until}.`)
+}
+
 // Shadowphage (Fesud, a fan hero): a power can take him into or out of the shadows.
 function moveShadow(state, hero, effects, missed = false) {
   const was = Boolean(hero.tokens?.shadow)
@@ -331,6 +346,7 @@ export function usePower(state, action) {
   if (use.tokens) next = updateHero(next, hero.id, (h) => ({ tokens: { ...h.tokens, ...use.tokens } }))
   if (use.invisible) next = updateHero(next, hero.id, (h) => ({ tokens: { ...h.tokens, invisible: true } }))
   if (effectsOf(power).shadow) next = moveShadow(next, hero, effectsOf(power))
+  if (use.buff) next = addBuff(next, state, hero, power, use.buff)
   if (use.refuge) {
     next = updateHero(next, picked.id, (h) => ({ tokens: { ...h.tokens, refuge: true } }))
     next = withLog(next, `${picked.name} is safe in the Astral Refuge until their next turn.`)

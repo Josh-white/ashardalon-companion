@@ -27,7 +27,10 @@ import { itemAc } from './items.js'
 //   healSelf, heal + pick ('other': one other hero; reach: 'sameTile', 'adjacent' or 'within2' on the
 //   virtual board), tokens, endCondition, refuge, invisible, causeFear, note,
 //   takeEncounter (One for the Team: the hero takes another hero's encounter card, as if they drew it),
-//   move (it takes the place of a move, so on the virtual board it uses one up).
+//   move (it takes the place of a move, so on the virtual board it uses one up),
+//   buff { attack, ac, who: 'all' | 'self', lasts: 'heroPhaseEnd' | 'turnStart' }: a bonus that
+//   lasts until the end of the caster's next Hero Phase, or until the start of their next turn
+//   (a fan Bard's Song of Courage, a fan Monk's Centered Defense). Kept on each hero as hero.buffs.
 // A card in cards.json can carry its own `effect` with these fields (a homebrew power);
 // a power listed below by name always uses the entry here instead.
 // `reaction` powers are offered where they happen: 'reroll', 'furious', 'dodge', 'evade', 'noble-shield', 'perseverance',
@@ -180,9 +183,12 @@ export function shadowAfter(hero, effects, missed = false) {
 const curseTotal = (hero, field) => (hero.curses ?? []).reduce((sum, curse) => sum + (curse.card?.[field] ?? 0), 0)
 export const heroAttackPenalty = (hero) => curseTotal(hero, 'attackPenalty')
 
+// Song of Courage, Melody of Defense, Centered Defense...: [{ source, casterId, attack, ac, ... }].
+export const buffTotal = (hero, field) => (hero.buffs ?? []).reduce((sum, b) => sum + (b[field] ?? 0), 0)
+
 export function heroAc(hero) {
   const tokens = hero.tokens ?? {}
-  return hero.ac + (hero.shieldedBy ? 2 : 0) + 2 * (tokens.mirrorImage ?? 0) + (tokens.shadow ? SHADOW_AC : 0) + itemAc(hero) - curseTotal(hero, 'acPenalty')
+  return hero.ac + buffTotal(hero, 'ac') + (hero.shieldedBy ? 2 : 0) + 2 * (tokens.mirrorImage ?? 0) + (tokens.shadow ? SHADOW_AC : 0) + itemAc(hero) - curseTotal(hero, 'acPenalty')
 }
 
 // The hit a hero could still turn into a miss: Tumbling Escape (a monster's attack) or
