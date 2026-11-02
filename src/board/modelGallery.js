@@ -1,5 +1,5 @@
 import { HERO_TEMPLATES } from '../data/heroes.js'
-import { heroModel, MONSTER_FIGURES, monsterModel, VILLAIN_MODELS } from './heroModels.js'
+import { heroModel, MONSTER_FIGURES, monsterModel, VILLAGER_MODELS, VILLAIN_MODELS } from './heroModels.js'
 
 // What the #models page shows: every figure that stands on the 3D board as a 3D model
 // (the box's heroes, fan heroes, and the monsters we made figures for), and the monsters
@@ -19,7 +19,7 @@ export function galleryFigures(cards) {
     monsters: MONSTER_FIGURES.map(([, model]) => ({ model, name: model.replace(/_/g, ' ') })).map(({ model, name }) => ({
       id: `monster-${name}`,
       name,
-      about: VILLAIN_MODELS.has(model) ? 'Villain' : 'Monster',
+      about: VILLAIN_MODELS.has(model) ? 'Villain' : VILLAGER_MODELS.has(model) ? 'Villager' : 'Monster',
       color: null,
       look: monsterModel({ name }),
     })),

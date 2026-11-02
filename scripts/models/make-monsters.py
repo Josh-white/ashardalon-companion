@@ -104,6 +104,17 @@ PALETTE = {
     "ash_dark": "4e0f0b",
     "ash_belly": "d9a441",
     "ash_wing": "6e1813",
+    "skin_light": "f1c9a2",  # villagers
+    "shirt": "e6dcc4",
+    "trousers": "4b4a58",
+    "tunic_green": "4f7a3a",
+    "tunic_blue": "3f5f8f",
+    "dress_teal": "2f8a85",
+    "shawl": "6b4a8a",
+    "hair_brown": "5a3a22",
+    "hair_red": "b0522a",
+    "hair_blonde": "e3c46e",
+    "cheek": "e59a8a",
 }
 
 argv = sys.argv
@@ -617,6 +628,121 @@ def build_cultist():
         x, z = math.cos(DEG(a)) * 0.30, math.sin(DEG(a)) * 0.30
         box(f"Brim{i}", "robe_dark", "head", (x, -0.27, 1.74 + z), (0.13, 0.10, 0.07), bevel=0.025,
             rot=(0, -(90 + a), 0))
+
+
+# The five villagers: (tunic, legs "trousers" or a dress colour, hair, extras).
+VILLAGERS = {
+    "alek": ("tunic_green", "trousers", "hair_brown"),
+    "brandis": ("tunic_blue", "trousers", "hair_brown"),
+    "cassi": ("dress_teal", "dress_teal", "hair_red"),
+    "donnel": ("leather", "trousers", "beard"),
+    "elizar": ("shawl", "shawl", "hair_blonde"),
+}
+
+
+def build_villager(who):
+    """A townsperson from Firestorm Peak's villages, friendly and a bit nervous. Alek is a
+    farmhand with wrapped fists, Brandis an explorer with a hat, pack and lantern, Cassi a
+    girl with a red braid and satchel, Donnel a big bald brawler with a black beard, and
+    Elizar a timid woman in a shawl, hands clasped."""
+    tunic, legs, hair = VILLAGERS[who]
+    big = 1.18 if who == "donnel" else 1.0
+    dress = legs != "trousers"
+    for side, tag in ((1, "L"), (-1, "R")):
+        leg = f"leg.{tag}"
+        box(f"Boot.{tag}", "leather_dark", leg, (0.15 * side, -0.08, 0.07), (0.19, 0.28, 0.14), bevel=0.05)
+        if not dress:
+            cone(f"Shin.{tag}", legs, leg, (0.15 * side, 0, 0.30), 0.10, 0.40, sides=8, tip=0.11)
+    if dress:
+        cone("Skirt", legs, "hips", (0, 0, 0.50), 0.40, 0.70, sides=12, tip=0.26)
+        cone("SkirtHem", "shirt", "hips", (0, 0, 0.17), 0.405, 0.05, sides=12, tip=0.40)
+    else:
+        box("Seat", legs, "hips", (0, 0, 0.58), (0.46, 0.34, 0.24), bevel=0.08)
+    box("Belt", "leather_dark", "hips", (0, 0, 0.78), (0.52 * big, 0.38 * big, 0.07), bevel=0.02)
+    box("Buckle", "gold", "hips", (0, -0.20 * big, 0.78), (0.09, 0.03, 0.07), bevel=0.01)
+
+    # Body: a tunic over a pale shirt collar.
+    box("Torso", tunic, "body", (0, 0, 1.05), (0.54 * big, 0.38 * big, 0.52), bevel=0.15, segments=3)
+    box("Collar", "shirt", "body", (0, -0.12, 1.30), (0.26, 0.14, 0.06), bevel=0.02)
+    if who == "donnel":
+        # A leather vest open over a bare chest.
+        box("Chest", "skin_light", "body", (0, -0.20, 1.06), (0.22, 0.05, 0.42), bevel=0.02)
+    if who == "elizar":
+        sphere("Shawl", "shawl", "body", (0, 0.02, 1.30), 0.36, scale=(1.05, 0.9, 0.45), segments=12, rings=8)
+        cone("ShawlTail", "shawl", "body", (0, 0.22, 1.05), 0.16, 0.40, rot=(180, 0, 0), sides=6, tip=0.04)
+    if who == "brandis":
+        box("Pack", "leather", "body", (0, 0.30, 1.05), (0.42, 0.20, 0.46), bevel=0.06)
+        box("PackFlap", "leather_dark", "body", (0, 0.32, 1.24), (0.44, 0.22, 0.10), bevel=0.03)
+        sphere("Bedroll", "red", "body", (0, 0.30, 1.34), 0.09, scale=(2.6, 1, 1), segments=10, rings=6)
+        box("Scarf", "red", "body", (0, -0.06, 1.32), (0.40, 0.30, 0.08), bevel=0.03)
+    if who == "cassi":
+        box("SatchelStrap", "leather", "body", (0, 0, 1.05), (0.06, 0.42, 0.62), bevel=0.01, rot=(0, -38, 0))
+        box("Satchel", "leather", "body", (-0.30, -0.06, 0.78), (0.10, 0.26, 0.22), bevel=0.04)
+
+    # Arms: sleeves (rolled up for Alek and Donnel) and hands.
+    bare = who in ("alek", "donnel")
+    for side, tag in ((1, "L"), (-1, "R")):
+        arm = f"arm.{tag}"
+        x = 0.36 * big * side
+        sphere(f"Shoulder.{tag}", tunic, arm, (x, 0, 1.22), 0.12 * big)
+        cone(f"Sleeve.{tag}", "skin_light" if bare else tunic, arm, (x * 1.06, -0.01, 1.00), 0.10 * big, 0.36,
+             rot=(180, 0, 0), sides=8, tip=0.08 * big)
+        if bare:
+            cone(f"Roll.{tag}", "shirt" if who == "alek" else tunic, arm, (x * 1.04, -0.01, 1.14), 0.11 * big,
+                 0.06, sides=8, tip=0.11 * big)
+        if who == "alek":
+            cone(f"Wrap.{tag}", "shirt", arm, (x * 1.1, -0.03, 0.80), 0.085, 0.08, sides=8, tip=0.085)
+        sphere(f"Hand.{tag}", "skin_light", arm, (x * 1.12, -0.04, 0.74), 0.085 * big)
+    if who == "brandis":
+        # A lantern hanging from the left hand.
+        hand = Vector((0.40, -0.04, 0.74))
+        box("LanternTop", "iron_dark", "arm.L", hand + Vector((0, 0, -0.12)), (0.12, 0.12, 0.04), bevel=0.01)
+        box("LanternGlass", "eye", "arm.L", hand + Vector((0, 0, -0.22)), (0.10, 0.10, 0.14), bevel=0.02)
+        box("LanternBase", "iron_dark", "arm.L", hand + Vector((0, 0, -0.31)), (0.13, 0.13, 0.04), bevel=0.01)
+
+    # Head: a big friendly face, round eyes, rosy cheeks, ears and the hair for each one.
+    hz = 1.72
+    sphere("Face", "skin_light", "head", (0, -0.02, hz), 0.32, scale=(1.0, 0.95, 1.0), segments=16, rings=10)
+    for side in (1, -1):
+        sphere(f"Ear{side}", "skin_light", "head", (0.31 * side, 0.0, hz), 0.07, scale=(0.5, 1, 1.1), segments=8,
+               rings=6)
+        sphere(f"EyeWhite{side}", "eye_white", "head", (0.11 * side, -0.27, hz + 0.02), 0.06, scale=(1, 0.5, 1.15),
+               segments=10, rings=7)
+        sphere(f"Pupil{side}", "black", "head", (0.11 * side, -0.30, hz + 0.01), 0.035, scale=(1, 0.5, 1.2),
+               segments=8, rings=6)
+        sphere(f"Cheek{side}", "cheek", "head", (0.19 * side, -0.24, hz - 0.08), 0.045, scale=(1.2, 0.4, 0.8),
+               segments=8, rings=5)
+        worry = 14 if who in ("elizar", "cassi") else (-12 if who == "donnel" else 0)
+        box(f"Brow{side}", "beard" if who == "donnel" else hair, "head", (0.11 * side, -0.28, hz + 0.12),
+            (0.10, 0.03, 0.025), bevel=0.008, rot=(0, worry * side, 0))
+    sphere("Nose", "skin_light", "head", (0, -0.31, hz - 0.04), 0.045, scale=(1, 0.8, 1), segments=8, rings=6)
+    if who in ("elizar", "cassi"):
+        sphere("Mouth", "black", "head", (0, -0.29, hz - 0.15), 0.025, scale=(1, 0.5, 1.2), segments=8, rings=5)
+    else:
+        box("Mouth", "black", "head", (0, -0.295, hz - 0.15), (0.09, 0.02, 0.02), bevel=0.006)
+
+    if who == "donnel":
+        sphere("BeardBig", "beard", "head", (0, -0.17, hz - 0.22), 0.24, scale=(1.1, 0.7, 1.0), segments=12, rings=8)
+        box("Moustache", "beard", "head", (0, -0.31, hz - 0.10), (0.20, 0.06, 0.05), bevel=0.02)
+        return
+    sphere("HairCap", hair, "head", (0, 0.04, hz + 0.08), 0.335, scale=(1.04, 1.0, 0.88), segments=16, rings=10)
+    box("Fringe", hair, "head", (0, -0.22, hz + 0.22), (0.44, 0.14, 0.10), bevel=0.04, rot=(-20, 0, 0))
+    if who == "alek":
+        box("Stubble", "hair_brown", "head", (0, -0.24, hz - 0.20), (0.24, 0.10, 0.08), bevel=0.03)
+    if who == "brandis":
+        cone("HatBrim", "leather", "head", (0, 0.02, hz + 0.24), 0.52, 0.04, sides=16, tip=0.52)
+        cone("HatCrown", "leather", "head", (0, 0.03, hz + 0.36), 0.28, 0.24, sides=12, tip=0.22)
+        cone("HatBand", "red", "head", (0, 0.03, hz + 0.29), 0.285, 0.06, sides=12, tip=0.27)
+    if who == "cassi":
+        for i in range(5):
+            sphere(f"Braid{i}", hair, "head", (0, 0.32 + 0.02 * i, hz - 0.05 - 0.12 * i), 0.09 - 0.008 * i,
+                   segments=8, rings=6)
+        sphere("BraidTie", "dress_teal", "head", (0, 0.40, hz - 0.62), 0.05, segments=8, rings=6)
+    if who == "elizar":
+        for side in (1, -1):
+            sphere(f"LongHair{side}", hair, "head", (0.26 * side, 0.06, hz - 0.30), 0.13, scale=(0.8, 1, 2.2),
+                   segments=10, rings=7)
+        sphere("HairBack", hair, "head", (0, 0.20, hz - 0.25), 0.25, scale=(1.1, 0.7, 1.6), segments=10, rings=7)
 
 
 def build_duergar(captain=False):
@@ -1899,6 +2025,11 @@ ASHARDALON_MOVES.append(("Spellcast_Shoot", False, [
 MONSTERS = [
     ("orc-smasher", "orc-smasher.glb", lambda: build_orc("mace"), 2.4, ORC_BONES, []),
     ("orc-archer", "orc-archer.glb", lambda: build_orc("bow"), 2.4, ORC_BONES, ["1H_Ranged_Shoot"]),
+    ("villager-alek", "villager-alek.glb", lambda: build_villager("alek"), 2.25, CULTIST_BONES, []),
+    ("villager-brandis", "villager-brandis.glb", lambda: build_villager("brandis"), 2.35, CULTIST_BONES, []),
+    ("villager-cassi", "villager-cassi.glb", lambda: build_villager("cassi"), 2.1, CULTIST_BONES, []),
+    ("villager-donnel", "villager-donnel.glb", lambda: build_villager("donnel"), 2.35, CULTIST_BONES, []),
+    ("villager-elizar", "villager-elizar.glb", lambda: build_villager("elizar"), 2.2, CULTIST_BONES, []),
     ("rage-drake", "rage-drake.glb", build_drake, 1.4, DRAKE_BONES, [], BEAR_MOVES),
     ("ashardalon", "ashardalon.glb", lambda: build_drake(dragon=True), 2.6, ASHARDALON_BONES, [], ASHARDALON_MOVES),
     ("otyugh", "otyugh.glb", build_otyugh, 2.0, OTYUGH_BONES, [], OTYUGH_MOVES),
