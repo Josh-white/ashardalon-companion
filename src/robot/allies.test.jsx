@@ -4,7 +4,6 @@ import { Component, useSyncExternalStore } from 'react'
 import { readFileSync } from 'node:fs'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { normalizeCardFile } from '../data/cards.js'
-import { HERO_TEMPLATES } from '../data/heroes.js'
 import { startingPicks } from '../components/Setup.jsx'
 import { powerSlotsFor } from '../state/heroSetup.js'
 import { ROBOT_CARD_FILE } from './robotCards.js'
@@ -130,7 +129,9 @@ const pick = (list) => list[Math.floor(random() * list.length)]
 
 async function playGame(seed) {
   vi.resetModules()
-  const [{ default: App }, { gameReducer, initialState }] = await Promise.all([import('../App.jsx'), import('../state/game.js')])
+  const [{ default: App }, { gameReducer, initialState }, { setHeroTemplates }] = await Promise.all([import('../App.jsx'), import('../state/game.js'), import('../data/heroes.js')])
+  // The card file's heroes (the made-up fan heroes too), as the Pi and the screens set them.
+  setHeroTemplates(CARDS.heroes)
   reducer = gameReducer
   random = seeded(seed)
   dice = seeded(seed + 1_000_003)
@@ -139,7 +140,7 @@ async function playGame(seed) {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'cancelAnimationFrame', 'Date'] })
   vi.setSystemTime(new Date('2026-10-30T19:00:00'))
   const numbers = (n) => Array.from({ length: n }, () => random())
-  const heroes = [...HERO_TEMPLATES].sort(() => random() - 0.5).slice(0, 1 + (seed % 3))
+  const heroes = [...CARDS.heroes].sort(() => random() - 0.5).slice(0, 1 + (seed % 3))
   let state = gameReducer(initialState, { type: 'SET_LOBBY_BOARD', on: true })
   heroes.forEach((template) => {
     // The suggested powers, and the first free card for any slot without one (a card file with no suggestions).

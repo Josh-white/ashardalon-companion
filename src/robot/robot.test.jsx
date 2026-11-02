@@ -4,7 +4,6 @@ import { Component, useSyncExternalStore } from 'react'
 import { appendFileSync, readFileSync } from 'node:fs'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { normalizeCardFile } from '../data/cards.js'
-import { HERO_TEMPLATES } from '../data/heroes.js'
 import { powerSlotsFor } from '../state/heroSetup.js'
 import { campaignOutcome } from '../state/campaign.js'
 import { TOWN_EVENTS } from '../data/townEvents.js'
@@ -50,7 +49,9 @@ const STUCK_TAPS = Number(process.env.ROBOT_STUCK) || 600
 const FIRST_SEED = Number(process.env.ROBOT_SEED) || 1
 const CARD_FILE = process.env.ROBOT_CARDS ? JSON.parse(readFileSync(process.env.ROBOT_CARDS, 'utf8')) : ROBOT_CARD_FILE
 const PLAIN_CARDS = normalizeCardFile(CARD_FILE)
-const EASY_CARDS = normalizeCardFile(easyCards(CARD_FILE))
+// Play-to-win games keep to the box's heroes: the made-up fan heroes add so many buttons that
+// random taps rarely get a chamber beaten (the allies' games play the fan heroes instead).
+const EASY_CARDS = normalizeCardFile({ ...easyCards(CARD_FILE), heroes: (CARD_FILE.heroes ?? []).filter((h) => !h.levels) })
 // Easy mode only changes numbers; a card it broke would quietly drop out of the game.
 for (const kind of ['monsters', 'villains', 'encounters', 'adventures']) {
   if (EASY_CARDS[kind].length !== PLAIN_CARDS[kind].length) throw new Error(`Easy mode lost some ${kind}: ${EASY_CARDS.problems.join(' ')}`)
@@ -328,7 +329,7 @@ function lobbyFor(game) {
   // A checkup brings the party the adventure asks for (2 to 4 heroes); otherwise 1 to 3.
   const [fewest, most] = CHECKUP || game.win ? playerRange(adventure).map((n, i) => (i ? Math.min(n, 4) : Math.max(n, 2))) : [1, 3]
   const heroCount = Math.min(fewest, most) + Math.floor(random() * (Math.max(most - fewest, 0) + 1))
-  const heroes = [...HERO_TEMPLATES].sort(() => random() - 0.5).slice(0, heroCount)
+  const heroes = [...CARDS.heroes].sort(() => random() - 0.5).slice(0, heroCount)
   let state = gameReducer(initialState, { type: 'CHOOSE_ADVENTURE', adventure })
   // Playing to win, the party takes all the healing surges the lobby allows.
   if (game.win) state = gameReducer(state, { type: 'SET_LOBBY_SURGES', surges: 99 })
@@ -388,13 +389,15 @@ async function playGame(seed) {
   // Fresh modules, so nothing (a counter for new ids, the loaded cards) carries over from
   // the game before: a seed plays the same game whether it's played alone or after others.
   vi.resetModules()
-  const [{ default: App }, { gameReducer, initialState }] = await Promise.all([import('../App.jsx'), import('../state/game.js')])
+  const [{ default: App }, { gameReducer, initialState }, { setHeroTemplates }] = await Promise.all([import('../App.jsx'), import('../state/game.js'), import('../data/heroes.js')])
   app = { gameReducer, initialState }
   random = seeded(seed)
   dice = seeded(seed + 1_000_003)
   other = seeded(seed + 2_000_003)
   const game = { seed, kind: kindOf(seed), win: winsOf(seed), taps: [], adventures: [] }
   CARDS = game.win ? EASY_CARDS : PLAIN_CARDS
+  // The card file's heroes (the made-up fan heroes too), as the Pi and the screens set them.
+  setHeroTemplates(CARDS.heroes)
   playingToWin = game.win
   game.lobby = !CHECKUP && game.kind === 'solo' && seed % 3 === 0
   store.crash = null
@@ -429,9 +432,9 @@ async function playGame(seed) {
     // still short of powers gets random ones (picking them by chance takes all night) and in it goes.
     for (let n = 0; n < LOBBY_TAPS && !store.crash && store.state.status === 'setup'; n++) await tapSomething(game)
     if (!store.crash && store.state.status === 'setup') {
-      const claims = store.state.lobby.length > 0 ? store.state.lobby : [{ deviceId: 'robot~solo-1', heroKey: pick(HERO_TEMPLATES).key }]
+      const claims = store.state.lobby.length > 0 ? store.state.lobby : [{ deviceId: 'robot~solo-1', heroKey: pick(CARDS.heroes).key }]
       for (const claim of claims) {
-        const template = HERO_TEMPLATES.find((t) => t.key === claim.heroKey)
+        const template = CARDS.heroes.find((t) => t.key === claim.heroKey)
         robotDispatch({ type: 'CLAIM_HERO', deviceId: claim.deviceId, heroKey: claim.heroKey, picks: randomPicks(template) })
       }
       await wait()

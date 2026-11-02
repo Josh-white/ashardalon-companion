@@ -17,7 +17,8 @@ import { foeDistance, foesInRange, powerRange } from '../board/monsters.js'
 import { heroesInReach } from '../board/encounters.js'
 import { hypnotized, moveChoices, moveTargets, queueMoves } from '../board/powerMoves.js'
 import { distanceChoices } from '../data/items.js'
-import { effectsOf, maxRolls, onHitHeals } from '../data/powerEffects.js'
+import { effectsOf, maxRolls, onHitHeals, wolfBlocked } from '../data/powerEffects.js'
+import { targetAllowed } from '../state/fanPowers.js'
 import { PHASES } from '../data/phases.js'
 import { powerNumber } from '../state/combat.js'
 import { foes } from '../state/gameHelpers.js'
@@ -32,6 +33,7 @@ import { trapDisable } from '../state/encounterRules.js'
 import { cancelEncounter } from './cancelEncounter.js'
 import { castDaily, fearMove, figureHp, guardPower, placeHandToken, sphereStep } from './powers.js'
 import { divertMove, divertPower, wizardEyeStep } from './boardPowers.js'
+import { boostPower, buffPower, fleetfooted } from './fanPowers.js'
 
 // A d20 the way the screens roll one; tests pass their own.
 const d20 = () => Math.floor(Math.random() * 20) + 1
@@ -56,8 +58,10 @@ const pullsFirst = (power) => {
 const movedFirst = (state, power) => Boolean(state && state.turn.beforeMoved === power.id && !state.turn.boardMove)
 
 export function simpleAttack(power, state = null) {
-  if (!power || power.used || !power.card || powerNumber(power.card.attack) === null) return false
+  if (!power || power.used || !power.card) return false
   const e = effectsOf(power)
+  // Guiding Strike (a fan Bard's) has no attack number: it always hits.
+  if (powerNumber(power.card.attack) === null && !e.autoHit) return false
   if (e.before && movedFirst(state, power)) return !e.use && !e.reaction && (!e.ask || ['started-adjacent', 'adjacent-count'].includes(e.ask))
   // Holy Strike's and Valiant Strike's questions the board answers (askAnswers).
   const asks = !e.ask || ['started-adjacent', 'adjacent-count'].includes(e.ask)
@@ -168,6 +172,9 @@ export function freeItemAttack(state, hero, roll = d20) {
   return null
 }
 
+// Attack the hero's buffs add to this power (Song of Courage, Heavy Hitter, a Longbow-only Power of Earth).
+const buffBonus = (hero, power) => (hero.buffs ?? []).reduce((sum, b) => sum + (b.attack && (!b.only || power.name.startsWith(b.only)) ? b.attack : 0), 0)
+
 const onBoard = (state, foe) => Object.keys(state.board.tokens).some((id) => baseId(id) === foe.id)
 
 // Every attack the hero could make from where they stand: [{ power, targets, score, say }].
@@ -177,19 +184,23 @@ export function attackOptions(state, hero, { atWill = false, all: every = false 
   const all = foes(state).filter((m) => m.ac && m.hp > 0 && onBoard(state, m))
   if (all.length === 0) return []
   const options = []
-  for (const power of hero.powers.filter((p) => simpleAttack(p, state) && (!atWill || p.type === 'at-will'))) {
+  // As the wolf (a fan Druid's Wolf Form) only the wolf's attacks work, and those only as the wolf.
+  for (const power of hero.powers.filter((p) => simpleAttack(p, state) && !wolfBlocked(hero, p) && (!atWill || p.type === 'at-will'))) {
     const effects = effectsOf(power)
     // A card that doesn't say how far it reaches is used on a monster next to the hero.
-    const range = swapsFirst(power) ? swapRange(power) : pullsFirst(power) || effects.before ? 'adjacent' : powerRange(power.card.text) ?? 'adjacent'
-    const inReach = foesInRange(state, hero.id, range, all)
+    const range = swapsFirst(power) ? swapRange(power) : pullsFirst(power) || effects.before ? 'adjacent' : effects.range ?? powerRange(power.card.text) ?? 'adjacent'
+    // Fan cards that only hit some monsters: villains only, not on the hero's tile, next to another hero.
+    const inReach = foesInRange(state, hero.id, range, all).filter((m) => !effects.targetOnly || targetAllowed(state, hero, effects, m))
     if (inReach.length === 0) continue
     const answers = askAnswers(state, hero, power)
-    const bonus = powerNumber(power.card.attack) + (answers.adjacentCount ?? 0)
+    const bonus = (powerNumber(power.card.attack) ?? 0) + (answers.adjacentCount ?? 0) + buffBonus(hero, power)
     const damage = (powerNumber(power.card.damage) ?? 1) + (answers.startedAdjacent ? 1 : 0)
-    const chance = (m) => Math.min(0.95, Math.max(0.05, (21 - (m.ac - bonus)) / 20))
+    const chance = (m) => (effects.autoHit ? 1 : Math.min(0.95, Math.max(0.05, (21 - (m.ac - bonus)) / 20)))
     const kills = (m) => damage >= figureHp(m)
     // Finish off what it can, then the weakest, villains first among equals.
-    const order = [...inReach].sort((a, b) => Number(kills(b)) - Number(kills(a)) || Number(Boolean(b.villain)) - Number(Boolean(a.villain)) || figureHp(a) - figureHp(b))
+    let order = [...inReach].sort((a, b) => Number(kills(b)) - Number(kills(a)) || Number(Boolean(b.villain)) - Number(Boolean(a.villain)) || figureHp(a) - figureHp(b))
+    // Trapping Shot: every monster it attacks is on the first one's tile.
+    if (effects.oneTile) order = order.filter((m) => targetAllowed(state, hero, effects, m, [order[0].id]))
     const limit = maxRolls(power)
     let picked
     if (effects.sameTarget) picked = Array(limit).fill(order[0].id)
@@ -198,7 +209,15 @@ export function attackOptions(state, hero, { atWill = false, all: every = false 
     const hit = picked.map((id) => order.find((m) => m.id === id))
     const score = hit.reduce((sum, m) => sum + chance(m) * (damage + (kills(m) ? 4 : 0) + (m.villain ? 2 : 0)), 0)
     const names = [...new Set(hit.map((m) => m.name))].join(' and the ')
-    options.push({ power, targets: picked, score, finishes: hit.filter(kills).map((m) => m.id), villain: hit.some((m) => m.villain), say: `${hero.name} attacks the ${names} with ${power.name}.` })
+    options.push({
+      power,
+      targets: picked,
+      score,
+      chance: Math.min(...hit.map(chance)),
+      finishes: hit.filter(kills).map((m) => m.id),
+      villain: hit.some((m) => m.villain),
+      say: `${hero.name} attacks the ${names} with ${power.name}.`,
+    })
   }
   // Dailies are saved for a villain, or a monster no at-will power could finish off. With no
   // at-will that can reach anything, the daily is better than doing nothing.
@@ -265,7 +284,7 @@ function moveFirstPlans(state, hero, { kinds = ['walk', 'pull', 'swap'] } = {}) 
     const ready = { ...moved, turn: { ...moved.turn, beforeMoved: power.id } }
     return attackOptions(ready, ready.heroes.find((h) => h.id === hero.id), { all: true }).find((o) => o.power.id === power.id) ?? null
   }
-  for (const power of hero.powers.filter((p) => !p.used && p.card && powerNumber(p.card.attack) !== null && state.turn.beforeMoved !== p.id)) {
+  for (const power of hero.powers.filter((p) => !p.used && p.card && powerNumber(p.card.attack) !== null && state.turn.beforeMoved !== p.id && !wolfBlocked(hero, p))) {
     const kind = moveFirstKind(power)
     if (!kind || !kinds.includes(kind)) continue
     const steps = effectsOf(power).board.before
@@ -422,6 +441,9 @@ const nearby = (state, hero, reach) => (heroesInReach(state, hero.id, reach) ?? 
 const neediest = (list) => [...list].sort((a, b) => hurt(b) - hurt(a) || a.hp - b.hp)[0] ?? null
 const foesOnBoard = (state) => foes(state).filter((m) => !m.objective && m.hp > 0 && onBoard(state, m))
 // Conditions a power or item can end (not curses).
+// A heal whose card says it's for a hero at 0 HP (Ballad of Life).
+export const forTheFallen = (power) => Boolean(effectsOf(power).use?.heal) && /\b0 HP\b/i.test(String(power.card?.text ?? ''))
+
 const ENDABLE = ['Dazed', 'Poisoned', 'Immobilized', 'Slowed', 'Weakened']
 const endable = (h) => (h.conditions ?? []).find((c) => ENDABLE.includes(c)) ?? null
 
@@ -430,9 +452,15 @@ const endable = (h) => (h.conditions ?? []).find((c) => ENDABLE.includes(c)) ?? 
 // around. Used only when it does some good. Powers that place things on the board stay
 // with the players.
 export function supportPower(state, hero) {
-  for (const power of hero.powers.filter((p) => !p.used && p.card)) {
+  for (const power of hero.powers.filter((p) => !p.used && p.card && !wolfBlocked(hero, p))) {
     const use = effectsOf(power).use
     if (!use || use.board || use.causeFear || use.refuge || use.invisible || use.ask) continue
+    // Ballad of Life (a fan Bard's): only for a hero who is down at 0 HP.
+    if (forTheFallen(power)) {
+      const down = state.heroes.find((h) => h.id !== hero.id && h.hp <= 0 && !h.escaped)
+      if (down) return { action: { type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: [down.id] }, say: `${hero.name} uses ${power.name}: ${down.name} gets back up!` }
+      continue
+    }
     if (use.tokens && !use.tokens.mirrorImage) continue
     // Healing that isn't worth it yet: save it until someone has lost this much.
     const amount = Math.max(use.healSelf ?? 0, use.heal ?? 0)
@@ -778,7 +806,7 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
     if (hero.level === 1 && state.turn.natural20 === hero.id && state.xp >= XP_TO_LEVEL_UP) {
       return { action: { type: 'LEVEL_UP', heroId: hero.id }, say: `Natural 20! ${hero.name} levels up.` }
     }
-    const care = supportItem(state, hero) ?? supportPower(state, hero)
+    const care = supportItem(state, hero) ?? supportPower(state, hero) ?? buffPower(state, hero)
     if (care) return care
     // A Treasure token on or next to the hero: pick it up (nothing else waiting to be handed out).
     const loot = treasureInReach(state, hero)
@@ -792,7 +820,7 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
     if (rescue) return { action: { type: 'MOVE_HERO', heroId: hero.id, to: rescue.to }, say: rescue.say }
     const unlock = freeFromCurse(state, hero, roll)
     if (unlock) return unlock
-    const disable = disableTrap(state, hero, roll)
+    const disable = fleetfooted(state, hero) ?? disableTrap(state, hero, roll)
     if (disable) return disable
     // Hypnotism's monster was moved: now it attacks the monster it ended up next to.
     const thrall = hypnotismAttack(state, hero, roll)
@@ -811,6 +839,9 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
     // Hypnotism, when walking one monster over to hit another beats the best attack.
     const hypnosis = attackGone(state, hero) ? null : hypnotismPlan(state, hero)
     if (hypnosis && (!option || hypnosis.score > option.score)) return startMove(hero, hypnosis.power)
+    // Heavy Hitter or Power of Earth first, when the attack matters and could miss.
+    const boost = boostPower(state, hero, option)
+    if (boost) return boost
     if (option) return { action: attackAction(state, hero, option, roll), say: option.say }
     // Nothing in reach: Charge, Into the Fray or Taunting Advance moves first, then attacks.
     const charge = attackGone(state, hero) ? null : moveFirst(state, hero)
