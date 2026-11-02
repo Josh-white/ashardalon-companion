@@ -9,9 +9,7 @@ import IdeasPage from './components/IdeaBox.jsx'
 import './index.css'
 
 // The hidden pages load only when opened, so the game's own screens download less.
-const Audition = lazy(() => import('./components/Audition.jsx'))
 const CardCheck = lazy(() => import('./components/CardCheck.jsx'))
-const TileCheck = lazy(() => import('./components/TileCheck.jsx'))
 const AllScreens = lazy(() => import('./components/AllScreens.jsx'))
 const FriendsPage = lazy(() => import('./components/FriendsPage.jsx'))
 const ModelGallery = lazy(() => import('./components/ModelGallery.jsx'))
@@ -28,8 +26,6 @@ document.addEventListener('gesturestart', (e) => e.preventDefault())
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    {/* A hidden page for picking the ElevenLabs sounds; see server/generate-sounds.js. */}
-    {/* The #tiles page draws every dungeon tile layout, to check against the real tiles. */}
     {/* The #cards page lists cards.json problems and cards the app can't find. */}
     {/* The #ideas page lists the ideas the players sent from the 💡 button. */}
     {/* The #friends page shows how much each friend from outside plays. */}
@@ -41,10 +37,6 @@ createRoot(document.getElementById('root')).render(
       <Suspense fallback={null}>
         {window.location.hash === '#screens' ? (
           <AllScreens />
-        ) : window.location.hash === '#audition' ? (
-          <Audition />
-        ) : window.location.hash === '#tiles' ? (
-          <TileCheck />
         ) : window.location.hash === '#ideas' ? (
           <IdeasPage />
         ) : window.location.hash === '#friends' ? (

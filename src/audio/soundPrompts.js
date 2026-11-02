@@ -7,7 +7,7 @@
 // ambience.js).
 //
 //   seconds   how long it is: ElevenLabs charges 40 credits a second
-//   takes     how many versions to make, to pick the best from on the #audition page
+//   takes     how many versions to make, to pick the best from (generate-sounds.js --pick)
 //   follow    how closely it follows the prompt, 0 to 1 (higher sticks to the words)
 
 const shot = (group, name, seconds, prompt, takes = 3) => ({ name, group, seconds, takes, loop: false, follow: 0.6, prompt })

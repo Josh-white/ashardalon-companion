@@ -1,6 +1,6 @@
 // Makes the game's recorded sounds with ElevenLabs' sound effects (the list and
 // prompts are in src/audio/soundPrompts.js). Each sound gets a few takes in
-// cards/sounds/takes/; pick the favourites on the #audition page (or with --pick), and
+// cards/sounds/takes/; pick the favourites with --pick, and
 // those are copied into cards/sounds/ where the game plays them. Takes already made are
 // skipped, so running it again costs only what's new.
 //
@@ -118,7 +118,7 @@ async function main() {
       break
     }
   }
-  console.log(`Made ${done} of ${todo.length}. Pick the favourites at /#audition.`)
+  console.log(`Made ${done} of ${todo.length}. Pick the favourites with --pick name=N.`)
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) main()
