@@ -6,6 +6,7 @@ import { templateFor } from '../data/heroes.js'
 import { placeNear } from '../board/play.js'
 import { playerName, updateHero, withLog, withMoment } from './gameHelpers.js'
 import { copyCard, createHero, levelSlots, withPicks } from './heroSetup.js'
+import { gameHeroLimit } from './adventure.js'
 import { heroRecord } from './campaignPlay.js'
 
 // The actions partyReducer handles; gameReducer hands these over (game.js).
@@ -55,6 +56,8 @@ export function partyReducer(state, action) {
       if (state.status !== 'playing' || !template || state.heroes.some((h) => h.key === template.key)) return state
       // Not while the party is still rolling for first turn: that roll is only for the heroes in it.
       if (state.firstRoll && !state.firstRoll.winner) return state
+      // Not past the number of heroes the adventure is for.
+      if (state.heroes.length >= gameHeroLimit(state)) return state
       const ally = action.ally === true && Boolean(state.board)
       const player = ally ? '' : String(action.player ?? '').slice(0, 40)
       if (!ally && !player.trim()) return state
