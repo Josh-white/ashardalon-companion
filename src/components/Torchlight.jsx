@@ -8,7 +8,8 @@ import { SQUARE } from './TileDrawing.jsx'
 // The darkness is one masked rect: every light is a soft circle cut out of it, so pools
 // add up where heroes stand close. Torches flicker by fading their warm glow (opacity only,
 // which phones and iPads draw cheaply). With Reduce Motion on, or on a slow device, the
-// light stands still; 🔥 on the board turns it off on that screen.
+// light stands still; 🔥 on the board turns it off on that screen. The dark falls only on
+// the tiles (when given), so the area's artwork around the map isn't dimmed.
 
 const KEY = 'ashardalon-torchlight'
 const DARK = 0.66
@@ -74,7 +75,7 @@ export function lightSources({ heroes, tokens, activeId, markers }) {
 
 const GLOW = { active: '#fbbf24', hero: '#f59e0b', lava: '#f97316' }
 
-export default function Torchlight({ bounds, lights }) {
+export default function Torchlight({ bounds, lights, tiles }) {
   const id = useId().replace(/:/g, '')
   const still = useStill()
   return (
@@ -98,8 +99,13 @@ export default function Torchlight({ bounds, lights }) {
             <circle key={l.id} cx={l.cx} cy={l.cy} r={l.r} fill={`url(#${id}cut)`} />
           ))}
         </mask>
+        {tiles && (
+          <clipPath id={`${id}tiles`}>
+            {tiles.map((t) => <rect key={t.id} x={t.x} y={t.y} width={t.w} height={t.h} />)}
+          </clipPath>
+        )}
       </defs>
-      <rect x={bounds.x} y={bounds.y} width={bounds.w} height={bounds.h} fill="#05060a" opacity={DARK} mask={`url(#${id}dark)`} />
+      <rect x={bounds.x} y={bounds.y} width={bounds.w} height={bounds.h} fill="#05060a" opacity={DARK} mask={`url(#${id}dark)`} clipPath={tiles ? `url(#${id}tiles)` : undefined} />
       {lights.map((l, i) => (
         <circle
           key={l.id}

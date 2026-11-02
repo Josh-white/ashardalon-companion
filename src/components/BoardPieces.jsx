@@ -31,6 +31,31 @@ const sameTile = (a, b) =>
   (a.def === b.def || JSON.stringify(a.def) === JSON.stringify(b.def))
 export const PlacedTile = memo(PlacedTileDrawing, sameTile)
 
+// Where each placed tile sits, in board units: [{ id, x, y, w, h }].
+export function tileRects(board) {
+  const rects = []
+  for (const placed of board.tiles) {
+    const def = board.defs[placed.tileId]
+    if (!def) continue
+    const [cols, rows] = [def.rows[0].length, def.rows.length]
+    const turned = placed.turn === 90 || placed.turn === 270
+    rects.push({ id: placed.uid, x: placed.at[0] * SQUARE, y: placed.at[1] * SQUARE, w: (turned ? rows : cols) * SQUARE, h: (turned ? cols : rows) * SQUARE })
+  }
+  return rects
+}
+
+// A soft dark edge around each tile, so grey stone stands off the area's artwork behind the
+// map. Plain see-through rects, not a blur filter, so iPads draw it cheaply.
+export function TileShadows({ rects }) {
+  return (
+    <g pointerEvents="none">
+      {[10, 6, 3].map((grow) => rects.map((r) => (
+        <rect key={`${r.id}-${grow}`} x={r.x - grow} y={r.y - grow} width={r.w + grow * 2} height={r.h + grow * 2} rx={grow} fill="#000" opacity="0.28" />
+      )))}
+    </g>
+  )
+}
+
 // The open sides of the dungeon a hero can still explore: a glowing dashed line along the
 // edge and an arrow pointing out into the dark, so they don't look like walls.
 const OPEN_EDGE = '#22d3ee'
