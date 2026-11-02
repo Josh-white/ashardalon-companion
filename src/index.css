@@ -298,8 +298,25 @@ body {
   70% { opacity: 0.9; }
   100% { opacity: 0; }
 }
+/* The new tile waits (hidden) while the board moves and holds still, then drops in: it
+   comes down from a little above the table and settles with a small bump. Scale only, so it
+   looks the same when the board is turned a quarter on the projector. The monster it brought
+   pops in once it's down, then the glow starts. With reduced motion everything just shows. */
+@keyframes tile-drop {
+  0% { opacity: 0; transform: scale(1.35); }
+  60% { opacity: 1; transform: scale(0.97); }
+  80% { transform: scale(1.015); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes figure-arrive {
+  0% { opacity: 0; transform: scale(0.3); }
+  70% { opacity: 1; transform: scale(1.12); }
+  100% { opacity: 1; transform: scale(1); }
+}
 @media (prefers-reduced-motion: no-preference) {
-  .new-tile-glow { animation: new-tile-glow 3.5s ease-in-out both; }
+  .new-tile-glow { animation: new-tile-glow 3.5s ease-in-out var(--landed, 0ms) both; }
+  .tile-drop { transform-box: fill-box; transform-origin: center; animation: tile-drop var(--drop-ms, 600ms) cubic-bezier(0.5, 0, 0.6, 1) var(--land-delay, 0ms) both; }
+  .figure-arrive { transform-box: fill-box; transform-origin: center; animation: figure-arrive 350ms ease-out var(--landed, 0ms) both; }
 }
 /* A hero gaining HP on the virtual board (HealFx.jsx): a green +N floats up and fades. */
 @keyframes heal-float {
