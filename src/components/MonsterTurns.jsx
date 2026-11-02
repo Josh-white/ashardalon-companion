@@ -151,13 +151,17 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
     const index = boardStep(state, monster, card.tactics, token) ?? 0
     return { index, yes: Boolean(card.tactics[index]?.when), targets: boardTargetIds(state, monster, card.tactics[index], token) }
   }
-  const [start] = useState(() => (byBoard ? fromBoard() : { index: 0, yes: false, targets: [] }))
-  const [figure, setFigure] = useState(1)
+  // Its attack was already rolled and this screen was left (a look at the Party tab to use
+  // Mind Over Body): come back to the results, not to the roll again.
+  const rolledBefore = state.turn.lastMonsterAttack?.monsterId === monster.id ? state.turn.lastMonsterAttack : null
+  const rolledFigure = Number(rolledBefore?.token?.split('#')[1]) || 1
+  const [start] = useState(() => (byBoard ? fromBoard(rolledFigure) : { index: 0, yes: false, targets: [] }))
+  const [figure, setFigure] = useState(rolledFigure)
   const [stepIndex, setStepIndex] = useState(start.index)
   const [answered, setAnswered] = useState(start.yes) // "Yes" to this step's question
   const [chosen, setChosen] = useState(start.targets)
   const [guarded, setGuarded] = useState([])
-  const [results, setResults] = useState(null)
+  const [results, setResults] = useState(rolledBefore ? true : null)
   const [tiePick, setTiePick] = useState(null) // the players' pick when heroes tie for the most HP
   const [controlling, setControlling] = useState(false)
   // The answers given so far, so a wrong tap can be taken back. They stay on this
