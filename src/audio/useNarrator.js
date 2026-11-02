@@ -238,9 +238,14 @@ export function useNarrator(on, { onHold, onReading } = {}) {
 
   // Says lines straight away (the intro screen's line, say), outside any game change.
   // force: say them even where this screen's sound is off by default.
+  // replace: stop whatever is being said first (paging through How to play).
   const say = useCallback(
-    (lines, { force = false } = {}) => {
+    (lines, { force = false, replace = false } = {}) => {
       if (!available || (!on && !force)) return
+      if (replace) {
+        queue.current = []
+        stopSpeaking(audioContext())
+      }
       queue.current = [...queue.current, ...lines].slice(-MAX_QUEUE)
       const ctx = audioContext()
       if (ctx) for (const line of lines) fetchLine(ctx, line).catch(() => {})

@@ -85,7 +85,11 @@ export function lobbyReducer(state, action) {
     }
 
     case 'SET_LOBBY_READY':
-      return updateClaim(state, action.deviceId, (claim) => ({ ready: Boolean(action.ready) && claim.player.trim() !== '' }))
+      // newPlayer: this player has never played, so their first game gets the coach's help (TurnGuide.jsx).
+      return updateClaim(state, action.deviceId, (claim) => ({
+        ready: Boolean(action.ready) && claim.player.trim() !== '',
+        ...(action.ready ? { newPlayer: Boolean(action.newPlayer) } : {}),
+      }))
 
     default:
       return state

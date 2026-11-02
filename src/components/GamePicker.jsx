@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { HallOfRecords } from './Records.jsx'
+import { HowToPlayButton } from './HowToPlay.jsx'
 import { Button } from './ui.jsx'
 
 const FAMILY_GAME = 'family'
@@ -158,8 +159,9 @@ export default function GamePicker({ current, onPick, onClose, startGame, change
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4 sm:p-8">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <h1 className="mr-auto font-display text-4xl font-bold text-amber-400">Which game?</h1>
+        <HowToPlayButton />
         <Button variant="ghost" onClick={() => setHall(true)}>
           🏆 Records
         </Button>

@@ -1,4 +1,5 @@
 import { unlockAudio } from '../audio/soundSetting.js'
+import { HowToPlayButton } from './HowToPlay.jsx'
 
 // A laptop or TV (a mouse and a wide window) is most likely the big screen.
 export function looksLikeBigScreen() {
@@ -36,7 +37,7 @@ function Door({ icon, title, text, lit, onClick }) {
 // answer is remembered, so a screen only asks once. A wide screen with a mouse has the
 // big screen lit up first; an iPad or phone has the hero. No demo game (onDemo null) while a
 // campaign is going, since it would take the campaign's place.
-export default function ScreenChoice({ onHero, onBigScreen, onSolo, onDemo, onArt, friend = false }) {
+export default function ScreenChoice({ onHero, onBigScreen, onSolo, onDemo, onArt, friend = false, voice = null }) {
   // A friend is on their own phone or tablet, away from JJ's projector and tiles: they play
   // the whole game on this screen, or each friend plays a hero on their own device.
   if (friend) {
@@ -50,6 +51,7 @@ export default function ScreenChoice({ onHero, onBigScreen, onSolo, onDemo, onAr
           <Door icon="🗺️" title="Play on this device" text="You run one to five heroes on a virtual board. Best for a first game." lit onClick={onSolo} />
           <Door icon="🛡️" title="Play together" text="Each friend in this game picks a hero on their own device" onClick={onHero} />
         </div>
+        <HowToPlayButton voice={voice} />
       </div>
     )
   }
@@ -66,6 +68,7 @@ export default function ScreenChoice({ onHero, onBigScreen, onSolo, onDemo, onAr
         {big ? [screen, hero] : [hero, screen]}
         {onSolo && <Door icon="🗺️" title="Play solo" text="This screen runs one to five heroes on a virtual board" onClick={onSolo} />}
       </div>
+      <HowToPlayButton voice={voice} />
       <p className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-zinc-400">
         {onDemo && (
           <button type="button" className="underline" onClick={onDemo}>

@@ -13,6 +13,7 @@ import { ChosenAdventure, QuestLine } from './Adventure.jsx'
 import Art from './Art.jsx'
 import { CampaignLobby, HeroCampaign } from './Campaign.jsx'
 import Chronicle from './Chronicle.jsx'
+import { HowToPlayButton, NewPlayerHowTo } from './HowToPlay.jsx'
 import HeroCoach from './HeroCoach.jsx'
 import { HeroAbilities, HeroBanner, HeroPortrait, PowerSlots } from './HeroGallery.jsx'
 import { HeroHall, HoldToPick } from './HeroHall.jsx'
@@ -150,6 +151,13 @@ export function newToHero(played, name, heroKey) {
   return !heroesPlayed(played, name).includes(heroKey)
 }
 
+// Has this player never played a game at all? Only for a typed name, once the records load
+// (the Pi has kept track since 2026-10-30, so the family counts as known).
+export function newToGame(played, name) {
+  if (!name?.trim() || !played) return false
+  return heroesPlayed(played, name).length === 0
+}
+
 // A hero from cards.json (a fan hero) is unknown until this screen has loaded the cards.
 export function MyHero(props) {
   if (templateFor(props.claim.heroKey)) return <MyHeroCard {...props} />
@@ -265,6 +273,8 @@ function MyHeroCard({ state, claim, cards, deviceId, dispatch, solo = false, rec
         </div>
       </div>
 
+      {!solo && <NewPlayerHowTo isNew={newToGame(played, claim.player)} voice={voice} />}
+
       <HeroCoach key={template.key} heroKey={template.key} isNew={newToHero(played, claim.player, template.key)} voice={voice} />
 
       <div>
@@ -275,7 +285,7 @@ function MyHeroCard({ state, claim, cards, deviceId, dispatch, solo = false, rec
       <button
         type="button"
         disabled={!claimReady(claim, cards.powers)}
-        onClick={() => dispatch({ type: 'SET_LOBBY_READY', deviceId, ready: !claim.ready })}
+        onClick={() => dispatch({ type: 'SET_LOBBY_READY', deviceId, ready: !claim.ready, newPlayer: newToGame(played, claim.player) })}
         className={`w-full rounded-full px-6 py-4 font-display text-2xl font-black transition active:scale-[0.98] disabled:opacity-40 ${
           claim.ready
             ? 'border-2 border-emerald-500 bg-emerald-950/70 text-emerald-200'
@@ -332,6 +342,7 @@ function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave, voice }
       <header className="text-center">
         <h1 className="font-display text-4xl font-bold text-amber-400 sm:text-5xl">Solo on the virtual board</h1>
         <p className="mt-2 text-lg text-zinc-400">Pick an adventure and one hero, or more to play as a party. No tiles on the table: the dungeon is on this screen.</p>
+        <HowToPlayButton voice={voice} className="mt-3" />
       </header>
       {state.campaign ? <CampaignLobby state={state} dispatch={dispatch} /> : <QuestLine state={state} dispatch={dispatch} onBoard big={false} />}
       {mine.map((claim) => (
@@ -446,6 +457,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
         onDemo={state.campaign ? null : demo}
         onArt={onArt}
         friend={friend && canSolo}
+        voice={voice}
       />
     )
   }
@@ -491,6 +503,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
         <p className="mt-3 font-display text-xl text-amber-100/90 italic">
           {watchOnly ? 'Pick your hero on your device to light their torch.' : mine ? 'Check your powers, then tell the party you are ready.' : 'Hold a hero to light their torch.'}
         </p>
+        <HowToPlayButton voice={voice} big={watchOnly} className={`mt-3 ${watchOnly ? 'text-[1.4vw]' : ''}`} />
       </header>
 
       {watchOnly && <Chronicle campaign={state.campaign} />}

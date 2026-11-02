@@ -100,7 +100,7 @@ export function buyFromShop(state, action) {
 export function drawTreasureToken(state, action) {
   const hero = state.heroes.find((h) => h.id === state.turn.tokenOwed)
   if (!hero) return state
-  const done = { ...state, turn: { ...state.turn, tokenOwed: null } }
+  const done = { ...state, turn: { ...state.turn, tokenOwed: null, treasureWhy: null } }
   const manual = action.token && (action.token.treasure === true || (Number.isInteger(action.token.gold) && action.token.gold > 0))
   let stack = state.tokenStack ?? []
   let drawn

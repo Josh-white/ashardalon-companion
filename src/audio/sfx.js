@@ -380,6 +380,10 @@ const newlyReady = (before, after) =>
   after?.status === 'setup' &&
   (after.lobby ?? []).some((c) => c.ready && !(before.lobby ?? []).some((b) => b.heroKey === c.heroKey && b.ready))
 
+const owedTo = (game) => game?.turn?.treasureOwed ?? game?.turn?.tokenOwed ?? null
+// A treasure card or token was just earned (not on a page that is just opening).
+export const treasureEarned = (before, after) => Boolean(before && owedTo(after) && !owedTo(before) && !after.treasure && after.moment?.kind !== 'treasure')
+
 // What a change of game sounds like on this page: each big moment's sounds, a sound
 // someone tapped on the sound board, and music when a new tile is revealed.
 export function changeSounds(before, after) {
@@ -391,6 +395,9 @@ export function changeSounds(before, after) {
     sounds.push(['dice', 0], ['land', DIE_LANDS_MS])
     if (after.firstRoll.last?.value === 20) sounds.push(['fanfare', DIE_LANDS_MS + 200])
   }
+  // Treasure earned: coins clink once the moment's own sounds are over, so a new player hears
+  // that something good is waiting at the bottom of the screen.
+  if (treasureEarned(before, after)) sounds.push(['coins', moment ? momentSoundMs(after.moment) : 0])
   const board = after?.soundboard?.last
   if (isNew(board, before?.soundboard?.last) && SOUNDS[board.sound]) sounds.push([board.sound, 0])
   if (tileRevealed(before, after)) sounds.push(['slide', 0], ['tile', SLIDE_LEAD_MS])
