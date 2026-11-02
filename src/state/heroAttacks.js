@@ -1,15 +1,15 @@
 // A hero attacking: the attack numbers, the roll against the monster's AC, rerolls,
 // follow-ups, power damage and the powers that dodge a hit. The reducer is in game.js.
-import { XP_TO_LEVEL_UP, levelCrits } from '../data/heroes.js'
+import { XP_TO_LEVEL_UP, hasAbility, levelCrits } from '../data/heroes.js'
 import { attackItems, heroItems, itemAttackParts } from '../data/items.js'
 import { hasSecondChance } from '../data/difficulty.js'
-import { effectsOf, maxRolls } from '../data/powerEffects.js'
+import { effectsOf, maxRolls, shadowAfter, shadowKept } from '../data/powerEffects.js'
 import { queueFearMove, queueMoves } from '../board/powerMoves.js'
 import { clamp, findFoe, foes, heroLabel, markUsed, updateHero, updateMonster, validRoll, withCast, withLog, withMoment } from './gameHelpers.js'
 import { spendItem } from './treasureDeck.js'
 import { applyPasses, heroOnRight, thunderPass } from './passMonsters.js'
 import { defeatDetails, healHero, hurtMonster, offerBrutalRecovery, powerNumber, rollAgainst } from './combat.js'
-import { inHeroPhase, itemAttackIsMove, powerUsesAttack, removeCurse, spendAttack } from './heroTurn.js'
+import { canSpendAttack, inHeroPhase, itemAttackIsMove, powerUsesAttack, removeCurse, spendAttack } from './heroTurn.js'
 
 // One attack's numbers against a monster at this distance, with where each comes from so the
 // attack box can show the sum: { bonus, damage, miss, evenBonus, crits, parts }. parts.bonus and
@@ -21,6 +21,7 @@ export function attackNumbers(hero, { item = null, power = null, extraAttack = n
   if (extraAttack?.bonus) bonusParts.push({ label: extraAttack.source, value: extraAttack.bonus })
   const adjacent = effects.ask === 'adjacent-count' ? clamp(Number(adjacentCount) || 0, 0, 8) : 0
   if (adjacent) bonusParts.push({ label: adjacent === 1 ? '1 monster next to you' : `${adjacent} monsters next to you`, value: adjacent })
+  if (effects.shadowBonus && hero.tokens?.shadow) bonusParts.push({ label: 'From the shadows', value: effects.shadowBonus })
   for (const curse of hero.curses ?? []) if (curse.card?.attackPenalty) bonusParts.push({ label: curse.name, value: -curse.card.attackPenalty })
   const damageParts = [{ label: source.name, value: item ? item.card.attack.damage : powerNumber(power.card?.damage) ?? 0 }]
   if (effects.ask === 'started-adjacent' && startedAdjacent) damageParts.push({ label: 'Started next to it', value: 1 })
@@ -105,9 +106,10 @@ export function heroAttack(state, action) {
   const anyHit = rolls.some((r) => r.hit)
 
   // A daily is used up, except Comeback Strike when it misses. Ring of Shooting Stars flips over.
-  if (power?.type === 'daily' && (anyHit || !effects.keepOnMiss)) next = markUsed(next, hero.id, power.id)
+  if (power?.type === 'daily' && (anyHit || !(effects.keepOnMiss || shadowKept(hero, effects, true)))) next = markUsed(next, hero.id, power.id)
   if (item?.card.after) next = spendItem(next, hero.id, item.id)
   if (effects.onHit?.healSelf && anyHit) next = healHero(next, hero.id, effects.onHit.healSelf, power.name)
+  if (effects.shadow) next = moveShadow(next, hero, effects, !anyHit)
 
   let extras = extraAttack ? bonusAttacks.filter((b) => b !== extraAttack) : bonusAttacks
   if (effects.after === 'at-will') extras = [...extras, { heroId: hero.id, bonus: 0, source: power.name }]
@@ -287,6 +289,28 @@ export function powerDamage(state, action) {
 }
 
 // A power used from its tile: healing, tokens, ending a condition, and so on.
+// Shadowphage (Fesud, a fan hero): a power can take him into or out of the shadows.
+function moveShadow(state, hero, effects, missed = false) {
+  const was = Boolean(hero.tokens?.shadow)
+  const now = shadowAfter(hero, effects, missed)
+  if (was === now) return state
+  const next = updateHero(state, hero.id, (h) => ({ tokens: { ...h.tokens, shadow: now } }))
+  return withLog(next, now ? `${hero.name} slips into the shadows.` : `${hero.name} steps out of the shadows.`)
+}
+
+// Shadowphage's own switch: entering the shadows takes the hero's attack in their Hero Phase
+// ("instead of attacking"); stepping out is free.
+export function setShadow(state, action) {
+  const hero = state.heroes.find((h) => h.id === action.heroId)
+  if (!hero || !hasAbility(hero, 'shadowphage')) return state
+  const on = Boolean(action.on)
+  if (on === Boolean(hero.tokens?.shadow)) return state
+  if (on && inHeroPhase(state, hero) && !canSpendAttack(state, hero)) return state
+  let next = moveShadow(state, hero, { shadow: on ? 'enter' : 'leave' })
+  if (on && inHeroPhase(state, hero)) next = spendAttack(next, hero, 'Shadowphage')
+  return next
+}
+
 export function usePower(state, action) {
   const hero = state.heroes.find((h) => h.id === action.heroId)
   const power = hero?.powers.find((p) => p.id === action.powerId)
@@ -306,6 +330,7 @@ export function usePower(state, action) {
   if (use.heal && picked) next = healHero(next, picked.id, use.heal, power.name)
   if (use.tokens) next = updateHero(next, hero.id, (h) => ({ tokens: { ...h.tokens, ...use.tokens } }))
   if (use.invisible) next = updateHero(next, hero.id, (h) => ({ tokens: { ...h.tokens, invisible: true } }))
+  if (effectsOf(power).shadow) next = moveShadow(next, hero, effectsOf(power))
   if (use.refuge) {
     next = updateHero(next, picked.id, (h) => ({ tokens: { ...h.tokens, refuge: true } }))
     next = withLog(next, `${picked.name} is safe in the Astral Refuge until their next turn.`)

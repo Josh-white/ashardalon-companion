@@ -56,6 +56,8 @@ export function describeAction(state, action) {
       return { furious: 'Furious Assault', bladeBarrier: 'Blade Barrier', flamingSphere: 'Flaming Sphere' }[action.source] ?? 'Power damage'
     case 'EVADE_HIT':
       return hero ? `${hero.name}'s Practiced Evasion` : 'Practiced Evasion'
+    case 'SET_SHADOW':
+      return action.on ? 'Slipping into the shadows' : 'Stepping out of the shadows'
     case 'DODGE_HIT':
       return hero ? `${hero.name}'s Tumbling Escape` : 'Tumbling Escape'
     case 'ATTACH_MONSTER_CARDS':

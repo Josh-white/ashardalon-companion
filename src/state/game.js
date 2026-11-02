@@ -26,7 +26,7 @@ import { discardEncounterCard, drawEncounter, oweEncounter } from './encounterDe
 import { dealStartingTreasure, drawTreasure, keepTreasure, oweTreasure, spendItem, treasureWords } from './treasureDeck.js'
 import { copyCard, createHero, heroesFromLobby, newPower, pickedElsewhere, POWER_LABELS, withPicks } from './heroSetup.js'
 import { buildDeckWithout, buyFromShop, campaignHeroes, campaignLobby, drawTreasureToken, fromCampaign, nextCampaignAdventure, sameHeroes, tagDrawn, useBoon } from './campaignPlay.js'
-import { attackFollowUp, dodgeHit, heroAttack, powerDamage, rerollAttack, usePower } from './heroAttacks.js'
+import { attackFollowUp, dodgeHit, heroAttack, powerDamage, rerollAttack, setShadow, usePower } from './heroAttacks.js'
 import { initialState } from './initialState.js'
 import { drawDungeonTile, openBoardDoor, revealDoor, revealTile } from './dungeon.js'
 import { addOffer, attackHeroes, damageHeroes, defeatVillain, dropOffer, figuresLeft, healHero, heroWith, hurtVillager, monsterAttack, offers, offerSavingGrace, placeVillain, resolveEncounter, villagerAttack, villagerRoll } from './combat.js'
@@ -613,6 +613,8 @@ function reduce(state, action) {
 
     case 'USE_POWER':
       return usePower(state, action)
+    case 'SET_SHADOW':
+      return setShadow(state, action)
 
     case 'DODGE_HIT':
       return dodgeHit(state, action)

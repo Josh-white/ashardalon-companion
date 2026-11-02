@@ -5,6 +5,7 @@
 // The totals match what the rest of the app uses (heroAc, moveSpeed, the attack roll).
 import { heroItems, itemAttackParts } from './items.js'
 import { levelCrits } from './heroes.js'
+import { SHADOW_AC } from './powerEffects.js'
 
 const inPlay = (hero) => heroItems(hero).filter((item) => item.card?.inPlay)
 const has = (hero, condition) => (hero.conditions ?? []).includes(condition)
@@ -29,6 +30,7 @@ export function acParts(hero, heroes = [], shield = null) {
     const caster = heroes.find((h) => h.id === hero.shieldedBy)
     parts.push({ label: caster ? `${caster.name}'s Cleric's Shield` : "Cleric's Shield", value: 2, kind: 'power' })
   }
+  if (tokens.shadow) parts.push({ label: 'In the shadows (Shadowphage)', value: SHADOW_AC, kind: 'power' })
   if (tokens.mirrorImage > 0) parts.push({ label: `Mirror Image (${tokens.mirrorImage})`, value: 2 * tokens.mirrorImage, kind: 'power', note: 'A miss pops one.' })
   if (shield?.bonus > 0) {
     parts.push({ label: `On ${shield.guards.map((g) => g.name).join(' and ')}'s tile (Blessed Shield)`, value: shield.bonus, kind: 'item', note: 'Only while you stay on that tile.' })
@@ -94,6 +96,7 @@ export function heroBadges(hero, heroes = [], shield = null) {
   for (const item of inPlay(hero).filter((i) => i.card.trapBonus)) badges.push({ text: `+${item.card.trapBonus} traps ${item.name}`, good: true })
   const tokens = hero.tokens ?? {}
   if (tokens.invisible) badges.push({ text: 'Invisible', good: true })
+  if (tokens.shadow) badges.push({ text: 'In the shadows', good: true })
   if (tokens.refuge) badges.push({ text: 'Astral Refuge', good: true })
   for (const condition of hero.conditions ?? []) badges.push({ text: condition, good: false })
   for (const curse of hero.curses ?? []) if (!curse.card?.acPenalty && !curse.card?.attackPenalty) badges.push({ text: `Curse: ${curse.name}`, good: false })

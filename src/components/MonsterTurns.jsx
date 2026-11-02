@@ -15,7 +15,7 @@ import { Button } from './ui.jsx'
 import { figureToken } from '../board/play.js'
 import { stoppedShort } from '../board/heroTokens.js'
 import { boardStep, boardTargetIds, closestTarget, foeDistance, squareAway, squareNextTo, squareToward } from '../board/monsters.js'
-import { seesInvisible } from '../board/tactics.js'
+import { seesInvisible, unseenByTactics } from '../board/tactics.js'
 import { liveAc } from '../board/checks.js'
 import { hitMoveStep } from '../board/powerMoves.js'
 import { nobleShieldWorth } from '../ally/boardPowers.js'
@@ -125,6 +125,7 @@ export function HeroPicker({ state, heroes, chosen, onToggle }) {
             {hero.name}
             <span className="block text-sm font-normal text-zinc-400">AC {state ? liveAc(state, hero) : heroAc(hero)} · {hero.hp} HP</span>
             {hero.tokens?.invisible && <span className="block text-sm font-normal text-sky-300">👻 Invisible: never the closest</span>}
+            {!hero.tokens?.invisible && hero.tokens?.shadow && <span className="block text-sm font-normal text-sky-300">🌑 In the shadows: never the closest</span>}
             {hero.tokens?.refuge && <span className="block text-sm font-normal text-sky-300">✨ In the Astral Refuge</span>}
           </button>
         )
@@ -217,7 +218,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
   }
 
   // An invisible hero isn't the closest hero, so only some steps can pick them.
-  const unseen = seesInvisible(step) || step?.when === 'aloneByUnexploredEdge' || step?.explore ? [] : state.heroes.filter((h) => h.tokens?.invisible && !h.tokens?.refuge)
+  const unseen = seesInvisible(step) || step?.when === 'aloneByUnexploredEdge' || step?.explore ? [] : state.heroes.filter((h) => unseenByTactics(h) && !h.tokens?.refuge)
   const targetable = monsterTargets(state).filter((h) => !unseen.includes(h))
   const villagers = targetable.filter((h) => h.villager)
   const toggle = (heroId) => setChosen((list) => toggleTarget(list, heroId, tapsMany(step)))
