@@ -1,10 +1,11 @@
-"""Builds the two orc monsters as .glb files for the 3D board: Orc Smasher (a big spiked mace)
-and Orc Archer (a bow and a quiver).
+"""Builds the monsters' 3D figures for the 3D board as .glb files: Orc Smasher (a big
+spiked mace), Orc Archer (a bow and a quiver) and Kobold Dragonshield (a dragon shield
+and a short sword).
 
 Run it in Blender (tested headless on 5.2; written for 3.6 and newer):
   * Scripting workspace: open this file (or paste it), press Run Script (Alt+P).
-  * Or headless:  blender --background --python make-test-orc.py -- /path/to/folder
-One run saves orc-smasher.glb and orc-archer.glb in OUTPUT_FOLDER.
+  * Or headless:  blender --background --python make-monsters.py -- /path/to/folder [name ...]
+One run saves every monster in MONSTERS (or just the names given) in OUTPUT_FOLDER.
 
 It is made like the hero figures on the 3D board (KayKit Adventurers in src/models):
   * a big head on a short body, rounded (bevelled) shapes, a face and gear,
@@ -13,7 +14,8 @@ It is made like the hero figures on the 3D board (KayKit Adventurers in src/mode
     1H_Melee_Attack_Chop, 1H_Ranged_Shoot (archer), Hit_A, Dodge_Right, Death_A,
     Death_A_Pose, Cheer), so
     src/components/figureModels.js could play them the same way,
-  * about 2.4 units tall (the board's figure SCALE of 0.44 makes it one square tall),
+  * sized against the heroes (about 2.5 units tall; the board's figure SCALE of 0.44 makes
+    that one square tall): the orcs 2.4, the kobold 1.9,
   * facing Blender's -Y (front view, numpad 1), which is three.js +Z,
   * origin on the floor between the feet.
 
@@ -32,13 +34,8 @@ from mathutils import Matrix, Vector
 
 # Where the .glb files go. A folder after "--" on the command line wins.
 OUTPUT_FOLDER = os.path.expanduser("~")
-# Which orcs to make: file name and weapon. Remove a line to make only the other.
-ORCS = [
-    ("orc-smasher.glb", "mace"),
-    ("orc-archer.glb", "bow"),
-]
-# Final height in Blender units (KayKit heroes are about 2.5).
-TARGET_HEIGHT = 2.4
+# Which monsters to make (see MONSTERS at the bottom). Empty = all of them.
+ONLY = []
 # False = no skeleton or moves (a still figure).
 ANIMATE = True
 FPS = 30
@@ -59,11 +56,16 @@ PALETTE = {
     "red": "8c2a22",
     "wood": "7a5230",
     "feather": "c9c2b0",
+    "scale": "a8462a",       # kobold red-orange
+    "scale_dark": "6e2a1a",
+    "belly": "d6a25e",
+    "crest": "e07a2a",
 }
 
 argv = sys.argv
 if "--" in argv and len(argv) > argv.index("--") + 1:
     OUTPUT_FOLDER = os.path.abspath(os.path.expanduser(argv[argv.index("--") + 1]))
+    ONLY = argv[argv.index("--") + 2:]
 
 COLOURS = list(PALETTE)
 SWATCH = 4  # pixels per colour in the palette texture
@@ -77,6 +79,9 @@ def clear_scene():
         bpy.ops.object.mode_set(mode="OBJECT")
     for obj in list(bpy.data.objects):
         bpy.data.objects.remove(obj, do_unlink=True)
+    # The moves are kept with a fake user, so they'd outlive the last figure: clear them too.
+    for action in list(bpy.data.actions):
+        bpy.data.actions.remove(action)
     for blocks in (bpy.data.meshes, bpy.data.materials, bpy.data.cameras, bpy.data.lights,
                    bpy.data.armatures, bpy.data.actions, bpy.data.images):
         # Twice: a mesh frees its material, a material frees its image.
@@ -307,9 +312,86 @@ def build_bow():
     box("QuiverStrap", "leather", "body", (0, 0, 1.12), (0.12, 0.70, 0.95), bevel=0.02, rot=(0, -40, 0))
 
 
+def build_kobold():
+    """A small red dragon-kin: snout, horns and crest, scale armour, a tail, a big shield with
+    a dragon's face on the left arm and a short sword in the right hand."""
+    for side, tag in ((1, "L"), (-1, "R")):
+        x = 0.2 * side
+        leg = f"leg.{tag}"
+        box(f"Foot.{tag}", "scale_dark", leg, (x, -0.06, 0.06), (0.22, 0.34, 0.12), bevel=0.05)
+        for i, dx in enumerate((-0.07, 0, 0.07)):
+            cone(f"Claw.{tag}{i}", "bone", leg, (x + dx, -0.25, 0.05), 0.03, 0.09, rot=(90, 0, 0), sides=4)
+        box(f"Shin.{tag}", "scale", leg, (x, 0.03, 0.25), (0.17, 0.19, 0.30), bevel=0.06)
+        sphere(f"Thigh.{tag}", "scale", leg, (x, 0, 0.48), 0.15, scale=(1, 1.05, 1.25))
+
+    # Hips: a leather kilt and belt; the tail comes out the back.
+    box("Kilt", "leather", "hips", (0, 0, 0.62), (0.54, 0.40, 0.24), bevel=0.08)
+    box("Belt", "iron_dark", "hips", (0, 0, 0.72), (0.58, 0.44, 0.07), bevel=0.02)
+    for i, (y, z, r, depth, tilt) in enumerate(((0.30, 0.56, 0.11, 0.30, -110), (0.52, 0.42, 0.075, 0.28, -120),
+                                                (0.70, 0.30, 0.045, 0.26, -125))):
+        cone(f"Tail{i}", "scale", "tail", (0, y, z), r, depth, rot=(tilt, 0, 0), sides=8, tip=r * 0.6)
+    cone("TailTip", "scale_dark", "tail", (0, 0.84, 0.21), 0.03, 0.12, rot=(-125, 0, 0), sides=6)
+
+    # Body: a pale belly under an iron breastplate with shoulder straps.
+    box("Torso", "scale", "body", (0, 0, 0.95), (0.58, 0.42, 0.50), bevel=0.16, segments=3)
+    box("Belly", "belly", "body", (0, -0.17, 0.85), (0.32, 0.10, 0.20), bevel=0.05)
+    box("Breastplate", "iron", "body", (0, -0.16, 1.04), (0.44, 0.12, 0.24), bevel=0.05)
+    box("PlateRivets", "iron_dark", "body", (0, -0.225, 1.04), (0.30, 0.02, 0.04), bevel=0.008)
+    for side in (1, -1):
+        box(f"Strap{side}", "leather", "body", (0.16 * side, 0, 1.08), (0.08, 0.46, 0.26), bevel=0.02)
+    box("Collar", "iron", "body", (0, 0, 1.18), (0.50, 0.40, 0.08), bevel=0.03)
+    sphere("Neck", "scale", "body", (0, -0.03, 1.24), 0.12, scale=(1, 1, 1.1))
+
+    # Arms.
+    for side, tag in ((1, "L"), (-1, "R")):
+        arm = f"arm.{tag}"
+        sphere(f"Shoulder.{tag}", "iron", arm, (0.36 * side, 0, 1.08), 0.11, scale=(1.1, 1, 0.9))
+        box(f"Forearm.{tag}", "scale", arm, (0.41 * side, -0.02, 0.84), (0.14, 0.15, 0.26), bevel=0.05)
+        sphere(f"Hand.{tag}", "scale_dark", arm, (0.43 * side, -0.04, 0.66), 0.085)
+
+    # Short sword in the right hand, pointing forward.
+    hand = Vector((-0.43, -0.04, 0.66))
+    box("Grip", "leather_dark", "arm.R", hand + Vector((0, -0.08, 0)), (0.05, 0.16, 0.05), bevel=0.012)
+    box("Crossguard", "iron_dark", "arm.R", hand + Vector((0, -0.17, 0)), (0.05, 0.04, 0.20), bevel=0.012)
+    box("SwordBlade", "iron", "arm.R", hand + Vector((0, -0.42, 0)), (0.03, 0.46, 0.10), bevel=0.01)
+    cone("SwordTip", "iron", "arm.R", hand + Vector((0, -0.70, 0)), 0.05, 0.12, rot=(90, 0, 0), sides=4,
+         scale=(0.3, 1, 1))
+
+    # The dragon shield on the left arm, facing forward.
+    sc = Vector((0.47, -0.17, 0.80))
+    box("Shield", "scale_dark", "arm.L", sc, (0.50, 0.07, 0.66), bevel=0.06, segments=3)
+    box("ShieldRim", "iron", "arm.L", sc + Vector((0, 0.01, 0)), (0.56, 0.05, 0.72), bevel=0.06, segments=3)
+    sphere("ShieldFace", "crest", "arm.L", sc + Vector((0, -0.05, 0.04)), 0.15, scale=(1, 0.5, 1.1))
+    box("ShieldSnout", "crest", "arm.L", sc + Vector((0, -0.10, -0.08)), (0.14, 0.10, 0.14), bevel=0.04)
+    for side in (1, -1):
+        cone(f"ShieldHorn{side}", "bone", "arm.L", sc + Vector((0.11 * side, -0.06, 0.20)), 0.035, 0.16,
+             rot=(0, 30 * side, 0), sides=5)
+        sphere(f"ShieldEye{side}", "eye", "arm.L", sc + Vector((0.06 * side, -0.11, 0.08)), 0.025)
+
+    # Head: a big round skull with a long snout, horns, a crest, yellow slit eyes.
+    sphere("Skull", "scale", "head", (0, 0.02, 1.46), 0.27, scale=(0.95, 1.05, 0.9), segments=16, rings=10)
+    box("Snout", "scale", "head", (0, -0.30, 1.40), (0.22, 0.40, 0.17), bevel=0.07, segments=3)
+    box("Jaw", "scale_dark", "head", (0, -0.27, 1.29), (0.19, 0.34, 0.07), bevel=0.03)
+    box("Chin", "belly", "head", (0, -0.20, 1.26), (0.18, 0.22, 0.03), bevel=0.01)
+    for side, tag in ((1, "L"), (-1, "R")):
+        x = side
+        box(f"Nostril.{tag}", "black", "head", (0.045 * x, -0.47, 1.47), (0.03, 0.03, 0.02), bevel=0.008)
+        for i, y in enumerate((-0.42, -0.33, -0.24)):
+            cone(f"Tooth.{tag}{i}", "bone", "head", (0.09 * x, y, 1.315), 0.016, 0.05, rot=(180, 0, 0), sides=4)
+        sphere(f"Eye.{tag}", "eye", "head", (0.13 * x, -0.17, 1.53), 0.06, scale=(0.9, 0.7, 0.8))
+        box(f"Pupil.{tag}", "black", "head", (0.13 * x, -0.215, 1.53), (0.014, 0.02, 0.07), bevel=0.006)
+        box(f"Brow.{tag}", "scale_dark", "head", (0.13 * x, -0.19, 1.60), (0.14, 0.09, 0.05), bevel=0.02,
+            rot=(0, -14 * x, 0))
+        cone(f"Horn.{tag}", "bone", "head", (0.12 * x, 0.18, 1.62), 0.05, 0.30, rot=(-50, 0, -12 * x), sides=6)
+        cone(f"Frill.{tag}", "crest", "head", (0.22 * x, 0.10, 1.48), 0.08, 0.22, rot=(0, 70 * x, 25 * x),
+             scale=(1, 0.3, 1), sides=5)
+    for i, (y, z, h) in enumerate(((-0.05, 1.70, 0.12), (0.08, 1.70, 0.15), (0.20, 1.64, 0.12))):
+        cone(f"Crest{i}", "crest", "head", (0, y, z), 0.06, h, rot=(-15, 0, 0), scale=(0.3, 1, 1), sides=4)
+
+
 # ---- 4. Join, size it, origin on the floor --------------------------------------------------
 
-def join_parts(name, mat):
+def join_parts(name, mat, height):
     bpy.ops.object.select_all(action="DESELECT")
     for obj in parts:
         obj.select_set(True)
@@ -325,7 +407,7 @@ def join_parts(name, mat):
         orc.data.auto_smooth_angle = math.pi
 
     zs = [v.co.z for v in orc.data.vertices]
-    k = TARGET_HEIGHT / (max(zs) - min(zs))
+    k = height / (max(zs) - min(zs))
     bottom = min(zs)
     for v in orc.data.vertices:
         v.co = Vector((v.co.x * k, v.co.y * k, (v.co.z - bottom) * k))
@@ -335,8 +417,8 @@ def join_parts(name, mat):
 
 # ---- 5. Skeleton and moves -------------------------------------------------------------------
 
-BONES = [
-    # name, head, tail, parent (design units, before sizing)
+# Every figure's bones: name, head, tail, parent (design units, before sizing).
+ORC_BONES = [
     ("root", (0, 0, 0), (0, 0, 0.25), None),
     ("hips", (0, 0, 0.55), (0, 0, 0.85), "root"),
     ("body", (0, 0, 0.85), (0, 0, 1.50), "hips"),
@@ -346,6 +428,17 @@ BONES = [
     ("leg.L", (0.26, 0, 0.62), (0.26, 0, 0.05), "hips"),
     ("leg.R", (-0.26, 0, 0.62), (-0.26, 0, 0.05), "hips"),
 ]
+KOBOLD_BONES = [
+    ("root", (0, 0, 0), (0, 0, 0.2), None),
+    ("hips", (0, 0, 0.50), (0, 0, 0.72), "root"),
+    ("body", (0, 0, 0.72), (0, 0, 1.22), "hips"),
+    ("head", (0, 0, 1.22), (0, 0, 1.80), "body"),
+    ("arm.L", (0.36, 0, 1.10), (0.43, 0, 0.66), "body"),
+    ("arm.R", (-0.36, 0, 1.10), (-0.43, 0, 0.66), "body"),
+    ("leg.L", (0.2, 0, 0.55), (0.2, 0, 0.05), "hips"),
+    ("leg.R", (-0.2, 0, 0.55), (-0.2, 0, 0.05), "hips"),
+    ("tail", (0, 0.2, 0.60), (0, 0.85, 0.22), "hips"),
+]
 
 # Each move: (name, loops, [(frame, {bone: (rx, ry, rz) degrees or {"rot": ..., "loc": ...}})]).
 # Bones bend about their own X; + leans the upright bones (hips, body, head) forward and
@@ -354,18 +447,18 @@ MOVES = [
     ("Idle", True, [
         (0, {}),
         (30, {"hips": {"loc": (0, -0.025, 0)}, "body": (4, 0, 0), "head": (-4, 3, 0),
-              "arm.L": (0, 0, 4), "arm.R": (0, 0, -4)}),
+              "arm.L": (0, 0, 4), "arm.R": (0, 0, -4), "tail": (0, 0, 12)}),
         (60, {}),
     ]),
     ("Walking_A", True, [
         (0, {"leg.L": (28, 0, 0), "leg.R": (-28, 0, 0), "arm.L": (-22, 0, 0), "arm.R": (22, 0, 0),
-             "body": (8, -6, 0), "hips": {"rot": (0, 6, 0)}}),
+             "body": (8, -6, 0), "hips": {"rot": (0, 6, 0)}, "tail": (0, 0, 15)}),
         (6, {"hips": {"loc": (0, 0.05, 0)}, "body": (8, 0, 0)}),
         (12, {"leg.L": (-28, 0, 0), "leg.R": (28, 0, 0), "arm.L": (22, 0, 0), "arm.R": (-22, 0, 0),
-              "body": (8, 6, 0), "hips": {"rot": (0, -6, 0)}}),
+              "body": (8, 6, 0), "hips": {"rot": (0, -6, 0)}, "tail": (0, 0, -15)}),
         (18, {"hips": {"loc": (0, 0.05, 0)}, "body": (8, 0, 0)}),
         (24, {"leg.L": (28, 0, 0), "leg.R": (-28, 0, 0), "arm.L": (-22, 0, 0), "arm.R": (22, 0, 0),
-              "body": (8, -6, 0), "hips": {"rot": (0, 6, 0)}}),
+              "body": (8, -6, 0), "hips": {"rot": (0, 6, 0)}, "tail": (0, 0, 15)}),
     ]),
     ("1H_Melee_Attack_Chop", False, [
         (0, {}),
@@ -416,7 +509,7 @@ MOVES += [
 ]
 
 
-def build_rig(orc, size):
+def build_rig(orc, size, bones):
     arm_data = bpy.data.armatures.new("Orc_Rig")
     rig = bpy.data.objects.new("Orc_Rig", arm_data)
     bpy.context.scene.collection.objects.link(rig)
@@ -424,7 +517,7 @@ def build_rig(orc, size):
     bpy.context.view_layer.objects.active = rig
     rig.select_set(True)
     bpy.ops.object.mode_set(mode="EDIT")
-    for name, head, tail, parent in BONES:
+    for name, head, tail, parent in bones:
         eb = arm_data.edit_bones.new(name)
         eb.head = size(head)
         eb.tail = size(tail)
@@ -446,7 +539,9 @@ def pose(rig, spec):
         pb.rotation_euler = (0, 0, 0)
         pb.location = (0, 0, 0)
     for bone, value in spec.items():
-        pb = rig.pose.bones[bone]
+        pb = rig.pose.bones.get(bone)
+        if pb is None:  # a bone this figure doesn't have (a tail)
+            continue
         if isinstance(value, dict):
             rot, loc = value.get("rot", (0, 0, 0)), value.get("loc", (0, 0, 0))
         else:
@@ -494,26 +589,36 @@ def export_glb(objs, path):
     )
 
 
-def make(file_name, weapon):
+# name, file, build, height, bones, extra moves
+MONSTERS = [
+    ("orc-smasher", "orc-smasher.glb", lambda: build_orc("mace"), 2.4, ORC_BONES, []),
+    ("orc-archer", "orc-archer.glb", lambda: build_orc("bow"), 2.4, ORC_BONES, ["1H_Ranged_Shoot"]),
+    ("kobold-dragonshield", "kobold-dragonshield.glb", build_kobold, 1.9, KOBOLD_BONES, []),
+]
+# Moves only some figures have.
+EXTRA_MOVES = {"1H_Ranged_Shoot"}
+
+
+def make(label, file_name, build, height, bones, extra):
     clear_scene()
     parts.clear()
     bpy.context.scene.render.fps = FPS
     material = palette_material()
-    build_orc(weapon)
-    name = os.path.splitext(file_name)[0].replace("-", "_").title()
-    orc, size = join_parts(name, material)
-    objs = [orc]
-    moves = [m for m in MOVES if weapon == "bow" or m[0] != "1H_Ranged_Shoot"]
+    build()
+    name = label.replace("-", "_").title()
+    figure, size = join_parts(name, material, height)
+    objs = [figure]
+    moves = [m for m in MOVES if m[0] not in EXTRA_MOVES or m[0] in extra]
     if ANIMATE:
-        rig = build_rig(orc, size)
+        rig = build_rig(figure, size, bones)
         add_moves(rig, moves)
-        objs = [rig, orc]
+        objs = [rig, figure]
     path = os.path.join(OUTPUT_FOLDER, file_name)
     export_glb(objs, path)
 
-    xs, ys, zs = ([v.co[i] for v in orc.data.vertices] for i in range(3))
+    xs, ys, zs = ([v.co[i] for v in figure.data.vertices] for i in range(3))
     size_kb = os.path.getsize(path) / 1024
-    tris = sum(len(p.vertices) - 2 for p in orc.data.polygons)
+    tris = sum(len(p.vertices) - 2 for p in figure.data.polygons)
     print(f"{name}: {max(xs) - min(xs):.2f} wide, {max(ys) - min(ys):.2f} deep, {max(zs) - min(zs):.2f} tall, "
           f"{tris} triangles")
     print(f"  Moves: {', '.join(m[0] for m in moves) if ANIMATE else 'none'}")
@@ -522,5 +627,6 @@ def make(file_name, weapon):
         print("  WARNING: over 5 MB")
 
 
-for file_name, weapon in ORCS:
-    make(file_name, weapon)
+for monster in MONSTERS:
+    if not ONLY or monster[0] in ONLY:
+        make(*monster)

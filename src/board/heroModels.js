@@ -13,6 +13,7 @@ export const MODEL_PROPS = {
   Rogue_Hooded: ['Knife', 'Knife_Offhand', '1H_Crossbow', '2H_Crossbow', 'Throwable'],
   Orc_Smasher: [],
   Orc_Archer: [],
+  Kobold_Dragonshield: [],
 }
 
 // By hero (the box's five by key), then by the words in a hero's class, for fan heroes.
@@ -43,11 +44,12 @@ export function heroModel(hero) {
   return { height: 1, ...pick }
 }
 
-// The monsters with their own 3D figure (made by scripts/models/make-test-orc.py), by card
+// The monsters with their own 3D figure (made by scripts/models/make-monsters.py), by card
 // name. Any other monster gets null and stays a standee.
 const MONSTER_FIGURES = [
   [/orc smasher/i, 'Orc_Smasher'],
   [/orc archer/i, 'Orc_Archer'],
+  [/kobold dragonshield/i, 'Kobold_Dragonshield'],
 ]
 
 // { model, gear, height } for a monster ({ name }), or null.
