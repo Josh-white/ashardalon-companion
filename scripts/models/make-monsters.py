@@ -89,6 +89,14 @@ PALETTE = {
     "flesh_light": "d9aa96",
     "eye_white": "f2eee2",
     "eye_green": "7fbf3a",
+    "storm": "5cc8ff",       # orc storm shaman's lightning
+    "storm_dark": "2b5f8f",
+    "gauth": "7a5c86",       # gauth
+    "gauth_dark": "4c3858",
+    "gauth_light": "b597b8",
+    "otyugh": "7b7648",      # otyugh
+    "otyugh_dark": "4f4b2c",
+    "otyugh_light": "aaa36c",
 }
 
 argv = sys.argv
@@ -242,12 +250,16 @@ def build_orc(weapon):
     box("Strap", "leather", "body", (0, 0, 1.12), (0.14, 0.70, 0.95), bevel=0.02, rot=(0, 40, 0))
     box("StrapStud", "iron", "body", (0.04, -0.36, 1.16), (0.08, 0.04, 0.08), bevel=0.015)
 
-    # Left shoulder: an iron pauldron with bone spikes. Right shoulder: a leather pad.
-    sphere("Pauldron", "iron_dark", "body", (0.54, 0, 1.44), 0.28, scale=(1.15, 1.05, 0.72))
-    box("PauldronRim", "iron", "body", (0.56, 0, 1.33), (0.56, 0.56, 0.06), bevel=0.02)
-    for i, (dx, dy) in enumerate(((0.0, -0.12), (0.08, 0.05), (-0.06, 0.14))):
-        cone(f"Spike{i}", "bone", "body", (0.58 + dx, dy, 1.62), 0.06, 0.22, rot=(0, 15, 0), sides=6)
-    box("Pad", "leather", "body", (-0.52, 0, 1.43), (0.36, 0.40, 0.12), bevel=0.04, rot=(0, -12, 0))
+    shaman = weapon == "staff"
+    if shaman:
+        build_shaman_mantle()
+    if not shaman:
+        # Left shoulder: an iron pauldron with bone spikes. Right shoulder: a leather pad.
+        sphere("Pauldron", "iron_dark", "body", (0.54, 0, 1.44), 0.28, scale=(1.15, 1.05, 0.72))
+        box("PauldronRim", "iron", "body", (0.56, 0, 1.33), (0.56, 0.56, 0.06), bevel=0.02)
+        for i, (dx, dy) in enumerate(((0.0, -0.12), (0.08, 0.05), (-0.06, 0.14))):
+            cone(f"Spike{i}", "bone", "body", (0.58 + dx, dy, 1.62), 0.06, 0.22, rot=(0, 15, 0), sides=6)
+        box("Pad", "leather", "body", (-0.52, 0, 1.43), (0.36, 0.40, 0.12), bevel=0.04, rot=(0, -12, 0))
 
     # Arms: shoulder, bracer, fist.
     for side, tag in ((1, "L"), (-1, "R")):
@@ -259,6 +271,8 @@ def build_orc(weapon):
 
     if weapon == "mace":
         build_mace()
+    elif shaman:
+        build_storm_staff()
     else:
         build_bow()
 
@@ -281,10 +295,76 @@ def build_orc(weapon):
              rot=(0, 72 * x, 0), scale=(1, 0.45, 1), sides=6)
         cone(f"Ring.{tag}", "iron", "head", (0.50 * x, hy + 0.02, 1.88), 0.035, 0.03,
              rot=(90, 0, 0), sides=8, tip=0.035)
-        box(f"Paint.{tag}", "red", "head", (0.22 * x, hy - 0.37, 1.80), (0.12, 0.03, 0.035), bevel=0.01,
+        box(f"Paint.{tag}", "storm" if shaman else "red", "head", (0.22 * x, hy - 0.37, 1.80), (0.12, 0.03, 0.035), bevel=0.01,
             rot=(0, 18 * x, 0))
     box("Mohawk", "hair", "head", (0, hy + 0.04, 2.27), (0.12, 0.66, 0.18), bevel=0.05, rot=(-8, 0, 0))
     cone("Topknot", "hair", "head", (0, hy + 0.34, 2.24), 0.07, 0.30, rot=(-60, 0, 0), sides=6)
+    if shaman:
+        build_shaman_headdress(hy)
+
+
+def build_shaman_mantle():
+    """A shaggy fur mantle over both shoulders and a necklace of bones and a blue stone."""
+    for i in range(9):
+        a = DEG(-120 + i * 30)
+        sphere(f"Mantle{i}", "fur_dark" if i % 2 else "fur", "body", (0.50 * math.sin(a), 0.30 * -math.cos(a) + 0.04,
+               1.40 + 0.04 * math.cos(a)), 0.20, scale=(1.1, 1.0, 0.75), segments=10, rings=7)
+    for side in (1, -1):
+        sphere(f"MantleShoulder{side}", "fur", "body", (0.55 * side, 0.02, 1.40), 0.24, scale=(1.05, 1.1, 0.8),
+               segments=10, rings=7)
+    for i in range(7):
+        a = DEG(-45 + i * 15)
+        at = Vector((0.30 * math.sin(a), -0.33 - 0.04 * math.cos(a), 1.32 - 0.12 * math.cos(a)))
+        cone(f"NeckBone{i}", "bone", "body", at, 0.035, 0.12, rot=(180, 0, 0), sides=5)
+    sphere("NeckStone", "storm", "body", (0, -0.39, 1.16), 0.06, scale=(1, 0.6, 1.2), segments=8, rings=6)
+
+
+def build_storm_staff():
+    """A tall gnarled staff held upright in the right fist, a crackling blue orb caught in a
+    forked top, feathers and a lightning bolt charm hanging from it."""
+    up = Vector((0, -0.15, 1)).normalized()
+    tilt = (-math.degrees(math.atan2(0.15, 1)), 0, 0)  # turns +Z to point along `up`
+    for i, (length, r) in enumerate(((0.62, 0.055), (0.60, 0.05), (0.52, 0.045))):
+        at = FIST_R + up * (-0.20 + sum(x for x, _ in ((0.62, 0), (0.60, 0), (0.52, 0))[:i]) + length / 2)
+        side = 0.03 * (1 if i % 2 else -1)
+        cone(f"StaffPart{i}", "wood", "arm.R", at + Vector((side, 0, 0)), r, length + 0.04,
+             rot=(tilt[0], 6 * (1 if i % 2 else -1), 0), sides=6, tip=r * 0.9)
+    box("StaffWrap", "leather_dark", "arm.R", FIST_R, (0.13, 0.13, 0.22), bevel=0.04, rot=tilt)
+    top = FIST_R + up * 1.56
+    orb = top + up * 0.20
+    for side in (1, -1):
+        cone(f"StaffFork{side}", "wood", "arm.R", top + Vector((0.10 * side, 0, 0.12)), 0.04, 0.32,
+             rot=(tilt[0], -22 * side, 0), sides=5)
+    sphere("StormOrb", "storm", "arm.R", orb, 0.15, segments=12, rings=8)
+    sphere("StormCore", "eye_white", "arm.R", orb + Vector((0, -0.08, 0.02)), 0.06, scale=(1, 0.6, 1), segments=8,
+           rings=6)
+    # A zigzag lightning charm and two feathers under the fork.
+    for i, (dx, dz, a) in enumerate(((0.0, -0.10, 30), (0.04, -0.20, -30), (0.0, -0.30, 30))):
+        box(f"Bolt{i}", "storm", "arm.R", top + Vector((0.14 + dx, -0.04, dz)), (0.03, 0.03, 0.13), bevel=0.008,
+            rot=(0, a, 0))
+    for side in (1, -1):
+        cone(f"StaffFeather{side}", "feather", "arm.R", top + Vector((-0.12 * side - 0.02, 0.02, -0.18)), 0.05,
+             0.26, rot=(180, 15 * side, 0), scale=(1, 0.3, 1), sides=5)
+
+
+def build_shaman_headdress(hy):
+    """A beast skull worn over the brow, with curling horns, and a fan of feathers behind."""
+    sphere("SkullCap", "bone", "head", (0, hy - 0.10, 2.22), 0.24, scale=(1.1, 1.1, 0.55), segments=12, rings=8)
+    box("SkullSnout", "bone", "head", (0, hy - 0.40, 2.14), (0.18, 0.22, 0.12), bevel=0.05)
+    for side in (1, -1):
+        sphere(f"SkullSocket{side}", "black", "head", (0.09 * side, hy - 0.30, 2.22), 0.045, scale=(1, 0.6, 1),
+               segments=8, rings=6)
+        cone(f"HornA{side}", "bone", "head", (0.28 * side, hy - 0.05, 2.30), 0.07, 0.22, rot=(0, 60 * side, 0),
+             sides=7, tip=0.055)
+        cone(f"HornB{side}", "bone", "head", (0.40 * side, hy + 0.02, 2.42), 0.055, 0.20, rot=(-30, 20 * side, 0),
+             sides=7, tip=0.035)
+        cone(f"HornC{side}", "bone", "head", (0.42 * side, hy + 0.10, 2.56), 0.035, 0.14, rot=(-70, -10 * side, 0),
+             sides=7)
+    for i in range(5):
+        a = DEG(-40 + i * 20)
+        cone(f"Feather{i}", "storm_dark" if i % 2 else "feather", "head",
+             (0.30 * math.sin(a), hy + 0.30, 2.30 + 0.18 * math.cos(a)), 0.06, 0.40,
+             rot=(-25, math.degrees(a), 0), scale=(1, 0.3, 1), sides=5)
 
 
 FIST_R = Vector((-0.65, -0.05, 0.72))
@@ -341,9 +421,11 @@ def build_bow():
     box("QuiverStrap", "leather", "body", (0, 0, 1.12), (0.12, 0.70, 0.95), bevel=0.02, rot=(0, -40, 0))
 
 
-def build_kobold():
+def build_kobold(lord=False):
     """A small red dragon-kin: snout, horns and crest, scale armour, a tail, a big shield with
-    a dragon's face on the left arm and a spear in the right hand."""
+    a dragon's face on the left arm and a spear in the right hand. The Kobold Dragonlord
+    (`lord`) wears gold, a crown and a crimson cape and carries a curved sword instead."""
+    metal = "gold" if lord else "iron"
     for side, tag in ((1, "L"), (-1, "R")):
         x = 0.2 * side
         leg = f"leg.{tag}"
@@ -364,24 +446,32 @@ def build_kobold():
     # Body: a pale belly under an iron breastplate with shoulder straps.
     box("Torso", "scale", "body", (0, 0, 0.95), (0.58, 0.42, 0.50), bevel=0.16, segments=3)
     box("Belly", "belly", "body", (0, -0.17, 0.85), (0.32, 0.10, 0.20), bevel=0.05)
-    box("Breastplate", "iron", "body", (0, -0.16, 1.04), (0.44, 0.12, 0.24), bevel=0.05)
+    box("Breastplate", metal, "body", (0, -0.16, 1.04), (0.44, 0.12, 0.24), bevel=0.05)
     box("PlateRivets", "iron_dark", "body", (0, -0.225, 1.04), (0.30, 0.02, 0.04), bevel=0.008)
     for side in (1, -1):
         box(f"Strap{side}", "leather", "body", (0.16 * side, 0, 1.08), (0.08, 0.46, 0.26), bevel=0.02)
-    box("Collar", "iron", "body", (0, 0, 1.18), (0.50, 0.40, 0.08), bevel=0.03)
+    box("Collar", metal, "body", (0, 0, 1.18), (0.50, 0.40, 0.08), bevel=0.03)
     sphere("Neck", "scale", "body", (0, -0.03, 1.24), 0.12, scale=(1, 1, 1.1))
 
     # Arms.
     for side, tag in ((1, "L"), (-1, "R")):
         arm = f"arm.{tag}"
-        sphere(f"Shoulder.{tag}", "iron", arm, (0.36 * side, 0, 1.08), 0.11, scale=(1.1, 1, 0.9))
+        sphere(f"Shoulder.{tag}", metal, arm, (0.36 * side, 0, 1.08), 0.11, scale=(1.1, 1, 0.9))
         box(f"Forearm.{tag}", "scale", arm, (0.41 * side, -0.02, 0.84), (0.14, 0.15, 0.26), bevel=0.05)
         sphere(f"Hand.{tag}", "scale_dark", arm, (0.43 * side, -0.04, 0.66), 0.085)
 
-    # A spear in the right hand, its point forward and a little up, a red tassel under the head.
     hand = Vector((-0.43, -0.04, 0.66))
     d = Vector((0, -0.97, 0.26))  # 15 degrees above forward
     tilt = (75, 0, 0)  # turns a +Z part to point along d
+    if lord:
+        build_lord_extras(hand, d, tilt)
+    else:
+        build_kobold_spear(hand, d, tilt)
+    build_kobold_shield_and_head(lord)
+
+
+def build_kobold_spear(hand, d, tilt):
+    """A spear in the right hand, its point forward and a little up, a red tassel under the head."""
     cone("SpearShaft", "wood", "arm.R", hand + d * 0.26, 0.04, 1.14, rot=tilt, sides=6, tip=0.03)
     cone("SpearButt", "iron_dark", "arm.R", hand - d * 0.32, 0.05, 0.06, rot=tilt, sides=6, tip=0.03)
     cone("SpearCollar", "iron_dark", "arm.R", hand + d * 0.82, 0.055, 0.06, rot=tilt, sides=6, tip=0.04)
@@ -389,10 +479,13 @@ def build_kobold():
     sphere("Tassel", "red", "arm.R", hand + d * 0.78 + Vector((0, 0, -0.07)), 0.055, scale=(0.8, 0.8, 1.4),
            segments=8, rings=6)
 
+
+def build_kobold_shield_and_head(lord):
     # The dragon shield on the left arm, facing forward.
+    metal = "gold" if lord else "iron"
     sc = Vector((0.47, -0.17, 0.80))
     box("Shield", "scale_dark", "arm.L", sc, (0.50, 0.07, 0.66), bevel=0.06, segments=3)
-    box("ShieldRim", "iron", "arm.L", sc + Vector((0, 0.01, 0)), (0.56, 0.05, 0.72), bevel=0.06, segments=3)
+    box("ShieldRim", metal, "arm.L", sc + Vector((0, 0.01, 0)), (0.56, 0.05, 0.72), bevel=0.06, segments=3)
     sphere("ShieldFace", "crest", "arm.L", sc + Vector((0, -0.05, 0.04)), 0.15, scale=(1, 0.5, 1.1))
     box("ShieldSnout", "crest", "arm.L", sc + Vector((0, -0.10, -0.08)), (0.14, 0.10, 0.14), bevel=0.04)
     for side in (1, -1):
@@ -417,8 +510,41 @@ def build_kobold():
         cone(f"Horn.{tag}", "bone", "head", (0.12 * x, 0.18, 1.62), 0.05, 0.30, rot=(-50, 0, -12 * x), sides=6)
         cone(f"Frill.{tag}", "crest", "head", (0.22 * x, 0.10, 1.48), 0.08, 0.22, rot=(0, 70 * x, 25 * x),
              scale=(1, 0.3, 1), sides=5)
+    if lord:
+        # A gold crown with five points and a red gem at the front.
+        cone("CrownBand", "gold", "head", (0, 0.02, 1.66), 0.22, 0.08, sides=12, tip=0.23)
+        for i in range(5):
+            a = DEG(-90 + i * 72)
+            cone(f"CrownPoint{i}", "gold", "head", (0.21 * math.cos(a), 0.02 + 0.21 * math.sin(a), 1.75), 0.045,
+                 0.13, rot=(0, 0, 0), sides=4)
+        sphere("CrownGem", "glow", "head", (0, -0.20, 1.67), 0.035, scale=(1, 0.6, 1.2), segments=8, rings=6)
+        return
     for i, (y, z, h) in enumerate(((-0.05, 1.70, 0.12), (0.08, 1.70, 0.15), (0.20, 1.64, 0.12))):
         cone(f"Crest{i}", "crest", "head", (0, y, z), 0.06, h, rot=(-15, 0, 0), scale=(0.3, 1, 1), sides=4)
+
+
+def build_lord_extras(hand, d, tilt):
+    """The Dragonlord's curved sword (raised in the right hand) and crimson cape."""
+    cone("SwordGrip", "leather_dark", "arm.R", hand, 0.035, 0.18, rot=tilt, sides=6, tip=0.035)
+    sphere("SwordPommel", "gold", "arm.R", hand - d * 0.11, 0.04, segments=8, rings=6)
+    box("SwordGuard", "gold", "arm.R", hand + d * 0.10, (0.24, 0.05, 0.05), bevel=0.015, rot=tilt)
+    # The blade bends upward as it goes: three straight pieces.
+    at, angle = hand + d * 0.12, 75
+    for i, length in enumerate((0.34, 0.30, 0.26)):
+        way = Vector((0, -math.sin(DEG(angle)), math.cos(DEG(angle))))
+        width = 0.14 - 0.02 * i
+        box(f"Blade{i}", "iron", "arm.R", at + way * length / 2, (0.025, width, length + 0.02), bevel=0.008,
+            rot=(angle, 0, 0))
+        at, angle = at + way * length, angle - 14
+    cone("BladeTip", "iron", "arm.R", at, 0.075, 0.13, rot=(angle, 0, 0), scale=(0.25, 1, 1), sides=4)
+
+    # The cape hangs from gold clasps behind the shoulders, a little flared at the bottom.
+    box("Cape", "red", "body", (0, 0.26, 0.86), (0.60, 0.05, 0.62), bevel=0.02, rot=(-10, 0, 0))
+    box("CapeHem", "robe", "body", (0, 0.32, 0.56), (0.66, 0.06, 0.06), bevel=0.02, rot=(-10, 0, 0))
+    box("CapeCollar", "red", "body", (0, 0.18, 1.20), (0.56, 0.12, 0.10), bevel=0.04)
+    for side in (1, -1):
+        sphere(f"Clasp{side}", "gold", "body", (0.24 * side, -0.12, 1.16), 0.05, scale=(1, 0.6, 1),
+               segments=8, rings=6)
 
 
 def build_cultist():
@@ -486,9 +612,11 @@ def build_cultist():
             rot=(0, -(90 + a), 0))
 
 
-def build_duergar():
+def build_duergar(captain=False):
     """A stocky grey dwarf in dark iron: a nose-guard helmet with a spike, glowing red eyes, a
-    huge braided beard, a round shield on the left arm and a warhammer in the right fist."""
+    huge braided beard, a round shield on the left arm and a warhammer in the right fist. The
+    Duergar Captain (`captain`) has a horned helm, gold trim, spiked pauldrons, a black cape
+    and a big double-bladed axe instead of the hammer and shield."""
     for side, tag in ((1, "L"), (-1, "R")):
         leg = f"leg.{tag}"
         box(f"Boot.{tag}", "iron_dark", leg, (0.24 * side, -0.05, 0.10), (0.30, 0.42, 0.20), bevel=0.07)
@@ -502,11 +630,22 @@ def build_duergar():
 
     # A barrel of an iron breastplate with heavy pauldrons.
     box("Torso", "iron", "body", (0, 0, 1.02), (1.00, 0.68, 0.62), bevel=0.24, segments=3)
-    box("PlateRidge", "iron_dark", "body", (0, -0.335, 1.02), (0.08, 0.04, 0.50), bevel=0.015)
+    box("PlateRidge", "gold" if captain else "iron_dark", "body", (0, -0.335, 1.02), (0.08, 0.04, 0.50), bevel=0.015)
     for side in (1, -1):
         sphere(f"Pauldron{side}", "iron_dark", "body", (0.52 * side, 0, 1.26), 0.26, scale=(1.1, 1.05, 0.7))
         for i, y in enumerate((-0.12, 0.0, 0.12)):
             sphere(f"Rivet{side}{i}", "gold", "body", (0.62 * side, y, 1.42), 0.03, segments=6, rings=4)
+        if captain:
+            for i, y in enumerate((-0.10, 0.10)):
+                cone(f"PauldronSpike{side}{i}", "bone", "body", (0.60 * side, y, 1.40), 0.06, 0.24,
+                     rot=(0, 30 * side, 0), sides=5)
+    if captain:
+        # A black cape with a gold clasp at each shoulder.
+        box("Cape", "armour", "body", (0, 0.40, 0.80), (0.92, 0.06, 0.88), bevel=0.03, rot=(-6, 0, 0))
+        box("CapeLining", "red", "body", (0, 0.36, 0.84), (0.86, 0.03, 0.78), bevel=0.01, rot=(-6, 0, 0))
+        for side in (1, -1):
+            sphere(f"CapeClasp{side}", "gold", "body", (0.36 * side, 0.32, 1.30), 0.06, segments=8, rings=6)
+        box("PlateTrim", "gold", "body", (0, -0.30, 1.30), (0.80, 0.06, 0.06), bevel=0.02)
 
     # Arms: grey skin, iron gauntlets and fists.
     for side, tag in ((1, "L"), (-1, "R")):
@@ -515,10 +654,18 @@ def build_duergar():
         box(f"Gauntlet.{tag}", "iron_dark", arm, (0.63 * side, -0.02, 0.83), (0.27, 0.27, 0.28), bevel=0.07)
         sphere(f"Fist.{tag}", "iron_dark", arm, (0.64 * side, -0.05, 0.64), 0.15)
 
-    # Warhammer in the right fist, its head resting forward and down.
     fist = Vector((-0.64, -0.05, 0.64))
     d = Vector((0, -0.866, -0.5))
     tilt = (120, 0, 0)
+    if captain:
+        build_great_axe(fist)
+    else:
+        build_duergar_hammer_and_shield(fist, d, tilt)
+    build_duergar_head(captain)
+
+
+def build_duergar_hammer_and_shield(fist, d, tilt):
+    # Warhammer in the right fist, its head resting forward and down.
     cone("HammerHaft", "wood", "arm.R", fist + d * 0.22, 0.045, 0.70, rot=tilt, sides=6, tip=0.045)
     cone("HammerPommel", "iron_dark", "arm.R", fist - d * 0.15, 0.06, 0.07, rot=tilt, sides=6, tip=0.04)
     head = fist + d * 0.58
@@ -537,15 +684,46 @@ def build_duergar():
         sphere(f"ShieldStud{i}", "iron", "arm.L", sc + Vector((math.cos(a) * 0.30, -0.05, math.sin(a) * 0.30)),
                0.03, segments=6, rings=4)
 
+
+def build_great_axe(fist):
+    """A long-hafted double axe held upright in the right fist, the blades above the head."""
+    up = Vector((0, -0.2, 1)).normalized()
+    tilt = (-math.degrees(math.atan2(0.2, 1)), 0, 0)  # turns +Z to point along `up`
+    cone("AxeHaft", "wood", "arm.R", fist + up * 0.45, 0.05, 1.50, rot=tilt, sides=6, tip=0.045)
+    cone("AxeButt", "iron_dark", "arm.R", fist - up * 0.32, 0.07, 0.10, rot=tilt, sides=6, tip=0.03)
+    box("AxeGrip", "leather_dark", "arm.R", fist, (0.12, 0.12, 0.24), bevel=0.04, rot=tilt)
+    head = fist + up * 1.05
+    box("AxeSocket", "iron_dark", "arm.R", head, (0.14, 0.16, 0.30), bevel=0.04, rot=tilt)
+    cone("AxeTop", "iron", "arm.R", head + up * 0.24, 0.05, 0.18, rot=tilt, sides=4)
+    for side in (1, -1):
+        # A half-moon blade on each side: a flat oval, a bright cutting edge and hooked tips.
+        sphere(f"AxeBlade{side}", "iron_dark", "arm.R", head + Vector((0.24 * side, 0, 0)), 0.30,
+               scale=(0.75, 0.12, 1.15), rot=tilt, segments=16, rings=10)
+        sphere(f"AxeEdge{side}", "iron", "arm.R", head + Vector((0.36 * side, 0, 0)), 0.30,
+               scale=(0.42, 0.09, 1.08), rot=tilt, segments=16, rings=10)
+    sphere("AxeGem", "glow", "arm.R", head + Vector((0, -0.09, 0)), 0.045, scale=(1, 0.5, 1), segments=8, rings=6)
+
+
+def build_duergar_head(captain):
     # Head: grey face under a spiked nose-guard helm, red eyes, a big braided beard.
     sphere("Face", "skin_grey", "head", (0, -0.04, 1.62), 0.33, scale=(1.05, 0.95, 1.0), segments=16, rings=10)
     sphere("Helm", "iron", "head", (0, 0.0, 1.80), 0.37, scale=(1.05, 1.02, 0.78), segments=16, rings=10)
     cone("HelmBrim", "gold", "head", (0, 0.0, 1.77), 0.385, 0.06, sides=16, tip=0.385)
     box("NoseGuard", "iron_dark", "head", (0, -0.37, 1.69), (0.06, 0.05, 0.16), bevel=0.02)
-    cone("HelmSpike", "iron_dark", "head", (0, 0.0, 2.12), 0.07, 0.20, sides=6)
+    cone("HelmSpike", "gold" if captain else "iron_dark", "head", (0, 0.0, 2.12), 0.07, 0.20, sides=6)
     for side in (1, -1):
+        if captain:
+            # Big curved horns: out from the helm, then up.
+            cone(f"HornBase{side}", "bone", "head", (0.42 * side, 0.02, 1.88), 0.09, 0.24, rot=(0, 80 * side, 0),
+                 sides=8, tip=0.065)
+            cone(f"HornMid{side}", "bone", "head", (0.58 * side, 0.02, 1.98), 0.065, 0.20, rot=(0, 40 * side, 0),
+                 sides=8, tip=0.045)
+            cone(f"HornTip{side}", "bone", "head", (0.65 * side, 0.02, 2.14), 0.045, 0.18, rot=(0, 8 * side, 0),
+                 sides=8)
+            continue
         cone(f"HelmWing{side}", "iron_dark", "head", (0.36 * side, 0.02, 1.86), 0.06, 0.22,
              rot=(0, 55 * side, 0), scale=(1, 0.35, 1), sides=4)
+    for side in (1, -1):
         box(f"Brow{side}", "beard", "head", (0.13 * side, -0.32, 1.70), (0.15, 0.06, 0.05), bevel=0.02,
             rot=(0, -12 * side, 0))
         sphere(f"Eye{side}", "glow", "head", (0.12 * side, -0.33, 1.63), 0.035, scale=(1.2, 0.5, 0.8),
@@ -896,6 +1074,109 @@ def build_mouther():
         mouther_eye(f"Eye{i}", bone, on(c, r, sc, d), d, size, iris)
 
 
+def build_gauth():
+    """A gauth: a floating ball with one big eye, a toothy mouth below it, six eyestalks on top
+    and four feeding tendrils dangling underneath."""
+    centre = Vector((0, 0, 1.25))
+    sphere("Body", "gauth", "body", centre, 0.48, scale=(1, 0.95, 0.92), segments=18, rings=12)
+    # Bumpy plates over the back and top.
+    for i in range(10):
+        a, b = DEG(i * 36 + 18), DEG(35 + (i % 3) * 18)
+        d = Vector((math.sin(b) * math.sin(a), math.sin(b) * math.cos(a) * 0.95 + 0.05, math.cos(b) * 0.92))
+        sphere(f"Plate{i}", "gauth_dark", "body", centre + d * 0.45, 0.11, scale=(1, 1, 0.5),
+               rot=turned(facing(d), (90, 0, 0)), segments=8, rings=5)
+    # The big central eye with a lid.
+    eye = centre + Vector((0, -0.40, 0.10))
+    sphere("EyeWhite", "eye_white", "body", eye, 0.20, scale=(1, 0.6, 1), segments=14, rings=9)
+    sphere("EyeIris", "eye", "body", eye + Vector((0, -0.10, 0)), 0.12, scale=(1, 0.4, 1), segments=12, rings=8)
+    sphere("EyePupil", "black", "body", eye + Vector((0, -0.145, 0)), 0.05, scale=(0.6, 0.4, 1.4), segments=8, rings=6)
+    sphere("EyeLid", "gauth_dark", "body", eye + Vector((0, 0.02, 0.15)), 0.21, scale=(1.04, 0.66, 0.36),
+           segments=14, rings=8)
+    # The mouth under the eye, on the head bone so it can snap.
+    mouther_mouth("Mouth", "head", centre + Vector((0, -0.40, -0.21)), (0, -1, -0.15), 0.19, teeth=7)
+    # Six eyestalks curling up and out from the top, each with a little eye.
+    for i in range(6):
+        a = DEG(i * 60 + 30)
+        out = Vector((math.sin(a), -math.cos(a) * 0.9, 0))
+        p0 = centre + out * 0.22 + Vector((0, 0, 0.38))
+        p1 = p0 + out * 0.10 + Vector((0, 0, 0.25))
+        p2 = p0 + out * 0.32 + Vector((0, 0, 0.35))
+        p3 = p0 + out * 0.42 + Vector((0, 0, 0.25))
+        n = 12
+        for j in range(n):
+            t = j / (n - 1)
+            sphere(f"Stalk{i}_{j}", "gauth_light" if j % 3 == 0 else "gauth", "stalks", bezier(p0, p1, p2, p3, t),
+                   0.055 - 0.02 * t, segments=7, rings=5)
+        look = (out + Vector((0, -0.6, 0.3))).normalized()
+        mouther_eye(f"StalkEye{i}", "stalks", p3 + look * 0.04, look, 0.07, "eye_green" if i % 2 else "eye")
+    # Feeding tendrils hanging down, two to a bone.
+    for i in range(4):
+        a = DEG(45 + i * 90)
+        dx, dy = math.sin(a), -math.cos(a)
+        bone = ("tent.F" if dy < 0 else "tent.B") + ("L" if dx > 0 else "R")
+        start = Vector((dx * 0.20, dy * 0.20, 0.85))
+        end = Vector((dx * 0.30, dy * 0.30, 0.20))
+        mid1, mid2 = start + Vector((dx * 0.15, dy * 0.15, -0.20)), end + Vector((-dx * 0.1, -dy * 0.1, 0.25))
+        for j in range(8):
+            t = j / 7
+            sphere(f"Tendril{i}_{j}", "gauth_dark" if j % 3 == 0 else "gauth", bone, bezier(start, mid1, mid2, end, t),
+                   0.05 - 0.03 * t, segments=7, rings=5)
+
+
+def build_otyugh():
+    """An otyugh: a bloated sack of a body on three stubby legs, a huge mouth of teeth across
+    the front, an eyestalk with three eyes on top and two long tentacles raised up, each
+    ending in a spiked club."""
+    centre = Vector((0, 0.05, 0.88))
+    sphere("Body", "otyugh", "body", centre, 0.62, scale=(1.08, 1.0, 0.9), segments=18, rings=12)
+    # Warty bumps and dark blotches.
+    for i in range(16):
+        a, b = DEG(i * 67 % 360), DEG(30 + (i * 37) % 100)
+        d = Vector((math.sin(b) * math.sin(a), math.sin(b) * math.cos(a), math.cos(b)))
+        if d.y < -0.5 and d.z < 0.5:
+            continue  # leave the mouth clear
+        at = centre + Vector((d.x * 0.62 * 1.08, d.y * 0.62, d.z * 0.62 * 0.9)) * 0.97
+        colour = "otyugh_dark" if i % 3 == 0 else "otyugh_light"
+        sphere(f"Wart{i}", colour, "body", at, 0.05 + 0.03 * (i % 3), scale=(1, 1, 0.7), segments=8, rings=5)
+    # The mouth: wide and toothy, on the head bone so it can chomp.
+    mouther_mouth("Mouth", "head", centre + Vector((0, -0.56, -0.05)), (0, -1, 0.05), 0.40, teeth=11)
+    # Three stubby legs: two at the front corners, one at the back (on the tail bone).
+    for name, bone, x, y in (("Leg.L", "leg.L", 0.42, -0.22), ("Leg.R", "leg.R", -0.42, -0.22), ("Leg.B", "tail", 0, 0.45)):
+        cone(name, "otyugh_dark", bone, (x, y, 0.20), 0.17, 0.42, sides=10, tip=0.21)
+        box(f"{name}Foot", "otyugh_dark", bone, (x, y - 0.04, 0.05), (0.32, 0.36, 0.10), bevel=0.04)
+        for i, dx in enumerate((-0.08, 0, 0.08)):
+            cone(f"{name}Claw{i}", "bone", bone, (x + dx, y - 0.22, 0.05), 0.03, 0.09, rot=(90, 0, 0), sides=4)
+    # The eyestalk rises from the top and bends forward, three eyes at its end.
+    p0, p1, p2, p3 = (Vector((0, 0.15, 1.35)), Vector((0, 0.25, 1.75)), Vector((0, -0.05, 1.95)),
+                      Vector((0, -0.15, 1.85)))
+    for j in range(12):
+        t = j / 11
+        sphere(f"Eyestalk{j}", "otyugh_light" if j % 3 == 0 else "otyugh", "head", bezier(p0, p1, p2, p3, t),
+               0.09 - 0.03 * t, segments=8, rings=6)
+    for i, (dx, dz, r) in enumerate(((0, 0.05, 0.08), (0.10, -0.04, 0.065), (-0.10, -0.04, 0.065))):
+        d = Vector((dx * 2, -1, dz * 2))
+        mouther_eye(f"StalkEye{i}", "head", p3 + Vector((dx, -0.06, dz)), d, r, "eye")
+    # Two tentacles: up from the shoulders in a curve, then a leafy spiked club.
+    for side, tag in ((1, "L"), (-1, "R")):
+        bone = f"arm.{tag}"
+        q0 = Vector((0.58 * side, -0.05, 1.05))
+        q1 = Vector((0.95 * side, -0.05, 1.20))
+        q2 = Vector((0.80 * side, -0.15, 1.75))
+        q3 = Vector((0.62 * side, -0.30, 1.95))
+        n = 16
+        for j in range(n):
+            t = j / (n - 1)
+            sphere(f"Tentacle{tag}{j}", "otyugh_light" if j % 4 == 0 else "otyugh", bone, bezier(q0, q1, q2, q3, t),
+                   0.10 - 0.04 * t, segments=8, rings=6)
+        club = q3 + Vector((-0.04 * side, -0.10, 0.05))
+        sphere(f"Club{tag}", "otyugh_dark", bone, club, 0.15, scale=(0.8, 1.3, 0.7), segments=10, rings=7)
+        for k, (dx, dy, dz) in enumerate(((1, 0, 0), (-1, 0, 0), (0, 0, 1), (0, -1, 0), (0.7, -0.5, 0.5),
+                                          (-0.7, -0.5, 0.5))):
+            d = Vector((dx, dy, dz)).normalized()
+            cone(f"ClubSpike{tag}{k}", "bone", bone, club + Vector((d.x * 0.12, d.y * 0.18, d.z * 0.10)), 0.035, 0.12,
+                 rot=turned(facing(d), (90, 0, 0)), sides=5)
+
+
 # ---- 4. Join, size it, origin on the floor --------------------------------------------------
 
 def join_parts(name, mat, height):
@@ -990,6 +1271,26 @@ MOUTHER_BONES = [
     ("lobe.R", (-0.46, -0.15, 0.05), (-0.46, -0.15, 0.55), "body"),
     ("lobe.B", (0.05, 0.50, 0.05), (0.05, 0.50, 0.65), "body"),
 ]
+GAUTH_BONES = [
+    ("root", (0, 0, 0), (0, 0, 0.2), None),
+    ("body", (0, 0, 0.95), (0, 0, 1.60), "root"),
+    ("head", (0, -0.38, 0.90), (0, -0.38, 1.15), "body"),
+    ("stalks", (0, 0, 1.55), (0, 0, 2.0), "body"),
+    ("tent.FL", (0.15, -0.15, 0.9), (0.2, -0.2, 0.2), "body"),
+    ("tent.FR", (-0.15, -0.15, 0.9), (-0.2, -0.2, 0.2), "body"),
+    ("tent.BL", (0.15, 0.15, 0.9), (0.2, 0.2, 0.2), "body"),
+    ("tent.BR", (-0.15, 0.15, 0.9), (-0.2, 0.2, 0.2), "body"),
+]
+OTYUGH_BONES = [
+    ("root", (0, 0, 0), (0, 0, 0.2), None),
+    ("body", (0, 0.05, 0.40), (0, 0.05, 1.30), "root"),
+    ("head", (0, -0.40, 0.80), (0, -0.40, 1.20), "body"),
+    ("arm.L", (0.58, -0.05, 1.05), (0.65, -0.25, 1.95), "body"),
+    ("arm.R", (-0.58, -0.05, 1.05), (-0.65, -0.25, 1.95), "body"),
+    ("leg.L", (0.42, -0.22, 0.45), (0.42, -0.22, 0.02), "root"),
+    ("leg.R", (-0.42, -0.22, 0.45), (-0.42, -0.22, 0.02), "root"),
+    ("tail", (0, 0.45, 0.45), (0, 0.45, 0.02), "root"),
+]
 KOBOLD_BONES = [
     ("root", (0, 0, 0), (0, 0, 0.2), None),
     ("hips", (0, 0, 0.50), (0, 0, 0.72), "root"),
@@ -1036,6 +1337,15 @@ MOVES = [
         (18, {"arm.L": (90, 0, -6), "arm.R": (88, 0, -35), "body": (-4, 28, 0), "head": (0, -25, 0)}),
         (22, {"arm.L": (92, 0, -6), "arm.R": (95, 0, -60), "body": (-6, 25, 0), "head": (0, -22, 0)}),
         (36, {}),
+    ]),
+    # Raise the staff high, then thrust it at the foe as the lightning flies.
+    ("Spellcast_Shoot", False, [
+        (0, {}),
+        (10, {"arm.R": (150, 0, 15), "arm.L": (40, 0, -30), "body": (-14, -10, 0), "head": (-14, 0, 0)}),
+        (16, {"arm.R": (95, 0, 0), "arm.L": (60, 0, -10), "body": (14, 10, 0), "head": (6, 0, 0),
+              "hips": {"loc": (0, -0.05, 0)}}),
+        (24, {"arm.R": (85, 0, 0), "arm.L": (50, 0, -10), "body": (10, 8, 0), "hips": {"loc": (0, -0.04, 0)}}),
+        (38, {}),
     ]),
     ("Hit_A", False, [
         (0, {}),
@@ -1367,13 +1677,87 @@ MOUTHER_MOVES = [
     ("Death_A_Pose", False, [(0, MOUTHER_FALLEN), (1, MOUTHER_FALLEN)]),
 ]
 
+# The gauth floats like the grell, and fires rays: its eyestalks lean in and its body tilts.
+GAUTH_MOVES = [m for m in GRELL_MOVES if m[0] != "Idle"] + [
+    ("Idle", True, [
+        (0, {}),
+        (30, {"body": {"loc": (0, 0.06, 0), "rot": (0, 6, 0)}, "stalks": (8, 0, -6), "head": (6, 0, 0),
+              "tent.FL": (8, 0, 4), "tent.BR": (6, 0, -4)}),
+        (60, {}),
+    ]),
+    ("Spellcast_Shoot", False, [
+        (0, {}),
+        (10, {"body": {"rot": (-15, 0, 0), "loc": (0, 0.08, -0.08)}, "stalks": (-25, 0, 0)}),
+        (16, {"body": {"rot": (12, 0, 0), "loc": (0, 0.05, 0.05)}, "stalks": (35, 0, 0), "head": (15, 0, 0)}),
+        (26, {"body": {"rot": (10, 0, 0), "loc": (0, 0.05, 0.04)}, "stalks": (30, 0, 0)}),
+        (38, {}),
+    ]),
+]
+
+# The otyugh waddles on three legs, sways its tentacles and slams them down to attack.
+OTYUGH_FALLEN = {"body": {"rot": (-70, 0, 10), "loc": (0, -0.1, -0.35)}, "arm.L": (-30, 0, 40),
+                 "arm.R": (-30, 0, -40), "head": (-20, 0, 0)}
+OTYUGH_MOVES = [
+    ("Idle", True, [
+        (0, {}),
+        (30, {"body": {"scale": (1.03, 0.97, 1.03)}, "arm.L": (10, 0, -8), "arm.R": (-6, 0, 8), "head": (8, 0, 5)}),
+        (60, {}),
+    ]),
+    ("Walking_A", True, [
+        (0, {"body": {"rot": (0, 8, 0), "loc": (0, 0.03, 0)}, "leg.L": (25, 0, 0), "leg.R": (-25, 0, 0),
+             "tail": (-15, 0, 0), "arm.L": (8, 0, 0), "arm.R": (-8, 0, 0)}),
+        (12, {"body": {"rot": (0, -8, 0), "loc": (0, 0.03, 0)}, "leg.L": (-25, 0, 0), "leg.R": (25, 0, 0),
+              "tail": (15, 0, 0), "arm.L": (-8, 0, 0), "arm.R": (8, 0, 0)}),
+        (24, {"body": {"rot": (0, 8, 0), "loc": (0, 0.03, 0)}, "leg.L": (25, 0, 0), "leg.R": (-25, 0, 0),
+              "tail": (-15, 0, 0), "arm.L": (8, 0, 0), "arm.R": (-8, 0, 0)}),
+    ]),
+    ("1H_Melee_Attack_Chop", False, [
+        (0, {}),
+        (10, {"arm.R": (-35, 0, 10), "arm.L": (-25, 0, -10), "body": {"rot": (-10, 0, 0)}, "head": (-15, 0, 0)}),
+        (16, {"arm.R": (80, 0, 10), "arm.L": (70, 0, -10), "body": {"rot": (12, 0, 0), "loc": (0, -0.05, 0.08)},
+              "head": (15, 0, 0)}),
+        (24, {"arm.R": (70, 0, 5), "arm.L": (60, 0, -5), "body": {"rot": (8, 0, 0)}}),
+        (36, {}),
+    ]),
+    ("Hit_A", False, [
+        (0, {}),
+        (5, {"body": {"rot": (-14, 0, 6), "scale": (1.08, 0.9, 1.06)}, "arm.L": (-25, 0, 15),
+             "arm.R": (-25, 0, -15), "head": (-25, 0, 0)}),
+        (20, {}),
+    ]),
+    ("Dodge_Right", False, [
+        (0, {}),
+        (7, {"root": {"loc": (-0.3, 0, 0), "rot": (0, 0, 10)}, "arm.L": (0, 0, 20)}),
+        (22, {}),
+    ]),
+    ("Cheer", False, [
+        (0, {}),
+        (10, {"arm.L": (-20, 0, 30), "arm.R": (-20, 0, -30), "body": {"loc": (0, 0.1, 0)}, "head": (-20, 0, 0)}),
+        (18, {"arm.L": (-10, 0, 20), "arm.R": (-10, 0, -20), "body": {"loc": (0, 0.0, 0)}}),
+        (26, {"arm.L": (-20, 0, 30), "arm.R": (-20, 0, -30), "body": {"loc": (0, 0.1, 0)}}),
+        (36, {}),
+    ]),
+    ("Death_A", False, [
+        (0, {}),
+        (10, {"body": {"rot": (10, 0, 0)}, "arm.L": (-20, 0, 10), "arm.R": (-20, 0, -10)}),
+        (30, OTYUGH_FALLEN),
+    ]),
+    ("Death_A_Pose", False, [(0, OTYUGH_FALLEN), (1, OTYUGH_FALLEN)]),
+]
+
 # name, file, build, height, bones, extra moves (, own moves)
+# The board draws villains 1.3 times bigger, so a villain's height here is its real height / 1.3.
 MONSTERS = [
     ("orc-smasher", "orc-smasher.glb", lambda: build_orc("mace"), 2.4, ORC_BONES, []),
     ("orc-archer", "orc-archer.glb", lambda: build_orc("bow"), 2.4, ORC_BONES, ["1H_Ranged_Shoot"]),
+    ("otyugh", "otyugh.glb", build_otyugh, 2.0, OTYUGH_BONES, [], OTYUGH_MOVES),
+    ("gauth", "gauth.glb", build_gauth, 1.8, GAUTH_BONES, [], GAUTH_MOVES),
+    ("orc-storm-shaman", "orc-storm-shaman.glb", lambda: build_orc("staff"), 2.2, ORC_BONES, ["Spellcast_Shoot"]),
     ("kobold-dragonshield", "kobold-dragonshield.glb", build_kobold, 1.9, KOBOLD_BONES, []),
+    ("kobold-dragonlord", "kobold-dragonlord.glb", lambda: build_kobold(lord=True), 1.85, KOBOLD_BONES, []),
     ("human-cultist", "human-cultist.glb", build_cultist, 2.5, CULTIST_BONES, []),
     ("duergar-guard", "duergar-guard.glb", build_duergar, 2.15, DUERGAR_BONES, []),
+    ("duergar-captain", "duergar-captain.glb", lambda: build_duergar(captain=True), 1.85, DUERGAR_BONES, []),
     ("snake", "snake.glb", build_snake, 1.75, SNAKE_BONES, [], SNAKE_MOVES),
     ("cave-bear", "cave-bear.glb", build_bear, 1.65, BEAR_BONES, [], BEAR_MOVES),
     ("legion-devil", "legion-devil.glb", build_devil, 2.5, DEVIL_BONES, []),
@@ -1381,7 +1765,7 @@ MONSTERS = [
     ("gibbering-mouther", "gibbering-mouther.glb", build_mouther, 1.75, MOUTHER_BONES, [], MOUTHER_MOVES),
 ]
 # Moves only some figures have.
-EXTRA_MOVES = {"1H_Ranged_Shoot"}
+EXTRA_MOVES = {"1H_Ranged_Shoot", "Spellcast_Shoot"}
 
 
 def make(label, file_name, build, height, bones, extra, own_moves=None):

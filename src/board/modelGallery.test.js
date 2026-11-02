@@ -6,7 +6,7 @@ describe('3D figures page', () => {
   const cards = {
     heroes: [...HERO_TEMPLATES, { key: 'monk', name: 'Darna', className: 'Human Monk', color: 'teal' }],
     monsters: [{ name: 'Orc Smasher' }, { name: 'Orc Smasher' }, { name: 'Orc Archer' }, { name: 'Gibbering Mouther' }, { name: 'Gelatinous Cube' }],
-    villains: [{ name: 'Otyugh' }],
+    villains: [{ name: 'Ashardalon' }, { name: 'Kobold Dragonlord' }],
   }
   it('splits box heroes, fan heroes, 3D monsters and standees', () => {
     const g = galleryFigures(cards)
@@ -16,6 +16,11 @@ describe('3D figures page', () => {
       'Orc_Smasher',
       'Orc_Archer',
       'Kobold_Dragonshield',
+      'Kobold_Dragonlord',
+      'Duergar_Captain',
+      'Orc_Storm_Shaman',
+      'Gauth',
+      'Otyugh',
       'Human_Cultist',
       'Duergar_Guard',
       'Snake',
@@ -24,7 +29,8 @@ describe('3D figures page', () => {
       'Grell',
       'Gibbering_Mouther',
     ])
-    expect(g.standees).toEqual([{ name: 'Gelatinous Cube', kind: 'Monster' }, { name: 'Otyugh', kind: 'Villain' }])
+    expect(g.monsters.find((m) => m.look.model === 'Kobold_Dragonlord').about).toBe('Villain')
+    expect(g.standees).toEqual([{ name: 'Gelatinous Cube', kind: 'Monster' }, { name: 'Ashardalon', kind: 'Villain' }])
   })
   it("orders the moves and skips Blender's leftover copies", () => {
     const moves = galleryMoves(['Hit_A', 'Idle.001', 'Walking_A', 'Idle', 'Hit_A.001'])

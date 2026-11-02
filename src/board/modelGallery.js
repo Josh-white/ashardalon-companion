@@ -1,5 +1,5 @@
 import { HERO_TEMPLATES } from '../data/heroes.js'
-import { heroModel, MONSTER_FIGURES, monsterModel } from './heroModels.js'
+import { heroModel, MONSTER_FIGURES, monsterModel, VILLAIN_MODELS } from './heroModels.js'
 
 // What the #models page shows: every figure that stands on the 3D board as a 3D model
 // (the box's heroes, fan heroes, and the monsters we made figures for), and the monsters
@@ -16,10 +16,16 @@ export function galleryFigures(cards) {
     fanHeroes: heroes.filter((h) => h.fan),
     // Every monster figure we made, even before its card is in this Pi's cards.json.
     // (MONSTER_FIGURES holds [card name words, figure file] pairs; the file is named after the monster.)
-    monsters: MONSTER_FIGURES.map(([, model]) => model.replace(/_/g, ' ')).map((name) => ({ id: `monster-${name}`, name, about: 'Monster', color: null, look: monsterModel({ name }) })),
+    monsters: MONSTER_FIGURES.map(([, model]) => ({ model, name: model.replace(/_/g, ' ') })).map(({ model, name }) => ({
+      id: `monster-${name}`,
+      name,
+      about: VILLAIN_MODELS.has(model) ? 'Villain' : 'Monster',
+      color: null,
+      look: monsterModel({ name }),
+    })),
     standees: [
       ...monsters.filter((m) => !monsterModel(m)).map((m) => ({ name: m.name, kind: 'Monster' })),
-      ...villains.map((v) => ({ name: v.name, kind: 'Villain' })),
+      ...villains.filter((v) => !monsterModel(v)).map((v) => ({ name: v.name, kind: 'Villain' })),
     ],
   }
 }

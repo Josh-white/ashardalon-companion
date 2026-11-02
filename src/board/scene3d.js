@@ -87,7 +87,7 @@ export function boardFigures(state) {
         icons: conditionIcons(m),
       })),
     ),
-    ...activeVillains(state).map((v) => ({ id: v.id, kind: 'villain', label: v.name, art: monsterArt(v), acting: acting === v.id, icons: conditionIcons(v) })),
+    ...activeVillains(state).map((v) => ({ id: v.id, kind: 'villain', label: v.name, art: monsterArt(v), model: monsterModel(v), acting: acting === v.id, icons: conditionIcons(v) })),
     ...(state.villagers ?? []).filter((v) => !v.removed).map((v) => ({ id: v.id, kind: 'villager', label: v.name, art: null, icons: [] })),
   ]
   return figures.filter((f) => board.tokens[f.id]).map((f) => ({ ...f, at: board.tokens[f.id] }))
