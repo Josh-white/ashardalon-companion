@@ -81,9 +81,11 @@ export const gameReducer = (state, action) => keepCardsQuiet(state, reduceGame(s
 const keepCardsQuiet = (state, next) => (state?.readCardsOff && next && next.readCardsOff === undefined ? { ...next, readCardsOff: true } : next)
 
 const reduceGame = (state, action) => {
-  const placed = pruneTokens(placeNewFigures(state, checkVictory(tagDrawn(reduceWithOpening(state, action)))))
+  // A Legion Devil that falls to a hero's attack is the one nearest that hero.
+  const attacker = action?.type === 'HERO_ATTACK' ? action.heroId : undefined
+  const placed = pruneTokens(placeNewFigures(state, checkVictory(tagDrawn(reduceWithOpening(state, action)))), attacker)
   const sprung = springHeroTokens(placed)
-  return withHealFx(state, withAttackFx(state, trackStats(state, sprung === placed ? placed : pruneTokens(checkVictory(sprung)), action), action))
+  return withHealFx(state, withAttackFx(state, trackStats(state, sprung === placed ? placed : pruneTokens(checkVictory(sprung), attacker), action), action))
 }
 
 // The tokens heroes put on the virtual board (board/heroTokens.js): the board keeps up with
