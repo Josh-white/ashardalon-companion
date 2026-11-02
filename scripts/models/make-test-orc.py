@@ -1,14 +1,17 @@
-"""Builds a chunky stylized orc and exports it as one .glb for the 3D board.
+"""Builds the two orc monsters as .glb files for the 3D board: Orc Smasher (a big spiked mace)
+and Orc Archer (a bow and a quiver).
 
 Run it in Blender (tested headless on 5.2; written for 3.6 and newer):
   * Scripting workspace: open this file (or paste it), press Run Script (Alt+P).
-  * Or headless:  blender --background --python make-test-orc.py -- /path/to/orc.glb
+  * Or headless:  blender --background --python make-test-orc.py -- /path/to/folder
+One run saves orc-smasher.glb and orc-archer.glb in OUTPUT_FOLDER.
 
 It is made like the hero figures on the 3D board (KayKit Adventurers in src/models):
-  * a big head on a short body, rounded (bevelled) shapes, a face, gear and a cleaver,
+  * a big head on a short body, rounded (bevelled) shapes, a face and gear,
   * one mesh with ONE material whose colours come from a tiny packed palette texture,
   * a skeleton with moves named like the heroes' clips (Idle, Walking_A,
-    1H_Melee_Attack_Chop, Hit_A, Dodge_Right, Death_A, Death_A_Pose, Cheer), so
+    1H_Melee_Attack_Chop, 1H_Ranged_Shoot (archer), Hit_A, Dodge_Right, Death_A,
+    Death_A_Pose, Cheer), so
     src/components/figureModels.js could play them the same way,
   * about 2.4 units tall (the board's figure SCALE of 0.44 makes it one square tall),
   * facing Blender's -Y (front view, numpad 1), which is three.js +Z,
@@ -27,8 +30,13 @@ from mathutils import Matrix, Vector
 
 # ---- Settings ----------------------------------------------------------------------------
 
-# Where the .glb goes. A path after "--" on the command line wins.
-OUTPUT_PATH = os.path.join(os.path.expanduser("~"), "test-orc.glb")
+# Where the .glb files go. A folder after "--" on the command line wins.
+OUTPUT_FOLDER = os.path.expanduser("~")
+# Which orcs to make: file name and weapon. Remove a line to make only the other.
+ORCS = [
+    ("orc-smasher.glb", "mace"),
+    ("orc-archer.glb", "bow"),
+]
 # Final height in Blender units (KayKit heroes are about 2.5).
 TARGET_HEIGHT = 2.4
 # False = no skeleton or moves (a still figure).
@@ -49,11 +57,13 @@ PALETTE = {
     "black": "141414",
     "hair": "1d1916",
     "red": "8c2a22",
+    "wood": "7a5230",
+    "feather": "c9c2b0",
 }
 
 argv = sys.argv
 if "--" in argv and len(argv) > argv.index("--") + 1:
-    OUTPUT_PATH = os.path.abspath(os.path.expanduser(argv[argv.index("--") + 1]))
+    OUTPUT_FOLDER = os.path.abspath(os.path.expanduser(argv[argv.index("--") + 1]))
 
 COLOURS = list(PALETTE)
 SWATCH = 4  # pixels per colour in the palette texture
@@ -69,9 +79,13 @@ def clear_scene():
         bpy.data.objects.remove(obj, do_unlink=True)
     for blocks in (bpy.data.meshes, bpy.data.materials, bpy.data.cameras, bpy.data.lights,
                    bpy.data.armatures, bpy.data.actions, bpy.data.images):
+        # Twice: a mesh frees its material, a material frees its image.
         for block in list(blocks):
             if block.users == 0:
                 blocks.remove(block)
+    for block in list(bpy.data.materials) + list(bpy.data.images):
+        if block.users == 0:
+            (bpy.data.materials if isinstance(block, bpy.types.Material) else bpy.data.images).remove(block)
 
 
 # ---- 2. One material with a tiny palette texture -------------------------------------------
@@ -172,7 +186,7 @@ def cone(name, colour, bone, loc, radius, depth, rot=(0, 0, 0), scale=None, side
     return finish(bm, name, colour, bone, loc, rot, scale)
 
 
-def build_orc():
+def build_orc(weapon):
     # Feet and legs.
     for side, tag in ((1, "L"), (-1, "R")):
         x = 0.26 * side
@@ -209,11 +223,10 @@ def build_orc():
         box(f"BracerBand.{tag}", "iron_dark", arm, (0.64 * side, -0.02, 1.01), (0.31, 0.31, 0.05), bevel=0.02)
         sphere(f"Fist.{tag}", "skin", arm, (0.65 * side, -0.05, 0.72), 0.17, scale=(1, 1.1, 0.95))
 
-    # Cleaver in the right fist, pointing forward.
-    cone("Handle", "leather_dark", "arm.R", (-0.65, -0.26, 0.72), 0.04, 0.46, rot=(90, 0, 0), sides=6, tip=0.04)
-    box("Guard", "iron_dark", "arm.R", (-0.65, -0.22, 0.72), (0.10, 0.06, 0.14), bevel=0.015)
-    box("Blade", "iron", "arm.R", (-0.65, -0.52, 0.64), (0.05, 0.38, 0.30), bevel=0.012)
-    box("Spine", "iron_dark", "arm.R", (-0.65, -0.52, 0.80), (0.07, 0.40, 0.05), bevel=0.012)
+    if weapon == "mace":
+        build_mace()
+    else:
+        build_bow()
 
     # Head: big, with a heavy jaw, tusks, nose, angry brows, yellow eyes, ears and a mohawk.
     hy = -0.04
@@ -238,6 +251,60 @@ def build_orc():
             rot=(0, 18 * x, 0))
     box("Mohawk", "hair", "head", (0, hy + 0.04, 2.27), (0.12, 0.66, 0.18), bevel=0.05, rot=(-8, 0, 0))
     cone("Topknot", "hair", "head", (0, hy + 0.34, 2.24), 0.07, 0.30, rot=(-60, 0, 0), sides=6)
+
+
+FIST_R = Vector((-0.65, -0.05, 0.72))
+FIST_L = Vector((0.65, -0.05, 0.72))
+
+
+def build_mace():
+    """A big spiked mace in the right fist, its head resting forward and down."""
+    d = Vector((0, -0.866, -0.5))  # 30 degrees below forward
+    tilt = (120, 0, 0)  # turns a +Z part to point along d
+    cone("MaceHandle", "wood", "arm.R", FIST_R + d * 0.30, 0.05, 0.80, rot=tilt, sides=6, tip=0.06)
+    cone("MaceGrip", "leather_dark", "arm.R", FIST_R + d * 0.02, 0.065, 0.30, rot=tilt, sides=6, tip=0.065)
+    cone("MaceCap", "iron_dark", "arm.R", FIST_R - d * 0.16, 0.07, 0.06, rot=tilt, sides=6, tip=0.04)
+    head = FIST_R + d * 0.78
+    cone("MaceCollar", "iron_dark", "arm.R", FIST_R + d * 0.60, 0.10, 0.10, rot=tilt, sides=8, tip=0.13)
+    sphere("MaceHead", "iron_dark", "arm.R", head, 0.21, segments=10, rings=7)
+    box("MaceBand", "iron", "arm.R", head, (0.46, 0.46, 0.08), bevel=0.03, rot=tilt)
+    spikes = [((1, 0, 0), (0, 90, 0)), ((-1, 0, 0), (0, -90, 0)), ((0, 0, 1), (0, 0, 0)),
+              ((0, 0, -1), (180, 0, 0)), ((0, 1, 0), (-90, 0, 0)), ((0, -1, 0), (90, 0, 0)),
+              ((0, -0.866, -0.5), (120, 0, 0))]
+    for i, (direction, rot) in enumerate(spikes):
+        cone(f"MaceSpike{i}", "bone", "arm.R", head + Vector(direction) * 0.24, 0.06, 0.16, rot=rot, sides=5)
+
+
+def build_bow():
+    """A bow in the left fist (it stands upright when the arm comes up to shoot) and a quiver."""
+    # Hanging down, the bow lies front to back with its belly under the fist and the string
+    # on top; raising the arm forward turns it upright with the string toward the orc.
+    half, bend, steps = 0.70, 0.18, 8
+    points = [FIST_L + Vector((0, half * t, bend * t * t))
+              for t in (-1 + 2 * i / steps for i in range(steps + 1))]
+    for i in range(steps):
+        a, b = points[i], points[i + 1]
+        mid, span = (a + b) / 2, b - a
+        tilt = math.degrees(math.atan2(span.z, span.y))
+        thick = 0.095 if abs(i - steps / 2 + 0.5) < 1.5 else 0.07
+        box(f"Bow{i}", "wood", "arm.L", mid, (thick, span.length + 0.03, thick), bevel=0.015, rot=(tilt, 0, 0))
+    box("BowGrip", "leather_dark", "arm.L", FIST_L + Vector((0, 0, -0.01)), (0.10, 0.18, 0.10), bevel=0.03)
+    for i in (0, steps):
+        cone(f"BowTip{i}", "bone", "arm.L", points[i] + Vector((0, 0.04 * (1 if i else -1), 0.02)), 0.035, 0.10,
+             rot=(90 if i == 0 else -90, 0, 0), sides=5)
+    string_z = points[0].z
+    box("BowString", "feather", "arm.L", Vector((FIST_L.x, FIST_L.y, string_z)), (0.015, half * 2, 0.015), bevel=0)
+
+    # Quiver on the back, slanting over the right shoulder, with feathered arrows.
+    tilt = (-12, -22, 0)
+    base = Vector((0.12, 0.40, 1.10))
+    cone("Quiver", "leather", "body", base, 0.12, 0.62, rot=tilt, sides=8, tip=0.13)
+    cone("QuiverRim", "leather_dark", "body", base + Vector((-0.11, 0.06, 0.28)), 0.14, 0.06, rot=tilt, sides=8, tip=0.14)
+    for i, (dx, dy) in enumerate(((-0.04, -0.03), (0.04, 0.02), (-0.01, 0.05))):
+        top = base + Vector((-0.15 + dx, 0.08 + dy, 0.44))
+        cone(f"Shaft{i}", "wood", "body", top + Vector((0.02, 0, -0.08)), 0.015, 0.22, rot=tilt, sides=4, tip=0.015)
+        box(f"Fletch{i}", "red" if i == 1 else "feather", "body", top, (0.07, 0.015, 0.12), bevel=0.005, rot=tilt)
+    box("QuiverStrap", "leather", "body", (0, 0, 1.12), (0.12, 0.70, 0.95), bevel=0.02, rot=(0, -40, 0))
 
 
 # ---- 4. Join, size it, origin on the floor --------------------------------------------------
@@ -307,6 +374,13 @@ MOVES = [
               "hips": {"loc": (0, -0.05, 0)}}),
         (22, {"arm.R": (30, 0, 0), "body": (16, -10, 0), "hips": {"loc": (0, -0.04, 0)}}),
         (34, {}),
+    ]),
+    ("1H_Ranged_Shoot", False, [
+        (0, {}),
+        (8, {"arm.L": (88, 0, -6), "arm.R": (80, 0, 32), "body": (0, 25, 0), "head": (0, -22, 0)}),
+        (18, {"arm.L": (90, 0, -6), "arm.R": (88, 0, -35), "body": (-4, 28, 0), "head": (0, -25, 0)}),
+        (22, {"arm.L": (92, 0, -6), "arm.R": (95, 0, -60), "body": (-6, 25, 0), "head": (0, -22, 0)}),
+        (36, {}),
     ]),
     ("Hit_A", False, [
         (0, {}),
@@ -381,9 +455,9 @@ def pose(rig, spec):
         pb.location = loc
 
 
-def add_moves(rig):
+def add_moves(rig, moves):
     rig.animation_data_create()
-    for name, _loops, keys in MOVES:
+    for name, _loops, keys in moves:
         action = bpy.data.actions.new(name)
         action.use_fake_user = True
         rig.animation_data.action = action
@@ -420,25 +494,33 @@ def export_glb(objs, path):
     )
 
 
-clear_scene()
-bpy.context.scene.render.fps = FPS
-material = palette_material()
-build_orc()
-orc, size = join_parts("Test_Orc", material)
-objs = [orc]
-if ANIMATE:
-    rig = build_rig(orc, size)
-    add_moves(rig)
-    objs = [rig, orc]
-export_glb(objs, OUTPUT_PATH)
+def make(file_name, weapon):
+    clear_scene()
+    parts.clear()
+    bpy.context.scene.render.fps = FPS
+    material = palette_material()
+    build_orc(weapon)
+    name = os.path.splitext(file_name)[0].replace("-", "_").title()
+    orc, size = join_parts(name, material)
+    objs = [orc]
+    moves = [m for m in MOVES if weapon == "bow" or m[0] != "1H_Ranged_Shoot"]
+    if ANIMATE:
+        rig = build_rig(orc, size)
+        add_moves(rig, moves)
+        objs = [rig, orc]
+    path = os.path.join(OUTPUT_FOLDER, file_name)
+    export_glb(objs, path)
 
-zs = [v.co.z for v in orc.data.vertices]
-xs = [v.co.x for v in orc.data.vertices]
-ys = [v.co.y for v in orc.data.vertices]
-size_kb = os.path.getsize(OUTPUT_PATH) / 1024
-tris = sum(len(p.vertices) - 2 for p in orc.data.polygons)
-print(f"Test orc: {max(xs) - min(xs):.2f} wide, {max(ys) - min(ys):.2f} deep, {max(zs) - min(zs):.2f} tall, {tris} triangles")
-print(f"Moves: {', '.join(m[0] for m in MOVES) if ANIMATE else 'none'}")
-print(f"Saved {OUTPUT_PATH} ({size_kb:.1f} KB)")
-if size_kb > 5 * 1024:
-    print("WARNING: over 5 MB")
+    xs, ys, zs = ([v.co[i] for v in orc.data.vertices] for i in range(3))
+    size_kb = os.path.getsize(path) / 1024
+    tris = sum(len(p.vertices) - 2 for p in orc.data.polygons)
+    print(f"{name}: {max(xs) - min(xs):.2f} wide, {max(ys) - min(ys):.2f} deep, {max(zs) - min(zs):.2f} tall, "
+          f"{tris} triangles")
+    print(f"  Moves: {', '.join(m[0] for m in moves) if ANIMATE else 'none'}")
+    print(f"  Saved {path} ({size_kb:.1f} KB)")
+    if size_kb > 5 * 1024:
+        print("  WARNING: over 5 MB")
+
+
+for file_name, weapon in ORCS:
+    make(file_name, weapon)
