@@ -7,7 +7,7 @@
 import { effectsOf } from '../data/powerEffects.js'
 import { startingPicks } from '../components/Setup.jsx'
 
-const pathCard = (card) => Boolean(card && (effectsOf(card).use?.tokens?.secretPaths || effectsOf(card).use?.tokens?.darkness))
+const pathCard = (card) => Boolean(card && (effectsOf(card).use?.tokens?.secretPaths || effectsOf(card).use?.tokens?.darknessLeft || effectsOf(card).use?.tokens?.darkness))
 const longbow = (card) => /^longbow\b/i.test(card?.name ?? '')
 const oak = (card) => /oak arrow/i.test(card?.name ?? '')
 

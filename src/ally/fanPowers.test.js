@@ -596,4 +596,14 @@ describe('the computer\'s starting powers', () => {
     ]
     expect(allyPicks(template, cards).map((c) => c?.id)).toEqual(['oak', 'shroud', 'roots'])
   })
+
+  it("skips Paths of Darkness too (its tokens are counted as darknessLeft on the card)", async () => {
+    const { allyPicks } = await import('./picks.js')
+    const template = { ...fan(2, 'assassin'), powerSlots: ['utility'] }
+    const cards = [
+      { id: 'darkness', hero: 'assassin', type: 'utility', name: 'Paths of Darkness', suggested: true, effect: { use: { tokens: { darknessLeft: 3 } } } },
+      { id: 'merge', hero: 'assassin', type: 'utility', name: 'Shadowmerge', effect: { use: {}, shadow: 'enter' } },
+    ]
+    expect(allyPicks(template, cards).map((c) => c?.id)).toEqual(['merge'])
+  })
 })
