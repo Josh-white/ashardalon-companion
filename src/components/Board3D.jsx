@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { boardExtras, boardFigures, boardLayout, restFacing } from '../board/scene3d.js'
+import { STAIR_STEPS_PER_SQUARE, STAIR_TOP, boardExtras, boardFigures, boardLayout, restFacing, stairHeights, stairsRise } from '../board/scene3d.js'
+import { STEP } from '../board/grid.js'
 import { artUrl, useArt } from '../state/useArt.js'
 import { TOKEN_COLORS } from './Board.jsx'
 import { useAttackFx } from './AttackFx.jsx'
@@ -215,7 +216,8 @@ function buildDungeon(stage, layout) {
     dungeon.add(strip)
   }
 
-  // Stairs going down (and a ladder): steps across the feature's squares.
+  // Stairs standing up out of the floor (and a ladder lying on it).
+  stage.heights = new Map()
   for (const exit of layout.exits) {
     const xs = exit.squares.map((s) => s[0])
     const ys = exit.squares.map((s) => s[1])
@@ -239,20 +241,7 @@ function buildDungeon(stage, layout) {
       }
       continue
     }
-    // Stairs: steps going down into a dark well where the floor would be.
-    const well = new THREE.Mesh(new THREE.BoxGeometry(w, 0.5, h), new THREE.MeshStandardMaterial({ color: '#0a0807', roughness: 1 }))
-    well.position.set(cxs, -0.42, czs)
-    dungeon.add(well)
-    const steps = 5
-    for (let i = 0; i < steps; i++) {
-      const step = new THREE.Mesh(
-        new THREE.BoxGeometry(w - 0.06, 0.08, h / steps),
-        stone ? stepMaterial(stone.steps, 1 - i * 0.17) : new THREE.MeshStandardMaterial({ color: new THREE.Color().setScalar(0.38 - i * 0.06), roughness: 0.9 }),
-      )
-      step.position.set(cxs, -0.04 - i * 0.06, czs - h / 2 + (i + 0.5) * (h / steps))
-      step.receiveShadow = true
-      dungeon.add(step)
-    }
+    buildStairs(stage, layout, exit, stone)
   }
 
   // Torches on the walls (and bones and rubble), with the board's darker torchlit air.
@@ -268,12 +257,74 @@ function buildDungeon(stage, layout) {
   stage.moon.position.set(-span * 0.6, span * 1.6, span * 0.5)
 }
 
-// A stone step, darker the deeper it goes.
-function stepMaterial(base, shade) {
-  const mat = base.clone()
-  mat.userData = {}
-  mat.color.setScalar(shade)
-  return mat
+// A flight of stairs standing up out of the floor (JJ: we're 3D now). The Start tile's come
+// down from a dark doorway where the heroes came in; the Tunnel Exit's climb to a doorway
+// with daylight in it. Every step knows its square, so a tap on it is a tap on that square,
+// and a figure standing on a stair square stands on its step (stage.heights).
+function buildStairs(stage, layout, exit, stone) {
+  const side = stairsRise(layout, exit.squares)
+  const heights = stairHeights(exit.squares, side)
+  const [dx, dz] = STEP[side]
+  const along = ([x, y]) => x * dx + y * dz
+  const lows = Math.min(...exit.squares.map(along))
+  const run = Math.max(...exit.squares.map(along)) - lows + 1
+  const rise = STAIR_TOP / (run * STAIR_STEPS_PER_SQUARE)
+  const sideways = dx !== 0
+  const mat = stone
+    ? [stone.rock[0], stone.rock[0], stone.steps, stone.steps, stone.rock[0], stone.rock[0]]
+    : new THREE.MeshStandardMaterial({ color: '#57534e', roughness: 0.9 })
+  for (const sq of exit.squares) {
+    const [x, z] = stage.at(sq[0], sq[1])
+    stage.heights.set(`${sq[0]},${sq[1]}`, heights[`${sq[0]},${sq[1]}`])
+    for (let k = 0; k < STAIR_STEPS_PER_SQUARE; k++) {
+      const i = (along(sq) - lows) * STAIR_STEPS_PER_SQUARE + k
+      const top = (i + 1) * rise
+      const deep = 1 / STAIR_STEPS_PER_SQUARE
+      const tall = top + FLOOR_H
+      const step = new THREE.Mesh(new THREE.BoxGeometry(sideways ? deep : 0.98, tall, sideways ? 0.98 : deep), mat)
+      const off = -0.5 + (k + 0.5) * deep
+      step.position.set(x + dx * off, top - tall / 2, z + dz * off)
+      step.castShadow = true
+      step.receiveShadow = true
+      step.userData.square = sq
+      stage.dungeon.add(step)
+    }
+  }
+  // The doorway at the top of the flight.
+  const xs = exit.squares.map(([x]) => x)
+  const ys = exit.squares.map(([, y]) => y)
+  const [cx, cz] = stage.at((Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2)
+  const span = sideways ? Math.max(...ys) - Math.min(...ys) + 1 : Math.max(...xs) - Math.min(...xs) + 1
+  const edge = run / 2
+  const door = new THREE.Group()
+  door.position.set(cx + dx * edge, 0, cz + dz * edge)
+  door.rotation.y = Math.atan2(-dx, -dz)
+  const high = STAIR_TOP + 0.7
+  const frame = stone ? stone.rock : new THREE.MeshStandardMaterial({ color: '#44403c', roughness: 1 })
+  for (const s of [-1, 1]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, high, 0.2), frame)
+    post.position.set(s * (span / 2 - 0.08), high / 2 - FLOOR_H, 0.08)
+    post.castShadow = true
+    door.add(post)
+  }
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(span, 0.18, 0.22), frame)
+  lintel.position.set(0, high - FLOOR_H, 0.08)
+  lintel.castShadow = true
+  const way = exit.entrance ? new THREE.MeshBasicMaterial({ color: '#030203' }) : new THREE.MeshBasicMaterial({ color: '#cfe3ff' })
+  const opening = new THREE.Mesh(new THREE.PlaneGeometry(span - 0.4, high - STAIR_TOP + 0.05), way)
+  opening.position.set(0, STAIR_TOP + (high - STAIR_TOP) / 2 - 0.08, -0.02)
+  door.add(lintel, opening)
+  if (!exit.entrance) {
+    // Daylight spilling down the stairs from the way out.
+    const glow = new THREE.Mesh(
+      new THREE.PlaneGeometry(span, run),
+      new THREE.MeshBasicMaterial({ color: '#bcd6ff', transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false }),
+    )
+    glow.rotation.x = -Math.PI / 2 + Math.atan2(STAIR_TOP, run)
+    glow.position.set(0, STAIR_TOP / 2 + 0.03, run / 2)
+    door.add(glow)
+  }
+  stage.dungeon.add(door)
 }
 
 // Torchlit: a darker room, so the torches carry the light. Calm screens (phones, iPads)
@@ -498,7 +549,7 @@ function buildLit(stage, targets) {
   const mat = new THREE.MeshBasicMaterial({ color: '#34d399', transparent: true, opacity: 0.6, depthWrite: false })
   for (const k of targets) {
     const [x, y] = k.split(',').map(Number)
-    const plane = squarePlane(mat, ...stage.at(x, y), 0.04, 0.9)
+    const plane = squarePlane(mat, ...stage.at(x, y), 0.04 + (stage.heights?.get(k) ?? 0), 0.9)
     plane.userData.square = [x, y]
     group.add(plane)
   }
@@ -591,7 +642,8 @@ function syncFigures(stage, figures, art, fallAt) {
       node = null
     }
     const [x, z] = stage.at(f.at[0], f.at[1])
-    const to = new THREE.Vector3(x, 0, z)
+    // On a stair square a figure stands on its step.
+    const to = new THREE.Vector3(x, stage.heights?.get(`${f.at[0]},${f.at[1]}`) ?? 0, z)
     if (!node) {
       node = makeStandee(stage, f, url)
       node.position.copy(to)

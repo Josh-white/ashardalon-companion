@@ -61,10 +61,36 @@ export function boardLayout(board) {
   for (const placed of board.tiles ?? []) {
     const def = board.defs?.[placed.tileId]
     for (const feature of def?.features ?? []) {
-      if (EXIT_FEATURES.includes(feature.type)) exits.push({ type: feature.type, squares: boardSquares(placed, def, feature.at) })
+      if (EXIT_FEATURES.includes(feature.type)) exits.push({ type: feature.type, squares: boardSquares(placed, def, feature.at), entrance: def.kind === 'start' })
     }
   }
   return { squares, walls, openEdges, exits, bounds: { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 } }
+}
+
+// Stairs stand up out of the floor in 3D (JJ's ask): the Start tile's come down from where
+// the heroes came in, the Tunnel Exit's climb up and out. They rise toward the side with the
+// most rock beyond it (a dead end's back wall), or away from the camera (north) when that's a tie.
+export const STAIR_TOP = 0.84
+export const STAIR_STEPS_PER_SQUARE = 3
+export function stairsRise(layout, squares) {
+  const floor = new Set(layout.squares.filter((s) => s.floor).map((s) => `${s.x},${s.y}`))
+  const mine = new Set(squares.map(([x, y]) => `${x},${y}`))
+  const shut = (side) =>
+    squares.filter(([x, y]) => {
+      const next = `${x + STEP[side][0]},${y + STEP[side][1]}`
+      return !mine.has(next) && !floor.has(next)
+    }).length
+  return ['N', 'E', 'W', 'S'].reduce((best, side) => (shut(side) > shut(best) ? side : best), 'N')
+}
+
+// How high a figure stands on each stair square: the middle step of the square's three.
+// { "x,y": height }. Squares nearest the bottom are lowest.
+export function stairHeights(squares, side) {
+  const along = ([x, y]) => x * STEP[side][0] + y * STEP[side][1]
+  const lows = Math.min(...squares.map(along))
+  const run = Math.max(...squares.map(along)) - lows + 1
+  const rise = STAIR_TOP / (run * STAIR_STEPS_PER_SQUARE)
+  return Object.fromEntries(squares.map((sq) => [`${sq[0]},${sq[1]}`, (along(sq) - lows) * STAIR_STEPS_PER_SQUARE * rise + 2 * rise]))
 }
 
 // Every figure standing on the board, in the order the flat board draws them.
