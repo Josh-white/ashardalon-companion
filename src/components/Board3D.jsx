@@ -7,6 +7,7 @@ import { TOKEN_COLORS } from './Board.jsx'
 import { useAttackFx } from './AttackFx.jsx'
 import { useHealFx } from './HealFx.jsx'
 import { canvasTexture, playAttack3D, playHeal3D } from './board3dFx.js'
+import { FLOOR_LOOKS, dressDungeon, stoneMaterials } from './dungeonLook3d.js'
 import { attachModel, detachModel, face, setDown, setWalking, stepModels } from './figureModels.js'
 import { FX_DELAY_MS } from '../board/attackFx.js'
 import { IMPACT, msAt } from './attackFxDraw.js'
@@ -25,6 +26,7 @@ const FLOOR_H = 0.16
 const ROCK_H = 0.55
 const WALL_H = 0.55
 const STEP_MS = 180
+const TORCH_LIGHTS = 6
 
 const seeded = (n) => {
   const s = Math.sin(n * 12.9898) * 43758.5453
@@ -77,7 +79,8 @@ function makeStage(mount, calm) {
   controls.maxDistance = 60
   controls.screenSpacePanning = false
 
-  scene.add(new THREE.HemisphereLight('#8a9bc4', '#2a1d12', 0.9))
+  const hemi = new THREE.HemisphereLight('#8a9bc4', '#2a1d12', 0.9)
+  scene.add(hemi)
   const moon = new THREE.DirectionalLight('#c9d4ff', 0.55)
   moon.castShadow = !calm
   moon.shadow.mapSize.set(2048, 2048)
@@ -86,6 +89,10 @@ function makeStage(mount, calm) {
   // light later would make every material rebuild, a stutter right at the hit.
   const flash = new THREE.PointLight('#ffffff', 0, 7, 1.5)
   scene.add(flash)
+  // The wall torches' real lights, big screen only, made now for the same reason; the
+  // dungeon moves them to its torches (dungeonLook3d.js).
+  const torchLights = calm ? [] : Array.from({ length: TORCH_LIGHTS }, () => new THREE.PointLight('#ff9a4a', 0, 4.5, 1.6))
+  scene.add(...torchLights)
 
   const blob = canvasTexture(64, 64, (g, w) => {
     const r = g.createRadialGradient(w / 2, w / 2, 2, w / 2, w / 2, w / 2)
@@ -99,13 +106,13 @@ function makeStage(mount, calm) {
   const figures = new THREE.Group()
   const lit = new THREE.Group()
   scene.add(dungeon, extras, lit, figures)
-  return { renderer, scene, camera, controls, moon, flash, blob, dungeon, extras, lit, figures, nodes: new Map(), textures: new Map(), tweens: [], animators: [], center: new THREE.Vector3() }
+  return { renderer, scene, camera, controls, hemi, moon, flash, torchLights, blob, dungeon, extras, lit, figures, nodes: new Map(), textures: new Map(), tweens: [], animators: [], center: new THREE.Vector3() }
 }
 
 const disposeTree = (root) =>
   root.traverse((o) => {
     o.geometry?.dispose()
-    for (const m of [].concat(o.material ?? [])) m.dispose()
+    for (const m of [].concat(o.material ?? [])) if (!m.userData.shared) m.dispose()
   })
 
 // The stone, rock, walls, open edges and stairs, rebuilt when a tile goes down or a door opens.
@@ -127,29 +134,42 @@ function buildDungeon(stage, layout) {
   const matrix = new THREE.Matrix4()
   const color = new THREE.Color()
 
-  const floorMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.95, FLOOR_H, 0.95), new THREE.MeshStandardMaterial({ roughness: 0.92 }), Math.max(floors.length, 1))
-  floorMesh.count = floors.length
-  floors.forEach((s, i) => {
-    const [x, z] = at(s.x, s.y)
-    // Stones sit a hair lower or higher, but never above 0, so marks on the floor always show.
-    matrix.makeTranslation(x, -FLOOR_H / 2 - seeded(s.x * 7 + s.y) * 0.02, z)
-    floorMesh.setMatrixAt(i, matrix)
-    const v = 0.34 + seeded(s.x * 31 + s.y * 17) * 0.1
-    floorMesh.setColorAt(i, s.scorch ? color.setRGB(0.13, 0.09, 0.08) : color.setRGB(v * 1.05, v, v * 0.92))
-  })
-  floorMesh.receiveShadow = true
-  floorMesh.userData.squares = floors.map((f) => [f.x, f.y])
-  stage.floor = floorMesh
-  dungeon.add(floorMesh)
+  const stone = stage.look === 'plain' ? null : stoneMaterials()
+  stage.floors = []
+  const quarter = new THREE.Quaternion()
+  const up = new THREE.Vector3(0, 1, 0)
+  const one = new THREE.Vector3(1, 1, 1)
+  // Carved flagstones: a few stone patterns, each square turned a random quarter-turn, one
+  // instanced block per pattern. Plain: one grey block for all.
+  const looks = stone ? FLOOR_LOOKS : 1
+  for (let look = 0; look < looks; look++) {
+    const mine = floors.filter((s) => (stone ? Math.floor(seeded(s.x * 11 + s.y * 23) * looks) === look : true))
+    const mat = stone ? stone.floors[look] : new THREE.MeshStandardMaterial({ roughness: 0.92 })
+    const floorMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.98, FLOOR_H, 0.98), mat, Math.max(mine.length, 1))
+    floorMesh.count = mine.length
+    mine.forEach((s, i) => {
+      const [x, z] = at(s.x, s.y)
+      // Stones sit a hair lower or higher, but never above 0, so marks on the floor always show.
+      quarter.setFromAxisAngle(up, Math.floor(seeded(s.x * 5 + s.y * 9) * 4) * (Math.PI / 2))
+      matrix.compose(new THREE.Vector3(x, -FLOOR_H / 2 - seeded(s.x * 7 + s.y) * 0.02, z), quarter, one)
+      floorMesh.setMatrixAt(i, matrix)
+      const v = stone ? 0.82 + seeded(s.x * 31 + s.y * 17) * 0.3 : 0.34 + seeded(s.x * 31 + s.y * 17) * 0.1
+      floorMesh.setColorAt(i, s.scorch ? color.setRGB(0.3, 0.2, 0.17) : color.setRGB(v * 1.03, v, v * 0.95))
+    })
+    floorMesh.receiveShadow = true
+    floorMesh.userData.floorSquares = mine.map((f) => [f.x, f.y])
+    stage.floors.push(floorMesh)
+    dungeon.add(floorMesh)
+  }
 
-  const rockMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, ROCK_H, 1), new THREE.MeshStandardMaterial({ roughness: 1 }), Math.max(rocks.length, 1))
+  const rockMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, ROCK_H, 1), stone ? stone.rock : new THREE.MeshStandardMaterial({ roughness: 1 }), Math.max(rocks.length, 1))
   rockMesh.count = rocks.length
   rocks.forEach((s, i) => {
     const [x, z] = at(s.x, s.y)
     matrix.makeTranslation(x, ROCK_H / 2 - 0.1, z)
     rockMesh.setMatrixAt(i, matrix)
-    const v = 0.16 + seeded(s.x * 13 + s.y * 3) * 0.06
-    rockMesh.setColorAt(i, color.setRGB(v * 1.1, v, v * 0.9))
+    const v = stone ? 0.75 + seeded(s.x * 13 + s.y * 3) * 0.3 : 0.16 + seeded(s.x * 13 + s.y * 3) * 0.06
+    rockMesh.setColorAt(i, color.setRGB(v * 1.05, v, v * 0.95))
   })
   rockMesh.castShadow = true
   rockMesh.receiveShadow = true
@@ -166,10 +186,13 @@ function buildDungeon(stage, layout) {
   }
 
   // Walls stand on the edge between squares (or round the outside of the dungeon).
-  const wallMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, WALL_H, 0.12), new THREE.MeshStandardMaterial({ color: '#3a322c', roughness: 1 }), Math.max(layout.walls.length, 1))
+  const wallMesh = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(1, WALL_H, stone ? 0.16 : 0.12),
+    stone ? stone.wall : new THREE.MeshStandardMaterial({ color: '#3a322c', roughness: 1 }),
+    Math.max(layout.walls.length, 1),
+  )
   wallMesh.count = layout.walls.length
   const turn = new THREE.Quaternion()
-  const up = new THREE.Vector3(0, 1, 0)
   layout.walls.forEach((w, i) => {
     const [x, z] = at(w.x, w.y)
     const dx = w.side === 'E' ? 0.5 : w.side === 'W' ? -0.5 : 0
@@ -224,7 +247,7 @@ function buildDungeon(stage, layout) {
     for (let i = 0; i < steps; i++) {
       const step = new THREE.Mesh(
         new THREE.BoxGeometry(w - 0.06, 0.08, h / steps),
-        new THREE.MeshStandardMaterial({ color: new THREE.Color().setScalar(0.38 - i * 0.06), roughness: 0.9 }),
+        stone ? stepMaterial(stone.steps, 1 - i * 0.17) : new THREE.MeshStandardMaterial({ color: new THREE.Color().setScalar(0.38 - i * 0.06), roughness: 0.9 }),
       )
       step.position.set(cxs, -0.04 - i * 0.06, czs - h / 2 + (i + 0.5) * (h / steps))
       step.receiveShadow = true
@@ -232,11 +255,34 @@ function buildDungeon(stage, layout) {
     }
   }
 
+  // Torches on the walls (and bones and rubble), with the board's darker torchlit air.
+  // Torch lights left over (a small dungeon) stay dark.
+  for (const light of stage.torchLights) light.intensity = 0
+  stage.dungeonAnimators = stone && stage.look !== 'stone' ? dressDungeon(dungeon, layout, at, { lights: stage.torchLights, wallH: WALL_H, props: stage.look === 'full' }) : []
+  setAir(stage, layout, stone && stage.look !== 'stone')
+
   // Shadows cover the whole dungeon.
   const span = Math.max(bounds.w, bounds.h) / 2 + 2
   Object.assign(stage.moon.shadow.camera, { left: -span, right: span, top: span, bottom: -span, near: 1, far: span * 4 })
   stage.moon.shadow.camera.updateProjectionMatrix()
   stage.moon.position.set(-span * 0.6, span * 1.6, span * 0.5)
+}
+
+// A stone step, darker the deeper it goes.
+function stepMaterial(base, shade) {
+  const mat = base.clone()
+  mat.userData = {}
+  mat.color.setScalar(shade)
+  return mat
+}
+
+// Torchlit: darker blue-black air that swallows the far edges, so the torches carry the light.
+function setAir(stage, layout, torchlit) {
+  const span = Math.max(layout.bounds.w, layout.bounds.h)
+  stage.hemi.intensity = torchlit ? 0.55 : 0.9
+  stage.moon.intensity = torchlit ? 0.35 : 0.55
+  stage.scene.fog = torchlit ? new THREE.Fog('#07060a', span * 1.6, span * 3.5) : null
+  stage.scene.background.set(torchlit ? '#07060a' : '#0c0a09')
 }
 
 function texture(stage, url, figure) {
@@ -680,7 +726,7 @@ function tapHit(stage, event) {
       if (o.userData.markerId) return { marker: o.userData.markerId }
       if (o.userData.itemId) return { item: o.userData.itemId }
       if (o.userData.square) return { square: o.userData.square }
-      if (o === stage.floor && hit.instanceId !== undefined) return { square: stage.floor.userData.squares[hit.instanceId] }
+      if (o.userData.floorSquares && hit.instanceId !== undefined) return { square: o.userData.floorSquares[hit.instanceId] }
     }
   }
   return {}
@@ -710,7 +756,7 @@ function fallDelay(moment, at) {
 
 // `taps` (a board that moves figures): { targets, selected, onSquare, onFigure, onItem,
 // onMarker, onBackground }, the same handlers the flat board uses. `calm`: see makeStage.
-export default function Board3D({ state, onFail, onSlow, taps = null, calm = false }) {
+export default function Board3D({ state, onFail, onSlow, taps = null, calm = false, look = 'full' }) {
   const mountRef = useRef(null)
   const stageRef = useRef(null)
   const tapsRef = useRef(taps)
@@ -743,6 +789,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
     }
     stage.still = stillWanted()
     stage.calm = calm
+    stage.look = look
     stage.heroModels = heroModels
     // Torch flicker, lava and fog keep the board drawing all the time: only on the big screen.
     stage.ambient = !stage.still && !calm
@@ -769,6 +816,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
       })
       if (stage.ambient) {
         for (const animate of stage.animators) animate(now)
+        for (const animate of stage.dungeonAnimators ?? []) animate(now)
         for (const node of stage.nodes.values()) {
           const torch = node.userData.torch
           if (torch) torch.intensity = 6 + Math.sin(now / 90 + node.position.x) * 0.6 + Math.sin(now / 37 + node.position.z) * 0.4
@@ -783,7 +831,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
       }
       stage.renderer.render(stage.scene, stage.camera)
       const torches = stage.ambient && [...stage.nodes.values()].some((n) => n.userData.torch?.visible)
-      const keepGoing = models || stage.tweens.length > 0 || torches || (stage.ambient && stage.animators.length > 0)
+      const keepGoing = models || stage.tweens.length > 0 || torches || (stage.ambient && (stage.animators.length > 0 || stage.dungeonAnimators?.length > 0))
       last = now
       if (keepGoing) stage.render()
     }
