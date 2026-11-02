@@ -18,6 +18,7 @@ describe('3D figures page', () => {
       'Kobold_Dragonshield',
       'Kobold_Dragonlord',
       'Duergar_Captain',
+      'Orc_Storm_Shaman',
       'Human_Cultist',
       'Duergar_Guard',
       'Snake',

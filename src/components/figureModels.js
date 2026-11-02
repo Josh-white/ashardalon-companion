@@ -18,6 +18,7 @@ import LegionDevil from '../models/Legion_Devil.glb?url'
 import Grell from '../models/Grell.glb?url'
 import Kobold_Dragonlord from '../models/Kobold_Dragonlord.glb?url'
 import Duergar_Captain from '../models/Duergar_Captain.glb?url'
+import Orc_Storm_Shaman from '../models/Orc_Storm_Shaman.glb?url'
 import Gibbering_Mouther from '../models/Gibbering_Mouther.glb?url'
 
 // The 3D figures on the 3D board: the heroes are KayKit Adventurers (CC0, src/models, trimmed
@@ -46,6 +47,7 @@ const FILES = {
   Grell,
   Kobold_Dragonlord,
   Duergar_Captain,
+  Orc_Storm_Shaman,
   Gibbering_Mouther,
 }
 // The figures are about 2.5 units tall: this makes them one square tall.
@@ -68,6 +70,8 @@ const MOVES = {
   down: 'Death_A_Pose',
   cheer: 'Cheer',
 }
+// Moves a figure may not have: it attacks instead.
+const RANGED = new Set(['cast', 'shoot', 'throw'])
 // Weapons held in both hands use the two-handed moves.
 const TWO_HANDED = /^2H_/
 
@@ -116,7 +120,10 @@ export function attachModel(node, look, color, ready) {
       const twoHanded = look.gear.some((g) => TWO_HANDED.test(g))
       const action = (move) => {
         const name = MOVES[twoHanded && MOVES[`${move}2`] ? `${move}2` : move]
-        return clips.has(name) ? mixer.clipAction(clips.get(name)) : null
+        if (clips.has(name)) return mixer.clipAction(clips.get(name))
+        // A monster with no spell or shot of its own (a mouther's gibbering, a drake's fire)
+        // lunges with its attack instead of standing still.
+        return RANGED.has(move) && clips.has(MOVES.attack) ? mixer.clipAction(clips.get(MOVES.attack)) : null
       }
       const anim = { mixer, action, clips, state: null, busy: false, cape, paint }
       mixer.addEventListener('finished', (e) => {

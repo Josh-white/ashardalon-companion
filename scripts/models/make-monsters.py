@@ -89,6 +89,8 @@ PALETTE = {
     "flesh_light": "d9aa96",
     "eye_white": "f2eee2",
     "eye_green": "7fbf3a",
+    "storm": "5cc8ff",       # orc storm shaman's lightning
+    "storm_dark": "2b5f8f",
 }
 
 argv = sys.argv
@@ -242,12 +244,16 @@ def build_orc(weapon):
     box("Strap", "leather", "body", (0, 0, 1.12), (0.14, 0.70, 0.95), bevel=0.02, rot=(0, 40, 0))
     box("StrapStud", "iron", "body", (0.04, -0.36, 1.16), (0.08, 0.04, 0.08), bevel=0.015)
 
-    # Left shoulder: an iron pauldron with bone spikes. Right shoulder: a leather pad.
-    sphere("Pauldron", "iron_dark", "body", (0.54, 0, 1.44), 0.28, scale=(1.15, 1.05, 0.72))
-    box("PauldronRim", "iron", "body", (0.56, 0, 1.33), (0.56, 0.56, 0.06), bevel=0.02)
-    for i, (dx, dy) in enumerate(((0.0, -0.12), (0.08, 0.05), (-0.06, 0.14))):
-        cone(f"Spike{i}", "bone", "body", (0.58 + dx, dy, 1.62), 0.06, 0.22, rot=(0, 15, 0), sides=6)
-    box("Pad", "leather", "body", (-0.52, 0, 1.43), (0.36, 0.40, 0.12), bevel=0.04, rot=(0, -12, 0))
+    shaman = weapon == "staff"
+    if shaman:
+        build_shaman_mantle()
+    if not shaman:
+        # Left shoulder: an iron pauldron with bone spikes. Right shoulder: a leather pad.
+        sphere("Pauldron", "iron_dark", "body", (0.54, 0, 1.44), 0.28, scale=(1.15, 1.05, 0.72))
+        box("PauldronRim", "iron", "body", (0.56, 0, 1.33), (0.56, 0.56, 0.06), bevel=0.02)
+        for i, (dx, dy) in enumerate(((0.0, -0.12), (0.08, 0.05), (-0.06, 0.14))):
+            cone(f"Spike{i}", "bone", "body", (0.58 + dx, dy, 1.62), 0.06, 0.22, rot=(0, 15, 0), sides=6)
+        box("Pad", "leather", "body", (-0.52, 0, 1.43), (0.36, 0.40, 0.12), bevel=0.04, rot=(0, -12, 0))
 
     # Arms: shoulder, bracer, fist.
     for side, tag in ((1, "L"), (-1, "R")):
@@ -259,6 +265,8 @@ def build_orc(weapon):
 
     if weapon == "mace":
         build_mace()
+    elif shaman:
+        build_storm_staff()
     else:
         build_bow()
 
@@ -281,10 +289,76 @@ def build_orc(weapon):
              rot=(0, 72 * x, 0), scale=(1, 0.45, 1), sides=6)
         cone(f"Ring.{tag}", "iron", "head", (0.50 * x, hy + 0.02, 1.88), 0.035, 0.03,
              rot=(90, 0, 0), sides=8, tip=0.035)
-        box(f"Paint.{tag}", "red", "head", (0.22 * x, hy - 0.37, 1.80), (0.12, 0.03, 0.035), bevel=0.01,
+        box(f"Paint.{tag}", "storm" if shaman else "red", "head", (0.22 * x, hy - 0.37, 1.80), (0.12, 0.03, 0.035), bevel=0.01,
             rot=(0, 18 * x, 0))
     box("Mohawk", "hair", "head", (0, hy + 0.04, 2.27), (0.12, 0.66, 0.18), bevel=0.05, rot=(-8, 0, 0))
     cone("Topknot", "hair", "head", (0, hy + 0.34, 2.24), 0.07, 0.30, rot=(-60, 0, 0), sides=6)
+    if shaman:
+        build_shaman_headdress(hy)
+
+
+def build_shaman_mantle():
+    """A shaggy fur mantle over both shoulders and a necklace of bones and a blue stone."""
+    for i in range(9):
+        a = DEG(-120 + i * 30)
+        sphere(f"Mantle{i}", "fur_dark" if i % 2 else "fur", "body", (0.50 * math.sin(a), 0.30 * -math.cos(a) + 0.04,
+               1.40 + 0.04 * math.cos(a)), 0.20, scale=(1.1, 1.0, 0.75), segments=10, rings=7)
+    for side in (1, -1):
+        sphere(f"MantleShoulder{side}", "fur", "body", (0.55 * side, 0.02, 1.40), 0.24, scale=(1.05, 1.1, 0.8),
+               segments=10, rings=7)
+    for i in range(7):
+        a = DEG(-45 + i * 15)
+        at = Vector((0.30 * math.sin(a), -0.33 - 0.04 * math.cos(a), 1.32 - 0.12 * math.cos(a)))
+        cone(f"NeckBone{i}", "bone", "body", at, 0.035, 0.12, rot=(180, 0, 0), sides=5)
+    sphere("NeckStone", "storm", "body", (0, -0.39, 1.16), 0.06, scale=(1, 0.6, 1.2), segments=8, rings=6)
+
+
+def build_storm_staff():
+    """A tall gnarled staff held upright in the right fist, a crackling blue orb caught in a
+    forked top, feathers and a lightning bolt charm hanging from it."""
+    up = Vector((0, -0.15, 1)).normalized()
+    tilt = (-math.degrees(math.atan2(0.15, 1)), 0, 0)  # turns +Z to point along `up`
+    for i, (length, r) in enumerate(((0.62, 0.055), (0.60, 0.05), (0.52, 0.045))):
+        at = FIST_R + up * (-0.20 + sum(x for x, _ in ((0.62, 0), (0.60, 0), (0.52, 0))[:i]) + length / 2)
+        side = 0.03 * (1 if i % 2 else -1)
+        cone(f"StaffPart{i}", "wood", "arm.R", at + Vector((side, 0, 0)), r, length + 0.04,
+             rot=(tilt[0], 6 * (1 if i % 2 else -1), 0), sides=6, tip=r * 0.9)
+    box("StaffWrap", "leather_dark", "arm.R", FIST_R, (0.13, 0.13, 0.22), bevel=0.04, rot=tilt)
+    top = FIST_R + up * 1.56
+    orb = top + up * 0.20
+    for side in (1, -1):
+        cone(f"StaffFork{side}", "wood", "arm.R", top + Vector((0.10 * side, 0, 0.12)), 0.04, 0.32,
+             rot=(tilt[0], -22 * side, 0), sides=5)
+    sphere("StormOrb", "storm", "arm.R", orb, 0.15, segments=12, rings=8)
+    sphere("StormCore", "eye_white", "arm.R", orb + Vector((0, -0.08, 0.02)), 0.06, scale=(1, 0.6, 1), segments=8,
+           rings=6)
+    # A zigzag lightning charm and two feathers under the fork.
+    for i, (dx, dz, a) in enumerate(((0.0, -0.10, 30), (0.04, -0.20, -30), (0.0, -0.30, 30))):
+        box(f"Bolt{i}", "storm", "arm.R", top + Vector((0.14 + dx, -0.04, dz)), (0.03, 0.03, 0.13), bevel=0.008,
+            rot=(0, a, 0))
+    for side in (1, -1):
+        cone(f"StaffFeather{side}", "feather", "arm.R", top + Vector((-0.12 * side - 0.02, 0.02, -0.18)), 0.05,
+             0.26, rot=(180, 15 * side, 0), scale=(1, 0.3, 1), sides=5)
+
+
+def build_shaman_headdress(hy):
+    """A beast skull worn over the brow, with curling horns, and a fan of feathers behind."""
+    sphere("SkullCap", "bone", "head", (0, hy - 0.10, 2.22), 0.24, scale=(1.1, 1.1, 0.55), segments=12, rings=8)
+    box("SkullSnout", "bone", "head", (0, hy - 0.40, 2.14), (0.18, 0.22, 0.12), bevel=0.05)
+    for side in (1, -1):
+        sphere(f"SkullSocket{side}", "black", "head", (0.09 * side, hy - 0.30, 2.22), 0.045, scale=(1, 0.6, 1),
+               segments=8, rings=6)
+        cone(f"HornA{side}", "bone", "head", (0.28 * side, hy - 0.05, 2.30), 0.07, 0.22, rot=(0, 60 * side, 0),
+             sides=7, tip=0.055)
+        cone(f"HornB{side}", "bone", "head", (0.40 * side, hy + 0.02, 2.42), 0.055, 0.20, rot=(-30, 20 * side, 0),
+             sides=7, tip=0.035)
+        cone(f"HornC{side}", "bone", "head", (0.42 * side, hy + 0.10, 2.56), 0.035, 0.14, rot=(-70, -10 * side, 0),
+             sides=7)
+    for i in range(5):
+        a = DEG(-40 + i * 20)
+        cone(f"Feather{i}", "storm_dark" if i % 2 else "feather", "head",
+             (0.30 * math.sin(a), hy + 0.30, 2.30 + 0.18 * math.cos(a)), 0.06, 0.40,
+             rot=(-25, math.degrees(a), 0), scale=(1, 0.3, 1), sides=5)
 
 
 FIST_R = Vector((-0.65, -0.05, 0.72))
@@ -1135,6 +1209,15 @@ MOVES = [
         (22, {"arm.L": (92, 0, -6), "arm.R": (95, 0, -60), "body": (-6, 25, 0), "head": (0, -22, 0)}),
         (36, {}),
     ]),
+    # Raise the staff high, then thrust it at the foe as the lightning flies.
+    ("Spellcast_Shoot", False, [
+        (0, {}),
+        (10, {"arm.R": (150, 0, 15), "arm.L": (40, 0, -30), "body": (-14, -10, 0), "head": (-14, 0, 0)}),
+        (16, {"arm.R": (95, 0, 0), "arm.L": (60, 0, -10), "body": (14, 10, 0), "head": (6, 0, 0),
+              "hips": {"loc": (0, -0.05, 0)}}),
+        (24, {"arm.R": (85, 0, 0), "arm.L": (50, 0, -10), "body": (10, 8, 0), "hips": {"loc": (0, -0.04, 0)}}),
+        (38, {}),
+    ]),
     ("Hit_A", False, [
         (0, {}),
         (5, {"body": (-18, 0, 6), "head": (-20, 0, 0), "arm.L": (-25, 0, 15), "arm.R": (-25, 0, -15),
@@ -1470,6 +1553,7 @@ MOUTHER_MOVES = [
 MONSTERS = [
     ("orc-smasher", "orc-smasher.glb", lambda: build_orc("mace"), 2.4, ORC_BONES, []),
     ("orc-archer", "orc-archer.glb", lambda: build_orc("bow"), 2.4, ORC_BONES, ["1H_Ranged_Shoot"]),
+    ("orc-storm-shaman", "orc-storm-shaman.glb", lambda: build_orc("staff"), 2.2, ORC_BONES, ["Spellcast_Shoot"]),
     ("kobold-dragonshield", "kobold-dragonshield.glb", build_kobold, 1.9, KOBOLD_BONES, []),
     ("kobold-dragonlord", "kobold-dragonlord.glb", lambda: build_kobold(lord=True), 1.85, KOBOLD_BONES, []),
     ("human-cultist", "human-cultist.glb", build_cultist, 2.5, CULTIST_BONES, []),
@@ -1482,7 +1566,7 @@ MONSTERS = [
     ("gibbering-mouther", "gibbering-mouther.glb", build_mouther, 1.75, MOUTHER_BONES, [], MOUTHER_MOVES),
 ]
 # Moves only some figures have.
-EXTRA_MOVES = {"1H_Ranged_Shoot"}
+EXTRA_MOVES = {"1H_Ranged_Shoot", "Spellcast_Shoot"}
 
 
 def make(label, file_name, build, height, bones, extra, own_moves=None):
