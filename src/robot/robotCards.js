@@ -34,6 +34,8 @@ const MONSTERS = [
 
 // Squares: "." floor, "#" wall, "S" scorch mark. Exits: "o" open, "x" wall, read left to
 // right (north, south) and top to bottom (east, west).
+// Robot tile 2's north opening and robot tile 4's east side have door spots.
+const DOOR_SPOTS = { 1: [[1, 0], [2, 0]], 3: [[3, 1], [3, 2]] }
 const TILES = [
   {
     id: 'start', name: 'Start', kind: 'start',
@@ -55,6 +57,8 @@ const TILES = [
   ].map(([a, b, c, d, exits], i) => ({
     id: `robot-tile-${i + 1}`, name: `Robot tile ${i + 1}`, kind: 'regular', triangle: i % 2 ? 'white' : 'black',
     rows: [a, b, c, d], exits,
+    // Door spots (the pale slabs) on two white-triangle tiles, for the made-up door adventure.
+    ...(DOOR_SPOTS[i] ? { features: [{ type: 'door', at: DOOR_SPOTS[i] }] } : {}),
   })),
   // A made-up chamber: an Entrance and four chamber tiles, for the made-up clans campaign.
   {
@@ -209,9 +213,22 @@ const BOONS = [
 ]
 const TREASURE_TOKENS = [{ gold: 50, count: 4 }, { gold: 100, count: 2 }, { treasure: true, count: 2 }]
 
+// A made-up adventure with the Closed Door rules, so the computer heroes have doors to open.
+const DOORS = {
+  id: 'robot-doors',
+  title: 'Robot Doors',
+  players: '1-5',
+  goal: 'Defeat 8 monsters.',
+  blurb: 'Made up for the robot: closed doors on the door spots.',
+  setup: ['Put the Start tile on the table and the heroes next to its stairs.'],
+  story: { start: 'Made up.', victory: 'Made up.' },
+  needs: ['doors'],
+  win: { figures: 8 },
+}
+
 export const ROBOT_CARD_FILE = {
   ...EXAMPLE,
-  adventures: [...EXAMPLE.adventures, CAMPAIGN, CLANS],
+  adventures: [...EXAMPLE.adventures, CAMPAIGN, CLANS, DOORS],
   chambers: CHAMBERS,
   boons: BOONS,
   // Shop prices, so the shop between campaign adventures has something to sell.
