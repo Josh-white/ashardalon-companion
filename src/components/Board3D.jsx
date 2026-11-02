@@ -327,16 +327,17 @@ function buildStairs(stage, layout, exit, stone) {
   stage.dungeon.add(door)
 }
 
-// Torchlit: a darker room, so the torches carry the light. Calm screens (phones, iPads)
+// Torchlit: a dimmer room, so the torches still show. Calm screens (phones, iPads)
 // have no real torch lights and small, often dim screens, so they stay much brighter (JJ:
 // too dark on the phone). No fog: with the camera pulled back to fit a long dungeon on a
 // narrow screen it swallowed the whole board.
 function setAir(stage, torchlit) {
   const calm = stage.calm
-  stage.hemi.intensity = torchlit ? (calm ? 1.25 : 0.6) : 0.9
-  stage.moon.intensity = torchlit ? (calm ? 0.7 : 0.4) : 0.55
+  // JJ (twice): still too dark on the projector and the phone, so both get more fill light.
+  stage.hemi.intensity = torchlit ? (calm ? 2 : 1.4) : 0.9
+  stage.moon.intensity = torchlit ? (calm ? 1 : 0.75) : 0.55
   stage.scene.fog = null
-  stage.renderer.toneMappingExposure = torchlit && calm ? 1.3 : 1
+  stage.renderer.toneMappingExposure = torchlit ? (calm ? 1.9 : 1.5) : 1
   stage.scene.background.set(torchlit ? '#07060a' : '#0c0a09')
 }
 
