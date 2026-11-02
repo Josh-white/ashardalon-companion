@@ -89,6 +89,9 @@ export function normalizeTiles(list, problems) {
     }
     const kind = tile.kind ?? 'regular'
     if (!TILE_KINDS.includes(kind)) return problems.push(`${label} has kind "${kind}"; use one of ${TILE_KINDS.join(', ')}.`)
+    // A drawn tile joins the board by its south side (its triangle edge), so that side
+    // needs an opening, or nobody can walk onto it (only a Start tile is never joined).
+    if (kind !== 'start' && !exits.S.includes('o')) return problems.push(`${label} needs an opening on its south side (exits.S): that's the side that joins the board.`)
     const triangle = tile.triangle ?? null
     if (triangle !== null && !TRIANGLES.includes(triangle)) return problems.push(`${label} has triangle "${triangle}"; use black, white, red or leave it out.`)
     seen.add(tile.id)

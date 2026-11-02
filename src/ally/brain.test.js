@@ -87,6 +87,15 @@ describe('the computer ally', () => {
     expect(allyStep(state, { roll })).toBeNull()
   })
 
+  it("explores when the only monster is somewhere it can't walk to", () => {
+    // The monster stands behind the start tile's wall column: no way through to it.
+    const state = withMonster(start(), [3, 6])
+    const step = allyStep(state, { roll })
+    expect(step.action.type).toBe('MOVE_HERO')
+    expect(step.action.to[1]).toBe(0)
+    expect(step.say).toMatch(/explore/)
+  })
+
   it("answers \"no tile\" when the hero isn't on an edge in the Exploration Phase", () => {
     const state = start()
     const exploring = { ...state, turn: { ...state.turn, phase: 1 } }

@@ -768,7 +768,10 @@ export function bestMove(state, hero) {
   const trap = toTrap(state, hero)
   if (trap) return trap
 
-  if (foeSquares.length > 0) {
+  // Monsters the hero can't walk to (behind a wall, a closed door or a Cave In) don't hold
+  // it up: with none it can reach, it explores instead of waiting for them for ever.
+  const reachableFoes = foeSquares.filter((sq) => fromHere.has(key(sq)))
+  if (reachableFoes.length > 0 || (foeSquares.length > 0 && attackOptions(state, hero).length > 0)) {
     // Already attacked: stay where it is rather than walk away from the fight.
     if (attackGone(state, hero)) return null
     if (attackOptions(state, hero).length > 0) return null
@@ -782,11 +785,11 @@ export function bestMove(state, hero) {
     }
     if (best) return { to: parse(best.k), say: `${hero.name} moves in to attack.` }
     // The monster nearest the party, not one off on its own somewhere.
-    const foe = groupedGoal(state, hero, foeSquares.map((sq) => [sq]))
-    return walkToward(state, hero, foe ?? foeSquares, `${hero.name} heads toward the monsters.`)
+    const foe = groupedGoal(state, hero, reachableFoes.map((sq) => [sq]))
+    return walkToward(state, hero, foe ?? reachableFoes, `${hero.name} heads toward the monsters.`)
   }
 
-  // No monsters: pick up a Treasure token lying about, then explore. A hero on an edge
+  // No monsters it can reach: pick up a Treasure token lying about, then explore. A hero on an edge
   // already stays to draw the tile.
   const loot = looseTreasure(state)
   if (loot.length > 0 && !treasureInReach(state, hero)) {
