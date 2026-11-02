@@ -116,3 +116,14 @@ describe('attackNumbers (the attack box sum and the roll use the same numbers)',
     expect(attackNumbers(hero, { power, distance: 'far' }).bonus).toBe(5)
   })
 })
+
+describe('Critical Hit at level 2 (house rule)', () => {
+  it('adds +1 damage on a natural 20 for level 2 heroes only', async () => {
+    const { attackNumbers } = await import('../state/game.js')
+    const power = { id: 'p', name: 'Cleave', type: 'at-will', card: { attack: '+6', damage: '1' } }
+    expect(attackNumbers(vistra({ level: 1 }), { power, distance: 'adjacent' }).crits).toEqual([])
+    const levelTwo = attackNumbers(vistra({ level: 2, items: [vorpal] }), { power, distance: 'adjacent' })
+    expect(levelTwo.crits).toEqual([18, 20])
+    expect(levelTwo.parts.crits.at(-1)).toEqual({ label: 'Critical Hit', from: 20 })
+  })
+})
