@@ -93,7 +93,7 @@ describe('fan target rules', () => {
   })
 
   it('a Longbow shot skips monsters on the hero\'s own tile', () => {
-    const oak = card('Longbow: Oak Arrow', 'at-will', '+11', '1', { range: 'within2', targetOnly: 'notOwnTile' })
+    const oak = card('Longbow: Oak Arrow', 'at-will', '+11', '2', { range: 'within2', targetOnly: 'notOwnTile' })
     let state = start([[fan(3, 'ranger'), [oak]]])
     state = place(state, hero(state, 0).id, [0, 6])
     // m1 next to her on her half of the Start tile, m2 on the other half.
@@ -319,5 +319,117 @@ describe('Whirling Mantis Step (a fan Monk)', () => {
     state = withMonsters(state, [[1, 2], [1, 4]], 3)
     const step = allyStep(state, { roll })
     expect(step.action).toMatchObject({ type: 'START_BOARD_MOVE', powerId: powerId(state, 0, 'Whirling Mantis Step') })
+  })
+})
+
+describe('Hjalmir (a fan Battlemaster)', () => {
+  const BATTLEMASTER = { ...fan(1, 'battlemaster', ['fearless']), powerSlots: ['at-will', 'utility', 'utility', 'daily'] }
+  const improviseCard = card('Improvise', 'utility', '', '', { use: { afterMiss: true, selfHurt: 1, hurt: 1, hurtReach: 'adjacent' }, reusable: true })
+  const comeCard = card('Come and Get It', 'utility', '', '', { use: { board: [{ pick: 'self', to: 'nextToNewMonster' }] } })
+  const lead = card('Follow My Lead', 'daily', '+10', '2', { follower: true, onHit: { status: 'cowardly' } })
+
+  it('Improvise finishes a 1 HP monster right after his own miss', () => {
+    let state = start([[BATTLEMASTER, [jab, improviseCard]]])
+    state = place(state, hero(state, 0).id, [0, 6])
+    state = withMonsters(state, [[0, 5]], 1)
+    state = gameReducer(state, { type: 'HERO_ATTACK', heroId: hero(state, 0).id, powerId: powerId(state, 0, 'Jab'), targets: [{ monsterId: 'm1', roll: 1 }] })
+    const step = allyStep(state, { roll })
+    expect(step.action).toMatchObject({ type: 'USE_POWER', powerId: powerId(state, 0, 'Improvise'), monsterIds: ['m1'] })
+    state = run(state, step)
+    expect(state.monsters).toEqual([])
+    expect(hero(state, 0).hp).toBe(hero(state, 0).maxHp - 1)
+  })
+
+  it("Improvise isn't used on a monster it wouldn't finish", () => {
+    let state = start([[BATTLEMASTER, [jab, improviseCard]]])
+    state = place(state, hero(state, 0).id, [0, 6])
+    state = withMonsters(state, [[0, 5]], 3)
+    state = gameReducer(state, { type: 'HERO_ATTACK', heroId: hero(state, 0).id, powerId: powerId(state, 0, 'Jab'), targets: [{ monsterId: 'm1', roll: 1 }] })
+    expect(allyStep(state, { roll })?.action.type).not.toBe('USE_POWER')
+  })
+
+  it('Fearless: with the attack done he steps next to a monster for next turn', () => {
+    let state = start([[BATTLEMASTER, [jab]]])
+    state = place(state, hero(state, 0).id, [0, 7])
+    state = withMonsters(state, [[0, 4]], 3)
+    state = { ...state, turn: { ...state.turn, attackSpent: 'Jab' } }
+    const step = allyStep(state, { roll })
+    expect(step.action.type).toBe('MOVE_HERO')
+    const [x, y] = step.action.to
+    expect(Math.max(Math.abs(x), Math.abs(y - 4))).toBe(1)
+  })
+
+  it('Come and Get It: jumps next to a new monster by a hurt friend, on a player\'s turn', () => {
+    let state = start([[HERO_TEMPLATES[0], [jab], false], [BATTLEMASTER, [jab, comeCard]]])
+    state = place(state, hero(state, 0).id, [0, 1])
+    state = place(state, hero(state, 1).id, [2, 7])
+    state = { ...state, heroes: state.heroes.map((h, i) => (i === 0 ? { ...h, hp: 2 } : h)) }
+    state = withMonsters(state, [[0, 0]], 3)
+    const step = fanReaction(state, () => 10)
+    expect(step.action).toMatchObject({ type: 'USE_POWER', heroId: hero(state, 1).id, powerId: powerId(state, 1, 'Come and Get It') })
+    state = run(state, step)
+    const move = offTurnMove(state)
+    expect(move.action.type).toBe('BOARD_MOVE')
+    state = run(state, move)
+    const [x, y] = state.board.tokens[hero(state, 1).id]
+    expect(Math.max(Math.abs(x), Math.abs(y))).toBe(1)
+    // Not again for the same monster once he's next to it.
+    expect(fanReaction(state, () => 10)).toBeNull()
+  })
+
+  it('Follow My Lead sends the friend nearest a monster next to it', () => {
+    let state = start([[BATTLEMASTER, [jab, lead]], [HERO_TEMPLATES[0], [jab]]])
+    state = place(state, hero(state, 0).id, [0, 6])
+    state = place(state, hero(state, 1).id, [2, 2])
+    state = withMonsters(state, [[0, 5], [0, 1]], 5)
+    state = gameReducer(state, { type: 'HERO_ATTACK', heroId: hero(state, 0).id, powerId: powerId(state, 0, 'Follow My Lead'), followerId: hero(state, 1).id, targets: [{ monsterId: 'm1', roll: 18 }] })
+    expect(state.turn.boardMove?.tokens).toEqual([hero(state, 1).id])
+    const step = allyStep(state, { roll })
+    expect(step.action).toMatchObject({ type: 'BOARD_MOVE', id: hero(state, 1).id })
+    const [x, y] = step.action.to
+    expect([[0, 5], [0, 1]].some(([mx, my]) => Math.max(Math.abs(x - mx), Math.abs(y - my)) === 1)).toBe(true)
+  })
+})
+
+describe('Savryna (a fan Ranger)', () => {
+  const RANGER = { ...fan(2, 'ranger'), powerSlots: ['at-will', 'at-will', 'utility', 'utility'] }
+  const oak = card('Longbow: Oak Arrow', 'at-will', '+11', '2', { range: 'within2', targetOnly: 'notOwnTile' })
+  const pacify = card('Longbow: Pacifying Shot', 'at-will', '+8', '1', { range: 'within2', targetOnly: 'notOwnTile', onHit: { status: 'pacified' } })
+  const treetop = card('Treetop', 'utility', '', '', { use: { perch: true } })
+  const tracker = card("Tracker's Instinct", 'utility', '', '', { use: { cancelEncounter: true }, uses: 2 })
+
+  it('Pacifies a monster next to a hurt friend rather than plinking it', () => {
+    let state = start([[RANGER, [oak, pacify]], [HERO_TEMPLATES[0], [jab], false]])
+    state = place(state, hero(state, 0).id, [0, 7])
+    state = place(state, hero(state, 1).id, [0, 1])
+    state = withMonsters(state, [[0, 0]], 3)
+    expect(attackOptions(state, hero(state, 0))[0].power.name).toBe('Longbow: Oak Arrow')
+    state = { ...state, heroes: state.heroes.map((h, i) => (i === 1 ? { ...h, hp: 2 } : h)) }
+    expect(attackOptions(state, hero(state, 0))[0].power.name).toBe('Longbow: Pacifying Shot')
+  })
+
+  it('Treetop: a hurt ranger next to a monster climbs out of reach at the end of the Hero Phase', () => {
+    let state = start([[RANGER, [oak, treetop]]])
+    state = place(state, hero(state, 0).id, [0, 6])
+    state = withMonsters(state, [[0, 5]], 3)
+    state = { ...state, heroes: state.heroes.map((h) => ({ ...h, hp: 2 })), turn: { ...state.turn, attackSpent: 'Longbow: Oak Arrow' } }
+    const step = allyStep(state, { roll })
+    expect(step.action).toMatchObject({ type: 'USE_POWER', powerId: powerId(state, 0, 'Treetop') })
+    state = run(state, step)
+    expect(hero(state, 0).tokens.treetop).toBe(true)
+  })
+
+  it("Tracker's Instinct cancels a nasty encounter from a black-triangle tile, for free", () => {
+    let state = start([[HERO_TEMPLATES[0], [jab], false], [RANGER, [oak, tracker]]])
+    const encounter = { cardId: 'pit', heroId: hero(state, 0).id, attacked: false, card: { id: 'pit', name: 'Pit Trap', type: 'trap' } }
+    state = { ...state, encounter }
+    expect(fanReaction(state, () => 10)).toBeNull()
+    state = { ...state, turn: { ...state.turn, triangle: true } }
+    const step = fanReaction(state, () => 10)
+    expect(step.action).toMatchObject({ type: 'USE_POWER', heroId: hero(state, 1).id, powerId: powerId(state, 1, "Tracker's Instinct") })
+    const xp = state.xp
+    state = run(state, step)
+    expect(state.encounter).toBeNull()
+    expect(state.xp).toBe(xp)
   })
 })
