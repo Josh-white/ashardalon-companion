@@ -31,6 +31,7 @@ export function acParts(hero, heroes = [], shield = null) {
     parts.push({ label: caster ? `${caster.name}'s Cleric's Shield` : "Cleric's Shield", value: 2, kind: 'power' })
   }
   if (tokens.shadow) parts.push({ label: 'In the shadows (Shadowphage)', value: SHADOW_AC, kind: 'power' })
+  for (const buff of hero.buffs ?? []) if (buff.ac) parts.push({ label: buff.source, value: buff.ac, kind: 'power' })
   if (tokens.mirrorImage > 0) parts.push({ label: `Mirror Image (${tokens.mirrorImage})`, value: 2 * tokens.mirrorImage, kind: 'power', note: 'A miss pops one.' })
   if (shield?.bonus > 0) {
     parts.push({ label: `On ${shield.guards.map((g) => g.name).join(' and ')}'s tile (Blessed Shield)`, value: shield.bonus, kind: 'item', note: 'Only while you stay on that tile.' })
@@ -74,6 +75,7 @@ export function attackParts(hero) {
       note: reachesFar ? 'Counts instead against a monster within 1 tile.' : 'Only your best item attack bonus counts.',
     })
   }
+  for (const buff of hero.buffs ?? []) if (buff.attack) parts.push({ label: buff.source, value: buff.attack, kind: 'power' })
   parts.push(...curseParts(hero, 'attackPenalty'))
   const damage = items.damage.map((d) => ({ ...d, kind: 'item', note: 'Only against a monster next to you.' }))
   const crits = items.crits.map((c) => ({ label: c.label, value: 1, kind: 'item', from: c.from, note: `Roll ${c.from === 20 ? 'a 20' : `${c.from} or more`}: +1 damage.` }))
