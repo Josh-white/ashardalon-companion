@@ -576,8 +576,11 @@ function syncFigures(stage, figures, art, fallAt) {
     seen.add(f.id)
     const url = f.art ? artUrl(art, f.art) : null
     const look = stage.heroModels && f.model ? f.model : null
+    // Compared by what it says: boardFigures makes a new look object every time the game
+    // changes, and a figure rebuilt then has no moves yet for the attack about to play.
+    const lookKey = look ? JSON.stringify(look) : null
     let node = stage.nodes.get(f.id)
-    if (node && (node.userData.url !== url || node.userData.look !== look)) {
+    if (node && (node.userData.url !== url || node.userData.lookKey !== lookKey)) {
       stage.figures.remove(node)
       forget(node)
       stage.nodes.delete(f.id)
@@ -589,6 +592,7 @@ function syncFigures(stage, figures, art, fallAt) {
       node = makeStandee(stage, f, url)
       node.position.copy(to)
       node.userData.look = look
+      node.userData.lookKey = lookKey
       stage.figures.add(node)
       stage.nodes.set(f.id, node)
       if (look) {
@@ -746,6 +750,38 @@ function heroModelsWanted() {
   }
 }
 
+// What one finger (or the left mouse button) does when it drags the 3D board, per screen:
+// 'turn' the camera around the dungeon, or 'move' (slide) the board like the flat one.
+// Two fingers or the right button always do the other one.
+const DRAG_KEY = 'ashardalon-board3d-drag'
+function dragWanted() {
+  try {
+    return localStorage.getItem(DRAG_KEY) === 'move' ? 'move' : 'turn'
+  } catch {
+    return 'turn'
+  }
+}
+function setDragMode(controls, drag) {
+  const move = drag === 'move'
+  controls.mouseButtons = { LEFT: move ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: move ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN }
+  controls.touches = { ONE: move ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE, TWO: move ? THREE.TOUCH.DOLLY_ROTATE : THREE.TOUCH.DOLLY_PAN }
+}
+
+// Sliding the board stops with the dungeon still in view: the point the camera looks at
+// stays over the dungeon (plus a square or two), and the camera comes along with it.
+function keepOnBoard(stage) {
+  const b = stage.bounds
+  if (!b) return
+  const t = stage.controls.target
+  const x = Math.max(-b.w / 2 - 1, Math.min(b.w / 2 + 1, t.x))
+  const z = Math.max(-b.h / 2 - 1, Math.min(b.h / 2 + 1, t.z))
+  if (x === t.x && z === t.z && t.y === 0) return
+  stage.camera.position.x += x - t.x
+  stage.camera.position.z += z - t.z
+  stage.camera.position.y -= t.y
+  t.set(x, 0, z)
+}
+
 // A hero downed by an attack falls when the animation's blow lands, not when the die is
 // rolled (the board already knows they're at 0 HP by then). Ms from now, 0 for at once.
 function fallDelay(moment, at) {
@@ -764,6 +800,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
   const art = useArt()
   const [ready, setReady] = useState(false)
   const [heroModels, setHeroModels] = useState(heroModelsWanted)
+  const [drag, setDrag] = useState(dragWanted)
   const board = state.board
   // Rebuilt only when the dungeon itself changes (a tile, a door), not every time a figure moves.
   const layoutKey = board ? `${board.tiles.map((t) => t.uid).join()}|${(board.doors ?? []).map((d) => d.id).join()}` : ''
@@ -849,7 +886,10 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
     stage.resize = resize
     const observer = new ResizeObserver(resize)
     observer.observe(mount)
-    stage.controls.addEventListener('change', stage.render)
+    stage.controls.addEventListener('change', () => {
+      keepOnBoard(stage)
+      stage.render()
+    })
 
     // A tap (not a drag) on the board goes to the same handlers as the flat board's.
     const canvas = stage.renderer.domElement
@@ -900,6 +940,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
       forget(node)
     }
     stage.nodes.clear()
+    stage.bounds = layout.bounds
     stage.resize()
     fitCamera(stage, layout.bounds, stage.camera.aspect)
     stage.render()
@@ -961,6 +1002,20 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, healsKey])
 
+  useEffect(() => {
+    if (ready && stageRef.current) setDragMode(stageRef.current.controls, drag)
+  }, [ready, drag])
+
+  const switchDrag = () => {
+    const next = drag === 'move' ? 'turn' : 'move'
+    setDrag(next)
+    try {
+      localStorage.setItem(DRAG_KEY, next)
+    } catch {
+      // Private browsing: it just isn't remembered.
+    }
+  }
+
   const switchFigures = () => {
     const on = !heroModels
     setHeroModels(on)
@@ -985,6 +1040,15 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
       <div className="absolute right-2 top-2 flex gap-2">
         <button type="button" onClick={switchFigures} aria-pressed={heroModels} className={cornerButton(calm)}>
           {heroModels ? '🧍 Figures: 3D' : '🪪 Figures: tokens'}
+        </button>
+        <button
+          type="button"
+          onClick={switchDrag}
+          aria-pressed={drag === 'move'}
+          title={drag === 'move' ? 'Dragging slides the board. Two fingers or right-drag turn it.' : 'Dragging turns the board. Two fingers or right-drag slide it.'}
+          className={cornerButton(calm)}
+        >
+          {drag === 'move' ? '✋ Drag: move' : '🔄 Drag: turn'}
         </button>
         <button type="button" onClick={fit} className={cornerButton(calm)}>
           Fit
