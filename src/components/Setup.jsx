@@ -100,6 +100,7 @@ function BoardChoice({ state, dispatch, big = false }) {
 // The claim's power slots: a campaign hero who levelled up has the cards each level added.
 const claimSlots = (claim) => {
   const template = templateFor(claim.heroKey)
+  if (!template) return claim.picks.map(() => 'daily')
   const slots = levelSlots(template, claim.picks.length - powerSlotsFor(template).length + 1)
   return claim.picks.map((_, i) => slots[i] ?? 'daily')
 }
@@ -148,10 +149,26 @@ export function newToHero(played, name, heroKey) {
   return !heroesPlayed(played, name).includes(heroKey)
 }
 
-function MyHero({ state, claim, cards, deviceId, dispatch, solo = false, records = null, played = null, voice = null }) {
+// A hero from cards.json (a fan hero) is unknown until this screen has loaded the cards.
+export function MyHero(props) {
+  if (templateFor(props.claim.heroKey)) return <MyHeroCard {...props} />
+  return (
+    <section className="rounded-2xl border border-zinc-800 p-4 text-zinc-300">
+      <p>Loading heroes…</p>
+      <p className="mt-1 text-sm text-zinc-500">
+        Stuck here?{' '}
+        <button type="button" className="underline" onClick={() => window.location.reload()}>
+          Reload this screen
+        </button>
+      </p>
+    </section>
+  )
+}
+
+function MyHeroCard({ state, claim, cards, deviceId, dispatch, solo = false, records = null, played = null, voice = null }) {
   const [showPowers, setShowPowers] = useState(!solo || !powersChosen(claim, cards.powers))
   const template = templateFor(claim.heroKey)
-  const color = HERO_COLORS[template.color]
+  const color = HERO_COLORS[template.color] ?? HERO_COLORS.sky
   const slots = claimSlots(claim)
   const level = campaignHero(state, template.key)?.level ?? 1
   const abilities = cards.abilities.filter((a) => a.hero === template.key && a.level <= level)
@@ -571,7 +588,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
             : tooMany
               ? `Too many heroes: ${limitText} Free ${lobby.length - limit === 1 ? 'one hero' : `${lobby.length - limit} heroes`} or pick another adventure.`
             : ready
-              ? `Everyone's ready! Turn order: ${lobby.map((c) => templateFor(c.heroKey).name).join(', ')}.`
+              ? `Everyone's ready! Turn order: ${lobby.map((c) => templateFor(c.heroKey)?.name ?? c.heroKey).join(', ')}.`
               : state.campaign
                 ? `Waiting for ${heroChoices.map((t) => t.name).join(', ')} to be ready.`
                 : 'Waiting for every hero to be ready.'}
