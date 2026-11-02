@@ -19,7 +19,9 @@
 #   - not drafts, not ones with the label "skip-test-copy", and not ones whose
 #     GitHub checks failed (they'd fail the build here too).
 #
-# To hold the test copy on what it has (say, to try one branch by hand):
+# Threads and people shouldn't deploy to the test copy by hand any more: two builds at
+# once clash over the container. To hold the test copy on what it has (say, to try
+# one branch by hand):
 #   touch .git/auto-test-hold      and to let it carry on:  rm .git/auto-test-hold
 #
 # The game picker's version line shows what's on: "Version 1a2b3c4 + PRs 227, 228".
@@ -142,6 +144,25 @@ if [ -n "$on" ]; then
   version="$version + PR$( [ "$(echo "$on" | wc -w)" -gt 1 ] && echo s) $(echo "$on" | sed 's/ /, /g')"
 fi
 
+# Rebuild and start. When something else (a deploy by hand) left a container with the
+# test copy's name in the way, it's removed and the start tried once more. The saved
+# games live in the volume, so removing the container loses nothing.
+deploy() {
+  out=.git/auto-test-compose.log
+  if APP_VERSION=$1 docker compose up -d --build >"$out" 2>&1; then
+    cat "$out"
+    return 0
+  fi
+  cat "$out"
+  if grep -q 'is already in use' "$out"; then
+    log "another container is using the name $CONTAINER, removing it and trying again."
+    docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+    APP_VERSION=$1 docker compose up -d --build
+    return
+  fi
+  return 1
+}
+
 healthy() {
   tries=0
   while [ $tries -lt 30 ]; do
@@ -155,7 +176,7 @@ healthy() {
 }
 
 printf '%s\n' "$wanted" >"$state_file"
-if APP_VERSION=$version docker compose up -d --build && healthy; then
+if deploy "$version" && healthy; then
   printf '%s\n' "$version" >.git/auto-test-version
   log "done, now on $version.$( [ -n "$left_out" ] && echo " Left out: PR $(echo "$left_out" | sed 's/ /, PR /g').")"
   exit 0
@@ -166,7 +187,7 @@ fi
 log "$version didn't build or start (a failing test stops the build), going back to $(git rev-parse --short "$previous")."
 git reset -q --hard "$previous"
 old_version=$(cat .git/auto-test-version 2>/dev/null || git rev-parse --short HEAD)
-if APP_VERSION=$old_version docker compose up -d --build && healthy; then
+if deploy "$old_version" && healthy; then
   log "back on the version that worked. Will try again when main or a pull request changes."
 else
   log "the old version didn't start either. Check 'docker compose logs'."

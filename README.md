@@ -196,6 +196,7 @@ Open `http://piserver.local:8082`. Every screen shows a **Test copy** banner. To
 - The game picker's version line shows what's on, like `Version 1a2b3c4 + PRs 227, 228`.
 - To hold the test copy still (to try one branch by hand): `touch ~/ashardalon-test/.git/auto-test-hold`. To let it carry on: `rm ~/ashardalon-test/.git/auto-test-hold`.
 - The card files, art and sounds in `cards/` aren't in git, so the test copy keeps its own.
+- Don't rebuild the test copy by hand while this runs: two builds at once clash over the container. For a rebuild by hand (say, after changing cards), wait for the script's lock: `cd ~/ashardalon-test && flock .git/auto-test.lock docker compose up -d --build`.
 
 To run it every 5 minutes:
 
