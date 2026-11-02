@@ -584,6 +584,26 @@ describe('the nightly robot check', () => {
   })
 })
 
+describe('the auto-update status', () => {
+  it('hands the family the last result and when it last ran, or says there is none', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ashardalon-'))
+    const server = await startServer({ port: 0, saveFile: join(dir, 'game.json'), staticDir: dir, cardsFile: join(dir, 'cards.json'), warmNarrator: false })
+    try {
+      const get = async () => (await fetch(`http://localhost:${server.port}/auto-update.json`)).json()
+      expect(await get()).toEqual({ none: true })
+      writeFileSync(join(dir, 'auto-update.json'), JSON.stringify({ ok: false, line: 'The new version failed.', detail: 'FAIL x' }))
+      writeFileSync(join(dir, 'auto-update.checked'), '')
+      const status = await get()
+      expect(status.ok).toBe(false)
+      expect(status.detail).toBe('FAIL x')
+      expect(typeof status.checkedAt).toBe('string')
+    } finally {
+      await server.close()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('card fixes', () => {
   let dir
   let server

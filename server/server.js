@@ -113,6 +113,25 @@ const SOUND_TYPES = { mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', m4a
 // How loud each music track is (integrated LUFS), measured on the Pi by
 // scripts/measure-music.sh into cards/sounds/music-levels.json, so screens can even
 // the tracks out without changing the files.
+// What scripts/auto-update.sh last wrote, plus when it last ran (the .checked file's time).
+// { none: true } on a Pi where it has never run, like the test copy.
+export function autoUpdateStatus(dir) {
+  let status = null
+  let checkedAt = null
+  try {
+    status = JSON.parse(readFileSync(join(dir, 'auto-update.json'), 'utf8'))
+  } catch {
+    // Never updated yet.
+  }
+  try {
+    checkedAt = statSync(join(dir, 'auto-update.checked')).mtime.toISOString()
+  } catch {
+    // Never ran.
+  }
+  if (!status && !checkedAt) return { none: true }
+  return { ...(status ?? {}), checkedAt }
+}
+
 export const MUSIC_LEVELS = 'music-levels.json'
 
 function musicLevels(soundsDir) {
@@ -445,7 +464,7 @@ export function startServer({
     const reading = req.method === 'GET' || req.method === 'HEAD'
     if (path.startsWith('/art/') || path.startsWith('/sound-takes')) return !reading
     if (path === '/ideas') return req.method !== 'POST'
-    return path === '/ideas.json' || path.startsWith('/ideas/') || path === '/friends.json' || path.startsWith('/sign-in-') || path === '/robot-check.json'
+    return path === '/ideas.json' || path.startsWith('/ideas/') || path === '/friends.json' || path.startsWith('/sign-in-') || path === '/robot-check.json' || path === '/auto-update.json'
   }
 
   function respond(req, res, who) {
@@ -482,6 +501,12 @@ export function startServer({
         // Not run yet.
       }
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(check))
+      return
+    }
+    if (req.url === '/auto-update.json') {
+      // How the Pi's last auto-update went (scripts/auto-update.sh), and when it last ran,
+      // so the family sees a warning when updates fail or stop.
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(autoUpdateStatus(dirname(cardsFile))))
       return
     }
     if (req.url === '/cards.json') {

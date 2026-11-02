@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMe } from '../state/useMe.js'
+import { AutoUpdateCard } from './AutoUpdate.jsx'
 
 // The #admin page: one place to find the hidden pages, opened from the 🛠 Admin link at
 // the bottom of the "Which game?" screen. Every # page in main.jsx must be listed here
@@ -91,6 +92,7 @@ export default function AdminPage() {
                 </li>
               ))}
             </ul>
+            <AutoUpdateCard />
             <RobotCheck />
           </>
         )}

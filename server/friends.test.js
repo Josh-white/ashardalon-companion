@@ -189,6 +189,7 @@ describe('friends on the real game', () => {
     expect((await fetch(`${url}/art/hero-fighter.jpg`, { method: 'DELETE', headers: as(amy) })).status).toBe(403)
     expect((await fetch(`${url}/sound-takes/pick`, { method: 'POST', headers: as(amy), body: '{}' })).status).toBe(403)
     expect((await get('/ideas.json', amy)).status).toBe(403)
+    expect((await get('/auto-update.json', amy)).status).toBe(403)
     const sent = await fetch(`${url}/ideas`, { method: 'POST', headers: { ...as(amy), 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'More dragons', from: 'Amy' }) })
     expect(sent.status).toBe(201)
     const { ideas } = await (await get('/ideas.json')).json()
