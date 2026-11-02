@@ -532,9 +532,11 @@ def build_cultist():
             rot=(0, -(90 + a), 0))
 
 
-def build_duergar():
+def build_duergar(captain=False):
     """A stocky grey dwarf in dark iron: a nose-guard helmet with a spike, glowing red eyes, a
-    huge braided beard, a round shield on the left arm and a warhammer in the right fist."""
+    huge braided beard, a round shield on the left arm and a warhammer in the right fist. The
+    Duergar Captain (`captain`) has a horned helm, gold trim, spiked pauldrons, a black cape
+    and a big double-bladed axe instead of the hammer and shield."""
     for side, tag in ((1, "L"), (-1, "R")):
         leg = f"leg.{tag}"
         box(f"Boot.{tag}", "iron_dark", leg, (0.24 * side, -0.05, 0.10), (0.30, 0.42, 0.20), bevel=0.07)
@@ -548,11 +550,22 @@ def build_duergar():
 
     # A barrel of an iron breastplate with heavy pauldrons.
     box("Torso", "iron", "body", (0, 0, 1.02), (1.00, 0.68, 0.62), bevel=0.24, segments=3)
-    box("PlateRidge", "iron_dark", "body", (0, -0.335, 1.02), (0.08, 0.04, 0.50), bevel=0.015)
+    box("PlateRidge", "gold" if captain else "iron_dark", "body", (0, -0.335, 1.02), (0.08, 0.04, 0.50), bevel=0.015)
     for side in (1, -1):
         sphere(f"Pauldron{side}", "iron_dark", "body", (0.52 * side, 0, 1.26), 0.26, scale=(1.1, 1.05, 0.7))
         for i, y in enumerate((-0.12, 0.0, 0.12)):
             sphere(f"Rivet{side}{i}", "gold", "body", (0.62 * side, y, 1.42), 0.03, segments=6, rings=4)
+        if captain:
+            for i, y in enumerate((-0.10, 0.10)):
+                cone(f"PauldronSpike{side}{i}", "bone", "body", (0.60 * side, y, 1.40), 0.06, 0.24,
+                     rot=(0, 30 * side, 0), sides=5)
+    if captain:
+        # A black cape with a gold clasp at each shoulder.
+        box("Cape", "armour", "body", (0, 0.40, 0.80), (0.92, 0.06, 0.88), bevel=0.03, rot=(-6, 0, 0))
+        box("CapeLining", "red", "body", (0, 0.36, 0.84), (0.86, 0.03, 0.78), bevel=0.01, rot=(-6, 0, 0))
+        for side in (1, -1):
+            sphere(f"CapeClasp{side}", "gold", "body", (0.36 * side, 0.32, 1.30), 0.06, segments=8, rings=6)
+        box("PlateTrim", "gold", "body", (0, -0.30, 1.30), (0.80, 0.06, 0.06), bevel=0.02)
 
     # Arms: grey skin, iron gauntlets and fists.
     for side, tag in ((1, "L"), (-1, "R")):
@@ -561,10 +574,18 @@ def build_duergar():
         box(f"Gauntlet.{tag}", "iron_dark", arm, (0.63 * side, -0.02, 0.83), (0.27, 0.27, 0.28), bevel=0.07)
         sphere(f"Fist.{tag}", "iron_dark", arm, (0.64 * side, -0.05, 0.64), 0.15)
 
-    # Warhammer in the right fist, its head resting forward and down.
     fist = Vector((-0.64, -0.05, 0.64))
     d = Vector((0, -0.866, -0.5))
     tilt = (120, 0, 0)
+    if captain:
+        build_great_axe(fist)
+    else:
+        build_duergar_hammer_and_shield(fist, d, tilt)
+    build_duergar_head(captain)
+
+
+def build_duergar_hammer_and_shield(fist, d, tilt):
+    # Warhammer in the right fist, its head resting forward and down.
     cone("HammerHaft", "wood", "arm.R", fist + d * 0.22, 0.045, 0.70, rot=tilt, sides=6, tip=0.045)
     cone("HammerPommel", "iron_dark", "arm.R", fist - d * 0.15, 0.06, 0.07, rot=tilt, sides=6, tip=0.04)
     head = fist + d * 0.58
@@ -583,15 +604,46 @@ def build_duergar():
         sphere(f"ShieldStud{i}", "iron", "arm.L", sc + Vector((math.cos(a) * 0.30, -0.05, math.sin(a) * 0.30)),
                0.03, segments=6, rings=4)
 
+
+def build_great_axe(fist):
+    """A long-hafted double axe held upright in the right fist, the blades above the head."""
+    up = Vector((0, -0.2, 1)).normalized()
+    tilt = (-math.degrees(math.atan2(0.2, 1)), 0, 0)  # turns +Z to point along `up`
+    cone("AxeHaft", "wood", "arm.R", fist + up * 0.45, 0.05, 1.50, rot=tilt, sides=6, tip=0.045)
+    cone("AxeButt", "iron_dark", "arm.R", fist - up * 0.32, 0.07, 0.10, rot=tilt, sides=6, tip=0.03)
+    box("AxeGrip", "leather_dark", "arm.R", fist, (0.12, 0.12, 0.24), bevel=0.04, rot=tilt)
+    head = fist + up * 1.05
+    box("AxeSocket", "iron_dark", "arm.R", head, (0.14, 0.16, 0.30), bevel=0.04, rot=tilt)
+    cone("AxeTop", "iron", "arm.R", head + up * 0.24, 0.05, 0.18, rot=tilt, sides=4)
+    for side in (1, -1):
+        # A half-moon blade on each side: a flat oval, a bright cutting edge and hooked tips.
+        sphere(f"AxeBlade{side}", "iron_dark", "arm.R", head + Vector((0.24 * side, 0, 0)), 0.30,
+               scale=(0.75, 0.12, 1.15), rot=tilt, segments=16, rings=10)
+        sphere(f"AxeEdge{side}", "iron", "arm.R", head + Vector((0.36 * side, 0, 0)), 0.30,
+               scale=(0.42, 0.09, 1.08), rot=tilt, segments=16, rings=10)
+    sphere("AxeGem", "glow", "arm.R", head + Vector((0, -0.09, 0)), 0.045, scale=(1, 0.5, 1), segments=8, rings=6)
+
+
+def build_duergar_head(captain):
     # Head: grey face under a spiked nose-guard helm, red eyes, a big braided beard.
     sphere("Face", "skin_grey", "head", (0, -0.04, 1.62), 0.33, scale=(1.05, 0.95, 1.0), segments=16, rings=10)
     sphere("Helm", "iron", "head", (0, 0.0, 1.80), 0.37, scale=(1.05, 1.02, 0.78), segments=16, rings=10)
     cone("HelmBrim", "gold", "head", (0, 0.0, 1.77), 0.385, 0.06, sides=16, tip=0.385)
     box("NoseGuard", "iron_dark", "head", (0, -0.37, 1.69), (0.06, 0.05, 0.16), bevel=0.02)
-    cone("HelmSpike", "iron_dark", "head", (0, 0.0, 2.12), 0.07, 0.20, sides=6)
+    cone("HelmSpike", "gold" if captain else "iron_dark", "head", (0, 0.0, 2.12), 0.07, 0.20, sides=6)
     for side in (1, -1):
+        if captain:
+            # Big curved horns: out from the helm, then up.
+            cone(f"HornBase{side}", "bone", "head", (0.42 * side, 0.02, 1.88), 0.09, 0.24, rot=(0, 80 * side, 0),
+                 sides=8, tip=0.065)
+            cone(f"HornMid{side}", "bone", "head", (0.58 * side, 0.02, 1.98), 0.065, 0.20, rot=(0, 40 * side, 0),
+                 sides=8, tip=0.045)
+            cone(f"HornTip{side}", "bone", "head", (0.65 * side, 0.02, 2.14), 0.045, 0.18, rot=(0, 8 * side, 0),
+                 sides=8)
+            continue
         cone(f"HelmWing{side}", "iron_dark", "head", (0.36 * side, 0.02, 1.86), 0.06, 0.22,
              rot=(0, 55 * side, 0), scale=(1, 0.35, 1), sides=4)
+    for side in (1, -1):
         box(f"Brow{side}", "beard", "head", (0.13 * side, -0.32, 1.70), (0.15, 0.06, 0.05), bevel=0.02,
             rot=(0, -12 * side, 0))
         sphere(f"Eye{side}", "glow", "head", (0.12 * side, -0.33, 1.63), 0.035, scale=(1.2, 0.5, 0.8),
@@ -1422,6 +1474,7 @@ MONSTERS = [
     ("kobold-dragonlord", "kobold-dragonlord.glb", lambda: build_kobold(lord=True), 1.85, KOBOLD_BONES, []),
     ("human-cultist", "human-cultist.glb", build_cultist, 2.5, CULTIST_BONES, []),
     ("duergar-guard", "duergar-guard.glb", build_duergar, 2.15, DUERGAR_BONES, []),
+    ("duergar-captain", "duergar-captain.glb", lambda: build_duergar(captain=True), 1.85, DUERGAR_BONES, []),
     ("snake", "snake.glb", build_snake, 1.75, SNAKE_BONES, [], SNAKE_MOVES),
     ("cave-bear", "cave-bear.glb", build_bear, 1.65, BEAR_BONES, [], BEAR_MOVES),
     ("legion-devil", "legion-devil.glb", build_devil, 2.5, DEVIL_BONES, []),
