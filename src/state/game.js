@@ -30,7 +30,7 @@ import { attackFollowUp, dodgeHit, heroAttack, powerDamage, rerollAttack, setSha
 import { initialState } from './initialState.js'
 import { drawDungeonTile, openBoardDoor, revealDoor, revealTile } from './dungeon.js'
 import { addOffer, attackHeroes, damageHeroes, defeatVillain, dropOffer, figuresLeft, healHero, heroWith, hurtVillager, monsterAttack, offers, offerSavingGrace, placeVillain, resolveEncounter, villagerAttack, villagerRoll } from './combat.js'
-import { answerCheck, canSpendAttack, checksFor, endHeroPhase, endPhaseCurses, inHeroPhase, levelUp, monsterControl, phaseChecks, removeCurse, spendAttack, startDamage, startTurn, updateEncounterCards, useItem, villagerRollDue } from './heroTurn.js'
+import { answerCheck, canSpendAttack, checksFor, endHeroPhase, endPhaseCurses, inHeroPhase, levelUp, mindOverBody, monsterControl, pruneMindTried, phaseChecks, removeCurse, spendAttack, startDamage, startTurn, updateEncounterCards, useItem, villagerRollDue } from './heroTurn.js'
 import { trapDisable } from './encounterRules.js'
 import { LOBBY_ACTIONS, lobbyReducer } from './lobby.js'
 import { PARTY_ACTIONS, partyReducer } from './party.js'
@@ -83,7 +83,7 @@ const keepCardsQuiet = (state, next) => (state?.readCardsOff && next && next.rea
 const reduceGame = (state, action) => {
   const placed = pruneTokens(placeNewFigures(state, checkVictory(tagDrawn(reduceWithOpening(state, action)))))
   const sprung = springHeroTokens(placed)
-  return withHealFx(state, withAttackFx(state, trackStats(state, sprung === placed ? placed : pruneTokens(checkVictory(sprung)), action), action))
+  return pruneMindTried(withHealFx(state, withAttackFx(state, trackStats(state, sprung === placed ? placed : pruneTokens(checkVictory(sprung)), action), action)))
 }
 
 // The tokens heroes put on the virtual board (board/heroTokens.js): the board keeps up with
@@ -615,6 +615,8 @@ function reduce(state, action) {
       return usePower(state, action)
     case 'SET_SHADOW':
       return setShadow(state, action)
+    case 'MIND_OVER_BODY':
+      return mindOverBody(state, action)
 
     case 'DODGE_HIT':
       return dodgeHit(state, action)

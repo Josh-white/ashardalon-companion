@@ -12,7 +12,11 @@
 //         (move.from is the villain's token): awayFrom (`n` tiles farther from it), nextToFoe,
 //         triangle (the tile the hero's tile's triangle points to); nextToAttacked (next to a
 //         monster the power attacked: Crane's Wings, a fan hero's power)
-// `hit: true` steps only happen when the attack hit, `miss: true` steps only when it missed.
+// `hit: true` steps only happen when the attack hit, `miss: true` steps only when it missed,
+// `ifShadow: true` only when the hero attacked from the shadows (Shadowphage).
+// `each: 'heroOnTile' | 'monsterOnTile'` makes the step once for every such figure (Tune of Ice
+// and Wind, One Hundred Leaves). `minApart: n` only moves a figure at least n tiles from the
+// hero (Vicious Mockery). pick `otherHero` is any other hero on the board (Psionic Stride).
 
 import { baseId, key } from './grid.js'
 import { distances, reachable, tilesBetween } from './paths.js'
@@ -24,9 +28,20 @@ const parse = (k) => k.split(',').map(Number)
 // Queues a power's moves (nothing happens without a board or with no steps left).
 // `from` is a monster's token the moves are measured from (a villain's hit, Bravery), and
 // `fromName` its name for the prompt.
-export function queueMoves(state, hero, power, steps, { attacked = [], hit = false, tokens, from, fromName, prompt } = {}) {
+export function queueMoves(state, hero, power, steps, { attacked = [], hit = false, shadow = false, tokens, from, fromName, prompt } = {}) {
   if (!state.board || !hero || !Array.isArray(steps)) return state
-  const todo = steps.filter((s) => (!s.hit || hit) && (!s.miss || !hit))
+  let todo = steps.filter((s) => (!s.hit || hit) && (!s.miss || !hit) && (!s.ifShadow || shadow))
+  const each = todo.find((s) => s.each)
+  if (each && !tokens) {
+    const self = state.board.tokens[hero.id]
+    const grid = boardGrid(state.board)
+    const tile = self && grid.get(key(self))?.area
+    const figures = each.each === 'monsterOnTile' ? foeTokens(state) : heroTokens(state)
+    tokens = figures.filter((f) => tile && grid.get(key(f.at))?.area === tile).map((f) => f.id)
+    const one = { ...each, pick: 'listed' }
+    delete one.each
+    todo = todo.flatMap((s) => (s === each ? tokens.map(() => one) : [s]))
+  }
   if (todo.length === 0) return state
   const move = { heroId: hero.id, source: power?.name ?? '', attacked, steps: todo, ...(tokens ? { tokens } : {}), ...(from ? { from, fromName } : {}), ...(prompt ? { prompt } : {}) }
   return settle({ ...state, turn: { ...state.turn, boardMove: move } })
@@ -131,6 +146,14 @@ function foeTokens(state) {
 
 // Which figures the current step can move (token ids).
 export function moveChoices(state) {
+  const s = step(state)
+  const list = choicesFor(state)
+  if (!s?.minApart || list.length === 0) return list
+  const grid = boardGrid(state.board)
+  const self = state.board.tokens[state.turn.boardMove.heroId]
+  return list.filter((id) => tilesBetween(grid, state.board.tokens[id], self) >= s.minApart)
+}
+function choicesFor(state) {
   const move = state.turn.boardMove
   const s = step(state)
   const self = move && state.board?.tokens[move.heroId]
@@ -161,6 +184,8 @@ export function moveChoices(state) {
       const heroTiles = new Set(heroTokens(state).map((h) => tileOf(h.at)))
       return foeTokens(state).filter((f) => !heroTiles.has(tileOf(f.at))).map((f) => f.id)
     }
+    case 'otherHero':
+      return others.map((h) => h.id)
     case 'attacked':
       return foeTokens(state).filter((f) => (move.attacked ?? []).includes(baseId(f.id))).map((f) => f.id)
     case 'listed':
@@ -313,6 +338,7 @@ const PICKS = {
   monsterOnTile: (me) => `a monster on ${me}'s tile`,
   monsterOffHeroTiles: () => 'a monster not on any hero’s tile',
   attacked: () => 'the monster',
+  otherHero: () => 'another hero',
   listed: () => 'a monster',
 }
 // Where the figure goes, for the prompt of a listed figure.

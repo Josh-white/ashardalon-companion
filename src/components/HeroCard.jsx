@@ -7,7 +7,9 @@ import { artUrl, useArt } from '../state/useArt.js'
 import { useCards } from '../state/useCards.js'
 import Art from './Art.jsx'
 import { sphereOf, sphereVictims } from '../board/heroTokens.js'
-import { canSpendAttack, inHeroPhase } from '../state/heroTurn.js'
+import { canSpendAttack, inHeroPhase, mindOverBodyChoices } from '../state/heroTurn.js'
+import { BARDIC_SONGS, bardicSongsLeft } from '../state/heroAttacks.js'
+import { rollD20 } from '../state/random.js'
 import { MonsterChoice } from './Pickers.jsx'
 import PowerList from './PowerList.jsx'
 import { StatTiles } from './StatBoosts.jsx'
@@ -50,6 +52,28 @@ function TokenDamage({ state, hero, source, label, prompt, many, disabled, dispa
           Cancel
         </Button>
       </div>
+    </div>
+  )
+}
+
+// Mind Over Body (a fan Monk): one roll per new condition, 11 or more shrugs it off.
+// Bardic Song (a fan Bard): how many songs are left (spent from a missed attack).
+function FanAbilities({ hero, dispatch }) {
+  const conditions = mindOverBodyChoices(hero)
+  const songs = hasAbility(hero, 'bardic-song') ? bardicSongsLeft(hero) : null
+  if (conditions.length === 0 && songs === null) return null
+  return (
+    <div className="mt-3 space-y-2">
+      {songs !== null && (
+        <p className="rounded-lg bg-zinc-950/60 px-3 py-2 text-sm text-sky-200">
+          🎶 Bardic Song: {songs} of {BARDIC_SONGS} left. When any hero misses, the attack box offers a song to roll again.
+        </p>
+      )}
+      {conditions.map((condition) => (
+        <Button key={condition} className="w-full" onClick={() => dispatch({ type: 'MIND_OVER_BODY', heroId: hero.id, condition, roll: rollD20() })}>
+          🧘 Mind Over Body: roll to shrug off {condition} (11 or more)
+        </Button>
+      ))}
     </div>
   )
 }
@@ -335,6 +359,7 @@ export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, 
 
       {state && <PowerMarkers state={state} hero={hero} dispatch={dispatch} />}
       {state && dispatch && <ShadowSwitch state={state} hero={hero} dispatch={dispatch} />}
+      {state && dispatch && <FanAbilities hero={hero} dispatch={dispatch} />}
       {state && dispatch && <AbilityOffers state={state} hero={hero} dispatch={dispatch} />}
 
       <PowerList state={state} hero={hero} dispatch={dispatch} tilesHidden={powersInTurnGuide} compact={compact} />
