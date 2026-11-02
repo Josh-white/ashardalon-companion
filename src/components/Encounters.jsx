@@ -519,6 +519,35 @@ function EncounterCard({ state, hero, dispatch }) {
         </>
       )}
       </fieldset>
+      {/* House rule: skip the card for free. Outside the fieldset, so it works while the card is read out. */}
+      <SkipButton
+        data-skip-encounter
+        label="Skip this card (no XP)"
+        sure={`Skip ${card.name}? It goes to the discards and does nothing.`}
+        onSkip={() => dispatch({ type: 'SKIP_ENCOUNTER' })}
+      />
+    </div>
+  )
+}
+
+// A quiet house-rule button that asks once more before it acts, so a stray tap
+// doesn't throw a card away.
+export function SkipButton({ label, sure, onSkip, ...rest }) {
+  const [asking, setAsking] = useState(false)
+  if (!asking) {
+    return (
+      <button type="button" {...rest} className="min-h-10 w-full rounded-lg px-2 text-sm text-zinc-400 underline" onClick={() => setAsking(true)}>
+        {label}
+      </button>
+    )
+  }
+  return (
+    <div className="rounded-lg bg-zinc-900/80 p-2 text-base text-zinc-200">
+      <p>{sure}</p>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <Button variant="ghost" onClick={() => setAsking(false)}>Keep it</Button>
+        <Button data-skip-yes onClick={() => { setAsking(false); onSkip() }}>Skip it</Button>
+      </div>
     </div>
   )
 }
@@ -796,7 +825,7 @@ export function CurseNotes({ state, hero, dispatch }) {
 }
 
 // The Environment card in play, shown at the top of every turn.
-export function EnvironmentBanner({ environment, className = '' }) {
+export function EnvironmentBanner({ environment, dispatch, className = '' }) {
   if (!environment) return null
   const rule = environment.card.text.replace(
     /^If there is an Environment Card already in play, discard it\. This Environment remains in play until a new Environment Card is drawn\.\n?/,
@@ -805,6 +834,14 @@ export function EnvironmentBanner({ environment, className = '' }) {
   return (
     <div className={`rounded-xl border border-emerald-800 bg-emerald-950/50 p-3 text-emerald-100 ${className}`}>
       <span className="font-bold">🌋 Environment: {environment.name}{/[.!?]$/.test(environment.name) ? '' : '.'}</span> <span className="text-emerald-200">{rule}</span>
+      {dispatch && (
+        <SkipButton
+          data-discard-environment
+          label="Discard this environment"
+          sure={`Discard ${environment.name}? It stops working right away.`}
+          onSkip={() => dispatch({ type: 'DISCARD_ENVIRONMENT' })}
+        />
+      )}
     </div>
   )
 }

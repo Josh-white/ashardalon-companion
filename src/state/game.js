@@ -787,6 +787,20 @@ function reduce(state, action) {
     case 'DRAW_ENCOUNTER':
       return drawEncounter(state, action)
 
+    // House rule: skip the drawn encounter card for free (no XP), straight to the discards.
+    case 'SKIP_ENCOUNTER': {
+      if (!state.encounter) return state
+      const next = discardEncounterCard({ ...state, encounter: null }, state.encounter.cardId)
+      return withLog(next, `Skipped ${state.encounter.card.name} (no XP spent).`)
+    }
+
+    // House rule: take the Environment card in play away, into the discards.
+    case 'DISCARD_ENVIRONMENT': {
+      if (!state.environment) return state
+      const next = discardEncounterCard({ ...state, environment: null }, state.environment.cardId)
+      return withLog(next, `${state.environment.name} was discarded: no environment now.`)
+    }
+
     case 'ENCOUNTER_ATTACK': {
       const encounter = state.encounter
       if (!encounter?.card.attack || encounter.attacked) return state
