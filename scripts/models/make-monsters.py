@@ -91,6 +91,9 @@ PALETTE = {
     "eye_green": "7fbf3a",
     "storm": "5cc8ff",       # orc storm shaman's lightning
     "storm_dark": "2b5f8f",
+    "gauth": "7a5c86",       # gauth
+    "gauth_dark": "4c3858",
+    "gauth_light": "b597b8",
 }
 
 argv = sys.argv
@@ -1068,6 +1071,55 @@ def build_mouther():
         mouther_eye(f"Eye{i}", bone, on(c, r, sc, d), d, size, iris)
 
 
+def build_gauth():
+    """A gauth: a floating ball with one big eye, a toothy mouth below it, six eyestalks on top
+    and four feeding tendrils dangling underneath."""
+    centre = Vector((0, 0, 1.25))
+    sphere("Body", "gauth", "body", centre, 0.48, scale=(1, 0.95, 0.92), segments=18, rings=12)
+    # Bumpy plates over the back and top.
+    for i in range(10):
+        a, b = DEG(i * 36 + 18), DEG(35 + (i % 3) * 18)
+        d = Vector((math.sin(b) * math.sin(a), math.sin(b) * math.cos(a) * 0.95 + 0.05, math.cos(b) * 0.92))
+        sphere(f"Plate{i}", "gauth_dark", "body", centre + d * 0.45, 0.11, scale=(1, 1, 0.5),
+               rot=turned(facing(d), (90, 0, 0)), segments=8, rings=5)
+    # The big central eye with a lid.
+    eye = centre + Vector((0, -0.40, 0.10))
+    sphere("EyeWhite", "eye_white", "body", eye, 0.20, scale=(1, 0.6, 1), segments=14, rings=9)
+    sphere("EyeIris", "eye", "body", eye + Vector((0, -0.10, 0)), 0.12, scale=(1, 0.4, 1), segments=12, rings=8)
+    sphere("EyePupil", "black", "body", eye + Vector((0, -0.145, 0)), 0.05, scale=(0.6, 0.4, 1.4), segments=8, rings=6)
+    sphere("EyeLid", "gauth_dark", "body", eye + Vector((0, 0.02, 0.15)), 0.21, scale=(1.04, 0.66, 0.36),
+           segments=14, rings=8)
+    # The mouth under the eye, on the head bone so it can snap.
+    mouther_mouth("Mouth", "head", centre + Vector((0, -0.40, -0.21)), (0, -1, -0.15), 0.19, teeth=7)
+    # Six eyestalks curling up and out from the top, each with a little eye.
+    for i in range(6):
+        a = DEG(i * 60 + 30)
+        out = Vector((math.sin(a), -math.cos(a) * 0.9, 0))
+        p0 = centre + out * 0.22 + Vector((0, 0, 0.38))
+        p1 = p0 + out * 0.10 + Vector((0, 0, 0.25))
+        p2 = p0 + out * 0.32 + Vector((0, 0, 0.35))
+        p3 = p0 + out * 0.42 + Vector((0, 0, 0.25))
+        n = 12
+        for j in range(n):
+            t = j / (n - 1)
+            sphere(f"Stalk{i}_{j}", "gauth_light" if j % 3 == 0 else "gauth", "stalks", bezier(p0, p1, p2, p3, t),
+                   0.055 - 0.02 * t, segments=7, rings=5)
+        look = (out + Vector((0, -0.6, 0.3))).normalized()
+        mouther_eye(f"StalkEye{i}", "stalks", p3 + look * 0.04, look, 0.07, "eye_green" if i % 2 else "eye")
+    # Feeding tendrils hanging down, two to a bone.
+    for i in range(4):
+        a = DEG(45 + i * 90)
+        dx, dy = math.sin(a), -math.cos(a)
+        bone = ("tent.F" if dy < 0 else "tent.B") + ("L" if dx > 0 else "R")
+        start = Vector((dx * 0.20, dy * 0.20, 0.85))
+        end = Vector((dx * 0.30, dy * 0.30, 0.20))
+        mid1, mid2 = start + Vector((dx * 0.15, dy * 0.15, -0.20)), end + Vector((-dx * 0.1, -dy * 0.1, 0.25))
+        for j in range(8):
+            t = j / 7
+            sphere(f"Tendril{i}_{j}", "gauth_dark" if j % 3 == 0 else "gauth", bone, bezier(start, mid1, mid2, end, t),
+                   0.05 - 0.03 * t, segments=7, rings=5)
+
+
 # ---- 4. Join, size it, origin on the floor --------------------------------------------------
 
 def join_parts(name, mat, height):
@@ -1161,6 +1213,16 @@ MOUTHER_BONES = [
     ("lobe.L", (0.48, -0.15, 0.05), (0.48, -0.15, 0.55), "body"),
     ("lobe.R", (-0.46, -0.15, 0.05), (-0.46, -0.15, 0.55), "body"),
     ("lobe.B", (0.05, 0.50, 0.05), (0.05, 0.50, 0.65), "body"),
+]
+GAUTH_BONES = [
+    ("root", (0, 0, 0), (0, 0, 0.2), None),
+    ("body", (0, 0, 0.95), (0, 0, 1.60), "root"),
+    ("head", (0, -0.38, 0.90), (0, -0.38, 1.15), "body"),
+    ("stalks", (0, 0, 1.55), (0, 0, 2.0), "body"),
+    ("tent.FL", (0.15, -0.15, 0.9), (0.2, -0.2, 0.2), "body"),
+    ("tent.FR", (-0.15, -0.15, 0.9), (-0.2, -0.2, 0.2), "body"),
+    ("tent.BL", (0.15, 0.15, 0.9), (0.2, 0.2, 0.2), "body"),
+    ("tent.BR", (-0.15, 0.15, 0.9), (-0.2, 0.2, 0.2), "body"),
 ]
 KOBOLD_BONES = [
     ("root", (0, 0, 0), (0, 0, 0.2), None),
@@ -1548,11 +1610,29 @@ MOUTHER_MOVES = [
     ("Death_A_Pose", False, [(0, MOUTHER_FALLEN), (1, MOUTHER_FALLEN)]),
 ]
 
+# The gauth floats like the grell, and fires rays: its eyestalks lean in and its body tilts.
+GAUTH_MOVES = [m for m in GRELL_MOVES if m[0] != "Idle"] + [
+    ("Idle", True, [
+        (0, {}),
+        (30, {"body": {"loc": (0, 0.06, 0), "rot": (0, 6, 0)}, "stalks": (8, 0, -6), "head": (6, 0, 0),
+              "tent.FL": (8, 0, 4), "tent.BR": (6, 0, -4)}),
+        (60, {}),
+    ]),
+    ("Spellcast_Shoot", False, [
+        (0, {}),
+        (10, {"body": {"rot": (-15, 0, 0), "loc": (0, 0.08, -0.08)}, "stalks": (-25, 0, 0)}),
+        (16, {"body": {"rot": (12, 0, 0), "loc": (0, 0.05, 0.05)}, "stalks": (35, 0, 0), "head": (15, 0, 0)}),
+        (26, {"body": {"rot": (10, 0, 0), "loc": (0, 0.05, 0.04)}, "stalks": (30, 0, 0)}),
+        (38, {}),
+    ]),
+]
+
 # name, file, build, height, bones, extra moves (, own moves)
 # The board draws villains 1.3 times bigger, so a villain's height here is its real height / 1.3.
 MONSTERS = [
     ("orc-smasher", "orc-smasher.glb", lambda: build_orc("mace"), 2.4, ORC_BONES, []),
     ("orc-archer", "orc-archer.glb", lambda: build_orc("bow"), 2.4, ORC_BONES, ["1H_Ranged_Shoot"]),
+    ("gauth", "gauth.glb", build_gauth, 1.8, GAUTH_BONES, [], GAUTH_MOVES),
     ("orc-storm-shaman", "orc-storm-shaman.glb", lambda: build_orc("staff"), 2.2, ORC_BONES, ["Spellcast_Shoot"]),
     ("kobold-dragonshield", "kobold-dragonshield.glb", build_kobold, 1.9, KOBOLD_BONES, []),
     ("kobold-dragonlord", "kobold-dragonlord.glb", lambda: build_kobold(lord=True), 1.85, KOBOLD_BONES, []),

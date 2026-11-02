@@ -19,6 +19,7 @@ import Grell from '../models/Grell.glb?url'
 import Kobold_Dragonlord from '../models/Kobold_Dragonlord.glb?url'
 import Duergar_Captain from '../models/Duergar_Captain.glb?url'
 import Orc_Storm_Shaman from '../models/Orc_Storm_Shaman.glb?url'
+import Gauth from '../models/Gauth.glb?url'
 import Gibbering_Mouther from '../models/Gibbering_Mouther.glb?url'
 
 // The 3D figures on the 3D board: the heroes are KayKit Adventurers (CC0, src/models, trimmed
@@ -48,6 +49,7 @@ const FILES = {
   Kobold_Dragonlord,
   Duergar_Captain,
   Orc_Storm_Shaman,
+  Gauth,
   Gibbering_Mouther,
 }
 // The figures are about 2.5 units tall: this makes them one square tall.
