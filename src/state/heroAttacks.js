@@ -1,6 +1,6 @@
 // A hero attacking: the attack numbers, the roll against the monster's AC, rerolls,
 // follow-ups, power damage and the powers that dodge a hit. The reducer is in game.js.
-import { XP_TO_LEVEL_UP } from '../data/heroes.js'
+import { XP_TO_LEVEL_UP, levelCrits } from '../data/heroes.js'
 import { attackItems, heroItems, itemAttackParts } from '../data/items.js'
 import { hasSecondChance } from '../data/difficulty.js'
 import { effectsOf, maxRolls } from '../data/powerEffects.js'
@@ -27,6 +27,7 @@ export function attackNumbers(hero, { item = null, power = null, extraAttack = n
   const items = itemAttackParts(hero, distance, stayed)
   if (items.attack) bonusParts.push(items.attack)
   damageParts.push(...items.damage)
+  const crits = [...items.crits, ...levelCrits(hero)]
   const total = (parts) => parts.reduce((n, p) => n + p.value, 0)
   return {
     bonus: total(bonusParts),
@@ -34,9 +35,9 @@ export function attackNumbers(hero, { item = null, power = null, extraAttack = n
     // "3 (Miss: 1)": some powers still hurt on a miss.
     miss: item ? 0 : powerNumber(/miss\D*(\d+)/i.exec(power.card?.damage ?? '')?.[1]) ?? 0,
     evenBonus: effects.evenBonus ?? 0,
-    // Dragontooth Pick and Vorpal Sword.
-    crits: items.crits.map((c) => c.from),
-    parts: { bonus: bonusParts, damage: damageParts, crits: items.crits },
+    // Dragontooth Pick, Vorpal Sword and Critical Hit at level 2.
+    crits: crits.map((c) => c.from),
+    parts: { bonus: bonusParts, damage: damageParts, crits },
   }
 }
 

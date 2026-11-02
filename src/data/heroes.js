@@ -94,6 +94,10 @@ export const LEVEL_UP_SURGE_BONUS = 1
 export const MAX_LEVEL = 2
 export const LEVEL_STATS = ['maxHp', 'ac', 'surgeValue', 'speed']
 
+// JJ's house rule (2026-11-02, from the fan hero cards): every hero at level 2 or more deals
+// +1 damage on a hit with a natural 20. Same shape as an item's crit ({ label, from }).
+export const levelCrits = (hero) => ((hero?.level ?? 1) >= 2 ? [{ label: 'Critical Hit', from: 20 }] : [])
+
 // A hero's HP, AC, surge value and speed at `level`. Each level after the first uses the
 // template's row for it (a homebrew hero's `levels`), or the box's level-2 bonuses.
 export function statsAtLevel(template, level = 1) {

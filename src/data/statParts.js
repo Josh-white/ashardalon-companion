@@ -4,6 +4,7 @@
 // or 'off' (an item that adds nothing right now: only the best item bonus counts).
 // The totals match what the rest of the app uses (heroAc, moveSpeed, the attack roll).
 import { heroItems, itemAttackParts } from './items.js'
+import { levelCrits } from './heroes.js'
 
 const inPlay = (hero) => heroItems(hero).filter((item) => item.card?.inPlay)
 const has = (hero, condition) => (hero.conditions ?? []).includes(condition)
@@ -74,7 +75,8 @@ export function attackParts(hero) {
   parts.push(...curseParts(hero, 'attackPenalty'))
   const damage = items.damage.map((d) => ({ ...d, kind: 'item', note: 'Only against a monster next to you.' }))
   const crits = items.crits.map((c) => ({ label: c.label, value: 1, kind: 'item', from: c.from, note: `Roll ${c.from === 20 ? 'a 20' : `${c.from} or more`}: +1 damage.` }))
-  return { total: sum(parts), parts, damage: sum(damage), damageParts: [...damage, ...crits] }
+  const levelCrit = levelCrits(hero).map((c) => ({ label: c.label, value: 1, kind: 'card', from: c.from, note: 'Level 2: roll a 20 and hit for +1 damage.' }))
+  return { total: sum(parts), parts, damage: sum(damage), damageParts: [...damage, ...crits, ...levelCrit] }
 }
 
 // Everything helping or hurting a hero right now, as short badges for the projector and the
