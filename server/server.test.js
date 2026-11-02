@@ -567,6 +567,23 @@ describe('recordings', () => {
   })
 })
 
+describe('the nightly robot check', () => {
+  it('hands the Admin page the last result, or says there is none yet', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ashardalon-'))
+    const cardsFile = join(dir, 'cards.json')
+    const server = await startServer({ port: 0, saveFile: join(dir, 'game.json'), staticDir: dir, cardsFile, warmNarrator: false })
+    try {
+      const get = async () => (await fetch(`http://localhost:${server.port}/robot-check.json`)).json()
+      expect(await get()).toEqual({ none: true })
+      writeFileSync(join(dir, 'robot-check.json'), JSON.stringify({ ok: true, line: '24 of 24 games played through.' }))
+      expect((await get()).line).toBe('24 of 24 games played through.')
+    } finally {
+      await server.close()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('card fixes', () => {
   let dir
   let server

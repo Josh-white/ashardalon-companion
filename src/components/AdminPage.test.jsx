@@ -31,4 +31,17 @@ describe('admin page', () => {
     await waitFor(() => screen.getByText('These pages are only for the family.'))
     expect(screen.queryByText('🃏 Card check')).toBeNull()
   })
+
+  it("shows last night's robot check", async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url) => ({
+      ok: true,
+      json: async () =>
+        url === '/robot-check.json'
+          ? { ok: false, at: '2026-11-02T03:30:00Z', commit: 'abc1234', cards: 'cards.json', line: '23 of 24 games played through, 1 got stuck or crashed.', failures: [{ name: 'plays a whole game (seed 5)', why: 'got stuck at 4/1/0' }], games: ['Ally game 1: ...'] }
+          : { friend: false },
+    })))
+    render(<AdminPage />)
+    await waitFor(() => screen.getByText(/23 of 24 games played through/))
+    expect(screen.getByText(/got stuck at 4\/1\/0/)).toBeTruthy()
+  })
 })

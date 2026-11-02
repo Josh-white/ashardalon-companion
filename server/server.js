@@ -444,7 +444,7 @@ export function startServer({
     const reading = req.method === 'GET' || req.method === 'HEAD'
     if (path.startsWith('/art/') || path.startsWith('/sound-takes')) return !reading
     if (path === '/ideas') return req.method !== 'POST'
-    return path === '/ideas.json' || path.startsWith('/ideas/') || path === '/friends.json' || path.startsWith('/sign-in-')
+    return path === '/ideas.json' || path.startsWith('/ideas/') || path === '/friends.json' || path.startsWith('/sign-in-') || path === '/robot-check.json'
   }
 
   function respond(req, res, who) {
@@ -470,6 +470,17 @@ export function startServer({
     }
     if (req.url === '/me.json') {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify({ friend: !who.family, email: who.email }))
+      return
+    }
+    if (req.url === '/robot-check.json') {
+      // The last nightly robot check with this Pi's cards (scripts/nightly-robot.sh), for the Admin page.
+      let check = { none: true }
+      try {
+        check = JSON.parse(readFileSync(join(dirname(cardsFile), 'robot-check.json'), 'utf8'))
+      } catch {
+        // Not run yet.
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(check))
       return
     }
     if (req.url === '/cards.json') {

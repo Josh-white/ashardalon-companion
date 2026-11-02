@@ -149,6 +149,14 @@ scripts/restore-game.sh ~/ashardalon-backups/game-2026-10-27-031500.json
 
 For a game other than the family game, put `GAME=<game>` in front, using the name of its backup folder: `GAME=coltons-solo scripts/restore-game.sh`. The restore saves the current game first (as a `-before-restore` copy), so it can be undone, then restarts the app with the backup. A backup from an older version of the app is upgraded when it loads; one from a newer version is refused until the app is updated. For the test copy, put `CONTAINER=ashardalon-test BACKUP_DIR=~/ashardalon-test-backups` in front of either command.
 
+## Nightly robot check with your own cards
+
+GitHub's checks only play made-up cards. `scripts/nightly-robot.sh` plays the robot games (16 random-tapping games, plus 8 where the computer plays every hero) with **this Pi's** `cards/cards.json`, in a throwaway Node container, so nothing gets installed and the game being played isn't touched. The result shows at the bottom of the 🛠 Admin page. A line per run also goes to the log. Expect it to take several minutes on the Pi. To run it every night at 2:30, for the real game and then the test copy (with the fan heroes):
+
+```sh
+(crontab -l 2>/dev/null; echo "30 2 * * * ($HOME/ashardalon-companion/scripts/nightly-robot.sh; $HOME/ashardalon-test/scripts/nightly-robot.sh) >> $HOME/ashardalon-backups/robot-nightly.log 2>&1") | crontab -
+```
+
 ## Friends from outside
 
 Friends can play on the real game from anywhere at `play.codebasehome.com`. A free Cloudflare Tunnel (`scripts/cloudflared/compose.yaml`) carries them to the Pi without opening anything on the router, and Cloudflare Access lets in only the emails on your list, with a code sent to that email. At home and on Tailscale nothing changes.
