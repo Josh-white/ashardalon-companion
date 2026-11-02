@@ -1,7 +1,8 @@
 """Builds the monsters' 3D figures for the 3D board as .glb files: Orc Smasher (a big
 spiked mace), Orc Archer (a bow and a quiver), Kobold Dragonshield (a dragon shield
 and a spear) Human Cultist (hooded robes, a sun sceptre and a dagger)
-and Duergar Guard (a helmet, a beard, a round shield and a warhammer).
+Duergar Guard (a helmet, a beard, a round shield and a warhammer)
+and Snake (coiled, with its own legless skeleton and moves).
 
 Run it in Blender (tested headless on 5.2; written for 3.6 and newer):
   * Scripting workspace: open this file (or paste it), press Run Script (Alt+P).
@@ -68,6 +69,9 @@ PALETTE = {
     "glow": "ff3b2e",
     "skin_grey": "7e8087",   # duergar
     "beard": "35363b",
+    "snake": "557d3b",
+    "snake_dark": "2e4a22",
+    "snake_belly": "cdbf78",
 }
 
 argv = sys.argv
@@ -539,6 +543,61 @@ def build_duergar():
     sphere("Beard", "beard", "head", (0, -0.18, 1.28), 0.30, scale=(1.05, 0.62, 1.3), segments=12, rings=8)
 
 
+def bezier(p0, p1, p2, p3, t):
+    u = 1 - t
+    return p0 * u ** 3 + p1 * 3 * u * u * t + p2 * 3 * u * t * t + p3 * t ** 3
+
+
+def build_snake():
+    """A big snake coiled twice round on the floor, its neck rising in an S to a wedge head
+    with yellow slit eyes, fangs and a forked tongue."""
+    # The coil: a tapering tail on the outside winding in and up to the neck.
+    steps = 44
+    for i in range(steps):
+        t = i / (steps - 1)
+        a = DEG(i * 17.7)
+        r = 0.62 - 0.30 * t
+        radius = 0.06 + 0.11 * min(1, i / 13)
+        z = radius * 0.85 + 0.22 * t
+        colour = "snake_dark" if i % 6 == 0 else "snake"
+        bone = "root" if i < 20 else "hips"
+        sphere(f"Coil{i}", colour, bone, (math.sin(a) * r, math.cos(a) * r, z), radius, scale=(1, 1, 0.85),
+               segments=10, rings=6)
+
+    # The neck in an S, thick at the coil and thinner at the head, a pale belly in front.
+    p0, p1, p2, p3 = Vector((0, 0.06, 0.40)), Vector((0, 0.22, 0.85)), Vector((0, -0.30, 0.95)), Vector((0, -0.24, 1.36))
+    n = 20
+    for i in range(n):
+        t = i / (n - 1)
+        at = bezier(p0, p1, p2, p3, t)
+        radius = 0.17 - 0.06 * t
+        bone = "neck1" if t < 0.5 else "neck2"
+        sphere(f"Neck{i}", "snake_dark" if i % 6 == 3 else "snake", bone, at, radius, segments=10, rings=6)
+        if 0.15 < t < 0.95:
+            ahead = bezier(p0, p1, p2, p3, min(1, t + 0.02)) - at
+            side = Vector((1, 0, 0)).cross(ahead).normalized()
+            sphere(f"Belly{i}", "snake_belly", bone, at - side * radius * 0.55, radius * 0.6,
+                   scale=(1.1, 1, 1), segments=8, rings=5)
+
+    # Head: a wedge with brows, slit eyes, nostrils, fangs, a pink mouth and a forked tongue.
+    sphere("Head", "snake", "head", (0, -0.36, 1.45), 0.18, scale=(1.15, 1.45, 0.72), segments=14, rings=8)
+    box("Snout", "snake", "head", (0, -0.55, 1.45), (0.22, 0.20, 0.12), bevel=0.05)
+    box("Jaw", "snake_belly", "head", (0, -0.45, 1.34), (0.24, 0.32, 0.06), bevel=0.025, rot=(18, 0, 0))
+    box("Mouth", "red", "head", (0, -0.46, 1.38), (0.20, 0.28, 0.04), bevel=0.01, rot=(9, 0, 0))
+    for side in (1, -1):
+        sphere(f"Eye{side}", "eye", "head", (0.13 * side, -0.44, 1.52), 0.05, scale=(0.7, 1, 0.9), segments=8, rings=6)
+        box(f"Pupil{side}", "black", "head", (0.165 * side, -0.445, 1.52), (0.012, 0.015, 0.06), bevel=0.005)
+        box(f"Brow{side}", "snake_dark", "head", (0.11 * side, -0.44, 1.575), (0.10, 0.14, 0.04), bevel=0.015,
+            rot=(0, 18 * side, 0))
+        box(f"Nostril{side}", "black", "head", (0.05 * side, -0.64, 1.49), (0.025, 0.02, 0.015), bevel=0.005)
+        cone(f"Fang{side}", "bone", "head", (0.07 * side, -0.58, 1.36), 0.022, 0.10, rot=(180, 0, 0), sides=5)
+        box(f"Fork{side}", "red", "head", (0.025 * side, -0.80, 1.38), (0.018, 0.08, 0.012), bevel=0.004,
+            rot=(0, 0, -20 * side))
+    box("Tongue", "red", "head", (0, -0.70, 1.38), (0.025, 0.16, 0.014), bevel=0.005)
+    for i, y in enumerate((-0.30, -0.20)):
+        box(f"Scale{i}", "snake_dark", "head", (0, y, 1.585), (0.10, 0.08, 0.03), bevel=0.012, rot=(0, 0, 45))
+
+
 # ---- 4. Join, size it, origin on the floor --------------------------------------------------
 
 def join_parts(name, mat, height):
@@ -597,6 +656,13 @@ DUERGAR_BONES = [
     ("arm.R", (-0.56, 0, 1.22), (-0.64, 0, 0.64), "body"),
     ("leg.L", (0.24, 0, 0.48), (0.24, 0, 0.05), "hips"),
     ("leg.R", (-0.24, 0, 0.48), (-0.24, 0, 0.05), "hips"),
+]
+SNAKE_BONES = [
+    ("root", (0, 0, 0), (0, 0, 0.2), None),
+    ("hips", (0, 0, 0.2), (0, 0, 0.42), "root"),
+    ("neck1", (0, 0.06, 0.42), (0, 0.10, 0.90), "hips"),
+    ("neck2", (0, 0.10, 0.90), (0, -0.22, 1.30), "neck1"),
+    ("head", (0, -0.22, 1.30), (0, -0.30, 1.70), "neck2"),
 ]
 KOBOLD_BONES = [
     ("root", (0, 0, 0), (0, 0, 0.2), None),
@@ -759,19 +825,65 @@ def export_glb(objs, path):
     )
 
 
-# name, file, build, height, bones, extra moves
+# The snake's own moves (same names, so the board plays them the same way).
+SNAKE_FALLEN = {"neck1": (70, 0, 25), "neck2": (55, 0, 10), "head": (25, 0, -20)}
+SNAKE_MOVES = [
+    ("Idle", True, [
+        (0, {}),
+        (30, {"neck1": (0, 0, 6), "neck2": (4, 0, -9), "head": (-4, 0, 6)}),
+        (60, {}),
+    ]),
+    ("Walking_A", True, [
+        (0, {"hips": {"rot": (0, 8, 0)}, "neck1": (0, 0, 10), "neck2": (0, 0, -12), "head": (0, 0, 8)}),
+        (12, {"hips": {"rot": (0, -8, 0)}, "neck1": (0, 0, -10), "neck2": (0, 0, 12), "head": (0, 0, -8)}),
+        (24, {"hips": {"rot": (0, 8, 0)}, "neck1": (0, 0, 10), "neck2": (0, 0, -12), "head": (0, 0, 8)}),
+    ]),
+    ("1H_Melee_Attack_Chop", False, [
+        (0, {}),
+        (10, {"neck1": (-18, 0, 0), "neck2": (-28, 0, 0), "head": (12, 0, 0)}),
+        (15, {"neck1": (28, 0, 0), "neck2": (34, 0, 0), "head": (-12, 0, 0), "hips": {"loc": (0, 0, 0.10)}}),
+        (22, {"neck1": (22, 0, 0), "neck2": (28, 0, 0), "head": (-8, 0, 0), "hips": {"loc": (0, 0, 0.06)}}),
+        (34, {}),
+    ]),
+    ("Hit_A", False, [
+        (0, {}),
+        (5, {"neck1": (-20, 0, 8), "neck2": (-18, 0, 0), "head": (-18, 0, 0), "root": {"loc": (0, 0, -0.12)}}),
+        (20, {}),
+    ]),
+    ("Dodge_Right", False, [
+        (0, {}),
+        (7, {"root": {"loc": (-0.3, 0, 0)}, "neck1": (0, 0, 18), "neck2": (0, 0, -10)}),
+        (22, {}),
+    ]),
+    ("Cheer", False, [
+        (0, {}),
+        (10, {"neck1": (-14, 0, 0), "neck2": (-22, 0, 0), "head": (-12, 0, 0), "hips": {"loc": (0, 0.08, 0)}}),
+        (17, {"neck1": (-10, 0, 8), "neck2": (-18, 0, -8), "head": (-8, 0, 0)}),
+        (24, {"neck1": (-14, 0, 0), "neck2": (-22, 0, 0), "head": (-12, 0, 0), "hips": {"loc": (0, 0.08, 0)}}),
+        (34, {}),
+    ]),
+    ("Death_A", False, [
+        (0, {}),
+        (10, {"neck1": (-12, 0, 0), "neck2": (-20, 0, 0), "head": (-15, 0, 0)}),
+        (30, SNAKE_FALLEN),
+    ]),
+    ("Death_A_Pose", False, [(0, SNAKE_FALLEN), (1, SNAKE_FALLEN)]),
+]
+
+# name, file, build, height, bones, extra moves (, own moves)
 MONSTERS = [
     ("orc-smasher", "orc-smasher.glb", lambda: build_orc("mace"), 2.4, ORC_BONES, []),
     ("orc-archer", "orc-archer.glb", lambda: build_orc("bow"), 2.4, ORC_BONES, ["1H_Ranged_Shoot"]),
     ("kobold-dragonshield", "kobold-dragonshield.glb", build_kobold, 1.9, KOBOLD_BONES, []),
     ("human-cultist", "human-cultist.glb", build_cultist, 2.5, CULTIST_BONES, []),
     ("duergar-guard", "duergar-guard.glb", build_duergar, 2.15, DUERGAR_BONES, []),
+    ("snake", "snake.glb", build_snake, 1.75, SNAKE_BONES, [], SNAKE_MOVES),
 ]
 # Moves only some figures have.
 EXTRA_MOVES = {"1H_Ranged_Shoot"}
 
 
-def make(label, file_name, build, height, bones, extra):
+def make(label, file_name, build, height, bones, extra, own_moves=None):
     clear_scene()
     parts.clear()
     bpy.context.scene.render.fps = FPS
@@ -780,7 +892,7 @@ def make(label, file_name, build, height, bones, extra):
     name = label.replace("-", "_").title()
     figure, size = join_parts(name, material, height)
     objs = [figure]
-    moves = [m for m in MOVES if m[0] not in EXTRA_MOVES or m[0] in extra]
+    moves = own_moves or [m for m in MOVES if m[0] not in EXTRA_MOVES or m[0] in extra]
     if ANIMATE:
         rig = build_rig(figure, size, bones)
         add_moves(rig, moves)
