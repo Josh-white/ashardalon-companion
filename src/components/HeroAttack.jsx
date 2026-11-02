@@ -8,6 +8,7 @@ import { asksIfStayed, attackItems, distanceChoices, heroItems, itemsWithUse } f
 import { effectsOf, maxRolls, onHitHeals, reactionsFor, wolfBlocked } from '../data/powerEffects.js'
 import { bardicSongsLeft, isFearlessTarget } from '../state/heroAttacks.js'
 import { rollD20 } from '../state/random.js'
+import { targetAllowed } from '../state/fanPowers.js'
 import { attackGone, attackNumbers, foes, powerNumber } from '../state/game.js'
 import { itemAttackIsMove } from '../state/heroTurn.js'
 import { HeroChoice, InReach, MonsterChoice, monsterName } from './Pickers.jsx'
@@ -397,13 +398,15 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   const moving = effects.ask === 'moved-monster'
   // On the virtual board only the monsters the power can reach are offered.
   const [showAll, setShowAll] = useState(false)
-  const range = state.board && !moving ? powerRange(item ? item.card.text : power?.card?.text) : null
+  const range = state.board && !moving ? (effects.range ?? powerRange(item ? item.card.text : power?.card?.text)) : null
   // On the virtual board Hypnotism's move is done there, and the board knows who it's next to.
   const trance = moving && power ? hypnotized(state, power.name) : null
   const asked = trance ? { movedId: trance.id } : answers
   const everyTarget = foes(state).filter((m) => !moving || (m.id !== asked.movedId && (!trance || trance.nextTo.includes(m.id))))
   const reachable = foesInRange(state, hero.id, range, everyTarget)
-  const targets = showAll ? everyTarget : reachable
+  // Fan powers: villains only, not your own tile, next to another hero, all on one tile.
+  const allowed = (m) => targetAllowed(state, hero, effects, m, chosen.filter((id) => id !== m.id))
+  const targets = (showAll ? everyTarget : reachable).filter((m) => showAll || allowed(m) || chosen.includes(m.id))
   // The board says how far each monster is, for magic weapons that care.
   // An item that only cares about "next to you" offers no "within 1 tile" answer, so the
   // board's within1 counts as farther. A player's tap beats the board.
@@ -616,13 +619,23 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
                 </p>
               )}
               {targets.length === 0 ? (
-                <p className="text-amber-300">No monster is {RANGE_WORDS[range]} {hero.name}. Move closer first, or pick another power.</p>
+                <p className="text-amber-300">{range ? `No monster is ${RANGE_WORDS[range]} ${hero.name}.` : `No monster this power can attack right now.`} Move closer first, or pick another power.</p>
               ) : (
                 <MonsterChoice state={state} monsters={targets} chosen={chosen} onToggle={tap} />
               )}
               </>
               )}
               <BeforeQuestion hero={hero} effects={effects} answers={answers} setAnswers={setAnswers} />
+              {effects.follower && (
+                <div>
+                  <p className="text-zinc-200">If it hits, which hero on {hero.name}'s tile follows the lead (moves next to a monster and makes an at-will attack)?</p>
+                  <InReach items={state.heroes.filter((h) => h.id !== hero.id && h.hp > 0)} near={heroesInReach(state, hero.id, 'sameTile')}>
+                    {(shown) => (
+                      <HeroChoice heroes={shown} chosen={answers.followerId ? [answers.followerId] : []} onToggle={(id) => setAnswers({ ...answers, followerId: answers.followerId === id ? undefined : id })} />
+                    )}
+                  </InReach>
+                </div>
+              )}
               {chosen.length > 0 && (
                 <DistanceQuestion
                   state={state}

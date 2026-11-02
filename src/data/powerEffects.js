@@ -27,6 +27,14 @@ import { itemAc } from './items.js'
 //   critFrom    +1 damage when the die shows this or more (a fan Ranger's Birch Arrow: 17).
 //   selfDamage  the hero takes this much damage after the attack (a fan Druid's Wolf Fangs).
 //   reusable    the card stays in play and isn't flipped (Improvise, Fleetfooted).
+//   range       which monsters it reaches on the virtual board ('adjacent', 'sameTile', 'within1'..'within3'),
+//               when the card text doesn't say it in words the app reads.
+//   targetOnly  'villain' (villains only), 'notOwnTile' (not a monster on your tile: Longbows),
+//               'nextToHero' (a monster next to another hero: Guiding Strike).
+//   oneTile     every monster it attacks has to be on the same tile (Trapping Shot).
+//   follower    on a hit another hero (asked in the attack box) moves their speed and makes an at-will attack.
+//   dodgeAttack 'shadow': after the dodge, a hero in the shadows makes an at-will attack (Swift Evasion).
+//   costsAttack a utility used in the Hero Phase "instead of attacking" (Chorus of Recovery).
 //   wolf        the fan Druid's Wolf Form attack: only while the hero is the wolf (tokens.wolf), with a
 //               Bite/Pounce question (Pounce: -2, and a hit Slows the monster). wolfOnly: a power only
 //               the wolf can use (Lupine Lore). While the hero is the wolf, no other power can be used.
@@ -150,7 +158,7 @@ BY_KEY.arcingstrike = BY_KEY.arcingsmite
 // The fields an effect can have, for checking a card's own `effect` in cards.json.
 export const EFFECT_FIELDS = [
   'targets', 'attacks', 'sameTarget', 'before', 'ask', 'evenBonus', 'onHit', 'after',
-  'note', 'hitNote', 'missNote', 'keepOnMiss', 'free', 'use', 'reaction', 'shadow', 'shadowBonus', 'shadowKeep', 'board', 'autoHit', 'critFrom', 'selfDamage', 'uses', 'wolf', 'wolfOnly', 'reusable',
+  'note', 'hitNote', 'missNote', 'keepOnMiss', 'free', 'use', 'reaction', 'shadow', 'shadowBonus', 'shadowKeep', 'board', 'autoHit', 'critFrom', 'selfDamage', 'uses', 'wolf', 'wolfOnly', 'reusable', 'range', 'targetOnly', 'oneTile', 'follower', 'dodgeAttack', 'costsAttack',
 ]
 
 const cardOf = (powerOrCard) => powerOrCard?.card ?? powerOrCard

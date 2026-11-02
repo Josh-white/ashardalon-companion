@@ -5,7 +5,7 @@ import { moveTargets } from '../board/powerMoves.js'
 import { tokenTargets } from '../board/heroTokens.js'
 import { outOfReach } from '../board/tactics.js'
 import { statusesOf } from './monsterStatus.js'
-import { isCharmable, pathKinds } from './fanPowers.js'
+import { isCharmable, pathKinds, targetAllowed } from './fanPowers.js'
 import { petsDue, petsOf } from './pets.js'
 import { normalizeTiles } from '../board/tileDefs.js'
 import { boardGrid } from '../board/play.js'
@@ -250,5 +250,52 @@ describe('Beast Ally', () => {
     expect(state.monsters[1].hp).toBe(1)
     expect(state.turn.acted).toContain('m1')
     expect(statusesOf(state.monsters[0])[0].tokens).toBe(1)
+  })
+})
+
+describe('fan target rules and extra attacks', () => {
+  const strikeWith = (state, effect, name = 'Shot') => {
+    const slot = state.heroes[0].powers.find((p) => p.type === 'at-will')
+    const next = gameReducer(state, { type: 'SET_POWER_CARD', heroId: state.heroes[0].id, powerId: slot.id, card: { id: name, name, attack: '+20', damage: '1', effect } })
+    return { state: next, id: slot.id }
+  }
+  it('targetOnly: not a monster on your tile; villains only', () => {
+    let state = game()
+    state = { ...state, board: { ...state.board, tokens: { ...state.board.tokens, m1: [0, 1] } } }
+    const longbow = strikeWith(state, { targetOnly: 'notOwnTile' })
+    const shot = gameReducer(longbow.state, { type: 'HERO_ATTACK', heroId: state.heroes[0].id, powerId: longbow.id, targets: [{ monsterId: 'm1', roll: 10 }] })
+    expect(shot).toBe(longbow.state)
+    expect(targetAllowed(state, state.heroes[0], { targetOnly: 'villain' }, state.monsters[0])).toBe(false)
+    const far = { ...state, board: { ...state.board, tokens: { ...state.board.tokens, m1: [1, -2] } } }
+    expect(targetAllowed(far, far.heroes[0], { targetOnly: 'notOwnTile' }, far.monsters[0])).toBe(true)
+  })
+
+  it('oneTile: after the first pick, only monsters on its tile', () => {
+    let state = game()
+    state = { ...state, monsters: [rat('m1'), rat('m2')], board: { ...state.board, tokens: { ...state.board.tokens, m2: [0, 1] } } }
+    expect(targetAllowed(state, state.heroes[0], { oneTile: true }, state.monsters[1], ['m1'])).toBe(false)
+    expect(targetAllowed(state, state.heroes[0], { oneTile: true }, state.monsters[1], [])).toBe(true)
+  })
+
+  it('follower: on a hit another hero gets a move and an at-will attack', () => {
+    const lead = strikeWith(game(), { follower: true }, 'Lead')
+    const [me, ally] = lead.state.heroes
+    const next = gameReducer(lead.state, { type: 'HERO_ATTACK', heroId: me.id, powerId: lead.id, targets: [{ monsterId: 'm1', roll: 10 }], followerId: ally.id })
+    expect(next.turn.bonusAttacks).toEqual([{ heroId: ally.id, bonus: 0, source: 'Lead' }])
+    expect(next.turn.boardMove.tokens).toEqual([ally.id])
+  })
+
+  it('costsAttack: a utility used instead of attacking', () => {
+    const { state, id } = give(game(), 0, { use: { healSelf: 1 }, costsAttack: true })
+    const next = use(state, 0, id)
+    expect(next.turn.attackSpent?.heroId).toBe(state.heroes[0].id)
+  })
+
+  it('cancelEncounter: cancels the encounter card waiting to be done', () => {
+    const { state, id } = give(game(), 0, { use: { cancelEncounter: true }, uses: 2 })
+    expect(use(state, 0, id)).toBe(state)
+    const drawn = { ...state, encounter: { cardId: 'x', heroId: state.heroes[1].id, card: { id: 'x', name: 'Bad Luck' } } }
+    const next = use(drawn, 0, id)
+    expect(next.encounter).toBeNull()
   })
 })

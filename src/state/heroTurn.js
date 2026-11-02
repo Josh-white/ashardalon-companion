@@ -383,7 +383,7 @@ export function attackGone(state, hero) {
 }
 
 // Whether using this power takes the place of the hero's attack right now.
-export const powerUsesAttack = (state, hero, power) => inHeroPhase(state, hero) && (power?.type === 'at-will' || power?.type === 'daily')
+export const powerUsesAttack = (state, hero, power) => inHeroPhase(state, hero) && (power?.type === 'at-will' || power?.type === 'daily' || Boolean(effectsOf(power).costsAttack))
 
 // Opening the Cage or disabling a trap takes the place of the active hero's attack:
 // once per Hero Phase, and not after they've attacked (or moved twice).

@@ -12,6 +12,7 @@
 //   perch       Treetop: on a wall next to the tile; monsters' adjacent attacks can't reach the
 //               hero until the next Hero Phase, which then has Advantage (roll twice, keep the best)
 //   mesmerize   Beast Ally: { types, names, from: [statuses], turns } Pacified/Trapped beasts become Mesmerized
+//   cancelEncounter  cancel the encounter card waiting to be done (Tracker's Instinct)
 //   charm       Charm Beast: { types: [monster types] } for the monster just drawn (action.monsterIds[0])
 
 import { baseId, key } from '../board/grid.js'
@@ -24,6 +25,7 @@ import { inHeroPhase } from './heroTurn.js'
 import { defeatDetails, hurtMonster } from './combat.js'
 import { clamp, findFoe, updateHero, updateMonster, withLog, withMoment } from './gameHelpers.js'
 import { discardMonsterCard } from './monsterDeck.js'
+import { discardEncounterCard } from './encounterDeck.js'
 
 // The `use` a power works with once the player picked an option (null: no option picked yet).
 export function resolveUse(use, option) {
@@ -43,6 +45,7 @@ export function fanUseBlocked(state, hero, use) {
   if (use.moveTraps && trapsOnTile(state, hero).length === 0) return `There's no trap on ${hero.name}'s tile.`
   if (use.removeTrap && trapsOnTile(state, hero).length === 0) return `There's no trap on ${hero.name}'s tile.`
   if (use.charm && !newestMonster(state)) return 'Use it when a new monster card is drawn.'
+  if (use.cancelEncounter && (!state.encounter || state.encounter.attacked || state.encounter.card?.noCancel)) return 'Use it when an encounter card is drawn, before it happens.'
   if (use.mesmerize && mesmerizeTargets(state, use.mesmerize).length === 0) return 'No Pacified or Trapped beast to Mesmerize yet.'
   return null
 }
@@ -131,6 +134,10 @@ export function applyFanUse(state, before, hero, power, use, action) {
   }
   if (use.charm) next = charmBeast(next, hero, power, use.charm, action)
   if (use.mesmerize) next = mesmerize(next, power, use.mesmerize)
+  if (use.cancelEncounter && before.encounter) {
+    next = discardEncounterCard({ ...next, encounter: null }, before.encounter.cardId)
+    next = withLog(next, `${power.name}: ${before.encounter.card.name} is cancelled.`)
+  }
   return next
 }
 
@@ -308,4 +315,26 @@ export function takePath(state, action) {
   const step = { pick: 'self', to: 'onToken', kind: action.kind, own: action.kind === 'darkness' }
   const next = queueMoves({ ...state, turn: { ...state.turn, boardMoves: (state.turn.boardMoves ?? 0) + 1 } }, hero, { name: HERO_TOKENS[action.kind].name }, [step])
   return withLog(next, `${hero.name} takes the ${HERO_TOKENS[action.kind].name}.`)
+}
+
+// Which monsters a fan power may attack (effects.targetOnly / oneTile). `chosen` are the ones already picked.
+export function targetAllowed(state, hero, effects, monster, chosen = []) {
+  const only = effects?.targetOnly
+  if (only === 'villain' && !monster.villain) return false
+  const board = state.board
+  const spots = board ? Object.entries(board.tokens).filter(([id]) => baseId(id) === monster.id).map(([, at]) => at) : []
+  if (!board || spots.length === 0) return true
+  const grid = boardGrid(board)
+  const area = (at) => grid.get(key(at))?.area
+  const own = board.tokens[hero.id] && area(board.tokens[hero.id])
+  if (only === 'notOwnTile' && spots.every((at) => area(at) === own)) return false
+  if (only === 'nextToHero') {
+    const others = state.heroes.filter((h) => h.id !== hero.id && h.hp > 0 && board.tokens[h.id]).map((h) => board.tokens[h.id])
+    if (!spots.some((at) => others.some((o) => adjacent(grid, at, o)))) return false
+  }
+  if (effects?.oneTile && chosen.length > 0) {
+    const first = Object.entries(board.tokens).filter(([id]) => baseId(id) === chosen[0]).map(([, at]) => area(at))
+    if (first.length > 0 && !spots.some((at) => first.includes(area(at)))) return false
+  }
+  return true
 }

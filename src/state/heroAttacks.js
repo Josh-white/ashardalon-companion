@@ -6,7 +6,7 @@ import { hasSecondChance } from '../data/difficulty.js'
 import { effectsOf, maxRolls, onHitHeals, shadowAfter, shadowKept, wolfBlocked } from '../data/powerEffects.js'
 import { addStatus, attackedStatus } from './monsterStatus.js'
 import { summonPets } from './pets.js'
-import { applyFanUse, fanUseBlocked, resolveUse, sendSeeker } from './fanPowers.js'
+import { applyFanUse, fanUseBlocked, resolveUse, sendSeeker, targetAllowed } from './fanPowers.js'
 import { queueFearMove, queueMoves } from '../board/powerMoves.js'
 import { heroesInReach } from '../board/encounters.js'
 import { clamp, findFoe, foes, heroLabel, markUsed, updateHero, updateMonster, validRoll, withCast, withLog, withMoment } from './gameHelpers.js'
@@ -73,6 +73,8 @@ export function heroAttack(state, action) {
     .filter((t) => foes(state).some((m) => m.id === t.monsterId && m.ac) && validRoll(t.roll))
     // Hypnotism never hurts the monster it moved.
     .filter((t) => effects.ask !== 'moved-monster' || t.monsterId !== action.movedId)
+    // Fan powers that only hit some monsters (villains only, not on your tile...).
+    .filter((t) => !effects.targetOnly || targetAllowed(state, hero, { targetOnly: effects.targetOnly }, findFoe(state, t.monsterId)))
     .slice(0, item ? 1 : maxRolls(power))
     // Advantage (Treetop, a fan Ranger): the device rolled twice, the better die counts.
     .map((t) => (hasAdvantage(state, hero) && validRoll(t.roll2) ? { ...t, roll: Math.max(t.roll, t.roll2), advantage: [t.roll, t.roll2] } : t))
@@ -159,6 +161,13 @@ export function heroAttack(state, action) {
     next = pass ? applyPasses(next, [pass], `${hero.name}'s ${power.name}`) : withLog(next, `${hero.name}'s ${power.name}: no monster on ${hero.name}'s tile to pass.`)
   }
   if (effects.board?.after) next = queueMoves(next, hero, power, effects.board.after, { attacked: targets.map((t) => t.monsterId), hit: anyHit, shadow: Boolean(hero.tokens?.shadow) })
+  // Follow My Lead (a fan Battlemaster): on a hit another hero moves next to a monster and makes an at-will attack.
+  const follower = effects.follower && anyHit && state.heroes.find((h) => h.id === action.followerId && h.id !== hero.id && h.hp > 0)
+  if (follower) {
+    next = { ...next, turn: { ...next.turn, bonusAttacks: [...(next.turn.bonusAttacks ?? []), { heroId: follower.id, bonus: 0, source: power.name }] } }
+    if (next.board?.tokens[follower.id] && !next.turn.boardMove) next = queueMoves(next, hero, power, [{ pick: 'listed', to: 'squares', n: 'speed' }], { tokens: [follower.id], prompt: `${follower.name} follows the lead: move next to a monster.` })
+    next = withLog(next, `${follower.name} follows ${hero.name}'s lead: a move and an at-will attack.`)
+  }
   next = queueFearMove(next)
 
   // Bloodlust ends when the hero defeats a monster.
@@ -464,5 +473,10 @@ export function dodgeHit(state, action) {
   const results = last.results.map((r) => (r === row ? { ...r, dodged: true } : r))
   next = { ...next, turn: { ...next.turn, lastMonsterAttack: { ...last, results } } }
   next = queueMoves(next, hero, power, effectsOf(power).board?.dodge)
+  // Swift Evasion (a fan Assassin): in the shadows, an at-will attack too.
+  if (effectsOf(power).dodgeAttack === 'shadow' && hero.tokens?.shadow) {
+    next = { ...next, turn: { ...next.turn, bonusAttacks: [...(next.turn.bonusAttacks ?? []), { heroId: hero.id, bonus: 0, source: power.name }] } }
+    next = withLog(next, `${hero.name} strikes back from the shadows: an at-will attack.`)
+  }
   return withLog(next, `${hero.name} used Tumbling Escape: the attack misses!${row.miss > 0 ? ` (${row.miss} miss damage)` : ''} Put ${hero.name} on a tile within 1 tile.`)
 }
