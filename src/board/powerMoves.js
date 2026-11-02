@@ -10,8 +10,9 @@
 //         of the hero, or of the figure itself with ref: 'piece'), ownTile, adjacentTile,
 //         tileCloser (onto a tile 1 tile closer to the hero), swap; and for a villain's hit
 //         (move.from is the villain's token): awayFrom (`n` tiles farther from it), nextToFoe,
-//         triangle (the tile the hero's tile's triangle points to)
-// `hit: true` steps only happen when the attack hit.
+//         triangle (the tile the hero's tile's triangle points to); nextToAttacked (next to a
+//         monster the power attacked: Crane's Wings, a fan hero's power)
+// `hit: true` steps only happen when the attack hit, `miss: true` steps only when it missed.
 
 import { baseId, key } from './grid.js'
 import { distances, reachable, tilesBetween } from './paths.js'
@@ -25,7 +26,7 @@ const parse = (k) => k.split(',').map(Number)
 // `fromName` its name for the prompt.
 export function queueMoves(state, hero, power, steps, { attacked = [], hit = false, tokens, from, fromName, prompt } = {}) {
   if (!state.board || !hero || !Array.isArray(steps)) return state
-  const todo = steps.filter((s) => !s.hit || hit)
+  const todo = steps.filter((s) => (!s.hit || hit) && (!s.miss || !hit))
   if (todo.length === 0) return state
   const move = { heroId: hero.id, source: power?.name ?? '', attacked, steps: todo, ...(tokens ? { tokens } : {}), ...(from ? { from, fromName } : {}), ...(prompt ? { prompt } : {}) }
   return settle({ ...state, turn: { ...state.turn, boardMove: move } })
@@ -223,6 +224,10 @@ export function moveTargets(state, id) {
       const foeAt = state.board.tokens[move.from]
       return foeAt ? nextTo(foeAt) : []
     }
+    case 'nextToAttacked': {
+      const foes = foeTokens(state).filter((f) => (move.attacked ?? []).includes(baseId(f.id)))
+      return [...new Set(foes.flatMap((f) => nextTo(f.at)))]
+    }
     case 'triangle': {
       const tile = grid.get(key(at))?.tile
       const placed = state.board.tiles.find((t) => t.uid === tile)
@@ -316,6 +321,7 @@ const WHERE = {
   adjacentTile: () => 'on a tile next to its own',
   awayFrom: (s, me, move) => `${s.n ?? 1} tile${(s.n ?? 1) > 1 ? 's' : ''} farther from the ${move.fromName}`,
   nextToFoe: (s, me, move) => `next to the ${move.fromName}`,
+  nextToAttacked: () => 'next to the monster it attacked',
   triangle: () => "on the tile the triangle points to",
 }
 export function movePrompt(state) {
