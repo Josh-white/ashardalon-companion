@@ -97,6 +97,13 @@ PALETTE = {
     "otyugh": "7b7648",      # otyugh
     "otyugh_dark": "4f4b2c",
     "otyugh_light": "aaa36c",
+    "drake": "c4471d",       # rage drake
+    "drake_dark": "7a2412",
+    "drake_belly": "e0a24a",
+    "ash": "a3221a",         # ashardalon
+    "ash_dark": "4e0f0b",
+    "ash_belly": "d9a441",
+    "ash_wing": "6e1813",
 }
 
 argv = sys.argv
@@ -834,6 +841,117 @@ def build_bear():
         cone(f"LowFang{side}", "bone", "head", (0.06 * side, hy - 0.31, hz - 0.20), 0.02, 0.07, sides=5)
 
 
+def build_drake(dragon=False):
+    """A rage drake: a wingless red dragon on all fours, a ridge of spikes down its back and
+    long tail, horns swept back and a snarling jaw of teeth. Legs and head use the bear's
+    bones and moves; the tail has its own bone. Ashardalon (`dragon`) is the same beast, darker,
+    with great wings, more horns and a crown of spikes."""
+    main, dark, belly = ("ash", "ash_dark", "ash_belly") if dragon else ("drake", "drake_dark", "drake_belly")
+    sphere("Rump", main, "hips", (0, 0.30, 0.72), 0.36, scale=(1.0, 1.2, 0.9), segments=14, rings=9)
+    sphere("Chest", main, "body", (0, -0.18, 0.80), 0.40, scale=(0.95, 1.15, 0.95), segments=14, rings=9)
+    sphere("Belly", belly, "body", (0, -0.02, 0.50), 0.26, scale=(1.1, 1.9, 0.5), segments=12, rings=8)
+    # The neck rises forward to the head.
+    for i in range(5):
+        t = i / 4
+        sphere(f"Neck{i}", main, "head", (0, -0.45 - 0.16 * t, 0.98 + 0.20 * t), 0.20 - 0.04 * t,
+               segments=10, rings=7)
+        sphere(f"Throat{i}", belly, "head", (0, -0.52 - 0.16 * t, 0.90 + 0.20 * t), 0.13 - 0.03 * t,
+               scale=(1, 0.8, 0.8), segments=8, rings=6)
+    # Tail: tapering behind, curling a little to one side, a spiked tip.
+    p0, p1, p2, p3 = Vector((0, 0.55, 0.75)), Vector((0, 0.95, 0.65)), Vector((0.25, 1.15, 0.35)), Vector((0.45, 1.05, 0.15))
+    for j in range(12):
+        t = j / 11
+        sphere(f"Tail{j}", main, "tail", bezier(p0, p1, p2, p3, t), 0.16 - 0.12 * t, segments=10, rings=7)
+    cone("TailSpike", "bone", "tail", p3 + Vector((0.10, -0.06, 0)), 0.06, 0.20, rot=(0, 90, 30), sides=5)
+    # Spikes down the back and tail.
+    spine = [(0, -0.62, 1.30), (0, -0.40, 1.16), (0, -0.20, 1.15), (0, 0.02, 1.12), (0, 0.24, 1.06), (0, 0.46, 0.98)]
+    for i, at in enumerate(spine):
+        bone = "head" if i == 0 else ("body" if at[1] < 0.1 else "hips")
+        cone(f"Spine{i}", belly, bone, Vector(at) + Vector((0, 0, 0.04)), 0.10, 0.30 - 0.02 * i,
+             rot=(-25, 0, 0), scale=(0.35, 1, 1), sides=4)
+    for j in (2, 5, 8):
+        at = bezier(p0, p1, p2, p3, j / 11)
+        cone(f"TailSpine{j}", belly, "tail", at + Vector((0, 0, 0.15 - 0.01 * j)), 0.08, 0.20, rot=(-30, 0, 0),
+             scale=(0.35, 1, 1), sides=4)
+
+    # Legs: the front pair on the arm bones, the back pair on the leg bones, with claws.
+    for side, tag in ((1, "L"), (-1, "R")):
+        for bone, y, upper in ((f"arm.{tag}", -0.30, 0.15), (f"leg.{tag}", 0.36, 0.19)):
+            x = 0.28 * side
+            sphere(f"Upper.{bone}", main, bone, (x, y, 0.52), upper, scale=(1, 1.1, 1.3))
+            box(f"Lower.{bone}", dark, bone, (x, y, 0.24), (0.18, 0.20, 0.32), bevel=0.06)
+            box(f"Foot.{bone}", dark, bone, (x, y - 0.05, 0.06), (0.22, 0.30, 0.12), bevel=0.05)
+            for i, dx in enumerate((-0.06, 0, 0.06)):
+                cone(f"Claw.{bone}{i}", "bone", bone, (x + dx, y - 0.23, 0.05), 0.028, 0.10, rot=(100, 0, 0), sides=4)
+
+    # Head: a long snout with a toothy jaw, horns swept back, glowing angry eyes.
+    hy, hz = -0.78, 1.22
+    sphere("Skull", main, "head", (0, hy, hz), 0.21, scale=(1.0, 1.1, 0.9), segments=14, rings=9)
+    box("Snout", main, "head", (0, hy - 0.28, hz - 0.04), (0.22, 0.36, 0.16), bevel=0.07, segments=3)
+    box("Jaw", dark, "head", (0, hy - 0.24, hz - 0.17), (0.19, 0.32, 0.07), bevel=0.03, rot=(10, 0, 0))
+    box("MouthInside", "red", "head", (0, hy - 0.24, hz - 0.12), (0.16, 0.30, 0.05), bevel=0.01, rot=(5, 0, 0))
+    for side in (1, -1):
+        box(f"Nostril{side}", "black", "head", (0.05 * side, hy - 0.46, hz + 0.02), (0.03, 0.03, 0.02), bevel=0.008)
+        for i, y in enumerate((-0.42, -0.33, -0.24, -0.15)):
+            cone(f"Tooth{side}{i}", "bone", "head", (0.09 * side, hy + y, hz - 0.13), 0.017, 0.06, rot=(180, 0, 0),
+                 sides=4)
+        sphere(f"Eye{side}", "glow", "head", (0.12 * side, hy - 0.10, hz + 0.08), 0.045, scale=(0.9, 0.7, 0.6),
+               segments=8, rings=6)
+        box(f"Brow{side}", dark, "head", (0.12 * side, hy - 0.10, hz + 0.14), (0.12, 0.10, 0.05), bevel=0.02,
+            rot=(0, -18 * side, 0))
+        cone(f"Horn{side}", "bone", "head", (0.12 * side, hy + 0.14, hz + 0.18), 0.05, 0.34, rot=(-60, 0, -14 * side),
+             sides=6)
+        cone(f"Cheek{side}", dark, "head", (0.19 * side, hy + 0.05, hz - 0.02), 0.06, 0.20,
+             rot=(0, 70 * side, 20 * side), scale=(1, 0.3, 1), sides=4)
+    if dragon:
+        for side in (1, -1):
+            cone(f"HornSmall{side}", "bone", "head", (0.17 * side, hy + 0.08, hz + 0.10), 0.035, 0.22,
+                 rot=(-75, 0, -35 * side), sides=6)
+            for i, (dy, dz) in enumerate(((0.0, 0.05), (0.08, -0.04))):
+                cone(f"Frill{side}{i}", "bone", "head", (0.20 * side, hy + dy, hz + dz), 0.03, 0.18,
+                     rot=(-60, 0, -70 * side), sides=5)
+        build_wings()
+
+
+def sheet(name, colour, bone, points):
+    """A flat, two-sided panel through `points` (a wing's skin)."""
+    bm = bmesh.new()
+    verts = [bm.verts.new(Vector(p)) for p in points]
+    bm.faces.new(verts)
+    back = [bm.verts.new(Vector(p)) for p in reversed(points)]
+    bm.faces.new(back)
+    return finish(bm, name, colour, bone, (0, 0, 0), (0, 0, 0))
+
+
+def build_wings():
+    """Ashardalon's wings: an arm of bone to a clawed wrist, three long fingers, dark skin
+    stretched between them and back to the body."""
+    for side, tag in ((1, "L"), (-1, "R")):
+        bone = f"wing.{tag}"
+        x = side
+        shoulder = Vector((0.22 * x, -0.05, 1.10))
+        elbow = Vector((0.60 * x, 0.10, 1.42))
+        wrist = Vector((0.95 * x, 0.30, 1.62))
+        tips = [Vector((1.42 * x, 0.55, 1.22)), Vector((1.15 * x, 0.85, 0.98)), Vector((0.75 * x, 0.90, 0.92))]
+        root_back = Vector((0.20 * x, 0.55, 0.98))
+        for i, (a, b, r) in enumerate(((shoulder, elbow, 0.07), (elbow, wrist, 0.055))):
+            d = b - a
+            m = facing(d)
+            cone(f"WingArm{tag}{i}", "ash_dark", bone, (a + b) / 2, r, d.length + 0.04, rot=turned(m, (-90, 0, 0)),
+                 sides=6, tip=r * 0.8)
+        sphere(f"WingWrist{tag}", "ash_dark", bone, wrist, 0.07, segments=8, rings=6)
+        cone(f"WingClaw{tag}", "bone", bone, wrist + Vector((0.02 * x, -0.06, 0.08)), 0.03, 0.14,
+             rot=(-30, 0, 0), sides=4)
+        for i, tip in enumerate(tips):
+            d = tip - wrist
+            cone(f"WingFinger{tag}{i}", "ash_dark", bone, wrist + d / 2, 0.035, d.length, rot=turned(facing(d), (-90, 0, 0)),
+                 sides=5, tip=0.015)
+        skins = [[shoulder, elbow, wrist, tips[0]], [wrist, tips[0], tips[1]], [wrist, tips[1], tips[2]],
+                 [shoulder, wrist, tips[2], root_back]]
+        for i, pts in enumerate(skins):
+            sheet(f"WingSkin{tag}{i}", "ash_wing", bone, pts)
+
+
 def build_devil():
     """A legion devil: red skin, curling horns, black spiked plate armour, a pointed tail, a
     longsword in the right hand and a small spiked buckler on the left arm."""
@@ -1291,6 +1409,9 @@ OTYUGH_BONES = [
     ("leg.R", (-0.42, -0.22, 0.45), (-0.42, -0.22, 0.02), "root"),
     ("tail", (0, 0.45, 0.45), (0, 0.45, 0.02), "root"),
 ]
+DRAKE_BONES = BEAR_BONES + [("tail", (0, 0.55, 0.75), (0, 1.05, 0.35), "hips")]
+ASHARDALON_BONES = DRAKE_BONES + [("wing.L", (0.22, -0.05, 1.10), (0.95, 0.30, 1.62), "body"),
+                                  ("wing.R", (-0.22, -0.05, 1.10), (-0.95, 0.30, 1.62), "body")]
 KOBOLD_BONES = [
     ("root", (0, 0, 0), (0, 0, 0.2), None),
     ("hips", (0, 0, 0.50), (0, 0, 0.72), "root"),
@@ -1745,11 +1866,41 @@ OTYUGH_MOVES = [
     ("Death_A_Pose", False, [(0, OTYUGH_FALLEN), (1, OTYUGH_FALLEN)]),
 ]
 
+# Ashardalon moves like the drake, with his wings: half folded at rest, spread wide when he
+# rears up to bite or roar, and a fire-breath move (Spellcast_Shoot) of his own.
+def wings(spread):
+    """Both wings raised (+) or folded (-) by `spread` degrees about their own forward axis."""
+    return {"wing.L": (0, 0, spread), "wing.R": (0, 0, -spread)}
+
+
+ASH_FOLD = 0
+ASHARDALON_MOVES = []
+for _name, _loop, _keys in BEAR_MOVES:
+    _spread = 35 if _name in ("1H_Melee_Attack_Chop", "Cheer") else (-55 if _name.startswith("Death") else ASH_FOLD)
+    ASHARDALON_MOVES.append((_name, _loop, [
+        (f, {**wings(_spread if (spec and spec is not BEAR_FALLEN) or _name.startswith("Death_A_Pose") else ASH_FOLD), **spec})
+        for f, spec in _keys]))
+ASHARDALON_MOVES[0] = ("Idle", True, [
+    (0, wings(ASH_FOLD)),
+    (30, {**wings(ASH_FOLD + 10), "body": (3, 0, 0), "head": (-6, 6, 0), "hips": {"loc": (0, -0.02, 0)}}),
+    (60, wings(ASH_FOLD)),
+])
+ASHARDALON_MOVES.append(("Spellcast_Shoot", False, [
+    (0, wings(ASH_FOLD)),
+    (12, {**BEAR_REAR, **wings(40), "head": (-35, 0, 0)}),
+    (20, {**wings(30), "body": (-6, 0, 0), "head": (25, 0, 0), "arm.L": (10, 0, 0), "arm.R": (10, 0, 0)}),
+    (32, {**wings(30), "body": (-4, 0, 0), "head": (20, 0, 0)}),
+    (44, wings(ASH_FOLD)),
+]))
+
 # name, file, build, height, bones, extra moves (, own moves)
 # The board draws villains 1.3 times bigger, so a villain's height here is its real height / 1.3.
+# Ashardalon is the big boss: about two squares long on the board, like the real miniature.
 MONSTERS = [
     ("orc-smasher", "orc-smasher.glb", lambda: build_orc("mace"), 2.4, ORC_BONES, []),
     ("orc-archer", "orc-archer.glb", lambda: build_orc("bow"), 2.4, ORC_BONES, ["1H_Ranged_Shoot"]),
+    ("rage-drake", "rage-drake.glb", build_drake, 1.4, DRAKE_BONES, [], BEAR_MOVES),
+    ("ashardalon", "ashardalon.glb", lambda: build_drake(dragon=True), 2.6, ASHARDALON_BONES, [], ASHARDALON_MOVES),
     ("otyugh", "otyugh.glb", build_otyugh, 2.0, OTYUGH_BONES, [], OTYUGH_MOVES),
     ("gauth", "gauth.glb", build_gauth, 1.8, GAUTH_BONES, [], GAUTH_MOVES),
     ("orc-storm-shaman", "orc-storm-shaman.glb", lambda: build_orc("staff"), 2.2, ORC_BONES, ["Spellcast_Shoot"]),
