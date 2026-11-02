@@ -14,6 +14,7 @@ const CardCheck = lazy(() => import('./components/CardCheck.jsx'))
 const TileCheck = lazy(() => import('./components/TileCheck.jsx'))
 const AllScreens = lazy(() => import('./components/AllScreens.jsx'))
 const FriendsPage = lazy(() => import('./components/FriendsPage.jsx'))
+const ModelGallery = lazy(() => import('./components/ModelGallery.jsx'))
 const AdminPage = lazy(() => import('./components/AdminPage.jsx'))
 
 // The page is picked once, when it loads, so a link that only changes the # (like the
@@ -32,6 +33,7 @@ createRoot(document.getElementById('root')).render(
     {/* The #cards page lists cards.json problems and cards the app can't find. */}
     {/* The #ideas page lists the ideas the players sent from the 💡 button. */}
     {/* The #friends page shows how much each friend from outside plays. */}
+    {/* The #models page shows every 3D figure on a turntable, with its moves. */}
     {/* The #admin page links to all of these; it opens from the bottom of "Which game?". */}
     {/* The #screens page shows the big screen, iPads and a phone side by side, for testing. */}
     {/* A screen that breaks shows "Something went wrong" and reloads, instead of going blank. */}
@@ -49,6 +51,8 @@ createRoot(document.getElementById('root')).render(
           <FriendsPage />
         ) : window.location.hash === '#cards' ? (
           <CardCheck />
+        ) : window.location.hash === '#models' ? (
+          <ModelGallery />
         ) : window.location.hash === '#admin' ? (
           <AdminPage />
         ) : (

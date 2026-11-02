@@ -51,7 +51,7 @@ export function heroModel(hero) {
 
 // The monsters with their own 3D figure (made by scripts/models/make-monsters.py), by card
 // name. Any other monster gets null and stays a standee.
-const MONSTER_FIGURES = [
+export const MONSTER_FIGURES = [
   [/orc smasher/i, 'Orc_Smasher'],
   [/orc archer/i, 'Orc_Archer'],
   [/kobold dragonshield/i, 'Kobold_Dragonshield'],

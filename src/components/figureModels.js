@@ -110,7 +110,7 @@ export function attachModel(node, look, color, ready) {
         const name = MOVES[twoHanded && MOVES[`${move}2`] ? `${move}2` : move]
         return clips.has(name) ? mixer.clipAction(clips.get(name)) : null
       }
-      const anim = { mixer, action, state: null, busy: false, cape, paint }
+      const anim = { mixer, action, clips, state: null, busy: false, cape, paint }
       mixer.addEventListener('finished', (e) => {
         // Only the move playing now: one it cut short doesn't send the figure back to idle.
         if (e.action !== anim.current) return
@@ -164,6 +164,27 @@ export function playMove(node, move) {
   anim.busy = true
   anim.easing = 0
 }
+
+// Any of the figure's own moves by its name in the file (the #models page's buttons). A
+// looping one (Idle, Walking) keeps going; any other plays once, then the figure stands again.
+export function playClip(node, name, loop = false) {
+  const anim = node?.userData.anim
+  const clip = anim?.clips.get(name)
+  if (!clip) return
+  const next = anim.mixer.clipAction(clip)
+  anim.down = name === 'Death_A_Pose'
+  next.reset().setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, loop ? Infinity : 1)
+  next.clampWhenFinished = !loop
+  next.play()
+  if (anim.current && anim.current !== next) anim.current.crossFadeTo(next, 0.15, false)
+  anim.current = next
+  anim.state = loop ? name : 'clip'
+  anim.busy = !loop
+  anim.easing = 0
+}
+
+// The names of a figure's moves, once it has loaded.
+export const clipNames = (node) => [...(node?.userData.anim?.clips.keys() ?? [])]
 
 // Walking while gliding to a new square, standing again after.
 export function setWalking(node, walking) {

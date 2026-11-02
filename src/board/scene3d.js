@@ -135,3 +135,19 @@ export function boardExtras(state) {
   const open = exits.length > 0 && !state.adventure?.escaped && escapeBlockers(state).length === 0
   return { markers, items: [...others, ...heroTokens], quests, exits: { squares: exits, open } }
 }
+
+// Where each figure looks while nothing is happening (JJ's ask): a hero at the nearest
+// monster or villain, a monster or villain at the nearest hero still standing. { id: [x, y] },
+// leaving out figures with nobody to look at (they keep looking where they were).
+export function restFacing(figures) {
+  const foe = (f) => f.kind === 'monster' || f.kind === 'villain'
+  const dist = (a, b) => Math.hypot(a.at[0] - b.at[0], a.at[1] - b.at[1])
+  const looks = {}
+  for (const f of figures) {
+    const others = f.kind === 'hero' ? figures.filter(foe) : foe(f) ? figures.filter((o) => o.kind === 'hero' && !o.faded) : []
+    let best = null
+    for (const o of others) if (dist(f, o) > 0 && (!best || dist(f, o) < dist(f, best))) best = o
+    if (best) looks[f.id] = best.at
+  }
+  return looks
+}
