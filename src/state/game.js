@@ -74,7 +74,13 @@ function evadeHit(state, action) {
 }
 
 // Every action, then a check for an adventure's victory, then the recap's counts.
-export const gameReducer = (state, action) => {
+export const gameReducer = (state, action) => keepCardsQuiet(state, reduceGame(state, action))
+
+// Heroes reading drawn cards aloud switched off (players who know the cards) stays off
+// through new games, Try again and the next campaign adventure, until someone turns it on.
+const keepCardsQuiet = (state, next) => (state?.readCardsOff && next && next.readCardsOff === undefined ? { ...next, readCardsOff: true } : next)
+
+const reduceGame = (state, action) => {
   const placed = pruneTokens(placeNewFigures(state, checkVictory(tagDrawn(reduceWithOpening(state, action)))))
   const sprung = springHeroTokens(placed)
   return withHealFx(state, withAttackFx(state, trackStats(state, sprung === placed ? placed : pruneTokens(checkVictory(sprung)), action), action))
@@ -187,6 +193,12 @@ function reduce(state, action) {
     // Someone tapped Skip: every screen reading a card stops.
     case 'SKIP_READING':
       return { ...state, reading: null, readSkips: (state.readSkips ?? 0) + 1 }
+
+    // Heroes reading drawn cards aloud, on or off for the whole game (src/components/SoundToggle.jsx
+    // CardReadingToggle). Turning it off stops a card being read right now, like Skip.
+    case 'SET_CARD_READING':
+      if (action.on) return { ...state, readCardsOff: false }
+      return { ...state, readCardsOff: true, reading: null, readSkips: (state.readSkips ?? 0) + 1 }
 
     // The "X goes first!" screen has finished: show what waited for it (the starting
     // treasure). Every screen sends this when its roll screen closes; only the first counts.

@@ -6,7 +6,7 @@ import { AreaName } from './AreaBackdrop.jsx'
 import { LOST_QUESTION, newGameQuestion } from './Recap.jsx'
 import { TilesLeft } from './Tiles.jsx'
 import UndoButton from './UndoButton.jsx'
-import { MusicToggle, SoundToggle, StayAwakeToggle } from './SoundToggle.jsx'
+import { CardReadingToggle, MusicToggle, SoundToggle, StayAwakeToggle } from './SoundToggle.jsx'
 import { BoardSwitch } from './SoundBoard.jsx'
 import { Button, useConfirm } from './ui.jsx'
 
@@ -43,6 +43,7 @@ export function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitch
           <UndoButton undo={undo} depth={undoDepth} dispatch={dispatch} className="max-w-56 truncate" />
           <SoundToggle on={sound.on} setOn={sound.setOn} elsewhere={sound.elsewhere} className="text-sm" />
           <MusicToggle on={sound.musicOn} setOn={sound.setMusicOn} soundOn={sound.on} className="text-sm" />
+          <CardReadingToggle state={state} dispatch={dispatch} className="text-sm" />
           <StayAwakeToggle className="text-sm" />
           {boardSwitch && <BoardSwitch state={state} dispatch={dispatch} className="text-sm" />}
           <DifficultySwitch state={state} dispatch={dispatch} className="text-sm" />
@@ -115,6 +116,7 @@ export function SoloBar({ state, dispatch, undo, undoDepth, onSwitchSeat, sound,
           <div className="flex flex-wrap gap-2">
             <SoundToggle on={sound.on} setOn={sound.setOn} elsewhere={sound.elsewhere} className="text-sm" />
             <MusicToggle on={sound.musicOn} setOn={sound.setMusicOn} soundOn={sound.on} className="text-sm" />
+            <CardReadingToggle state={state} dispatch={dispatch} className="text-sm" />
             <StayAwakeToggle className="text-sm" />
             {boardSwitch && <BoardSwitch state={state} dispatch={dispatch} className="text-sm" />}
           </div>

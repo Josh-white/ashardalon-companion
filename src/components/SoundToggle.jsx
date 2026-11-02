@@ -32,6 +32,24 @@ export function MusicToggle({ on, setOn, soundOn, className = '' }) {
   )
 }
 
+// Heroes reading drawn cards aloud (encounters, treasure, chambers...), on or off for the
+// whole game, for players who already know the cards. The narrator and sound effects play on.
+export function CardReadingToggle({ state, dispatch, className = '' }) {
+  if (!state || !dispatch) return null
+  const on = !state.readCardsOff
+  return (
+    <button
+      type="button"
+      className={`rounded-xl px-3 py-2 transition hover:bg-zinc-800 active:scale-95 ${on ? 'text-zinc-300' : 'text-zinc-500'} ${className}`}
+      onClick={() => dispatch({ type: 'SET_CARD_READING', on: !on })}
+      aria-pressed={on}
+      title={on ? 'Heroes read drawn cards out loud. Tap to turn it off for everyone (the narrator keeps talking).' : 'Tap to have heroes read drawn cards out loud again.'}
+    >
+      {on ? '🗣️ Heroes read cards' : '🗣️ Cards not read aloud'}
+    </button>
+  )
+}
+
 // Keeps this screen from going to sleep during the game (on by default on every screen).
 export function StayAwakeToggle({ className = '' }) {
   const [on, setOn] = useStayAwakeSetting()
