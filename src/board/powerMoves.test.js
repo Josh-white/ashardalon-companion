@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
 import { moveChoices, movePrompt, moveTargets, queueMoves } from './powerMoves.js'
+import { heroReach, walkSpeed } from './play.js'
 import { normalizeTiles } from './tileDefs.js'
 
 const TILES = normalizeTiles(
@@ -35,6 +36,26 @@ describe('powers that move figures on the board', () => {
     expect(next.board.tokens[heroes[0].id]).toEqual([1, 2])
     expect(next.board.tokens[heroes[1].id]).toEqual([0, 2])
     expect(next.turn.boardMove).toBeNull()
+  })
+
+  it("Yer Own Size!: swaps only with a hero next to a monster, and costs 2 squares of the next walk", () => {
+    const { state, heroes, power } = game()
+    const steps = [{ pick: 'heroWithin1', to: 'swap', nextToMonster: true, speedCost: 2 }]
+    // The other hero at [1,2] isn't next to the rat at [1,-2]: nothing to swap with.
+    expect(queueMoves(state, heroes[0], power, steps).turn.boardMove).toBeNull()
+    const near = { ...state, board: { ...state.board, tokens: { ...state.board.tokens, [heroes[1].id]: [1, -1] } } }
+    let next = queueMoves(near, heroes[0], power, steps)
+    expect(moveChoices(next)).toEqual([heroes[1].id])
+    next = gameReducer(next, { type: 'BOARD_MOVE', id: heroes[1].id })
+    expect(next.board.tokens[heroes[0].id]).toEqual([1, -1])
+    const hero = next.heroes[0]
+    expect(walkSpeed(next, hero)).toBe(hero.speed - 2)
+    const far = heroReach(next, hero)
+    expect(far.length).toBeGreaterThan(0)
+    // Walking once uses up the lost squares: the next walk is full speed again.
+    const to = far[0].split(',').map(Number)
+    next = gameReducer(next, { type: 'MOVE_HERO', heroId: hero.id, to })
+    expect(walkSpeed(next, next.heroes[0])).toBe(hero.speed)
   })
 
   it('pulls a monster within 1 tile next to the hero, then does the next step', () => {
