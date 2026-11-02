@@ -296,7 +296,7 @@ export function Token({ id, at, label, color, art, selected, active, aimed, acti
 
 // A tile just laid (useFreshTiles): a warm wash and a bright outline round its squares that
 // flash a few times and fade, so everyone spots it while the board settles into its new fit.
-export function NewTileGlow({ grid, uids }) {
+export function NewTileGlow({ grid, uids, style }) {
   const squares = [...grid.values()].filter((sq) => uids.includes(sq.area))
   if (squares.length === 0) return null
   const own = new Set(squares.map((sq) => key([sq.x, sq.y])))
@@ -309,7 +309,7 @@ export function NewTileGlow({ grid, uids }) {
       }),
   )
   return (
-    <g pointerEvents="none" className="new-tile-glow" data-new-tile={uids.join(' ')}>
+    <g pointerEvents="none" className="new-tile-glow" style={style} data-new-tile={uids.join(' ')}>
       {squares.map((sq) => (
         <rect key={`${sq.x},${sq.y}`} x={sq.x * SQUARE} y={sq.y * SQUARE} width={SQUARE} height={SQUARE} fill="#fde68a" fillOpacity="0.28" />
       ))}

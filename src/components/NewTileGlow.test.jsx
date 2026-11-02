@@ -6,7 +6,7 @@ import { normalizeTiles } from '../board/tileDefs.js'
 import { layTile } from '../board/play.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
 import Board from './Board.jsx'
-import { GLOW_MS } from './useFreshTiles.js'
+import { DROP_MS, GLOW_MS, LAND_MS } from './useFreshTiles.js'
 
 const OPEN = { N: 'oooo', S: 'oooo', W: 'oooooooo', E: 'oooooooo' }
 const TILES = normalizeTiles(
@@ -59,5 +59,23 @@ describe('a new tile lights up', () => {
     first.unmount()
     const again = render(<Board state={explored(state)} dispatch={vi.fn()} fill calm />)
     expect(again.container.querySelector('[data-new-tile]')).not.toBeNull()
+  })
+
+  it('waits for the board to move, then drops the new tile in (JJ: show the area, then the tile)', () => {
+    vi.useFakeTimers()
+    const state = game()
+    const c = render(<Board state={state} dispatch={vi.fn()} fill calm />)
+    expect(c.container.querySelector('.tile-drop')).toBeNull()
+    const next = explored(state)
+    c.rerender(<Board state={next} dispatch={vi.fn()} fill calm />)
+    const dropping = c.container.querySelectorAll('.tile-drop')
+    expect(dropping).toHaveLength(1)
+    // The drop starts only after the camera move and a pause, and the glow after it lands.
+    expect(dropping[0].style.getPropertyValue('--land-delay')).toBe(`${LAND_MS}ms`)
+    expect(c.container.querySelector('[data-new-tile]').style.getPropertyValue('--landed')).toBe(`${LAND_MS + DROP_MS}ms`)
+    // Once down, it's an ordinary tile again (a hero stepping on doesn't pop in).
+    act(() => vi.advanceTimersByTime(LAND_MS + DROP_MS + 500))
+    expect(c.container.querySelector('.tile-drop')).toBeNull()
+    expect(c.container.querySelector('[data-new-tile]')).not.toBeNull()
   })
 })
