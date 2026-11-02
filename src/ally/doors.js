@@ -11,8 +11,8 @@ import { doorsNearHero, nextToDoor } from '../board/doors.js'
 import { canSpendAttack } from '../state/heroTurn.js'
 import { DOOR_UNLOCK_ROLL } from '../state/adventure.js'
 import { randomNumbers, shuffleNumbers } from '../state/random.js'
+import { d20 } from './helpers.js'
 
-const d20 = () => Math.floor(Math.random() * 20) + 1
 
 const doorsOf = (state) => state.board?.doors ?? []
 

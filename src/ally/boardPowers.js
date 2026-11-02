@@ -18,11 +18,9 @@ import { foes } from '../state/gameHelpers.js'
 import { villainInPlay } from '../state/monsterDeck.js'
 import { encounterHarm } from './cancelEncounter.js'
 import { foeFigures, standingHeroes, usable } from './powers.js'
+import { areaAt, badlyHurt, parse } from './helpers.js'
 
-const parse = (k) => k.split(',').map(Number)
-const areaAt = (grid, sq) => (sq ? grid.get(key(sq))?.area : undefined)
 // Down to half its hit points or less: worth spending a power to keep it safe.
-const hurt = (h) => h.hp > 0 && h.hp <= Math.ceil(h.maxHp / 2)
 const isVillain = (state, id) => (state.villains ?? []).some((v) => v.id === baseId(id))
 const near1 = (d) => d === 'adjacent' || d === 'within1'
 
@@ -41,7 +39,7 @@ function bestDivert(state) {
   const grid = boardGrid(state.board)
   const tokens = state.board.tokens
   const party = standingHeroes(state)
-  const weak = party.filter(hurt)
+  const weak = party.filter(badlyHurt)
   if (weak.length === 0) return null
   // On a hurt hero's tile is worst, a tile away is still close enough to come and attack.
   const threat = (sq) => weak.reduce((sum, h) => sum + Math.max(0, 2 - tilesBetween(grid, sq, tokens[h.id])), 0)
@@ -260,7 +258,7 @@ function oneForTheTeam(state) {
     if (!power) continue
     const mine = encounterHarm(state, encounter.card, hero)
     if (mine.lethal || hero.hp <= drawer.hp) continue
-    if (!harm.lethal && !(hurt(drawer) && hero.hp >= drawer.hp + 2)) continue
+    if (!harm.lethal && !(badlyHurt(drawer) && hero.hp >= drawer.hp + 2)) continue
     return { action: { type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: [] }, say: `${hero.name} uses ${power.name}: "I'll take that one, ${drawer.name}!"` }
   }
   return null
