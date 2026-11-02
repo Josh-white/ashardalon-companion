@@ -27,6 +27,8 @@ import { dealStartingTreasure, drawTreasure, keepTreasure, oweTreasure, spendIte
 import { copyCard, createHero, heroesFromLobby, newPower, pickedElsewhere, POWER_LABELS, withPicks } from './heroSetup.js'
 import { buildDeckWithout, buyFromShop, campaignHeroes, campaignLobby, drawTreasureToken, fromCampaign, nextCampaignAdventure, sameHeroes, tagDrawn, useBoon } from './campaignPlay.js'
 import { cowardlyRoll, endTurnStatus } from './monsterStatus.js'
+import { petHurt, petsAct } from './pets.js'
+import { dropDarkness, springArmedTraps, springFanTokens, takePath } from './fanPowers.js'
 import { attackFollowUp, dodgeHit, heroAttack, powerDamage, rerollAttack, setShadow, usePower } from './heroAttacks.js'
 import { initialState } from './initialState.js'
 import { drawDungeonTile, openBoardDoor, revealDoor, revealTile } from './dungeon.js'
@@ -86,7 +88,9 @@ const reduceGame = (state, action) => {
   const attacker = action?.type === 'HERO_ATTACK' ? action.heroId : undefined
   const placed = pruneTokens(placeNewFigures(state, checkVictory(tagDrawn(reduceWithOpening(state, action)))), attacker)
   const sprung = springHeroTokens(placed)
-  return pruneFanTokens(withHealFx(state, withAttackFx(state, trackStats(state, sprung === placed ? placed : pruneTokens(checkVictory(sprung), attacker), action), action)))
+  const fan = springFanTokens(state, sprung)
+  const settled = fan === placed ? placed : pruneTokens(checkVictory(fan), attacker)
+  return pruneFanTokens(withHealFx(state, withAttackFx(state, trackStats(state, settled, action), action)))
 }
 
 // The tokens heroes put on the virtual board (board/heroTokens.js): the board keeps up with
@@ -663,6 +667,18 @@ function reduce(state, action) {
       return { ...state, turn: { ...state.turn, acting: id } }
     }
 
+    case 'PETS_ACT':
+      return petsAct(state, action)
+
+    case 'PET_HURT':
+      return petHurt(state, action)
+
+    case 'DROP_DARKNESS':
+      return dropDarkness(state, action)
+
+    case 'TAKE_PATH':
+      return takePath(state, action)
+
     case 'MARK_ACTED':
       return markActed(state, action.id)
 
@@ -961,6 +977,8 @@ function reduce(state, action) {
       if (phase < PHASES.length - 1) {
         const ended = endPhaseCurses(state, state.heroes[heroIndex], PHASES[phase].key, action.rolls)
         const next = { ...ended, turn: { ...ended.turn, phase: phase + 1 } }
+        // Trapping Attack (a fan Assassin): the traps the hero armed go off as the Villain Phase starts.
+        if (PHASES[phase + 1]?.key === 'villain') return springArmedTraps(next, next.heroes[heroIndex])
         if (PHASES[phase].key !== 'hero') return next
         const out = endHeroPhase(next, next.heroes[heroIndex], action.roll)
         // Ending the Hero Phase on the exit's stairs gets the hero out (virtual board).

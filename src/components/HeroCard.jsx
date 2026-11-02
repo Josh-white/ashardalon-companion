@@ -6,7 +6,8 @@ import { surgeHp } from '../data/difficulty.js'
 import { artUrl, useArt } from '../state/useArt.js'
 import { useCards } from '../state/useCards.js'
 import Art from './Art.jsx'
-import { sphereOf, sphereVictims } from '../board/heroTokens.js'
+import { HERO_TOKENS, sphereOf, sphereVictims } from '../board/heroTokens.js'
+import { canDropDarkness, pathKinds } from '../state/fanPowers.js'
 import { canBecomeWolf, canSpendAttack, inHeroPhase, mindOverBodyChoices, naturesHealingOk } from '../state/heroTurn.js'
 import { BARDIC_SONGS, bardicSongsLeft } from '../state/heroAttacks.js'
 import { rollD20 } from '../state/random.js'
@@ -64,10 +65,28 @@ function FanAbilities({ state, hero, dispatch }) {
   const heal = naturesHealingOk(state, hero) && hero.hp < hero.maxHp
   const wolf = Boolean(hero.tokens?.wolf)
   const canWolf = canBecomeWolf(state, hero)
-  if (conditions.length === 0 && songs === null && !heal && !wolf && !canWolf) return null
+  const darkness = canDropDarkness(state, hero)
+  const paths = pathKinds(state, hero)
+  const perched = Boolean(hero.tokens?.treetop)
+  const advantage = state.turn.advantage === hero.id && inHeroPhase(state, hero)
+  const seekers = hero.tokens?.seekersLeft > 0 ? hero.tokens.seekersLeft : 0
+  if (conditions.length === 0 && songs === null && !heal && !wolf && !canWolf && !darkness && paths.length === 0 && !perched && !advantage && !seekers) return null
   const give = (what) => dispatch({ type: 'NATURES_HEALING', heroId: hero.id, give: what })
   return (
     <div className="mt-3 space-y-2">
+      {perched && <p className="rounded-lg bg-zinc-950/60 px-3 py-2 text-sm text-emerald-200">🌳 Up on a wall: monsters next to {hero.name} can't attack until the next Hero Phase (ranged attacks still can).</p>}
+      {advantage && <p className="rounded-lg bg-zinc-950/60 px-3 py-2 text-sm text-emerald-200">🎯 Advantage: each attack this Hero Phase rolls two dice and keeps the better one.</p>}
+      {seekers > 0 && <p className="rounded-lg bg-zinc-950/60 px-3 py-2 text-sm text-violet-200">👤 Shadow Seekers: {seekers} left. One goes out each time {hero.name} slips into the shadows near a monster.</p>}
+      {darkness && (
+        <Button className="w-full" onClick={() => dispatch({ type: 'DROP_DARKNESS', heroId: hero.id })}>
+          🌑 Leave the shadows to put down a Darkness token ({hero.tokens.darknessLeft} left)
+        </Button>
+      )}
+      {paths.map((kind) => (
+        <Button key={kind} className="w-full" onClick={() => dispatch({ type: 'TAKE_PATH', heroId: hero.id, kind })}>
+          {HERO_TOKENS[kind].icon} {kind === 'darkness' ? 'Move through the Darkness to another token' : 'Take the Secret Path to the other token'} (uses a move)
+        </Button>
+      ))}
       {canWolf && (
         <Button className="w-full" onClick={() => dispatch({ type: 'WOLF_FORM', heroId: hero.id, on: true })}>
           🐺 Wolf Form: lose 1 HP and become the wolf

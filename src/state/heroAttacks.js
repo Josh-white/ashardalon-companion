@@ -5,6 +5,8 @@ import { attackItems, heroItems, itemAttackParts } from '../data/items.js'
 import { hasSecondChance } from '../data/difficulty.js'
 import { effectsOf, maxRolls, onHitHeals, shadowAfter, shadowKept, wolfBlocked } from '../data/powerEffects.js'
 import { addStatus, attackedStatus } from './monsterStatus.js'
+import { summonPets } from './pets.js'
+import { applyFanUse, fanUseBlocked, resolveUse, sendSeeker } from './fanPowers.js'
 import { queueFearMove, queueMoves } from '../board/powerMoves.js'
 import { heroesInReach } from '../board/encounters.js'
 import { clamp, findFoe, foes, heroLabel, markUsed, updateHero, updateMonster, validRoll, withCast, withLog, withMoment } from './gameHelpers.js'
@@ -72,6 +74,8 @@ export function heroAttack(state, action) {
     // Hypnotism never hurts the monster it moved.
     .filter((t) => effects.ask !== 'moved-monster' || t.monsterId !== action.movedId)
     .slice(0, item ? 1 : maxRolls(power))
+    // Advantage (Treetop, a fan Ranger): the device rolled twice, the better die counts.
+    .map((t) => (hasAdvantage(state, hero) && validRoll(t.roll2) ? { ...t, roll: Math.max(t.roll, t.roll2), advantage: [t.roll, t.roll2] } : t))
   if (!source || (baseBonus === null && !effects.autoHit) || power?.used || targets.length === 0) return state
   if (power && wolfBlocked(hero, power)) return state
 
@@ -94,7 +98,7 @@ export function heroAttack(state, action) {
   let next = state
   const rolls = []
   const defeated = []
-  for (const { monsterId, roll } of targets) {
+  for (const { monsterId, roll, advantage } of targets) {
     const monster = findFoe(next, monsterId)
     if (!monster) {
       // Tornado Strike can aim a second roll at a monster the first one already beat.
@@ -107,7 +111,7 @@ export function heroAttack(state, action) {
     rolls.push({ monsterId, label: monster.name, value: roll, total: result.total, ac: monster.ac, hit: result.hit, outcome: result.outcome, dealt: result.dealt, attack: rowAttack })
     next = withLog(
       next,
-      `${hero.name}'s ${source.name} vs the ${monster.name}: rolled ${roll} + ${rowAttack.bonus} = ${result.total} against AC ${monster.ac}. ${result.outcome}`,
+      `${hero.name}'s ${source.name} vs the ${monster.name}: ${advantage ? `Advantage, rolled ${advantage.join(' and ')}, kept ${roll}` : `rolled ${roll}`} + ${rowAttack.bonus} = ${result.total} against AC ${monster.ac}. ${result.outcome}`,
     )
     const hurt = hurtMonster(next, monster, result.dealt)
     next = hurt.state
@@ -326,6 +330,9 @@ function addBuff(next, state, hero, power, buff) {
   return withLog(next, `${buff.who === 'self' ? hero.name : 'Every hero'} gets ${what} until ${until}.`)
 }
 
+// Treetop (a fan Ranger): the Hero Phase after perching has Advantage.
+export const hasAdvantage = (state, hero) => Boolean(hero) && state.turn.advantage === hero.id && inHeroPhase(state, hero)
+
 // Fearless (a fan Battlemaster): turn.fearless lists the monsters next to the hero when its turn started.
 export const isFearlessTarget = (state, hero, monsterId) =>
   Boolean(monsterId) && state.turn.fearless?.heroId === hero?.id && state.turn.fearless.foes.includes(monsterId)
@@ -364,8 +371,9 @@ function moveShadow(state, hero, effects, missed = false) {
   const was = Boolean(hero.tokens?.shadow)
   const now = shadowAfter(hero, effects, missed)
   if (was === now) return state
-  const next = updateHero(state, hero.id, (h) => ({ tokens: { ...h.tokens, shadow: now } }))
-  return withLog(next, now ? `${hero.name} slips into the shadows.` : `${hero.name} steps out of the shadows.`)
+  const next = withLog(updateHero(state, hero.id, (h) => ({ tokens: { ...h.tokens, shadow: now } })), now ? `${hero.name} slips into the shadows.` : `${hero.name} steps out of the shadows.`)
+  // Shadow Seekers (a fan Assassin): each trip into the shadows sends one out.
+  return now ? sendSeeker(next, next.heroes.find((h) => h.id === hero.id)) : next
 }
 
 // Shadowphage's own switch: entering the shadows takes the hero's attack in their Hero Phase
@@ -384,8 +392,8 @@ export function setShadow(state, action) {
 export function usePower(state, action) {
   const hero = state.heroes.find((h) => h.id === action.heroId)
   const power = hero?.powers.find((p) => p.id === action.powerId)
-  const use = effectsOf(power).use
-  if (!power || power.used || !use || wolfBlocked(hero, power)) return state
+  const use = resolveUse(effectsOf(power).use, action.option)
+  if (!power || power.used || !use || wolfBlocked(hero, power) || fanUseBlocked(state, hero, use)) return state
   const heroIds = (Array.isArray(action.heroIds) ? action.heroIds : []).filter((id) => state.heroes.some((h) => h.id === id))
   const picked = heroIds[0] && state.heroes.find((h) => h.id === heroIds[0])
   if (use.pick && !picked && !use.optional) return state
@@ -397,7 +405,12 @@ export function usePower(state, action) {
   let next = withCast(power.type === 'at-will' ? state : spendUse(state, hero, power), power)
   next = withLog(next, `${heroLabel(hero)} used ${power.name}.`)
   if (use.healSelf) next = healHero(next, hero.id, use.healSelf, power.name)
-  if (use.heal && picked) next = healHero(next, picked.id, use.heal, power.name)
+  if (use.heal && picked) {
+    // Nature's Gifts: up to `count` heroes (in reach) each get the heal.
+    const reach = use.count ? heroesInReach(state, hero.id, use.reach) : null
+    const healed = use.count ? heroIds.filter((id) => !reach || reach.includes(id)).slice(0, use.count) : [picked.id]
+    for (const id of healed) next = healHero(next, id, use.heal, power.name)
+  }
   if (use.tokens) next = updateHero(next, hero.id, (h) => ({ tokens: { ...h.tokens, ...use.tokens } }))
   if (use.invisible) next = updateHero(next, hero.id, (h) => ({ tokens: { ...h.tokens, invisible: true } }))
   if (effectsOf(power).shadow) next = moveShadow(next, hero, effectsOf(power))
@@ -407,6 +420,8 @@ export function usePower(state, action) {
     next = withLog(next, `${picked.name} is safe in the Astral Refuge until their next turn.`)
   }
   if (use.cleanse) next = cleanseTile(next, hero, power)
+  next = applyFanUse(next, state, hero, power, use, action)
+  if (use.summon) next = summonPets(next, hero, use.summon, power.name)
   if (use.endCondition) {
     if (!picked.conditions.includes(action.condition)) return state
     next = updateHero(next, picked.id, (h) => ({ conditions: h.conditions.filter((c) => c !== action.condition) }))

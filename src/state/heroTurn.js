@@ -293,6 +293,12 @@ export function startTurn(state) {
   state = returnFromPowers(state, hero)
   state = endBuffs(state, hero, (b) => b.untilTurnStart)
   state = noteFearless(state, hero)
+  // Treetop (a fan Ranger): down from the wall, with Advantage this Hero Phase.
+  if (hero?.tokens?.treetop) {
+    state = updateHero(state, hero.id, (h) => ({ tokens: { ...h.tokens, treetop: false } }))
+    state = withLog({ ...state, turn: { ...state.turn, advantage: hero.id } }, `${hero.name} drops down from the wall onto any square of the tile, with Advantage on attacks this Hero Phase!`)
+    state = queueMoves(state, hero, { name: 'Treetop' }, [{ pick: 'self', to: 'ownTile' }])
+  }
   if (hero?.tokens?.wolf) state = withLog(updateHero(state, hero.id, (h) => ({ tokens: { ...h.tokens, wolf: null } })), `${hero.name} changes back from Wolf Form.`)
   for (const curse of (hero?.curses ?? []).filter((c) => c.card?.removeAtTurnStart)) {
     // On the virtual board the hero waits under "Not on the board yet" for a tap.

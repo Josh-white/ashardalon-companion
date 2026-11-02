@@ -1,4 +1,5 @@
 import { baseId, boardSquares, key } from './grid.js'
+import { seekerTarget } from './heroTokens.js'
 import { adjacent, tilesBetween } from './paths.js'
 import { boardGrid, movesLeft, occupied, placeToken } from './play.js'
 import { newId, sameName, withLog } from '../state/gameHelpers.js'
@@ -22,7 +23,9 @@ export function placeItem(state, action) {
   const to = Array.isArray(action.to) ? action.to : null
   if (!item || !to || !boardGrid(state.board).get(key(to))?.floor) return state
   if (items(state).some((i) => i.id !== item.id && i.at && key(i.at) === key(to))) return state
-  return withItems(state, items(state).map((i) => (i.id === item.id ? { ...i, at: [to[0], to[1]] } : i)))
+  // A Shadow Seeker remembers the monster it went next to.
+  const target = item.kind === 'seeker' ? seekerTarget(state, to) : undefined
+  return withItems(state, items(state).map((i) => (i.id === item.id ? { ...i, at: [to[0], to[1]], ...(target ? { target } : {}) } : i)))
 }
 
 export function removeItem(state, action) {

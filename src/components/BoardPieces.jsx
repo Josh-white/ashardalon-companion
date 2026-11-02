@@ -180,8 +180,13 @@ export function HeroTokenMark({ item, count, spin, selected, onTap }) {
     <g data-item={item.id} data-kind={item.kind} onClick={onTap} className={onTap ? 'cursor-pointer' : undefined} transform={spin ? `rotate(${-spin} ${cx} ${cy})` : undefined}>
       <circle cx={cx} cy={cy} r={SQUARE * 0.3} fill={look.color} fillOpacity="0.85" stroke={selected ? '#f59e0b' : '#0a0c10'} strokeWidth={selected ? 4 : 2} />
       <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fontSize={SQUARE * 0.32} pointerEvents="none">
-        {look.icon}
+        {item.icon ?? look.icon}
       </text>
+      {item.kind === 'pet' && (
+        <text x={cx + SQUARE * 0.3} y={cy - SQUARE * 0.24} textAnchor="middle" fontSize={SQUARE * 0.22} fontWeight="bold" fill="#86efac" stroke="#0a0c10" strokeWidth="3" paintOrder="stroke" pointerEvents="none">
+          {item.hp}
+        </text>
+      )}
       {count > 1 && (
         <text x={cx + SQUARE * 0.3} y={cy - SQUARE * 0.24} textAnchor="middle" fontSize={SQUARE * 0.22} fontWeight="bold" fill="#fde68a" stroke="#0a0c10" strokeWidth="3" paintOrder="stroke" pointerEvents="none">
           {count}

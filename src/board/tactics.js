@@ -10,6 +10,9 @@ import { adjacent, tilesBetween } from './paths.js'
 // in reach, and "adjacent to a Hero, attacks that Hero" steps, still find them.
 // Invisibility and Shadowphage: monsters don't count this hero as the closest hero.
 export const unseenByTactics = (hero) => Boolean(hero?.tokens?.invisible || hero?.tokens?.shadow)
+// Treetop (a fan Ranger): a hero up on a wall can't be reached by attacks on adjacent heroes.
+export const meleeStep = (step) => ['adjacent', 'adjacentMany'].includes(step?.when) || step?.move === 'adjacent'
+export const outOfReach = (hero, step) => Boolean(hero?.tokens?.treetop) && meleeStep(step)
 export const seesInvisible = (step) => step?.targets === 'all' || (step?.when === 'adjacent' && !step.move)
 
 // Which heroes make a tactic's condition true for a monster on `at`. `heroes` is a list

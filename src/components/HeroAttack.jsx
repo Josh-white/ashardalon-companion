@@ -462,7 +462,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   }
 
   const roll = () => {
-    const targets = chosen.map((monsterId) => ({ monsterId, roll: rollD20() }))
+    const targets = chosen.map((monsterId) => ({ monsterId, roll: rollD20(), roll2: rollD20() }))
     const source = item ? { itemId: item.id } : { powerId: power.id }
     dispatch({ type: 'HERO_ATTACK', heroId: hero.id, ...source, targets, bonusAttack: Boolean(extra), distances: allDistances, stayed, ...asked })
     setRolled(true)

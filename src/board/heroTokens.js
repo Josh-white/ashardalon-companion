@@ -21,6 +21,14 @@ export const HERO_TOKENS = {
   caltrop: { counter: 'caltrops', name: 'Caltrop', icon: '📌', color: '#78716c' },
   sphere: { counter: 'flamingSphere', name: 'Flaming Sphere', icon: '🔥', color: '#c2410c', stack: true, moves: true },
   eye: { counter: 'wizardEye', name: 'Wizard Eye', icon: '👁️', color: '#6d28d9', stack: true, moves: true },
+  // Fan heroes' tokens (fanTokens below says what they do).
+  boobytrap: { counter: 'boobytraps', name: 'Boobytrap', icon: '🪤', color: '#92400e', springs: 'trapped' },
+  spike: { counter: 'spikedGrowth', name: 'Spiked Growth', icon: '🌵', color: '#3f6212', springs: 'stunned' },
+  secret: { counter: 'secretPaths', name: 'Secret Path', icon: '🌿', color: '#15803d', path: true },
+  darkness: { counter: 'darkness', name: 'Darkness', icon: '🌑', color: '#1e1b4b', path: true },
+  seeker: { counter: 'seekers', name: 'Shadow Seeker', icon: '👤', color: '#3b0764' },
+  // Lizard & Lace (state/pets.js): put down and moved by the app, not counted on the hero.
+  pet: { counter: 'pets', name: 'Ally', icon: '🦎', color: '#166534', manual: true },
 }
 export const isHeroToken = (item) => Boolean(item && HERO_TOKENS[item.kind])
 
@@ -42,7 +50,7 @@ export function syncHeroTokens(state) {
   let list = items(state)
   let changed = false
   for (const hero of state.heroes) {
-    for (const kind of Object.keys(HERO_TOKENS)) {
+    for (const kind of Object.keys(HERO_TOKENS).filter((k) => !HERO_TOKENS[k].manual)) {
       const mine = list.filter((i) => i.kind === kind && i.owner === hero.id)
       const want = wanted(hero, kind)
       if (mine.length < want) {
@@ -71,10 +79,22 @@ export function tokenTargets(state, item) {
   // The Blade Barrier's tokens all go on one tile: once one is down, the rest follow it.
   const placed = items(state).find((i) => i.kind === item.kind && i.owner === item.owner && i.at)
   const barrierTile = item.kind === 'blade' && placed ? grid.get(key(placed.at))?.area : null
+  const mine = items(state).filter((i) => i.kind === item.kind && i.owner === item.owner && i.at)
+  const usedTiles = new Set(mine.map((i) => grid.get(key(i.at))?.area))
+  const seekerSpots = item.kind === 'seeker' ? new Set(seekerSquares(state, item.owner)) : null
   return [...grid.values()]
     .filter((sq) => sq.floor && !taken.has(key([sq.x, sq.y])) && !marked.has(key([sq.x, sq.y])))
     .filter((sq) => {
+      const here = [sq.x, sq.y]
       if (item.kind === 'caltrop') return sq.area === own
+      // Boobytraps: two different tiles within 1 tile. Spiked Growth: squares within 2 tiles.
+      if (item.kind === 'boobytrap') return !usedTiles.has(sq.area) && tilesBetween(grid, at, here) <= 1
+      if (item.kind === 'spike') return tilesBetween(grid, at, here) <= 2
+      // Secret Paths: one on the hero's own tile, the other anywhere.
+      if (item.kind === 'secret') return mine.length > 0 || sq.area === own
+      // Paths of Darkness: next to the hero.
+      if (item.kind === 'darkness') return adjacent(grid, at, here)
+      if (seekerSpots) return seekerSpots.has(key(here))
       if (barrierTile) return sq.area === barrierTile
       return tilesBetween(grid, at, [sq.x, sq.y]) <= (item.kind === 'blade' ? 2 : 1)
     })
@@ -161,4 +181,30 @@ export function sphereVictims(state, hero) {
   const area = grid.get(key(sphere.at))?.area
   const foes = new Set([...state.monsters.filter((m) => !m.objective), ...(state.villains ?? []).filter((v) => !v.defeated)].map((m) => m.id))
   return [...new Set(Object.entries(state.board.tokens).filter(([id, at]) => foes.has(baseId(id)) && grid.get(key(at))?.area === area).map(([id]) => baseId(id)))]
+}
+
+// Shadow Seekers (a fan Assassin): a token goes next to the nearest monster within 1 tile of
+// the hero. The squares next to that monster (or those monsters, when tied).
+function seekerSquares(state, heroId) {
+  const board = state.board
+  const at = board?.tokens[heroId]
+  if (!at) return []
+  const grid = boardGrid(board)
+  const foes = new Set([...state.monsters.filter((m) => !m.objective), ...(state.villains ?? []).filter((v) => !v.defeated)].map((m) => m.id))
+  const near = Object.entries(board.tokens).filter(([id, spot]) => foes.has(baseId(id)) && tilesBetween(grid, at, spot) <= 1)
+  if (near.length === 0) return []
+  const steps = distances(grid, at)
+  const far = (spot) => steps.get(key(spot)) ?? Infinity
+  const best = Math.min(...near.map(([, spot]) => far(spot)))
+  return near.filter(([, spot]) => far(spot) === best).flatMap(([, spot]) => [...grid.values()].filter((sq) => sq.floor && adjacent(grid, spot, [sq.x, sq.y])).map((sq) => key([sq.x, sq.y])))
+}
+
+// Which monster a Shadow Seeker token is next to (it hurts that one when it moves or attacks).
+export function seekerTarget(state, square) {
+  const board = state.board
+  if (!board || !square) return null
+  const grid = boardGrid(board)
+  const foes = new Set([...state.monsters.filter((m) => !m.objective), ...(state.villains ?? []).filter((v) => !v.defeated)].map((m) => m.id))
+  const found = Object.entries(board.tokens).find(([id, spot]) => foes.has(baseId(id)) && adjacent(grid, spot, square))
+  return found ? found[0] : null
 }

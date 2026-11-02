@@ -14,8 +14,9 @@ import { DrawTileButton } from './Tiles.jsx'
 import { Button } from './ui.jsx'
 import { figureToken } from '../board/play.js'
 import { stoppedShort } from '../board/heroTokens.js'
+import { petsDue, petsOf } from '../state/pets.js'
 import { boardStep, boardTargetIds, closestTarget, foeDistance, squareAway, squareNextTo, squareToward } from '../board/monsters.js'
-import { seesInvisible, unseenByTactics } from '../board/tactics.js'
+import { outOfReach, seesInvisible, unseenByTactics } from '../board/tactics.js'
 import { liveAc } from '../board/checks.js'
 import { hitMoveStep } from '../board/powerMoves.js'
 import { nobleShieldWorth } from '../ally/boardPowers.js'
@@ -220,7 +221,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
 
   // An invisible hero isn't the closest hero, so only some steps can pick them.
   const unseen = seesInvisible(step) || step?.when === 'aloneByUnexploredEdge' || step?.explore ? [] : state.heroes.filter((h) => unseenByTactics(h) && !h.tokens?.refuge)
-  const targetable = monsterTargets(state).filter((h) => !unseen.includes(h))
+  const targetable = monsterTargets(state).filter((h) => !unseen.includes(h) && !outOfReach(h, step))
   const villagers = targetable.filter((h) => h.villager)
   const toggle = (heroId) => setChosen((list) => toggleTarget(list, heroId, tapsMany(step)))
   const { tapped, strongest, tied, top, targetIds } = chooseTargets(step, targetable, chosen, tiePick)
@@ -581,11 +582,17 @@ export default function MonsterTurns({ state, dispatch, hero }) {
   const active = monsters.find((m) => m.id === state.turn.acting && !isDone(m))
 
   if (monsters.length === 0) {
-    return <p className="mt-4 rounded-xl bg-zinc-950/50 p-3 text-zinc-400">You have no monster cards, so no monster turns.</p>
+    return (
+      <>
+        <PetTurns state={state} hero={hero} dispatch={dispatch} />
+        <p className="mt-4 rounded-xl bg-zinc-950/50 p-3 text-zinc-400">You have no monster cards, so no monster turns.</p>
+      </>
+    )
   }
 
   return (
     <div className="mt-5">
+      <PetTurns state={state} hero={hero} dispatch={dispatch} />
       <h3 className="font-display text-xl font-bold text-zinc-200">Monster turns</h3>
       {active?.card ? (
         <div className="mt-2">
@@ -622,6 +629,32 @@ export default function MonsterTurns({ state, dispatch, hero }) {
           ))}
         </ul>
       )}
+    </div>
+  )
+}
+
+// A fan hero's allies on the board (Lizard & Lace): they go first in the hero's Villain Phase.
+function PetTurns({ state, hero, dispatch }) {
+  const pets = petsOf(state, hero.id)
+  if (pets.length === 0) return null
+  const due = petsDue(state, hero)
+  return (
+    <div className="mb-4 space-y-2 rounded-xl border border-emerald-700/60 bg-emerald-950/40 p-3">
+      <p className="font-semibold text-emerald-200">Allies: {pets.map((p) => `${p.icon ?? '🦎'} ${p.name} (${p.hp} HP)`).join(', ')}</p>
+      {due ? (
+        <Button variant="gold" className="w-full" onClick={() => dispatch({ type: 'PETS_ACT', heroId: hero.id, rolls: pets.map(() => rollD20()) })}>
+          {pets.map((p) => p.name).join(' and ')} take{pets.length === 1 ? 's' : ''} their turn first
+        </Button>
+      ) : (
+        <p className="text-sm text-emerald-300">✓ They've had their turn.</p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {pets.map((p) => (
+          <Button key={p.id} variant="ghost" onClick={() => dispatch({ type: 'PET_HURT', id: p.id, amount: 1 })}>
+            {p.name} lost 1 HP
+          </Button>
+        ))}
+      </div>
     </div>
   )
 }

@@ -5,7 +5,8 @@ import { attackGone, powerNumber, powerUsesAttack } from '../state/game.js'
 import { usesLeft } from '../state/heroAttacks.js'
 import { rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
-import { HeroChoice, InReach } from './Pickers.jsx'
+import { HeroChoice, InReach, MonsterChoice } from './Pickers.jsx'
+import { fanUseBlocked, foesInReach, nearestOtherFoe, newestMonster, resolveUse, trapsOnTile } from '../state/fanPowers.js'
 import { heroesInReach } from '../board/encounters.js'
 import { Button } from './ui.jsx'
 
@@ -74,13 +75,23 @@ export function PowerTile({ power, onToggle, selected = false, compact = false }
 // Using a power from its tile: asks who it's for when the power needs to know, then the
 // app does the healing, tokens or condition. Powers without a `use` just flip over.
 function UsePanel({ state, hero, power, dispatch, onClose }) {
-  const use = effectsOf(power).use
+  const base = effectsOf(power).use
+  // Nature's Gifts: pick one of the card's options first.
+  const [option, setOption] = useState(Array.isArray(base.choose) ? null : 0)
+  const use = resolveUse(base, option) ?? {}
   const [chosen, setChosen] = useState([])
   const [condition, setCondition] = useState(null)
+  const [monsterId, setMonsterId] = useState(null)
+  const [trapIds, setTrapIds] = useState([])
   const others = state.heroes.filter((h) => h.id !== hero.id)
-  const choices = use.endCondition ? others.filter((h) => h.conditions.length > 0) : use.pick === 'any' ? state.heroes : others
+  const pool = use.pick === 'any' ? state.heroes : others
+  const choices = use.endCondition ? pool.filter((h) => h.conditions.length > 0) : pool
   const picked = state.heroes.find((h) => h.id === chosen[0])
   const pickOne = (id) => {
+    if (use.count) {
+      setChosen((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id].slice(-use.count)))
+      return
+    }
     setChosen([id])
     setCondition(null)
   }
@@ -88,10 +99,27 @@ function UsePanel({ state, hero, power, dispatch, onClose }) {
   // One for the Team: there has to be another hero's encounter card to take.
   const encounter = state.encounter
   const takeable = Boolean(encounter && !encounter.attacked && encounter.heroId !== hero.id)
-  const ready = (use.endCondition ? Boolean(condition) : !use.pick || use.optional || chosen.length > 0) && (!use.takeEncounter || takeable)
-
+  const blocked = option === null ? null : fanUseBlocked(state, hero, use)
+  const hurtable = use.hurt ? foesInReach(state, hero, use.hurtReach) : []
+  const traps = use.moveTraps || use.removeTrap ? trapsOnTile(state, hero) : []
+  const charmed = use.charm ? newestMonster(state) : null
+  const ready =
+    option !== null &&
+    !blocked &&
+    (use.endCondition ? Boolean(condition) : !use.pick || use.optional || chosen.length > 0) &&
+    (!use.takeEncounter || takeable) &&
+    (!use.hurt || Boolean(monsterId)) &&
+    (!use.moveTraps || trapIds.length > 0)
   const apply = () => {
-    dispatch({ type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: chosen, condition })
+    const extra = {}
+    if (option !== null && Array.isArray(base.choose)) extra.option = option
+    if (use.hurt) extra.monsterIds = [monsterId]
+    if (use.moveTraps || use.removeTrap) extra.trapIds = trapIds.length ? trapIds : traps.slice(0, 1).map((t) => t.id)
+    if (charmed) {
+      const target = nearestOtherFoe(state, charmed.id)
+      Object.assign(extra, { monsterIds: [charmed.id], targetId: target?.id ?? null, roll: rollD20() })
+    }
+    dispatch({ type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: chosen, condition, ...extra })
     onClose()
   }
   const summary = [
@@ -121,6 +149,50 @@ function UsePanel({ state, hero, power, dispatch, onClose }) {
           {gone ? `⚠️ ${gone} Use it anyway only if a card says you can.` : `⚔️ This is ${hero.name}'s attack this turn.`}
         </p>
       )}
+      {Array.isArray(base.choose) && (
+        <div className="grid gap-2">
+          {base.choose.map((o, i) => (
+            <Button key={o.label ?? i} variant={option === i ? 'gold' : 'default'} onClick={() => { setOption(i); setChosen([]); setCondition(null) }}>
+              {o.label ?? `Option ${i + 1}`}
+            </Button>
+          ))}
+        </div>
+      )}
+      {blocked && <p className="rounded-lg bg-red-950/70 p-2 text-red-200">{blocked}</p>}
+      {charmed && !blocked && (
+        <p className="text-zinc-200">
+          The new monster is the {charmed.name}.{' '}
+          {(charmed.card?.types ?? []).some((t) => (use.charm.types ?? []).map((x) => x.toLowerCase()).includes(t.toLowerCase()))
+            ? `It's a creature or beast: it attacks the ${nearestOtherFoe(state, charmed.id)?.name ?? 'nearest monster'} and skips this Villain Phase.`
+            : "It isn't a creature or beast, so it's discarded."}
+        </p>
+      )}
+      {use.hurt && !blocked && (
+        <>
+          <p className="text-zinc-200">Which monster takes {use.hurt} damage?</p>
+          {hurtable.length === 0 ? (
+            <p className="text-zinc-400">No monster is next to {hero.name}.</p>
+          ) : (
+            <MonsterChoice state={state} monsters={[...state.monsters, ...(state.villains ?? [])].filter((m) => hurtable.includes(m.id))} chosen={monsterId ? [monsterId] : []} onToggle={(id) => setMonsterId(id)} />
+          )}
+        </>
+      )}
+      {traps.length > 0 && !blocked && (
+        <>
+          <p className="text-zinc-200">{use.moveTraps ? `Which traps? (up to ${use.moveTraps})` : 'Which trap?'}</p>
+          <div className="flex flex-wrap gap-2">
+            {traps.map((t) => (
+              <Button
+                key={t.id}
+                variant={trapIds.includes(t.id) ? 'gold' : 'default'}
+                onClick={() => setTrapIds((list) => (list.includes(t.id) ? list.filter((x) => x !== t.id) : use.moveTraps ? [...list, t.id].slice(-use.moveTraps) : [t.id]))}
+              >
+                {t.name}
+              </Button>
+            ))}
+          </div>
+        </>
+      )}
       {use.causeFear && (
         <>
           <p className="text-zinc-200">Tap each ally on that tile who is next to a monster. Each gets an at-will attack at +2.</p>
@@ -129,7 +201,7 @@ function UsePanel({ state, hero, power, dispatch, onClose }) {
       )}
       {use.pick && (
         <>
-          <p className="text-zinc-200">{use.prompt ?? 'Which hero?'}{use.endCondition && ' Only heroes with a condition are shown.'}</p>
+          <p className="text-zinc-200">{use.prompt ?? (use.count ? `Which heroes? (up to ${use.count})` : 'Which hero?')}{use.endCondition && ' Only heroes with a condition are shown.'}</p>
           {choices.length === 0 ? (
             <p className="text-zinc-400">Nobody has a condition to end.</p>
           ) : (

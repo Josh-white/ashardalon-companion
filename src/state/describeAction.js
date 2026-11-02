@@ -58,6 +58,14 @@ export function describeAction(state, action) {
       return hero ? `${hero.name}'s Practiced Evasion` : 'Practiced Evasion'
     case 'COWARDLY_ROLL':
       return 'Cowardly roll'
+    case 'PETS_ACT':
+      return 'Allies act'
+    case 'PET_HURT':
+      return 'Ally hurt'
+    case 'DROP_DARKNESS':
+      return 'Darkness token'
+    case 'TAKE_PATH':
+      return action.kind === 'darkness' ? 'Through the Darkness' : 'Secret Path'
     case 'WOLF_FORM':
       return action.on ? 'Wolf Form' : 'Back from Wolf Form'
     case 'NATURES_HEALING':
