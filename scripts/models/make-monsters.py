@@ -3,7 +3,8 @@ spiked mace), Orc Archer (a bow and a quiver), Kobold Dragonshield (a dragon shi
 and a spear) Human Cultist (hooded robes, a sun sceptre and a dagger)
 Duergar Guard (a helmet, a beard, a round shield and a warhammer)
 Snake (coiled, with its own legless skeleton and moves) , Cave Bear
-(on all fours; rears up to maul) and Legion Devil (horns, black armour, a tail and a longsword).
+(on all fours; rears up to maul) , Legion Devil (horns, black armour, a tail and a longsword)
+and Grell (a floating brain with a beak and tentacles).
 
 Run it in Blender (tested headless on 5.2; written for 3.6 and newer):
   * Scripting workspace: open this file (or paste it), press Run Script (Alt+P).
@@ -79,6 +80,10 @@ PALETTE = {
     "devil": "a3262a",
     "devil_dark": "6a1519",
     "armour": "2c2a30",
+    "brain": "b88c8e",
+    "brain_dark": "7e5458",
+    "brain_light": "d8b3ae",
+    "beak": "3a3336",
 }
 
 argv = sys.argv
@@ -724,6 +729,53 @@ def build_devil():
     box("Crest", "black", "head", (0, hy + 0.06, 2.24), (0.08, 0.50, 0.12), bevel=0.03, rot=(-10, 0, 0))
 
 
+def build_grell():
+    """A grell: a floating brain with no eyes, a hooked beak underneath at the front and a
+    ring of tentacles hanging to the floor."""
+    centre = Vector((0, 0, 1.30))
+    # A dark core with wavy ridges running front to back over it: the folds of a brain.
+    sphere("Brain", "brain_dark", "body", centre, 0.50, scale=(1.0, 1.12, 0.82), segments=16, rings=10)
+    sphere("Underside", "brain_light", "body", centre + Vector((0, 0, -0.18)), 0.50, scale=(0.95, 1.05, 0.45),
+           segments=16, rings=8)
+    for k in range(-5, 6):
+        if k == 0:
+            continue  # the deep split down the middle
+        theta = DEG(k * 19 + (4 if k > 0 else -4))
+        for j in range(19):
+            y = -0.52 + j * 0.058
+            f = 1 - (y / 0.58) ** 2
+            if f <= 0.02:
+                continue
+            wiggle = 0.06 * math.sin(j * 1.3 + k * 2.1)
+            rx, rz = 0.47 * math.sqrt(f), 0.385 * math.sqrt(f)
+            at = Vector((rx * math.sin(theta + wiggle), y * 1.0, rz * math.cos(theta + wiggle)))
+            sphere(f"Fold{k}_{j}", "brain", "body", centre + at, 0.075, scale=(1, 1.2, 1), segments=7, rings=5)
+
+    # The beak: an upper hook and a lower jaw, a red mouth between.
+    sphere("BeakBase", "brain_light", "head", (0, -0.42, 1.02), 0.17, scale=(1.1, 0.8, 0.9), segments=12, rings=8)
+    cone("BeakUpper", "beak", "head", (0, -0.60, 0.98), 0.16, 0.36, rot=(110, 0, 0), scale=(1, 0.75, 1), sides=8)
+    cone("BeakLower", "beak", "head", (0, -0.54, 0.85), 0.11, 0.24, rot=(65, 0, 0), scale=(1, 0.7, 1), sides=8)
+    box("Gullet", "red", "head", (0, -0.52, 0.92), (0.12, 0.10, 0.06), bevel=0.02)
+
+    # Eight tentacles in a ring, curling down to the floor, two to a bone.
+    for i in range(8):
+        a = DEG(22.5 + i * 45)
+        dx, dy = math.sin(a), -math.cos(a)  # i=0 front-right... round the ring
+        bone = ("tent.F" if dy < 0 else "tent.B") + ("L" if dx > 0 else "R")
+        start = Vector((dx * 0.32, dy * 0.32, 1.02))
+        mid1 = Vector((dx * 0.52, dy * 0.52, 0.70))
+        mid2 = Vector((dx * 0.30, dy * 0.30, 0.35))
+        end = Vector((dx * 0.52, dy * 0.52, 0.06))
+        n = 12
+        for j in range(n):
+            t = j / (n - 1)
+            radius = 0.075 - 0.05 * t
+            sphere(f"Tent{i}_{j}", "brain_light" if j % 3 else "brain", bone, bezier(start, mid1, mid2, end, t),
+                   radius, segments=8, rings=5)
+        cone(f"Barb{i}", "beak", bone, end + Vector((dx * 0.05, dy * 0.05, 0)), 0.025, 0.07,
+             rot=(0, 0, 0), sides=4)
+
+
 # ---- 4. Join, size it, origin on the floor --------------------------------------------------
 
 def join_parts(name, mat, height):
@@ -801,6 +853,15 @@ BEAR_BONES = [
     ("leg.R", (-0.32, 0.40, 0.72), (-0.32, 0.40, 0.05), "hips"),
 ]
 DEVIL_BONES = ORC_BONES + [("tail", (0, 0.22, 0.70), (0, 0.95, 0.15), "hips")]
+GRELL_BONES = [
+    ("root", (0, 0, 0), (0, 0, 0.2), None),
+    ("body", (0, 0, 0.95), (0, 0, 1.60), "root"),
+    ("head", (0, -0.40, 0.90), (0, -0.40, 1.15), "body"),
+    ("tent.FL", (0.22, -0.22, 1.0), (0.26, -0.26, 0.10), "body"),
+    ("tent.FR", (-0.22, -0.22, 1.0), (-0.26, -0.26, 0.10), "body"),
+    ("tent.BL", (0.22, 0.22, 1.0), (0.26, 0.26, 0.10), "body"),
+    ("tent.BR", (-0.22, 0.22, 1.0), (-0.26, 0.26, 0.10), "body"),
+]
 KOBOLD_BONES = [
     ("root", (0, 0, 0), (0, 0, 0.2), None),
     ("hips", (0, 0, 0.50), (0, 0, 0.72), "root"),
@@ -1060,6 +1121,58 @@ BEAR_MOVES = [
     ("Death_A_Pose", False, [(0, BEAR_FALLEN), (1, BEAR_FALLEN)]),
 ]
 
+# The grell floats: it bobs, glides with its tentacles trailing, lunges and snaps its beak.
+TENTS = ("tent.FL", "tent.FR", "tent.BL", "tent.BR")
+GRELL_FALLEN = {"body": {"rot": (-25, 0, 15), "loc": (0, -0.55, 0)}, "head": (20, 0, 0),
+                **{t: (0, 0, 40 if t.endswith("L") else -40) for t in TENTS}}
+GRELL_MOVES = [
+    ("Idle", True, [
+        (0, {}),
+        (30, {"body": {"loc": (0, 0.06, 0)}, "tent.FL": (8, 0, 4), "tent.FR": (-6, 0, -4), "tent.BL": (-8, 0, 4),
+              "tent.BR": (6, 0, -4), "head": (6, 0, 0)}),
+        (60, {}),
+    ]),
+    ("Walking_A", True, [
+        (0, {"body": {"rot": (10, 0, 0), "loc": (0, 0.05, 0)}, **{t: (-25, 0, 0) for t in TENTS}}),
+        (12, {"body": {"rot": (10, 0, 0), "loc": (0, 0.10, 0)}, **{t: (-15, 0, 0) for t in TENTS}}),
+        (24, {"body": {"rot": (10, 0, 0), "loc": (0, 0.05, 0)}, **{t: (-25, 0, 0) for t in TENTS}}),
+    ]),
+    ("1H_Melee_Attack_Chop", False, [
+        (0, {}),
+        (10, {"body": {"rot": (-15, 0, 0), "loc": (0, 0.10, -0.1)}, "head": (-20, 0, 0),
+              "tent.FL": (-30, 0, 0), "tent.FR": (-30, 0, 0)}),
+        (15, {"body": {"rot": (25, 0, 0), "loc": (0, 0, 0.18)}, "head": (25, 0, 0),
+              "tent.FL": (70, 0, -10), "tent.FR": (70, 0, 10)}),
+        (22, {"body": {"rot": (18, 0, 0), "loc": (0, 0, 0.12)}, "head": (-10, 0, 0),
+              "tent.FL": (55, 0, 0), "tent.FR": (55, 0, 0)}),
+        (34, {}),
+    ]),
+    ("Hit_A", False, [
+        (0, {}),
+        (5, {"body": {"rot": (-20, 0, 6), "loc": (0, 0.05, -0.15)}, **{t: (25, 0, 0) for t in TENTS}}),
+        (20, {}),
+    ]),
+    ("Dodge_Right", False, [
+        (0, {}),
+        (7, {"root": {"loc": (-0.3, 0, 0), "rot": (0, 0, 12)}}),
+        (22, {}),
+    ]),
+    ("Cheer", False, [
+        (0, {}),
+        (10, {"body": {"loc": (0, 0.15, 0)}, "tent.FL": (60, 0, 30), "tent.FR": (60, 0, -30),
+              "tent.BL": (-60, 0, 30), "tent.BR": (-60, 0, -30)}),
+        (22, {"body": {"loc": (0, 0.10, 0)}, "tent.FL": (40, 0, 20), "tent.FR": (40, 0, -20),
+              "tent.BL": (-40, 0, 20), "tent.BR": (-40, 0, -20)}),
+        (34, {}),
+    ]),
+    ("Death_A", False, [
+        (0, {}),
+        (10, {"body": {"rot": (-10, 0, 0), "loc": (0, 0.10, 0)}}),
+        (30, GRELL_FALLEN),
+    ]),
+    ("Death_A_Pose", False, [(0, GRELL_FALLEN), (1, GRELL_FALLEN)]),
+]
+
 # name, file, build, height, bones, extra moves (, own moves)
 MONSTERS = [
     ("orc-smasher", "orc-smasher.glb", lambda: build_orc("mace"), 2.4, ORC_BONES, []),
@@ -1070,6 +1183,7 @@ MONSTERS = [
     ("snake", "snake.glb", build_snake, 1.75, SNAKE_BONES, [], SNAKE_MOVES),
     ("cave-bear", "cave-bear.glb", build_bear, 1.65, BEAR_BONES, [], BEAR_MOVES),
     ("legion-devil", "legion-devil.glb", build_devil, 2.5, DEVIL_BONES, []),
+    ("grell", "grell.glb", build_grell, 2.2, GRELL_BONES, [], GRELL_MOVES),
 ]
 # Moves only some figures have.
 EXTRA_MOVES = {"1H_Ranged_Shoot"}
