@@ -5,7 +5,18 @@ import { HERO_TEMPLATES } from '../data/heroes.js'
 import { normalizeTiles } from '../board/tileDefs.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
 import Board from './Board.jsx'
-import { reloadBoard3D } from './board3dSwitch.js'
+import { reloadBoard3D, useBoard3D } from './board3dSwitch.js'
+
+function useBoard3DOn() {
+  let on
+  function Probe() {
+    on = useBoard3D()[0]
+    return null
+  }
+  render(<Probe />)
+  cleanup()
+  return on
+}
 
 const TILES = normalizeTiles(
   [{ id: 'start', kind: 'start', rows: ['....', '....', '....', '....', '....', '....', '....', '....'], exits: { N: 'oooo', S: 'oooo', W: 'oooooooo', E: 'oooooooo' } }],
@@ -28,7 +39,10 @@ afterEach(() => {
 })
 
 describe('🧊 on an iPad board', () => {
-  it('has the switch next to 🔥, off at first', () => {
+  it('is on at first, and once turned off has the switch next to 🔥', () => {
+    expect(useBoard3DOn()).toBe(true)
+    localStorage.setItem('ashardalon-board3d', 'off')
+    reloadBoard3D()
     const c = render(<Board state={game()} dispatch={vi.fn()} fill calm />)
     const cube = c.getByTitle('Show the board in 3D')
     expect(cube.getAttribute('aria-pressed')).toBe('false')
@@ -38,6 +52,8 @@ describe('🧊 on an iPad board', () => {
   it("goes back to the flat board and says why when the screen can't draw 3D", async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    localStorage.setItem('ashardalon-board3d', 'off')
+    reloadBoard3D()
     const c = render(<Board state={game()} dispatch={vi.fn()} fill calm />)
     fireEvent.click(c.getByTitle('Show the board in 3D'))
     // jsdom has no WebGL, so the 3D board gives up as soon as its code has loaded. Loading
@@ -49,6 +65,17 @@ describe('🧊 on an iPad board', () => {
     expect(c.container.querySelector('svg[aria-label="The dungeon board"]')).toBeTruthy()
     fireEvent.click(c.getByLabelText('Close'))
     expect(c.queryByText(/can't draw the 3D board/)).toBeNull()
+    warn.mockRestore()
+    error.mockRestore()
+  }, 20000)
+
+  it("quietly shows the flat board where 3D can't be drawn and nobody asked for it", async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const c = render(<Board state={game()} dispatch={vi.fn()} fill calm />)
+    await waitFor(() => expect(c.getByTitle('Show the board in 3D').getAttribute('aria-pressed')).toBe('false'), { timeout: 15000 })
+    expect(c.queryByText(/can't draw the 3D board/)).toBeNull()
+    expect(c.container.querySelector('svg[aria-label="The dungeon board"]')).toBeTruthy()
     warn.mockRestore()
     error.mockRestore()
   }, 20000)

@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { normalizeCardFile } from '../data/cards.js'
 import { normalizeTiles } from '../board/tileDefs.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
 import Board from './Board.jsx'
+import { reloadBoard3D } from './board3dSwitch.js'
 import { setAimed } from './useAimed.js'
 
 const TILES = normalizeTiles(
@@ -35,6 +36,12 @@ beforeAll(() => {
   }
 })
 afterEach(cleanup)
+
+// These are about the flat board: 3D (on by default) stays off here.
+beforeEach(() => {
+  localStorage.setItem('ashardalon-board3d', 'off')
+  reloadBoard3D()
+})
 
 describe('tapping a monster token', () => {
   it("shows which monster it is, and a tap on the board closes it", () => {

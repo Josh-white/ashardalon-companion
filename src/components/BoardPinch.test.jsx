@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { normalizeTiles } from '../board/tileDefs.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
 import Board from './Board.jsx'
+import { reloadBoard3D } from './board3dSwitch.js'
 
 const TILES = normalizeTiles(
   [{ id: 'start', kind: 'start', rows: ['....', '....', '....', '....', '....', '....', '....', '....'], exits: { N: 'oooo', S: 'oooo', W: 'oooooooo', E: 'oooooooo' } }],
@@ -31,6 +32,12 @@ beforeAll(() => {
 afterEach(() => {
   cleanup()
   localStorage.clear()
+})
+
+// These are about the flat board: 3D (on by default) stays off here.
+beforeEach(() => {
+  localStorage.setItem('ashardalon-board3d', 'off')
+  reloadBoard3D()
 })
 
 describe('pinch zoom on the board', () => {
