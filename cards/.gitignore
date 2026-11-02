@@ -8,3 +8,8 @@ sounds/*
 sound-downloads/
 # The nightly robot check (scripts/nightly-robot.sh).
 robot-check.json
+
+# How the Pi's auto-update went (scripts/auto-update.sh).
+auto-update.json
+auto-update.json.tmp
+auto-update.checked

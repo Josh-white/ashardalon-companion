@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { HallOfRecords } from './Records.jsx'
 import { HowToPlayButton } from './HowToPlay.jsx'
 import { Button } from './ui.jsx'
+import { AutoUpdateWarning } from './AutoUpdate.jsx'
 
 const FAMILY_GAME = 'family'
 
@@ -171,6 +172,8 @@ export default function GamePicker({ current, onPick, onClose, startGame, change
           </Button>
         )}
       </div>
+
+      {list && !list.friend && <AutoUpdateWarning />}
 
       {!list && <p className="text-zinc-400">{failed ? "Can't reach the Pi to list the games. Trying again…" : 'Looking for games…'}</p>}
 

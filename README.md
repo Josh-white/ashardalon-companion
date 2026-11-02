@@ -104,6 +104,8 @@ To update after pulling new changes: `git pull && docker compose up -d --build`.
 (crontab -l 2>/dev/null; echo "*/5 * * * * $HOME/ashardalon-companion/scripts/auto-update.sh >> $HOME/ashardalon-backups/auto-update.log 2>&1") | crontab -
 ```
 
+When an update fails (a test fails in the build, the app doesn't answer, the folder has hand edits or isn't on `main`), or the script hasn't run for 30 minutes, the "Which game?" screen shows a red warning with the reason, and the 🛠 Admin page always shows the last result. Friends never see it. The script keeps it in `cards/auto-update.json` and `cards/auto-update.checked` (not in git).
+
 Card files (`cards/cards.json`, art and sounds) aren't in git, so changes to those still go on the Pi by hand.
 
 The tests run inside the Docker build, so a version that fails them never starts: the build stops and the Pi stays on the version that worked.
