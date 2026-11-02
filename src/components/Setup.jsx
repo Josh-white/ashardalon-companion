@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { heroArt } from '../data/art.js'
 import { HERO_COLORS, HERO_TEMPLATES, heroTemplates, statsAtLevel, templateFor } from '../data/heroes.js'
+import { heroLimitText, lobbyHeroLimit } from '../state/adventure.js'
 import { campaignHero } from '../state/campaign.js'
 import { levelSlots, powerSlotsFor } from '../state/game.js'
 import { randomNumbers, shuffleNumbers } from '../state/random.js'
@@ -284,12 +285,15 @@ function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave, voice }
   const lobby = state.lobby ?? []
   const mine = SOLO_SLOTS.map((slot) => lobby.find((c) => c.deviceId === deviceId + slot)).filter(Boolean)
   const others = lobby.filter((c) => !c.deviceId.startsWith(deviceId + '~solo'))
-  const freeSlot = SOLO_SLOTS.find((slot) => !lobby.some((c) => c.deviceId === deviceId + slot))
+  // No more heroes than the adventure is for (Adventure 1 is one hero).
+  const limit = lobbyHeroLimit(state)
+  const tooMany = mine.length > limit
+  const freeSlot = mine.length < limit ? SOLO_SLOTS.find((slot) => !lobby.some((c) => c.deviceId === deviceId + slot)) : undefined
   const powersDone = mine.every((c) => powersChosen(c, cards.powers))
   // A campaign goes on with the same heroes, every one of them.
   const heroChoices = state.campaign ? heroTemplates().filter((t) => campaignHero(state, t.key)) : heroTemplates()
   const campaignShort = state.campaign && !heroChoices.every((t) => mine.some((c) => c.heroKey === t.key))
-  const ready = mine.length > 0 && powersDone && others.length === 0 && !campaignShort
+  const ready = mine.length > 0 && powersDone && others.length === 0 && !campaignShort && !tooMany
   // One player runs every hero, so the screens call each turn by the hero's name. The name
   // here is only for the player's solo records in the Hall of Records.
   const [soloName, setSoloName] = useState(rememberedSoloName)
@@ -309,12 +313,17 @@ function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave, voice }
     <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
       <header className="text-center">
         <h1 className="font-display text-4xl font-bold text-amber-400 sm:text-5xl">Solo on the virtual board</h1>
-        <p className="mt-2 text-lg text-zinc-400">Pick an adventure and one hero, or up to five to play as a party. No tiles on the table: the dungeon is on this screen.</p>
+        <p className="mt-2 text-lg text-zinc-400">Pick an adventure and one hero, or more to play as a party. No tiles on the table: the dungeon is on this screen.</p>
       </header>
       {state.campaign ? <CampaignLobby state={state} dispatch={dispatch} /> : <QuestLine state={state} dispatch={dispatch} onBoard big={false} />}
       {mine.map((claim) => (
         <MyHero key={claim.deviceId} state={state} claim={claim} cards={cards} deviceId={claim.deviceId} dispatch={dispatch} solo voice={voice} />
       ))}
+      {mine.length > 0 && (tooMany || !freeSlot) && (
+        <p className={`text-center ${tooMany ? 'font-semibold text-amber-300' : 'text-zinc-400'}`}>
+          {heroLimitText(state.campaign?.card ?? state.lobbyAdventure, limit)} {tooMany ? `Tap "Pick a different hero" on ${mine.length - limit === 1 ? 'one hero' : `${mine.length - limit} heroes`}, or pick another adventure.` : ''}
+        </p>
+      )}
       {freeSlot && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {heroChoices
@@ -358,6 +367,8 @@ function SoloSetup({ state, dispatch, deviceId, cards, onStart, onLeave, voice }
             ? 'Another device has a hero in the lobby. A solo game needs it to pick "Pick a different hero" first.'
             : mine.length === 0
               ? 'Pick a hero to start.'
+              : tooMany
+                ? `Too many heroes: ${heroLimitText(state.campaign?.card ?? state.lobbyAdventure, limit)}`
               : campaignShort
                 ? 'The campaign goes on with all of its heroes: pick each one.'
               : powersDone
@@ -422,7 +433,12 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
   }
   // A campaign goes on with the same heroes, every one of them.
   const heroChoices = state.campaign ? heroTemplates().filter((t) => campaignHero(state, t.key)) : heroTemplates()
-  const ready = lobby.length > 0 && lobby.every((c) => c.ready) && (!state.campaign || heroChoices.every((t) => lobby.some((c) => c.heroKey === t.key)))
+  // No more heroes than the adventure is for: once it's full, nobody else can pick one.
+  const limit = lobbyHeroLimit(state)
+  const tooMany = lobby.length > limit
+  const full = lobby.filter((c) => c !== mine).length >= limit
+  const limitText = heroLimitText(state.campaign?.card ?? state.lobbyAdventure, limit)
+  const ready = lobby.length > 0 && !tooMany && lobby.every((c) => c.ready) && (!state.campaign || heroChoices.every((t) => lobby.some((c) => c.heroKey === t.key)))
 
   const onBoard = canBoard && Boolean(state.lobbyBoard)
   const enter = () =>
@@ -466,7 +482,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
           lobby={lobby}
           records={records}
           onFree={(c) => dispatch({ type: 'RELEASE_HERO', deviceId: c.deviceId })}
-          onAlly={onBoard && !state.campaign ? addAlly : null}
+          onAlly={onBoard && !state.campaign && !full ? addAlly : null}
           levelOf={(key) => campaignHero(state, key)?.level ?? 1}
         />
       )}
@@ -490,6 +506,12 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
       )}
 
       {mine && !watchOnly && <MyHero state={state} claim={mine} cards={cards} deviceId={deviceId} dispatch={dispatch} records={records} played={played} voice={voice} />}
+
+      {!watchOnly && full && !mine && (
+        <p className="text-center text-lg text-amber-300">
+          {limitText} Every hero is picked. To play, ask for a hero to be freed or pick another adventure.
+        </p>
+      )}
 
       {!watchOnly && (
         <div className={`flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-4 ${mine ? 'pt-4' : ''}`}>
@@ -515,7 +537,7 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
               </>
             )
             const size = mine ? 'sm:w-[18%]' : 'sm:w-[30%] lg:w-[18%]'
-            return !taken && !mine ? (
+            return !taken && !mine && !full ? (
               <div key={template.key} className={`w-full ${size}`}>
                 <HoldToPick label={`Hold to pick ${template.name}`} onPick={() => claim(template)} className="block w-full text-center transition active:scale-95">
                   {banner}
@@ -545,7 +567,9 @@ export default function Setup({ state, dispatch, deviceId, onClaim, onDemo, watc
         )}
         <p className="text-sm text-zinc-500">
           {lobby.length === 0
-            ? 'Each player picks a hero on their own device.'
+            ? `Each player picks a hero on their own device. ${limitText}`
+            : tooMany
+              ? `Too many heroes: ${limitText} Free ${lobby.length - limit === 1 ? 'one hero' : `${lobby.length - limit} heroes`} or pick another adventure.`
             : ready
               ? `Everyone's ready! Turn order: ${lobby.map((c) => templateFor(c.heroKey).name).join(', ')}.`
               : state.campaign

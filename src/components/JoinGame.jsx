@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { heroArt } from '../data/art.js'
-import { HERO_COLORS, HERO_TEMPLATES } from '../data/heroes.js'
+import { HERO_COLORS, heroTemplates } from '../data/heroes.js'
+import { gameHeroLimit } from '../state/adventure.js'
 import { powerSlotsFor } from '../state/game.js'
 import { useCards } from '../state/useCards.js'
 import Art from './Art.jsx'
@@ -8,11 +9,13 @@ import { HeroAbilities, PowerSlots } from './HeroGallery.jsx'
 import { rememberedName, rememberName, startingPicks } from './Setup.jsx'
 import { Button } from './ui.jsx'
 
-// The heroes nobody is playing yet, who can still join this game.
-export const freeHeroes = (state) => HERO_TEMPLATES.filter((t) => !state.heroes.some((h) => h.key === t.key))
+// The heroes nobody is playing yet, who can still join this game (fan heroes from cards.json too).
+export const freeHeroes = (state) => heroTemplates().filter((t) => !state.heroes.some((h) => h.key === t.key))
 
-// Whether a new hero can join now: the game is going, and the roll for first turn is over.
-export const canJoin = (state) => state.status === 'playing' && !(state.firstRoll && !state.firstRoll.winner) && freeHeroes(state).length > 0
+// Whether a new hero can join now: the game is going, the roll for first turn is over, and
+// the party is smaller than the adventure allows.
+export const canJoin = (state) =>
+  state.status === 'playing' && !(state.firstRoll && !state.firstRoll.winner) && freeHeroes(state).length > 0 && state.heroes.length < gameHeroLimit(state)
 
 // Joining a game that's already going (Easton wants in): pick a free hero, type a name, keep
 // or change the suggested powers. The Pi puts the hero next to whoever's turn it is.
@@ -22,7 +25,7 @@ export default function JoinGame({ state, dispatch, deviceId, onJoined, onCancel
   const [heroKey, setHeroKey] = useState(null)
   const [player, setPlayer] = useState(rememberedName)
   const [picks, setPicks] = useState([])
-  const template = HERO_TEMPLATES.find((t) => t.key === heroKey)
+  const template = heroTemplates().find((t) => t.key === heroKey)
   const active = state.heroes[state.turn.heroIndex]
 
   if (!template) {
