@@ -8,6 +8,7 @@ import { monsterArt } from '../data/art.js'
 import { powerKey, spellKind } from '../audio/spellKind.js'
 import { findFoe } from '../state/gameHelpers.js'
 import { figureToken } from './play.js'
+import { baseId } from './grid.js'
 
 // The moment's own screen shows the die first; the board animation starts once it's read.
 export const FX_DELAY_MS = 2400
@@ -52,6 +53,39 @@ export const heroLook = (title = '') => NAMED_LOOKS[powerKey(title.split(': ')[1
 // The square a monster's token stands on (its first figure, for a card with several).
 const foeSquare = (board, id) => board.tokens[id] ?? board.tokens[figureToken(id, 2)] ?? board.tokens[figureToken(id, 3)] ?? null
 
+const sameSquare = (a, b) => a[0] === b[0] && a[1] === b[1]
+const steps = (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]))
+// The squares of a monster card's figures on a board, nearest the hero first.
+const figureSquares = (board, id, from) =>
+  Object.entries(board?.tokens ?? {})
+    .filter(([token]) => baseId(token) === id)
+    .map(([, at]) => at)
+    .sort((a, b) => steps(a, from) - steps(b, from))
+
+// Which square each shot flies to. A card with several figures (the Legion Devils) has a
+// token for each, so a hit that fells one aims at the token that left the board, and the
+// other shots at the figures still standing, nearest the hero first, one figure each.
+function aimShots(before, after, rolls, from) {
+  const groups = new Map()
+  const group = (id) => {
+    if (!groups.has(id)) {
+      const was = figureSquares(before.board, id, from)
+      const still = figureSquares(after.board, id, from)
+      const gone = was.filter((at) => !still.some((s) => sameSquare(s, at)))
+      const lost = Math.max(0, was.length - still.length)
+      groups.set(id, { fallen: gone.slice(0, lost), standing: [...was.filter((at) => !gone.slice(0, lost).includes(at))], used: 0, kills: 0 })
+    }
+    return groups.get(id)
+  }
+  return rolls.map((r) => {
+    if (!r.monsterId) return null
+    const g = group(r.monsterId)
+    if (r.hit && g.kills < g.fallen.length) return { to: g.fallen[g.kills++], fell: true }
+    const to = g.standing.length > 0 ? g.standing[g.used++ % g.standing.length] : g.fallen[0] ?? foeSquare(before.board, r.monsterId)
+    return to ? { to, fell: false } : null
+  })
+}
+
 // What to animate for this action, or null: { look, by: 'hero' | 'monster', from, shots }.
 // Each shot is { to, result: 'hit' | 'miss' | 'kill' | 'down', dealt, art? }, squares are [x, y].
 export function attackFx(before, after, action) {
@@ -62,18 +96,20 @@ export function attackFx(before, after, action) {
   if (action.type === 'HERO_ATTACK') {
     const from = board.tokens[action.heroId]
     if (!from) return null
-    const shots = moment.rolls.flatMap((r) => {
-      const to = r.monsterId && foeSquare(board, r.monsterId)
-      if (!to) return []
+    const aims = aimShots(before, after, moment.rolls, from)
+    const shots = moment.rolls.flatMap((r, i) => {
+      const aim = aims[i]
+      if (!aim) return []
       const foe = findFoe(before, r.monsterId)
-      const gone = !findFoe(after, r.monsterId)
-      return [{ to, result: r.hit ? (gone ? 'kill' : 'hit') : 'miss', dealt: r.dealt ?? 0, art: gone ? monsterArt(foe) : null }]
+      const gone = aim.fell || !findFoe(after, r.monsterId)
+      return [{ to: aim.to, result: r.hit ? (gone ? 'kill' : 'hit') : 'miss', dealt: r.dealt ?? 0, art: r.hit && gone ? monsterArt(foe) : null }]
     })
     return shots.length > 0 ? { look: heroLook(moment.title), by: 'hero', from, shots } : null
   }
 
   if (action.type === 'MONSTER_ATTACK') {
-    const from = foeSquare(board, action.monsterId)
+    // The figure taking its turn, for a card with several (the Legion Devils).
+    const from = (action.token && board.tokens[action.token]) || foeSquare(board, action.monsterId)
     if (!from) return null
     const results = after.turn?.lastMonsterAttack?.results ?? []
     const shots = moment.rolls.flatMap((r) => {

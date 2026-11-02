@@ -238,7 +238,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
     }
     const targets = targetIds.map((heroId) => ({ heroId, roll: rollD20() }))
     const tableRoll = table.length > 0 ? rollD20() : undefined
-    dispatch({ type: 'MONSTER_ATTACK', monsterId: monster.id, attackId: attack.id, tableRoll, targets, nobleShield, tileGuarded: guarded })
+    dispatch({ type: 'MONSTER_ATTACK', monsterId: monster.id, token, attackId: attack.id, tableRoll, targets, nobleShield, tileGuarded: guarded })
     setResults(true)
   }
   // Noble Shield: an attack on several heroes, one of them a paladin with the power unused.

@@ -470,16 +470,16 @@ export function moveToken(state, action) {
 export const timeLeapt = (hero) => (hero.curses ?? []).some((c) => c.card?.removeAtTurnStart)
 
 // Figures that left play take their token with them (a Time Leap takes the hero's). When one figure of a monster card
-// falls, its token nearest the active hero (the one most likely just attacked) goes, and
-// the rest are numbered again.
-export function pruneTokens(state) {
+// falls, its token nearest the hero who attacked (the active hero, unless someone else
+// did) goes, and the rest are numbered again.
+export function pruneTokens(state, attackerId) {
   const board = state.board
   if (!board) return state
   const live = new Set(
     [...state.heroes.filter((h) => !timeLeapt(h) && !h.escaped), ...state.monsters, ...(state.villains ?? []).filter((v) => !v.defeated), ...(state.villagers ?? []).filter((v) => !v.removed)].map((f) => f.id),
   )
   let tokens = Object.fromEntries(Object.entries(board.tokens).filter(([id]) => live.has(baseId(id))))
-  const hero = tokens[state.heroes[state.turn.heroIndex]?.id]
+  const hero = (attackerId && tokens[attackerId]) || tokens[state.heroes[state.turn.heroIndex]?.id]
   for (const monster of state.monsters) {
     const mine = Object.keys(tokens).filter((id) => baseId(id) === monster.id)
     const left = figuresLeft(monster)
