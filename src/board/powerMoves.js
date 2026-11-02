@@ -215,7 +215,8 @@ export function moveTargets(state, id) {
   const hero = state.heroes.find((h) => h.id === move.heroId)
   switch (s.to) {
     case 'squares': {
-      const n = s.n === 'speed' ? moveSpeed(hero) : s.n ?? 1
+      // 'speed' is the moving hero's own speed (Nature's Gifts moves another hero).
+      const n = s.n === 'speed' ? moveSpeed(state.heroes.find((h) => h.id === id) ?? hero) : s.n ?? 1
       // Heroes can't walk through monsters; a moved monster can't walk through heroes.
       const isHero = state.heroes.some((h) => h.id === id)
       const blocked = isHero ? stops : new Set(heroTokens(state).map((h) => key(h.at)))

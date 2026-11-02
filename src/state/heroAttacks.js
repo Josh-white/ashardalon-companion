@@ -402,7 +402,8 @@ export function usePower(state, action) {
   const taken = use.takeEncounter ? state.encounter : null
   if (use.takeEncounter && (!taken || taken.attacked || taken.heroId === hero.id)) return state
 
-  let next = withCast(power.type === 'at-will' ? state : spendUse(state, hero, power), power)
+  // A card that 'remains in play and is not flipped' (Improvise, Fleetfooted) has reusable: true.
+  let next = withCast(power.type === 'at-will' || effectsOf(power).reusable ? state : spendUse(state, hero, power), power)
   next = withLog(next, `${heroLabel(hero)} used ${power.name}.`)
   if (use.healSelf) next = healHero(next, hero.id, use.healSelf, power.name)
   if (use.heal && picked) {

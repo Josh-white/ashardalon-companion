@@ -160,13 +160,19 @@ export function springArmedTraps(state, hero) {
   return next
 }
 
+// Charm Beast's creatures and beasts: monsters with one of `types`, or named in `names`.
+export function isCharmable(monster, charm = {}) {
+  const types = (Array.isArray(charm.types) ? charm.types : []).map((t) => t.toLowerCase())
+  const names = (Array.isArray(charm.names) ? charm.names : []).map((n) => n.toLowerCase())
+  return (monster?.card?.types ?? []).some((t) => types.includes(t.toLowerCase())) || names.includes(String(monster?.name ?? '').toLowerCase())
+}
+
 // Charm Beast: a drawn monster that isn't a creature or beast is discarded; one that is attacks
 // the nearest other monster (the device's roll) and sits out this Villain Phase.
 function charmBeast(state, hero, power, charm, action) {
   const monster = findFoe(state, action.monsterIds?.[0]) ?? newestMonster(state)
   if (!monster || monster.villain) return state
-  const types = (Array.isArray(charm.types) ? charm.types : []).map((t) => t.toLowerCase())
-  const beast = (monster.card?.types ?? []).some((t) => types.includes(t.toLowerCase()))
+  const beast = isCharmable(monster, charm)
   if (!beast) {
     const next = discardMonsterCard({ ...state, monsters: state.monsters.filter((m) => m.id !== monster.id) }, monster)
     return withLog(next, `${power.name}: the ${monster.name} isn't a creature or beast, so it's discarded.`)

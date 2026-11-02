@@ -5,7 +5,7 @@ import { moveTargets } from '../board/powerMoves.js'
 import { tokenTargets } from '../board/heroTokens.js'
 import { outOfReach } from '../board/tactics.js'
 import { statusesOf } from './monsterStatus.js'
-import { pathKinds } from './fanPowers.js'
+import { isCharmable, pathKinds } from './fanPowers.js'
 import { petsDue, petsOf } from './pets.js'
 import { normalizeTiles } from '../board/tileDefs.js'
 import { boardGrid } from '../board/play.js'
@@ -162,7 +162,12 @@ describe('fan board tokens', () => {
     let state = game()
     const trap = { id: 'tr1', cardId: 'pit', name: 'Pit', type: 'trap', card: {}, tile: boardGrid(state.board).get('0,2').area }
     const { state: s, id } = give({ ...state, traps: [trap] }, 0, { use: { removeTrap: true } })
-    expect(use(s, 0, id, { trapIds: ['tr1'] }).traps).toEqual([])
+    const next = use(s, 0, id, { trapIds: ['tr1'] })
+    expect(next.traps).toEqual([])
+    expect(next.heroes[0].powers.find((p) => p.id === id).used).toBe(true)
+    // A card that stays in play isn't flipped.
+    const kept = give({ ...state, traps: [trap] }, 0, { use: { removeTrap: true }, reusable: true })
+    expect(use(kept.state, 0, kept.id, { trapIds: ['tr1'] }).heroes[0].powers.find((p) => p.id === kept.id).used).toBeFalsy()
   })
 })
 
@@ -199,6 +204,8 @@ describe('Charm Beast', () => {
     const orc = { ...s, monsters: [rat('m1'), rat('m2', { name: 'Orc', card: { ...rat('m2').card, types: ['Orc'] } })] }
     const gone = use(orc, 0, id, { monsterIds: ['m2'] })
     expect(gone.monsters.map((m) => m.id)).toEqual(['m1'])
+    expect(isCharmable({ name: 'Snake', card: { types: ['Reptile'] } }, { types: ['Animal'], names: ['Snake'] })).toBe(true)
+    expect(isCharmable({ name: 'Kobold Dragonshield', card: { types: ['Reptile', 'Sentry'] } }, { types: ['Animal'], names: ['Snake'] })).toBe(false)
   })
 })
 

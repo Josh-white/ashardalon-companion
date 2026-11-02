@@ -26,6 +26,7 @@ import { itemAc } from './items.js'
 //   autoHit     hits without needing the roll to beat AC (a fan Bard's Guiding Strike).
 //   critFrom    +1 damage when the die shows this or more (a fan Ranger's Birch Arrow: 17).
 //   selfDamage  the hero takes this much damage after the attack (a fan Druid's Wolf Fangs).
+//   reusable    the card stays in play and isn't flipped (Improvise, Fleetfooted).
 //   wolf        the fan Druid's Wolf Form attack: only while the hero is the wolf (tokens.wolf), with a
 //               Bite/Pounce question (Pounce: -2, and a hit Slows the monster). wolfOnly: a power only
 //               the wolf can use (Lupine Lore). While the hero is the wolf, no other power can be used.
@@ -149,7 +150,7 @@ BY_KEY.arcingstrike = BY_KEY.arcingsmite
 // The fields an effect can have, for checking a card's own `effect` in cards.json.
 export const EFFECT_FIELDS = [
   'targets', 'attacks', 'sameTarget', 'before', 'ask', 'evenBonus', 'onHit', 'after',
-  'note', 'hitNote', 'missNote', 'keepOnMiss', 'free', 'use', 'reaction', 'shadow', 'shadowBonus', 'shadowKeep', 'board', 'autoHit', 'critFrom', 'selfDamage', 'uses', 'wolf', 'wolfOnly',
+  'note', 'hitNote', 'missNote', 'keepOnMiss', 'free', 'use', 'reaction', 'shadow', 'shadowBonus', 'shadowKeep', 'board', 'autoHit', 'critFrom', 'selfDamage', 'uses', 'wolf', 'wolfOnly', 'reusable',
 ]
 
 const cardOf = (powerOrCard) => powerOrCard?.card ?? powerOrCard

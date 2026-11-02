@@ -6,7 +6,7 @@ import { usesLeft } from '../state/heroAttacks.js'
 import { rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { HeroChoice, InReach, MonsterChoice } from './Pickers.jsx'
-import { fanUseBlocked, foesInReach, nearestOtherFoe, newestMonster, resolveUse, trapsOnTile } from '../state/fanPowers.js'
+import { fanUseBlocked, foesInReach, isCharmable, nearestOtherFoe, newestMonster, resolveUse, trapsOnTile } from '../state/fanPowers.js'
 import { heroesInReach } from '../board/encounters.js'
 import { Button } from './ui.jsx'
 
@@ -162,7 +162,7 @@ function UsePanel({ state, hero, power, dispatch, onClose }) {
       {charmed && !blocked && (
         <p className="text-zinc-200">
           The new monster is the {charmed.name}.{' '}
-          {(charmed.card?.types ?? []).some((t) => (use.charm.types ?? []).map((x) => x.toLowerCase()).includes(t.toLowerCase()))
+          {isCharmable(charmed, use.charm)
             ? `It's a creature or beast: it attacks the ${nearestOtherFoe(state, charmed.id)?.name ?? 'nearest monster'} and skips this Villain Phase.`
             : "It isn't a creature or beast, so it's discarded."}
         </p>
