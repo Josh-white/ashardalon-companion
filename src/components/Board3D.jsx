@@ -4,10 +4,13 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { boardExtras, boardFigures, boardLayout } from '../board/scene3d.js'
 import { artUrl, useArt } from '../state/useArt.js'
 import { TOKEN_COLORS } from './Board.jsx'
+import { useAttackFx } from './AttackFx.jsx'
+import { useHealFx } from './HealFx.jsx'
+import { canvasTexture, playAttack3D, playHeal3D } from './board3dFx.js'
 
-// The virtual board in 3D (three.js), for the big screen: the dungeon's stone floor and
-// rock, walls along shut edges, the stairs, and every figure as a standee carrying its
-// round token art. Read only: the iPads still move the figures.
+// The virtual board in 3D (three.js): the dungeon's stone floor and rock, walls along shut
+// edges, the stairs, and every figure as a standee carrying its round token art. Attacks
+// and heals play on it like on the flat board (board3dFx.js).
 //
 // It draws only when something changes (a figure walks, a tile goes down, someone drags the
 // camera) plus the torches' flicker, which stops with Reduce Motion on. One floor block is
@@ -22,16 +25,6 @@ const STEP_MS = 180
 const seeded = (n) => {
   const s = Math.sin(n * 12.9898) * 43758.5453
   return s - Math.floor(s)
-}
-
-function canvasTexture(w, h, draw) {
-  const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
-  draw(canvas.getContext('2d'), w, h)
-  const texture = new THREE.CanvasTexture(canvas)
-  texture.colorSpace = THREE.SRGBColorSpace
-  return texture
 }
 
 // A round token for a figure with no picture on the Pi: its colour and first letter.
@@ -64,7 +57,7 @@ function makeStage(mount, calm) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, calm ? 1.5 : 2))
   renderer.toneMapping = THREE.ACESFilmicToneMapping
   renderer.shadowMap.enabled = !calm
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap
+  renderer.shadowMap.type = THREE.PCFShadowMap
   renderer.domElement.style.display = 'block'
   renderer.domElement.style.width = '100%'
   renderer.domElement.style.height = '100%'
@@ -85,6 +78,10 @@ function makeStage(mount, calm) {
   moon.castShadow = !calm
   moon.shadow.mapSize.set(2048, 2048)
   scene.add(moon, moon.target)
+  // The flash of a blow landing (board3dFx.js). Always there, dark until then: adding a
+  // light later would make every material rebuild, a stutter right at the hit.
+  const flash = new THREE.PointLight('#ffffff', 0, 7, 1.5)
+  scene.add(flash)
 
   const blob = canvasTexture(64, 64, (g, w) => {
     const r = g.createRadialGradient(w / 2, w / 2, 2, w / 2, w / 2, w / 2)
@@ -98,7 +95,7 @@ function makeStage(mount, calm) {
   const figures = new THREE.Group()
   const lit = new THREE.Group()
   scene.add(dungeon, extras, lit, figures)
-  return { renderer, scene, camera, controls, moon, blob, dungeon, extras, lit, figures, nodes: new Map(), textures: new Map(), tweens: [], animators: [], center: new THREE.Vector3() }
+  return { renderer, scene, camera, controls, moon, flash, blob, dungeon, extras, lit, figures, nodes: new Map(), textures: new Map(), tweens: [], animators: [], center: new THREE.Vector3() }
 }
 
 const disposeTree = (root) =>
@@ -305,6 +302,12 @@ const squarePlane = (material, x, z, y, size = 0.96) => {
   plane.rotation.x = -Math.PI / 2
   plane.position.set(x, y, z)
   return plane
+}
+
+// A defeated monster's picture for its falling standee (kept for next time), or a plain
+// dark token when the Pi has none.
+function cachedPicture(stage, url) {
+  return texture(stage, url, { label: '?', kind: 'monster' })
 }
 
 // Markers, tokens and the way out, rebuilt whenever one of them changes. Lava glows and
@@ -529,6 +532,7 @@ function syncFigures(stage, figures, art) {
     } else if (node.position.distanceTo(to) > 0.01) {
       glide(stage, node, to)
     }
+    node.userData.at = f.at
     const { ring, faceMat, baseMat } = node.userData
     ring.visible = Boolean(f.active || f.acting || f.selected)
     ring.material.color.set(f.selected ? '#34d399' : f.acting ? '#fb923c' : '#fbbf24')
@@ -632,6 +636,8 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
   const extras = boardExtras(state)
   const extrasKey = JSON.stringify(extras)
   const targetsKey = (taps?.targets ?? []).join(' ')
+  const playing = useAttackFx(state.moment)
+  const heals = useHealFx(state.healFx, state.moment)
 
   // Make the stage once; hand back to the flat board if this screen can't draw 3D.
   useEffect(() => {
@@ -663,8 +669,8 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
         }
       }
       stage.tweens = stage.tweens.filter((t) => {
-        t.start ??= now
-        const k = Math.min(1, (now - t.start) / t.ms)
+        t.start ??= now + (t.wait ?? 0)
+        const k = Math.max(0, Math.min(1, (now - t.start) / t.ms))
         t.step(k)
         return k < 1
       })
@@ -724,6 +730,8 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
     stageRef.current = stage
     setReady(true)
     return () => {
+      stage.stopFx?.()
+      for (const stop of stage.stopHeals ?? []) stop()
       cancelAnimationFrame(frame)
       observer.disconnect()
       canvas.removeEventListener('pointerdown', press)
@@ -777,6 +785,31 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
     syncFigures(stage, figures, art)
     stage.render()
   })
+
+  // An attack flies, strikes and fades (one at a time: a new one clears the last).
+  useEffect(() => {
+    const stage = stageRef.current
+    if (!ready || !stage?.at || !playing) return
+    stage.stopFx?.()
+    stage.stopFx = playAttack3D(stage, playing.fx, (name) => cachedPicture(stage, artUrl(art, name)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, playing?.id])
+
+  // Each heal floats up once over its hero.
+  const healsKey = heals.map((h) => h.key).join()
+  useEffect(() => {
+    const stage = stageRef.current
+    if (!ready || !stage?.at) return
+    stage.healsShown ??= new Set()
+    stage.stopHeals ??= []
+    for (const h of heals) {
+      const node = stage.nodes.get(h.heroId)
+      if (stage.healsShown.has(h.key) || !node) continue
+      stage.healsShown.add(h.key)
+      stage.stopHeals.push(playHeal3D(stage, node, h.amount, h.delay))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, healsKey])
 
   const fit = () => {
     const stage = stageRef.current
