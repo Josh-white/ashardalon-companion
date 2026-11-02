@@ -5,7 +5,7 @@ import { itemTrapBonus, tileAcBonus } from '../data/items.js'
 import { tileShieldNow } from '../board/checks.js'
 import { heroAc } from '../data/powerEffects.js'
 import { foeBonus } from '../data/difficulty.js'
-import { canSpendAttack } from './heroTurn.js'
+import { attackGone, canSpendAttack } from './heroTurn.js'
 
 // Who an attack goes after, asked as a question when the app can't tell.
 export function targetQuestion(targets, hero) {
@@ -109,8 +109,8 @@ export function extraEncounterReasons(state, hero) {
 // opening the Cage) right now, or null when they can.
 export function attackBlocked(state, hero, what) {
   if (canSpendAttack(state, hero)) return null
-  const spent = state.turn.attackSpent
-  return spent?.heroId === hero.id ? `${hero.name} used this turn's attack on ${spent.on}.` : `${hero.name} attacked this turn, so ${what} has to wait.`
+  // The real reason: an attack, a power, two moves, or one move while Dazed.
+  return attackGone(state, hero) ?? `${hero.name} can't do ${what} right now.`
 }
 
 // What a phase check's answer does: "1 damage and Dazed", or "nothing happens".
