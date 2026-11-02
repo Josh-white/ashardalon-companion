@@ -26,10 +26,20 @@ describe("the heroes' 3D figures", () => {
     expect(attackMove('fire')).toBe('cast')
   })
 
-  it('gives the two orcs their own figures and leaves other monsters as standees', () => {
+  it('gives the monsters we made their own figures and leaves other monsters as standees', () => {
     expect(monsterModel({ name: 'Orc Smasher' })).toEqual({ model: 'Orc_Smasher', gear: [], height: 1 })
     expect(monsterModel({ name: 'Orc Archer' }).model).toBe('Orc_Archer')
-    expect(monsterModel({ name: 'Grell' })).toBeNull()
-    for (const name of ['Orc_Smasher', 'Orc_Archer']) expect(MODEL_PROPS[name]).toEqual([])
+    expect(monsterModel({ name: 'Kobold Dragonshield' }).model).toBe('Kobold_Dragonshield')
+    // Not the villain: Kobold Dragonlord gets his own figure later.
+    expect(monsterModel({ name: 'Kobold Dragonlord' })).toBeNull()
+    expect(monsterModel({ name: 'Human Cultist' }).model).toBe('Human_Cultist')
+    expect(monsterModel({ name: 'Duergar Guard' }).model).toBe('Duergar_Guard')
+    expect(monsterModel({ name: 'Duergar Captain' })).toBeNull()
+    expect(monsterModel({ name: 'Snake' }).model).toBe('Snake')
+    expect(monsterModel({ name: 'Cave Bear' }).model).toBe('Cave_Bear')
+    expect(monsterModel({ name: 'Legion Devil' }).model).toBe('Legion_Devil')
+    expect(monsterModel({ name: 'Grell' }).model).toBe('Grell')
+    expect(monsterModel({ name: 'Gibbering Mouther' })).toBeNull()
+    for (const name of ['Orc_Smasher', 'Orc_Archer', 'Kobold_Dragonshield', 'Human_Cultist', 'Duergar_Guard', 'Snake', 'Cave_Bear', 'Legion_Devil', 'Grell']) expect(MODEL_PROPS[name]).toEqual([])
   })
 })
