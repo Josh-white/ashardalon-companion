@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { Component, useSyncExternalStore } from 'react'
 import { readFileSync } from 'node:fs'
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { normalizeCardFile } from '../data/cards.js'
 import { startingPicks } from '../components/Setup.jsx'
 import { powerSlotsFor } from '../state/heroSetup.js'
@@ -14,6 +14,7 @@ import { ROBOT_CARD_FILE } from './robotCards.js'
 // The game has to keep moving: round after round, until it's won or lost, without a crash.
 //   ALLY_GAMES=10 ALLY_STEPS=800 npx vitest run src/robot/allies.test.jsx
 //   ROBOT_CARDS=cards/cards.json ...   to play with the Pi's real cards
+//   ALLY_ADVENTURES=adventure-5,adventure-8 (or all) ...   only those adventures, every game
 
 const GAMES = Number(process.env.ALLY_GAMES) || 4
 const STEPS = Number(process.env.ALLY_STEPS) || 400
@@ -127,6 +128,19 @@ afterEach(() => {
 const label = (el) => (el.getAttribute('aria-label') || el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80)
 const pick = (list) => list[Math.floor(random() * list.length)]
 
+// "2-5" or "1" on the adventure card, as [fewest, most] heroes (at most 3 here, to keep games short).
+const playerRange = (adventure) => {
+  const [low, high = low] = String(adventure?.players ?? '1-5').split('-').map(Number)
+  return [low || 1, Math.min(high || 5, Math.max(low || 1, 3))]
+}
+const WANTED = process.env.ALLY_ADVENTURES ? process.env.ALLY_ADVENTURES.split(',') : null
+// The adventures the computer heroes can play: not campaigns (they need the campaign lobby).
+const ADVENTURES = CARDS.adventures.filter((a) => !a.campaign && (WANTED ? WANTED.includes(a.id) || WANTED.includes('all') : true))
+function adventureFor(seed) {
+  if (ADVENTURES.length === 0 || (!WANTED && seed % 2 === 1)) return null
+  return ADVENTURES[Math.floor(seed / (WANTED ? 1 : 2)) % ADVENTURES.length]
+}
+
 async function playGame(seed) {
   vi.resetModules()
   const [{ default: App }, { gameReducer, initialState }, { setHeroTemplates }] = await Promise.all([import('../App.jsx'), import('../state/game.js'), import('../data/heroes.js')])
@@ -140,8 +154,14 @@ async function playGame(seed) {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'cancelAnimationFrame', 'Date'] })
   vi.setSystemTime(new Date('2026-10-30T19:00:00'))
   const numbers = (n) => Array.from({ length: n }, () => random())
-  const heroes = [...CARDS.heroes].sort(() => random() - 0.5).slice(0, 1 + (seed % 3))
+  // Every other game (or every game, with ALLY_ADVENTURES) plays an adventure, so the
+  // computer heroes go for its goal and the win counts; the rest are free play.
+  const adventure = adventureFor(seed)
+  const [fewest, most] = adventure ? playerRange(adventure) : [1, 3]
+  const count = Math.max(fewest, Math.min(most, 1 + (seed % 3)))
+  const heroes = [...CARDS.heroes].sort(() => random() - 0.5).slice(0, count)
   let state = gameReducer(initialState, { type: 'SET_LOBBY_BOARD', on: true })
+  if (adventure) state = gameReducer(state, { type: 'CHOOSE_ADVENTURE', adventure })
   heroes.forEach((template) => {
     // The suggested powers, and the first free card for any slot without one (a card file with no suggestions).
     const picks = startingPicks(template, CARDS.powers)
@@ -162,7 +182,8 @@ async function playGame(seed) {
     boardRandom: numbers(64),
   })
   store.state = state
-  const game = { seed, heroes: heroes.map((h) => h.name), helps: 0, steps: 0, problem: null }
+  const game = { seed, adventure: adventure?.title ?? 'free play', heroes: heroes.map((h) => h.name), helps: 0, steps: 0, problem: null }
+  if (adventure && state.adventure?.card.id !== adventure.id) return { ...game, problem: `the game didn't start ${adventure.title}` }
   if (state.status !== 'playing' || !state.heroes.every((h) => h.ally)) return { ...game, problem: "the allies' game didn't start" }
 
   localStorage.clear()
@@ -216,18 +237,28 @@ async function playGame(seed) {
   return game
 }
 
+// How the computer heroes did, game by game, once they've all been played: adventures won
+// out of those played (free play can only be lost).
+const results = []
+afterAll(() => {
+  const played = results.filter((g) => g.adventure !== 'free play')
+  const won = played.filter((g) => g.status === 'won')
+  if (played.length > 0) process.stderr.write(`Computer heroes won ${won.length} of ${played.length} adventures (${played.map((g) => `${g.adventure}: ${g.status}`).join('; ')})\n`)
+})
+
 describe('computer allies', () => {
   for (let i = 0; i < GAMES; i++) {
     const seed = FIRST_SEED + i
     it(`play a whole game by themselves (seed ${seed})`, async () => {
       const game = await playGame(seed)
       process.stderr.write(
-        `Ally game ${seed}: ${game.heroes.join(', ')}, ${game.steps} steps, round ${game.round}, ${game.tiles} tiles, ${game.status}, asked for a hand ${game.helps} times\n`,
+        `Ally game ${seed}: ${game.adventure} with ${game.heroes.join(', ')}, ${game.steps} steps, round ${game.round}, ${game.tiles} tiles, ${game.status}, asked for a hand ${game.helps} times\n`,
       )
+      results.push(game)
       if (process.env.ALLY_LOG) process.stderr.write(store.log.map((l) => `  ${l.round}/${l.heroIndex} ${l.text}`).join('\n') + '\n')
       expect(game.problem, game.problem).toBeNull()
       // Out of the start: the allies explored and fought, round after round.
-      expect(game.round).toBeGreaterThan(2)
+      if (game.status !== 'won') expect(game.round).toBeGreaterThan(2)
     }, 300_000)
   }
 })

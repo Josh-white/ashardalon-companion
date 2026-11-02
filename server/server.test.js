@@ -583,3 +583,36 @@ describe('the nightly robot check', () => {
     }
   })
 })
+
+describe('card fixes', () => {
+  let dir
+  let server
+  const cardFile = (effect) => ({ powers: [{ id: 'jab', hero: 'cleric', type: 'at-will', name: 'Jab', attack: '+6', damage: '1', text: 'Made up.', effect }] })
+
+  beforeEach(async () => {
+    dir = mkdtempSync(join(tmpdir(), 'ashardalon-'))
+    writeFileSync(join(dir, 'cards.json'), JSON.stringify(cardFile({ critFrom: 19 })))
+    server = await startServer({ port: 0, saveFile: join(dir, 'game.json'), staticDir: dir, cardsFile: join(dir, 'cards.json'), warmNarrator: false })
+  })
+
+  afterEach(async () => {
+    await server.close()
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('reach a game in progress once a screen loads the changed cards', async () => {
+    const screen = connect(server.port)
+    await screen.nextState(1)
+    const hero = createHero(HERO_TEMPLATES[0])
+    const card = { id: 'jab', name: 'Jab', text: 'Made up.', attack: '+6', damage: '1', effect: { critFrom: 19 } }
+    hero.powers[0] = { ...hero.powers[0], name: 'Jab', card }
+    screen.send({ type: 'START_GAME', heroes: [hero] })
+    expect((await screen.nextState(2)).heroes[0].powers[0].card.effect).toEqual({ critFrom: 19 })
+
+    writeFileSync(join(dir, 'cards.json'), JSON.stringify(cardFile({ critFrom: 17 })))
+    await fetch(`http://localhost:${server.port}/cards.json`)
+    const fixed = await screen.nextState(3)
+    expect(fixed.heroes[0].powers[0].card.effect).toEqual({ critFrom: 17 })
+    expect(JSON.parse(readFileSync(join(dir, 'game.json'), 'utf8')).heroes[0].powers[0].card.effect).toEqual({ critFrom: 17 })
+  })
+})

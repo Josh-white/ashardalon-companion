@@ -183,7 +183,7 @@ function AttackStep({ state, hero, name, attack, onAttack, onNobody, dispatch, t
         onToggle={(id) => setGuarded((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]))}
       />
       {targets.length === 0 && onNobody ? (
-        <Button className="w-full py-4 text-xl font-bold" onClick={onNobody}>
+        <Button variant="gold" className="w-full py-4 text-xl font-bold" onClick={onNobody}>
           Nobody is there
         </Button>
       ) : (
