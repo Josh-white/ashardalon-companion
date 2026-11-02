@@ -84,6 +84,13 @@ describe('encounter rules', () => {
     expect(attackBlocked(spent, hero, 'disabling a trap')).toBe(`${hero.name} used this turn's attack on the Cage.`)
   })
 
+  it('says a Dazed hero who moved has no attack, instead of saying they attacked', () => {
+    const state = game()
+    const hero = { ...state.heroes[state.turn.heroIndex], conditions: ['Dazed'] }
+    const moved = { ...state, board: state.board ?? {}, heroes: state.heroes.map((h) => (h.id === hero.id ? hero : h)), turn: { ...state.turn, boardMoves: 1 } }
+    expect(attackBlocked(moved, hero, 'disabling a trap')).toBe(`${hero.name} is Dazed and already moved, so there's no attack this turn.`)
+  })
+
   it("says what a phase check's answer does", () => {
     expect(effectWords(null)).toBe('nothing happens')
     expect(effectWords({ damage: 1, condition: 'Dazed' })).toBe('1 damage and Dazed')

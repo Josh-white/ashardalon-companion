@@ -23,9 +23,12 @@ import { itemAc } from './items.js'
 //   shadow      a Shadowphage hero (Fesud) goes 'enter' or 'leave' the shadows after it.
 //   shadowKeep  a daily that misses from the shadows isn't used up, and the hero leaves them instead.
 //   shadowBonus more attack while the hero is in the shadows.
+//   autoHit     hits without needing the roll to beat AC (a fan Bard's Guiding Strike).
+//   onHit.even  the onHit heal only happens when a hit's die is even (War Song Strike).
 // Other powers have a `use`, done from the power's tile:
 //   healSelf, heal + pick ('other': one other hero; reach: 'sameTile', 'adjacent' or 'within2' on the
 //   virtual board), tokens, endCondition, refuge, invisible, causeFear, note,
+//   cleanse: 'tile' (each hero on the caster's tile ends 1 condition, on the virtual board),
 //   takeEncounter (One for the Team: the hero takes another hero's encounter card, as if they drew it),
 //   move (it takes the place of a move, so on the virtual board it uses one up),
 //   buff { attack, ac, who: 'all' | 'self', lasts: 'heroPhaseEnd' | 'turnStart' }: a bonus that
@@ -138,7 +141,7 @@ BY_KEY.arcingstrike = BY_KEY.arcingsmite
 // The fields an effect can have, for checking a card's own `effect` in cards.json.
 export const EFFECT_FIELDS = [
   'targets', 'attacks', 'sameTarget', 'before', 'ask', 'evenBonus', 'onHit', 'after',
-  'note', 'hitNote', 'missNote', 'keepOnMiss', 'free', 'use', 'reaction', 'shadow', 'shadowBonus', 'shadowKeep', 'board',
+  'note', 'hitNote', 'missNote', 'keepOnMiss', 'free', 'use', 'reaction', 'shadow', 'shadowBonus', 'shadowKeep', 'board', 'autoHit',
 ]
 
 const cardOf = (powerOrCard) => powerOrCard?.card ?? powerOrCard
@@ -165,6 +168,10 @@ export function reactionsFor(heroes, reaction) {
     hero.powers.filter((p) => !p.used && effectsOf(p).reaction === reaction).map((power) => ({ hero, power })),
   )
 }
+
+// Sacred Flame, War Song Strike: an attack that hit lets the hero heal someone on their tile.
+export const onHitHeals = (effects, rolls = []) =>
+  Boolean(effects.onHit?.heal) && rolls.some((r) => r.hit && (!effects.onHit.even || r.value % 2 === 0))
 
 // Shadowphage (a fan hero's ability): +2 AC while in the shadows.
 export const SHADOW_AC = 2

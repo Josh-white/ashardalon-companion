@@ -17,7 +17,7 @@ import { foeDistance, foesInRange, powerRange } from '../board/monsters.js'
 import { heroesInReach } from '../board/encounters.js'
 import { hypnotized, moveChoices, moveTargets, queueMoves } from '../board/powerMoves.js'
 import { distanceChoices } from '../data/items.js'
-import { effectsOf, maxRolls } from '../data/powerEffects.js'
+import { effectsOf, maxRolls, onHitHeals } from '../data/powerEffects.js'
 import { PHASES } from '../data/phases.js'
 import { powerNumber } from '../state/combat.js'
 import { foes } from '../state/gameHelpers.js'
@@ -87,7 +87,7 @@ function followUp(state, hero) {
   const power = hero.powers.find((p) => p.id === last.powerId)
   if (!power) return null
   const effects = effectsOf(power)
-  const kind = effects.onHit?.heal && last.rolls.some((r) => r.hit) ? 'heal-one' : effects.after
+  const kind = onHitHeals(effects, last.rolls) ? 'heal-one' : effects.after
   if (!['heal-one', 'heal-tile', 'shield'].includes(kind)) return null
   const onTile = (heroesInReach(state, hero.id, 'sameTile') ?? [hero.id]).map((id) => heroById(state, id)).filter((h) => h && h.hp > 0)
   const neediest = [...onTile].sort((a, b) => hurt(b) - hurt(a) || a.hp - b.hp)[0] ?? hero

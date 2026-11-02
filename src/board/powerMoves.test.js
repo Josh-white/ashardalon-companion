@@ -75,6 +75,29 @@ describe('powers that move figures on the board', () => {
     expect(targets.every((k) => { const [a, b] = k.split(',').map(Number); return Math.max(Math.abs(a - x), Math.abs(b - y)) === 1 })).toBe(true)
   })
 
+  it('moves every hero on the tile once (each: heroOnTile, Tune of Ice and Wind)', () => {
+    const { state, heroes, power } = game()
+    const next = queueMoves(state, heroes[0], power, [{ each: 'heroOnTile', to: 'squares', n: 2 }])
+    expect(next.turn.boardMove.steps).toHaveLength(2)
+    expect(next.turn.boardMove.tokens.sort()).toEqual(heroes.map((h) => h.id).sort())
+    expect(moveChoices(next).sort()).toEqual(heroes.map((h) => h.id).sort())
+  })
+
+  it('swaps with any other hero (Psionic Stride) and only pulls a far monster (Vicious Mockery)', () => {
+    const { state, heroes, power } = game()
+    expect(moveChoices(queueMoves(state, heroes[0], power, [{ pick: 'otherHero', to: 'swap' }]))).toEqual([heroes[1].id])
+    // The rat is 1 tile away, so Vicious Mockery's pull has nothing to do.
+    const pull = [{ pick: 'attacked', to: 'tileCloser', miss: true, minApart: 2 }]
+    expect(queueMoves(state, heroes[0], power, pull, { attacked: ['m1'], hit: false }).turn.boardMove ?? null).toBeNull()
+  })
+
+  it('only moves after an attack from the shadows when the step says ifShadow (Alshabbah)', () => {
+    const { state, heroes, power } = game()
+    const steps = [{ pick: 'self', to: 'squares', n: 3, ifShadow: true }]
+    expect(queueMoves(state, heroes[0], power, steps, { shadow: false }).turn.boardMove ?? null).toBeNull()
+    expect(moveChoices(queueMoves(state, heroes[0], power, steps, { shadow: true }))).toEqual([heroes[0].id])
+  })
+
   it('puts a monster onto a tile next to its own (Distant Diversion)', () => {
     const { state, heroes, power } = game()
     const next = queueMoves(state, heroes[0], power, [{ pick: 'monsterWithin3', to: 'adjacentTile' }])
