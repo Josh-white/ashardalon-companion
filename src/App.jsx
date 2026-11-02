@@ -28,6 +28,7 @@ import { BoardToast, SoundBoard } from './components/SoundBoard.jsx'
 import { Button } from './components/ui.jsx'
 import { useSoundEffects } from './audio/sfx.js'
 import { useNarrator } from './audio/useNarrator.js'
+import { VoiceContext } from './audio/voiceContext.js'
 import { useMusic } from './audio/music.js'
 import { useAudioLocked, useMusicSetting, useSoundSetting } from './audio/soundSetting.js'
 import { PHASES } from './data/phases.js'
@@ -420,13 +421,15 @@ export default function App() {
       {/* The opening story and the end-of-game recap cover the play area only, so they start right under the top
           bars (Undo and the menu stay reachable) instead of hiding the game bar behind it. */}
       <div className="relative flex min-h-0 flex-1 flex-col">
-        <PlayView
-          state={state}
-          dispatch={dispatch}
-          allyHost={allyHost}
-          hero={myHero ?? null}
-          soundBoard={<SoundBoard state={state} dispatch={dispatch} who={who} testCopy={Boolean(instance)} className="absolute bottom-3 left-3" />}
-        />
+        <VoiceContext.Provider value={narrator}>
+          <PlayView
+            state={state}
+            dispatch={dispatch}
+            allyHost={allyHost}
+            hero={myHero ?? null}
+            soundBoard={<SoundBoard state={state} dispatch={dispatch} who={who} testCopy={Boolean(instance)} className="absolute bottom-3 left-3" />}
+          />
+        </VoiceContext.Provider>
         <OpeningStory state={state} dispatch={dispatch} contained />
         {ended && (
           <Recap

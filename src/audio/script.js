@@ -4,6 +4,7 @@
 // functions the projector uses, so the words match exactly.
 import { ALLY_LINES, allyLine, coachLine } from '../data/coaches.js'
 import { heroTemplates } from '../data/heroes.js'
+import { teachingLines } from '../data/howToPlay.js'
 import { VILLAIN_LINES } from '../data/villainLines.js'
 import { INTRO_LINE, firstTurnLine, momentLines, narrationFor, previouslyLine, readsCard } from './narration.js'
 import { TILE_EVENTS } from '../data/tileEvents.js'
@@ -28,6 +29,8 @@ export function narrationScript(cards) {
     const line = coachLine(hero.key)
     if (line) lines.push(line)
   }
+  // How to play for new players, and each coach's line at the start of each phase of a first game.
+  lines.push(...teachingLines(templates.map((h) => h.key)))
   // What each coach says while the computer plays their hero.
   for (const hero of templates) for (const when of Object.keys(ALLY_LINES[hero.key] ?? {})) lines.push(allyLine(hero.key, when))
   // Who won the roll for first turn, and the Chronicle's look back between campaign adventures.

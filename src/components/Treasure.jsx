@@ -129,18 +129,37 @@ export function TreasureStep({ state, dispatch, heroId = null }) {
     body = (
       <Button
         variant="gold"
-        className="w-full px-5 py-4 text-xl font-bold"
+        className="moment-glow w-full px-5 py-4 text-xl font-bold"
         onClick={() => dispatch({ type: 'DRAW_TREASURE', cards: treasures, random: shuffleNumbers() })}
       >
         💰 Draw a treasure card for {finder?.name}
       </Button>
     )
   }
+  // New players miss why the bar is there, so before the draw it says so in a line.
+  const why = !state.treasure && (owed || state.turn.tokenOwed) ? treasureWhy(state, finder) : null
   return (
     <div data-ally-scope="" className="fixed inset-x-0 bottom-0 z-30 max-h-[85vh] overflow-y-auto border-t-4 border-amber-500 bg-zinc-950/95 p-4 shadow-2xl">
-      <div className="mx-auto max-w-3xl">{body}</div>
+      <div className="mx-auto max-w-3xl">
+        {why && (
+          <div className="mb-3 text-center">
+            <p className="font-display text-2xl font-bold text-amber-300">💰 Treasure!</p>
+            <p className="text-amber-100">{why}</p>
+          </div>
+        )}
+        {body}
+      </div>
     </div>
   )
+}
+
+// Why the treasure bar came up, in a line a first-time player gets. Treasure found another
+// way (a Treasure token on the board, or one that says "Treasure!") just says it was found.
+export function treasureWhy(state, finder) {
+  const name = finder?.name ?? 'A hero'
+  const prize = state.turn.tokenOwed ? 'a Treasure token' : 'a treasure card'
+  if (state.turn.treasureWhy === 'monster') return `${name} beat a monster, so they get ${prize}. Only one per turn!`
+  return `${name} found treasure! Draw ${prize} to see what it is.`
 }
 
 // A campaign: defeating a monster earns a Treasure token. The app draws from its own stack

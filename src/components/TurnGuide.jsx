@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { HERO_COLORS, XP_TO_LEVEL_UP } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
 import { surgeHp } from '../data/difficulty.js'
@@ -12,6 +12,7 @@ import { checksFor, phaseChecks, phaseTodo, poisonBonus, villagerRollDue } from 
 import { VillagerTurn } from './Villagers.jsx'
 import { useCards } from '../state/useCards.js'
 import { treasurePending } from './Treasure.jsx'
+import { FirstGameHelp, PhaseExplainer, useFirstGameHelp } from './FirstGameHelp.jsx'
 import { DrawnTile, HallwayDraws, useTileDraw } from './Tiles.jsx'
 import { Button } from './ui.jsx'
 import { heroEdges } from '../board/play.js'
@@ -312,6 +313,12 @@ export default function TurnGuide({ state, dispatch }) {
   const todoLine = useRef(null)
   const color = HERO_COLORS[hero.color]
   const stepKey = `${round}-${heroIndex}-${phase}`
+  // The first-game helper, and which phase's name was tapped to explain it (closed each new phase).
+  const [helping, setHelping] = useFirstGameHelp(hero)
+  const [explained, setExplained] = useState({ key: null, step: null })
+  const explain = explained.step === stepKey ? explained.key : null
+  const setExplain = (key) => setExplained({ key, step: stepKey })
+  const explainPhase = PHASES.find((p) => p.key === explain)
 
   const { treasures, encounters, monsters } = useCards()
   const isLastPhase = phase === PHASES.length - 1
@@ -348,19 +355,36 @@ export default function TurnGuide({ state, dispatch }) {
       </h2>
       {hero.player && !state.board && <p className="text-zinc-400">playing {hero.name}</p>}
 
+      {/* Tap a phase's name to hear what it is. */}
       <div className={`grid grid-cols-3 gap-1.5 ${narrow ? 'mt-3' : 'mt-3 sm:mt-5 sm:gap-2'}`}>
         {PHASES.map((p, i) => (
-          <div
+          <button
+            type="button"
             key={p.key}
+            aria-label={`What is the ${p.title}?`}
+            onClick={() => setExplain(explain === p.key ? null : p.key)}
             className={`truncate rounded-xl px-1 py-1.5 text-center text-sm whitespace-nowrap ${narrow ? '' : 'sm:py-2 sm:text-base'} ${
               i === phase ? 'bg-amber-500 font-bold text-zinc-950' : i < phase ? 'bg-zinc-800 text-zinc-500' : 'bg-zinc-900 text-zinc-400'
-            }`}
+            } ${explain === p.key ? 'ring-2 ring-amber-300' : ''}`}
           >
             <span className="mr-1">{p.emoji}</span>
             {p.title.replace(' Phase', '')}
-          </div>
+          </button>
         ))}
       </div>
+      {explainPhase && (
+        <PhaseExplainer
+          hero={hero}
+          phase={explainPhase}
+          helping={helping}
+          onHelp={() => {
+            setHelping(true)
+            setExplain(null)
+          }}
+          onClose={() => setExplain(null)}
+        />
+      )}
+      {helping && !hero.ally && <FirstGameHelp hero={hero} phaseKey={current.key} stepKey={stepKey} onHide={() => setHelping(false)} />}
 
       <EnvironmentBanner environment={state.environment} className="mt-4" />
       <SongRollOffer state={state} dispatch={dispatch} className="mt-4" />

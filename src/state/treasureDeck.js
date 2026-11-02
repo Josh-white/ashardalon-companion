@@ -6,7 +6,9 @@ import { article, buildDeck, drawTop, heroLabel, newId, updateHero, withLog, wit
 // The first monster defeated in a turn earns a treasure card, or in a campaign a Treasure
 // token (gold, or now and then a treasure card).
 export const oweTreasure = (state, heroId) =>
-  state.campaign ? { ...state.turn, treasureDrawn: true, tokenOwed: heroId } : { ...state.turn, treasureDrawn: true, treasureOwed: heroId }
+  state.campaign
+    ? { ...state.turn, treasureDrawn: true, tokenOwed: heroId, treasureWhy: 'monster' }
+    : { ...state.turn, treasureDrawn: true, treasureOwed: heroId, treasureWhy: 'monster' }
 
 export const treasureWords = (state) => (state.campaign ? 'Draw a Treasure token!' : 'Draw a treasure card!')
 
@@ -34,14 +36,14 @@ export function drawTreasure(state, action) {
   const withDeck = state.treasureDeck ? state : { ...state, treasureDeck: buildDeck(action.cards, action.random) }
   const drawn = drawTop(withDeck.treasureDeck, action.random)
   // An empty deck owes nothing more, so the turn can go on.
-  if (!drawn) return withLog({ ...state, turn: { ...state.turn, treasureOwed: null } }, 'There are no treasure cards left to draw.')
+  if (!drawn) return withLog({ ...state, turn: { ...state.turn, treasureOwed: null, treasureWhy: null } }, 'There are no treasure cards left to draw.')
   const card = drawn.deck.cards[drawn.cardId]
   if (!card) return state
   let next = {
     ...withDeck,
     treasureDeck: drawn.deck,
     treasure: { id: newId('treasure'), cardId: card.id, heroId: hero.id, card },
-    turn: { ...withDeck.turn, treasureOwed: null },
+    turn: { ...withDeck.turn, treasureOwed: null, treasureWhy: null },
   }
   if (drawn.reshuffled) next = withLog(next, 'The treasure discards were shuffled into a new deck.')
   return withMoment(withLog(next, `${heroLabel(hero)} found ${article(card.name)} ${card.name}!`), {
