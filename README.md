@@ -78,7 +78,7 @@ docker compose exec ashardalon node server/generate-sounds.js --dry-run   # what
 docker compose exec ashardalon node server/generate-sounds.js             # make the takes
 ```
 
-Each sound gets two or three takes in `cards/sounds/takes/`. Open the app at `/#audition` to listen and tap **Use this** on your favourite, which copies it to `cards/sounds/` where the game plays it (anything it replaces is kept in `takes/replaced/`). ### Background music tracks
+Each sound gets two or three takes in `cards/sounds/takes/`. Listen to them there and pick your favourite with `--pick name=N`, which copies it to `cards/sounds/` where the game plays it (anything it replaces is kept in `takes/replaced/`). ### Background music tracks
 
 Put a music track for each mood in `cards/sounds/` as `loop-explore.mp3`, `loop-battle.mp3` and `loop-boss.mp3` (JJ uses free tracks from Tabletop Audio: Dungeon I, Light the Beacons and Red Dragon Dawn). Each one streams in place of the made-up music for its mood, starting somewhere in the track and fading over 1.5 seconds when the mood changes. Music dips from 30% to 10% while the narrator talks, and the 🎵 switch turns it on or off on each screen. A mood with no track gets the made-up music.
 
@@ -245,7 +245,5 @@ Add these to the app's address:
 
 - `/#screens`: the big screen, iPads and a phone side by side, each acting as its own device, for testing.
 - `/#cards`: problems in `cards.json`, and cards the app looks for but can't find.
-- `/#tiles`: every dungeon tile layout, to check against the real tiles.
 - `/#ideas`: the ideas players sent from 💡.
 - `/#friends`: each friend from outside, with when they last came, visits, games started and finished, and taps (family only).
-- `/#audition`: pick the takes for the recorded sound effects.

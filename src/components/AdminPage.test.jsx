@@ -13,7 +13,7 @@ describe('admin page', () => {
   it('lists every hidden # page in main.jsx', () => {
     const main = readFileSync('src/main.jsx', 'utf8')
     const routes = [...main.matchAll(/'(#[a-z]+)'/g)].map((m) => m[1]).filter((h) => h !== '#admin')
-    expect(routes.length).toBeGreaterThan(5)
+    expect(routes.length).toBeGreaterThan(3)
     const listed = ADMIN_PAGES.map((p) => p.hash).filter(Boolean)
     for (const hash of routes) expect(listed).toContain(hash)
   })

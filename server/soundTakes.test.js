@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdi
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { auditionList, listTakes, pickTake } from './soundTakes.js'
+import { listTakes, pickTake } from './soundTakes.js'
 import { makeTake, plan } from './generate-sounds.js'
 import { SOUND_PROMPTS, promptCredits } from '../src/audio/soundPrompts.js'
 
@@ -48,11 +48,9 @@ describe('ElevenLabs sound takes', () => {
     const dir = soundsDir()
     writeFileSync(join(dir, 'coins.mp3'), 'old coins')
     writeFileSync(join(dir, 'takes', 'coins-2.mp3'), 'new coins')
-    expect(auditionList(dir).find((s) => s.name === 'coins')).toMatchObject({ takes: [2], picked: 'other' })
     expect(pickTake(dir, 'coins', 2)).toBe(true)
     expect(readFileSync(join(dir, 'coins.mp3'), 'utf8')).toBe('new coins')
     expect(readdirSync(join(dir, 'takes', 'replaced'))).toHaveLength(1)
-    expect(auditionList(dir).find((s) => s.name === 'coins').picked).toBe(2)
     expect(pickTake(dir, 'coins', 3)).toBe(false)
     expect(pickTake(dir, '../game', 1)).toBe(false)
     expect(existsSync(join(dir, 'CREDITS.csv'))).toBe(true)

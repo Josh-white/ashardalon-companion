@@ -15,7 +15,6 @@ import { createSignInList } from './signInList.js'
 import { createIdeaBox } from './ideas.js'
 import { createFriendLog } from './friendLog.js'
 import { readBody } from './readBody.js'
-import { auditionList, pickTake, takesDir } from './soundTakes.js'
 import { normalizeCardFile } from '../src/data/cards.js'
 import { missingCards } from '../src/data/cardCheck.js'
 import { setHeroTemplates } from '../src/data/heroes.js'
@@ -194,35 +193,6 @@ export function byteRange(header, size) {
   const start = from === '' ? Math.max(0, size - Number(to)) : Number(from)
   const end = from === '' || to === '' ? size - 1 : Math.min(Number(to), size - 1)
   return start <= end && start < size ? [start, end] : false
-}
-
-// The #audition page: the list of sounds and their takes, each take's audio, and
-// POST /sound-takes/pick { name, take } to make a take the one the game plays.
-const TAKE_NAME = /^[a-z0-9-]+-\d+\.mp3$/
-async function handleTakes(soundsDir, req, res) {
-  const path = decodeURIComponent(new URL(req.url, 'http://localhost').pathname)
-  if (path === '/sound-takes.json') {
-    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(auditionList(soundsDir)))
-    return
-  }
-  if (path === '/sound-takes/pick' && req.method === 'POST') {
-    try {
-      const { name, take } = JSON.parse(String(await readBody(req, 1000)))
-      const ok = typeof name === 'string' && pickTake(soundsDir, name, take)
-      res.writeHead(ok ? 200 : 404, { 'Content-Type': 'application/json' }).end(JSON.stringify({ ok }))
-    } catch {
-      res.writeHead(400).end('Bad request')
-    }
-    return
-  }
-  const name = path.slice('/sound-takes/'.length)
-  const file = TAKE_NAME.test(name) && join(takesDir(soundsDir), name)
-  if (!file || !existsSync(file)) {
-    res.writeHead(404).end('Not found')
-    return
-  }
-  res.writeHead(200, { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store' })
-  createReadStream(file).pipe(res)
 }
 
 // GET /art/<name>.jpg (or .png) serves a picture, PUT saves one, and DELETE
@@ -458,11 +428,11 @@ export function startServer({
       },
     )
   })
-  // What a friend's screen may not do: change card pictures or sounds, or read and tidy the ideas box.
+  // What a friend's screen may not do: change card pictures, or read and tidy the ideas box.
   const friendRefused = (req) => {
     const path = req.url.split('?')[0]
     const reading = req.method === 'GET' || req.method === 'HEAD'
-    if (path.startsWith('/art/') || path.startsWith('/sound-takes')) return !reading
+    if (path.startsWith('/art/')) return !reading
     if (path === '/ideas') return req.method !== 'POST'
     return path === '/ideas.json' || path.startsWith('/ideas/') || path === '/friends.json' || path.startsWith('/sign-in-') || path === '/robot-check.json' || path === '/auto-update.json'
   }
@@ -530,10 +500,6 @@ export function startServer({
     }
     if (req.url.startsWith('/sounds/')) {
       serveSound(soundsDir, req, res)
-      return
-    }
-    if (req.url === '/sound-takes.json' || req.url.startsWith('/sound-takes/')) {
-      handleTakes(soundsDir, req, res)
       return
     }
     if (req.url.startsWith('/art/')) {
