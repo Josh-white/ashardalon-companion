@@ -40,8 +40,10 @@ describe('🧊 on an iPad board', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     const c = render(<Board state={game()} dispatch={vi.fn()} fill calm />)
     fireEvent.click(c.getByTitle('Show the board in 3D'))
-    // jsdom has no WebGL, so the 3D board gives up straight away.
-    await waitFor(() => expect(c.getByText(/can't draw the 3D board/)).toBeTruthy())
+    // jsdom has no WebGL, so the 3D board gives up as soon as its code has loaded. Loading
+    // three.js and the hero figures takes a couple of seconds on the Pi, where this runs
+    // before every update, so it gets plenty of time.
+    await waitFor(() => expect(c.getByText(/can't draw the 3D board/)).toBeTruthy(), { timeout: 15000 })
     expect(c.getByTitle('Show the board in 3D').getAttribute('aria-pressed')).toBe('false')
     expect(localStorage.getItem('ashardalon-board3d')).toBe('off')
     expect(c.container.querySelector('svg[aria-label="The dungeon board"]')).toBeTruthy()
@@ -49,7 +51,7 @@ describe('🧊 on an iPad board', () => {
     expect(c.queryByText(/can't draw the 3D board/)).toBeNull()
     warn.mockRestore()
     error.mockRestore()
-  })
+  }, 20000)
 
   it('is not on the read-only boards with nothing to tap', () => {
     const c = render(<Board state={game()} readOnly fill />)
