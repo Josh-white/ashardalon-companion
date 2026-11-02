@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { CONDITIONS, HERO_COLORS } from '../data/heroes.js'
-import { betterItem, heroItems, itemsOutdone, spareItems, tileGuards } from '../data/items.js'
+import { betterItem, helpsRightAway, heroItems, itemsOutdone, spareItems, tileGuards } from '../data/items.js'
 import { guardsOnTile } from '../board/checks.js'
 import { foes } from '../state/game.js'
 import { rollD20, shuffleNumbers } from '../state/random.js'
@@ -62,13 +62,21 @@ function TreasureCard({ state, dispatch }) {
   const helped = state.heroes.filter((h) => !covered.get(h.id))
   // A better card leaves the owner's old item adding nothing, so it could go to someone else.
   const outdone = covered.get(owner.id) ? [] : itemsOutdone(owner, treasure.card)
+  // A potion someone could use right away (low HP, a condition, a used power): marked on their button.
+  const needs = Object.fromEntries(state.heroes.map((h) => [h.id, helpsRightAway(h, treasure.card)]).filter(([, why]) => why))
+  const needy = state.heroes.filter((h) => needs[h.id])
   return (
     <div className="space-y-4 rounded-2xl border-2 border-amber-500 bg-amber-950/40 p-4">
       <TreasureCardFace card={treasure.card} />
       <p className="text-lg text-zinc-200">
         {finder?.name} found it. Who keeps it?
       </p>
-      <HeroChoice heroes={state.heroes} chosen={[owner.id]} onToggle={setOwnerId} />
+      <HeroChoice heroes={state.heroes} chosen={[owner.id]} onToggle={setOwnerId} notes={needs} />
+      {needy.length > 0 && (
+        <p className="rounded-xl bg-emerald-950/60 p-3 text-emerald-100">
+          💚 {needy.map((h) => h.name).join(' and ')} could use it right away.{treasure.card.use !== 'refreshPower' && treasure.card.use !== 'refreshAny' && ' Whoever keeps it can also use it on a hero next to them.'}
+        </p>
+      )}
       {wasted.length > 0 && (
         <div className="space-y-1 rounded-xl bg-zinc-950/60 p-3 text-zinc-200">
           {wasted.map((h) => (

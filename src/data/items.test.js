@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { betterItem, itemsOutdone, spareItems } from './items.js'
+import { betterItem, helpsRightAway, itemsOutdone, spareItems } from './items.js'
 
 const item = (name, card) => ({ id: name, name, card: { inPlay: true, ...card } })
 const hero = (...items) => ({ id: 'h', items })
@@ -51,5 +51,33 @@ describe('spareItems and itemsOutdone (items that add nothing for their owner)',
     expect(itemsOutdone(hero(amuletItem), { inPlay: true, acBonus: 2 }).map((s) => s.item.name)).toEqual(['Amulet of Protection'])
     expect(itemsOutdone(hero(amuletItem), amulet)).toEqual([])
     expect(itemsOutdone(hero(amuletItem), sword1)).toEqual([])
+  })
+})
+
+describe('helpsRightAway (which hero a drawn potion would help now)', () => {
+  const healing = { name: 'Potion of Healing', use: 'heal', heal: 2 }
+  const recovery = { name: 'Potion of Recovery', use: 'endCondition' }
+  const rejuvenation = { name: 'Potion of Rejuvenation', use: 'refreshPower' }
+
+  it('marks a hero at 2 HP or less for a Potion of Healing', () => {
+    expect(helpsRightAway({ hp: 2, maxHp: 8 }, healing)).toMatch(/2 HP/)
+    expect(helpsRightAway({ hp: 0, maxHp: 8 }, healing)).toMatch(/0 HP/)
+    expect(helpsRightAway({ hp: 3, maxHp: 8 }, healing)).toBeNull()
+    expect(helpsRightAway({ hp: 2, maxHp: 2 }, healing)).toBeNull()
+  })
+
+  it('marks a hero with a condition for a Potion of Recovery, not a curse', () => {
+    expect(helpsRightAway({ hp: 5, maxHp: 8, conditions: ['Poisoned'] }, recovery)).toMatch(/Poisoned/)
+    expect(helpsRightAway({ hp: 5, maxHp: 8, conditions: [], curses: [{ name: 'Gaze of the Basilisk' }] }, recovery)).toBeNull()
+  })
+
+  it('marks a hero with a used power for a Potion of Rejuvenation', () => {
+    expect(helpsRightAway({ powers: [{ name: 'Hurled Breath', type: 'daily', used: true }] }, rejuvenation)).toMatch(/Hurled Breath/)
+    expect(helpsRightAway({ powers: [{ name: 'Hurled Breath', type: 'daily', used: false }] }, rejuvenation)).toBeNull()
+  })
+
+  it('ignores other cards and heroes who escaped', () => {
+    expect(helpsRightAway({ hp: 1, maxHp: 8 }, { name: '+1 Magic Sword', inPlay: true })).toBeNull()
+    expect(helpsRightAway({ hp: 1, maxHp: 8, escaped: true }, healing)).toBeNull()
   })
 })

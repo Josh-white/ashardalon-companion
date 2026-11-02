@@ -10,7 +10,8 @@ export function monsterName(state, monster) {
 }
 
 // Big buttons for picking heroes, for powers that heal or help someone.
-export function HeroChoice({ heroes, chosen, onToggle }) {
+// notes: optional { [heroId]: 'short reason' } shown as a green mark on that hero's button.
+export function HeroChoice({ heroes, chosen, onToggle, notes }) {
   return (
     <div className="grid grid-cols-2 gap-2">
       {heroes.map((hero) => {
@@ -28,6 +29,9 @@ export function HeroChoice({ heroes, chosen, onToggle }) {
             <span className="block text-sm font-normal text-zinc-400">
               {hero.hp} / {hero.maxHp} HP · AC {heroAc(hero)}
             </span>
+            {notes?.[hero.id] && (
+              <span className="mt-1 block rounded-md bg-emerald-900/70 px-2 py-0.5 text-sm font-semibold text-emerald-200">💚 Helps right now: {notes[hero.id]}</span>
+            )}
           </button>
         )
       })}

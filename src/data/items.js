@@ -130,3 +130,23 @@ export function itemsOutdone(hero, card) {
   const added = { id: '__new', name: card?.name, card }
   return spareItems({ ...hero, items: [...heroItems(hero), added] }).filter((s) => s.item.id !== '__new' && !before.has(s.item.id))
 }
+
+// Conditions a Potion of Recovery can end (not curses).
+const CURABLE = ['Dazed', 'Immobilized', 'Poisoned', 'Slowed', 'Weakened']
+
+// Why a one-use treasure (a potion) would help this hero right away, in a few words, or
+// null. Only a hint for who keeps a drawn card: heal a hero down to 2 HP or less, end a
+// condition, or flip up a used power.
+export function helpsRightAway(hero, card) {
+  if (!hero || !card || hero.escaped) return null
+  if (card.use === 'heal' && hero.hp <= 2 && hero.hp < hero.maxHp) return `Only ${Math.max(0, hero.hp)} HP left`
+  if (card.use === 'endCondition') {
+    const condition = (hero.conditions ?? []).find((c) => CURABLE.includes(c))
+    if (condition) return `${condition}: this ends it`
+  }
+  if (card.use === 'refreshPower' || card.use === 'refreshAny') {
+    const spent = (hero.powers ?? []).find((p) => p.used && p.type === 'daily') ?? (hero.powers ?? []).find((p) => p.used)
+    if (spent) return `${spent.name} is used up`
+  }
+  return null
+}
