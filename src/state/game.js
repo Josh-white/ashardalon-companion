@@ -7,7 +7,7 @@ import { PHASES } from '../data/phases.js'
 import { heroItems } from '../data/items.js'
 import { effectsOf } from '../data/powerEffects.js'
 import { adjustTiles, buildTileStack, MAX_TILES, MIN_TILES, STARTING_TILES } from './tiles.js'
-import { aliveVillagers, checkVictory, countDefeat, DOOR_UNLOCK_ROLL, escapeBlockers, MAX_SURGES, MIN_SURGES, newAdventure, takeToken } from './adventure.js'
+import { aliveVillagers, checkVictory, countDefeat, DOOR_UNLOCK_ROLL, escapeBlockers, heroLimit, MAX_SURGES, MIN_SURGES, newAdventure, takeToken } from './adventure.js'
 import { trackStats } from './stats.js'
 import { campaignHero, campaignOutcome, campaignSurges, isCampaign, newCampaign } from './campaign.js'
 import { playBoardSound, setBoardOff, setBoardUnlimited } from './soundboard.js'
@@ -217,6 +217,8 @@ function reduce(state, action) {
       const heroes = (action.heroes ?? heroesFromLobby(state.lobby ?? [], state.campaign)).map((h) => (h.ally && !action.boardTiles ? { ...h, ally: false } : h))
       if (state.status !== 'setup' || heroes.length === 0) return state
       const card = state.campaign?.card ?? state.lobbyAdventure
+      // No more heroes than the adventure is for (Adventure 1 is a solo adventure).
+      if (heroes.length > heroLimit(card)) return state
       // A campaign's adventure needs every hero of the campaign, and only them.
       if (state.campaign && !sameHeroes(heroes, state.campaign.heroes)) return state
       const campaign = state.campaign ?? (isCampaign(card) ? newCampaign(card, action.chambers, action.random) : null)

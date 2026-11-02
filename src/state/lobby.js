@@ -3,7 +3,7 @@
 import { difficultyOf } from '../data/difficulty.js'
 import { STARTING_SURGES, templateFor } from '../data/heroes.js'
 import { MAX_TILES, MIN_TILES, STARTING_TILES } from './tiles.js'
-import { isPlayable, MAX_SURGES, MIN_SURGES } from './adventure.js'
+import { isPlayable, lobbyHeroLimit, MAX_SURGES, MIN_SURGES } from './adventure.js'
 import { campaignHero } from './campaign.js'
 import { clamp } from './gameHelpers.js'
 import { copyCard, levelSlots, pickedElsewhere, updateClaim } from './heroSetup.js'
@@ -45,6 +45,8 @@ export function lobbyReducer(state, action) {
       if (state.status !== 'setup' || !template || !action.deviceId) return state
       // One hero per iPad, and nobody can take a hero another iPad already has.
       if (lobby.some((c) => c.heroKey === template.key && c.deviceId !== action.deviceId)) return state
+      // No more heroes than the adventure (or campaign) is for. Swapping your own hero is fine.
+      if (lobby.filter((c) => c.deviceId !== action.deviceId).length >= lobbyHeroLimit(state)) return state
       // A campaign's heroes come back with their level, name and powers.
       const saved = campaignHero(state, template.key)
       if (state.campaign && !saved) return state

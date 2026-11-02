@@ -26,6 +26,23 @@ export const usesDoors = (adventure) => Boolean(adventure?.card.needs.includes('
 export const DOOR_KINDS = ['unlocked', 'trapped', 'locked']
 export const DOOR_UNLOCK_ROLL = 10
 
+// How many heroes an adventure is for: the biggest number in its "players" line ("1", "2-5"),
+// or the rulebook's five when it doesn't say. Free play is five too.
+export const MAX_HEROES = 5
+export function heroLimit(card) {
+  const numbers = String(card?.players ?? '').match(/\d+/g)
+  const most = numbers ? Math.max(...numbers.map(Number)) : 0
+  return most >= 1 ? most : MAX_HEROES
+}
+// The limit for the lobby (the adventure picked, or the campaign's), and for a game going.
+export const lobbyHeroLimit = (state) => heroLimit(state.campaign?.card ?? state.lobbyAdventure)
+export const gameHeroLimit = (state) => heroLimit(state.adventure?.card ?? state.campaign?.card)
+// "Adventure 1 is for 1 hero." / "Free play is for up to 5 heroes."
+export function heroLimitText(card, limit = heroLimit(card)) {
+  const name = card ? (card.number ? `Adventure ${card.number}` : card.title) : 'Free play'
+  return `${name} is for ${limit === 1 ? '1 hero' : `up to ${limit} heroes`}.`
+}
+
 export const MIN_SURGES = 1
 export const MAX_SURGES = 3
 
