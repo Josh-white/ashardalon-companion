@@ -11,7 +11,7 @@
 //   null             nothing for the brain to decide: tap the turn screen's next button
 
 import { baseId, key, unexploredEdges } from '../board/grid.js'
-import { adjacent, distances } from '../board/paths.js'
+import { adjacent, distances, tilesBetween } from '../board/paths.js'
 import { boardGrid, caged, heroEdges, heroReach, movesLeft, occupied, stayedOnBoard, timeLeapt } from '../board/play.js'
 import { foeDistance, foesInRange, powerRange } from '../board/monsters.js'
 import { heroesInReach } from '../board/encounters.js'
@@ -19,6 +19,7 @@ import { hypnotized, moveChoices, moveTargets, queueMoves } from '../board/power
 import { distanceChoices } from '../data/items.js'
 import { effectsOf, maxRolls, onHitHeals, wolfBlocked } from '../data/powerEffects.js'
 import { targetAllowed } from '../state/fanPowers.js'
+import { statusesOf } from '../state/monsterStatus.js'
 import { PHASES } from '../data/phases.js'
 import { powerNumber } from '../state/combat.js'
 import { foes } from '../state/gameHelpers.js'
@@ -33,7 +34,7 @@ import { trapDisable } from '../state/encounterRules.js'
 import { cancelEncounter } from './cancelEncounter.js'
 import { castDaily, fearMove, figureHp, guardPower, placeHandToken, sphereStep } from './powers.js'
 import { divertMove, divertPower, wizardEyeStep } from './boardPowers.js'
-import { boostPower, buffPower, fanMove, fleetfooted, rescueStride, seekersPower, shadowStep, shadowmerge, trappingAttack } from './fanPowers.js'
+import { boostPower, buffPower, fanMove, fearlessStep, fleetfooted, improvise, perchPower, rescueStride, seekersPower, shadowStep, shadowmerge, trappingAttack } from './fanPowers.js'
 
 // A d20 the way the screens roll one; tests pass their own.
 const d20 = () => Math.floor(Math.random() * 20) + 1
@@ -175,6 +176,14 @@ export function freeItemAttack(state, hero, roll = d20) {
   return null
 }
 
+// A monster on or next to the tile of a hero at half HP or less: the one to slow down.
+function threatensHurt(state, monster) {
+  if (!state.board) return false
+  const grid = boardGrid(state.board)
+  const spots = Object.entries(state.board.tokens).filter(([id]) => baseId(id) === monster.id).map(([, at]) => at)
+  return state.heroes.some((h) => h.hp > 0 && h.hp <= Math.ceil(h.maxHp / 2) && state.board.tokens[h.id] && spots.some((at) => tilesBetween(grid, at, state.board.tokens[h.id]) <= 1))
+}
+
 // Attack the hero's buffs add to this power (Song of Courage, Heavy Hitter, a Longbow-only Power of Earth).
 const buffBonus = (hero, power) => (hero.buffs ?? []).reduce((sum, b) => sum + (b.attack && (!b.only || power.name.startsWith(b.only)) ? b.attack : 0), 0)
 
@@ -210,13 +219,18 @@ export function attackOptions(state, hero, { atWill = false, all: every = false 
     else if (effects.attacks) picked = Array.from({ length: limit }, (_, i) => order[i % order.length].id)
     else picked = order.slice(0, Number.isFinite(limit) ? limit : order.length).map((m) => m.id)
     const hit = picked.map((id) => order.find((m) => m.id === id))
-    const score = hit.reduce((sum, m) => sum + chance(m) * (damage + (kills(m) ? 4 : 0) + (m.villain ? 2 : 0)), 0)
+    // A status on the hit (Trapped, Pacified, Immobilized...) is worth most on a monster about to go
+    // after a hurt friend, or the villain; nothing on one that has it already or dies anyway.
+    const status = effects.onHit?.status
+    const statusWorth = (m) => (!status || kills(m) || statusesOf(m).some((x) => x.kind === status) ? 0 : m.villain || threatensHurt(state, m) ? 2 : 0.5)
+    const score = hit.reduce((sum, m) => sum + chance(m) * (damage + (kills(m) ? 4 : 0) + (m.villain ? 2 : 0) + statusWorth(m)), 0)
     const names = [...new Set(hit.map((m) => m.name))].join(' and the ')
     options.push({
       power,
       targets: picked,
       score,
       chance: Math.min(...hit.map(chance)),
+      ranged: !['adjacent', 'sameTile'].includes(range),
       finishes: hit.filter(kills).map((m) => m.id),
       villain: hit.some((m) => m.villain),
       say: `${hero.name} attacks the ${names} with ${power.name}.`,
@@ -249,7 +263,17 @@ function attackAction(state, hero, option, roll) {
     distances: dist,
     stayed: stayedOnBoard(state, hero) ?? false,
     ...askAnswers(state, hero, option.power),
+    // Follow My Lead: the friend closest to a monster follows up.
+    ...(effectsOf(option.power).follower ? { followerId: followerFor(state, hero) } : {}),
   }
+}
+
+// The other standing hero nearest a monster (Follow My Lead's follower).
+function followerFor(state, hero) {
+  const grid = boardGrid(state.board)
+  const spots = Object.entries(state.board.tokens).filter(([id]) => foes(state).some((m) => m.id === baseId(id) && m.hp > 0 && !m.objective)).map(([, at]) => at)
+  const near = (h) => Math.min(99, ...spots.map((at) => tilesBetween(grid, at, state.board.tokens[h.id])))
+  return state.heroes.filter((h) => h.id !== hero.id && h.hp > 0 && !h.escaped && state.board.tokens[h.id]).sort((a, b) => near(a) - near(b))[0]?.id ?? null
 }
 
 const withHeroAt = (state, hero, at) => ({ ...state, board: { ...state.board, tokens: { ...state.board.tokens, [hero.id]: at } } })
@@ -742,7 +766,9 @@ export function bestMove(state, hero) {
     for (const k of reach) {
       const moved = withHeroAt(state, hero, parse(k))
       const option = attackOptions(moved, moved.heroes.find((h) => h.id === hero.id))[0]
-      if (option && (!best || option.score > best.score || (option.score === best.score && nearer(k, best.k) < 0))) best = { k, score: option.score, option }
+      // An archer (a ranged best attack) would rather not stand next to a monster to shoot.
+      const score = option ? option.score - (option.ranged && adjacentFoes(moved, hero) > 0 ? 0.3 : 0) : 0
+      if (option && (!best || score > best.score || (score === best.score && nearer(k, best.k) < 0))) best = { k, score, option }
     }
     if (best) return { to: parse(best.k), say: `${hero.name} moves in to attack.` }
     // The monster nearest the party, not one off on its own somewhere.
@@ -833,7 +859,7 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
     if (hero.level === 1 && state.turn.natural20 === hero.id && state.xp >= XP_TO_LEVEL_UP) {
       return { action: { type: 'LEVEL_UP', heroId: hero.id }, say: `Natural 20! ${hero.name} levels up.` }
     }
-    const care = supportItem(state, hero) ?? supportPower(state, hero) ?? buffPower(state, hero) ?? rescueStride(state, hero) ?? seekersPower(state, hero)
+    const care = improvise(state, hero) ?? supportItem(state, hero) ?? supportPower(state, hero) ?? buffPower(state, hero) ?? rescueStride(state, hero) ?? seekersPower(state, hero)
     if (care) return care
     // A Treasure token on or next to the hero: pick it up (nothing else waiting to be handed out).
     const loot = treasureInReach(state, hero)
@@ -886,7 +912,7 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
     if (move) return { action: { type: 'MOVE_HERO', heroId: hero.id, to: move.to }, say: move.say }
     // The end of the Hero Phase: the Flaming Sphere burns, a hurt hero hides, and Command or
     // Distant Diversion sends a monster away from a hurt friend.
-    return sphereStep(state, hero) ?? guardPower(state, hero) ?? divertPower(state, hero) ?? shadowStep(state, hero, null)
+    return sphereStep(state, hero) ?? guardPower(state, hero) ?? perchPower(state, hero) ?? divertPower(state, hero) ?? shadowStep(state, hero, null) ?? fearlessStep(state, hero)
   }
   if (phase === 'exploration' && state.turn.explored !== true && state.turn.explored !== false && heroEdges(state).length === 0) {
     return { action: { type: 'SET_EXPLORED', explored: false, rolls: [roll(), roll()] }, say: `${hero.name} isn't on an unexplored edge.` }
