@@ -2,6 +2,8 @@ import * as THREE from 'three'
 import { FX_MS } from '../board/attackFx.js'
 import { chained, IMPACT, msAt, shotOffset, slowMo } from './attackFxDraw.js'
 import { HEAL_MS } from './HealFx.jsx'
+import { attackMove } from '../board/heroModels.js'
+import { face, playMove } from './figureModels.js'
 
 // Attacks and heals on the 3D board (Board3D.jsx), the same moments the flat board draws
 // (board/attackFx.js, board/healFx.js) on the same clock: lightning crackles from figure to
@@ -465,6 +467,16 @@ function ghost(stage, group, at, picture) {
   }
 }
 
+// A part that does something once, when the animation reaches `at`.
+function once(at, run) {
+  let done = false
+  return (p) => {
+    if (done || p < at) return
+    done = true
+    run()
+  }
+}
+
 const nodeAt = (stage, square) =>
   [...stage.nodes.values()].find((n) => n.userData.at && n.userData.at[0] === square[0] && n.userData.at[1] === square[1]) ?? null
 
@@ -525,6 +537,11 @@ export function playAttack3D(stage, fx, picture) {
         touched.add(target)
         const d = to.clone().sub(from).setY(0).normalize()
         const away = new THREE.Vector3(-d.z, 0, d.x).multiplyScalar(0.3).addScaledVector(d, 0.12)
+        // A hero figure turns to the blow and jumps aside.
+        parts.push(once(hitAt - 0.15, () => {
+          face(target, from.x - to.x, from.z - to.z)
+          playMove(target, 'dodge')
+        }))
         parts.push((p) => {
           const k = seg(p, hitAt - 0.15, hitAt) * (1 - seg(p, hitAt + 0.05, hitAt + 0.3))
           target.userData.body.position.x = away.x * k
@@ -548,6 +565,7 @@ export function playAttack3D(stage, fx, picture) {
     })
     if (target) {
       touched.add(target)
+      parts.push(once(hitAt, () => target.userData.anim?.down || playMove(target, 'hit')))
       parts.push((p, sec) => {
         const age = sec - hitSec
         const k = age > 0 && age < 0.45 ? 1 - age / 0.45 : 0
@@ -568,6 +586,12 @@ export function playAttack3D(stage, fx, picture) {
       })
     }
   })
+
+  // A hero figure turns to its (first) target and swings, shoots, throws or casts.
+  if (!still && attacker?.userData.anim && aims.length > 0) {
+    face(attacker, aims[0].x - origin.x, aims[0].z - origin.z)
+    parts.push(once(IMPACT - 0.3, () => playMove(attacker, attackMove(fx.look))))
+  }
 
   // A fighter (or a monster's claws and jaws) lunges in at a single target.
   if (!still && attacker && MELEE.has(fx.look) && fx.shots.length === 1) {

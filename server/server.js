@@ -41,6 +41,7 @@ const CONTENT_TYPES = {
   '.json': 'application/json',
   '.ico': 'image/x-icon',
   '.webmanifest': 'application/manifest+json',
+  '.glb': 'model/gltf-binary',
 }
 
 // The saved game, upgraded from an older version of the app if needed. A save that

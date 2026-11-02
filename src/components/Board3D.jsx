@@ -7,6 +7,10 @@ import { TOKEN_COLORS } from './Board.jsx'
 import { useAttackFx } from './AttackFx.jsx'
 import { useHealFx } from './HealFx.jsx'
 import { canvasTexture, playAttack3D, playHeal3D } from './board3dFx.js'
+import { attachModel, detachModel, face, setDown, setWalking, stepModels } from './figureModels.js'
+import { FX_DELAY_MS } from '../board/attackFx.js'
+import { IMPACT, msAt } from './attackFxDraw.js'
+import { serverNow } from '../state/useSharedGame.js'
 
 // The virtual board in 3D (three.js): the dungeon's stone floor and rock, walls along shut
 // edges, the stairs, and every figure as a standee carrying its round token art. Attacks
@@ -509,16 +513,27 @@ function makeStandee(stage, figure, url) {
   return node
 }
 
-// Figures come, go and walk to their new squares.
-function syncFigures(stage, figures, art) {
+// A figure taken off the board: its pictures stay for next time, a figure still loading
+// is not put on.
+function forget(node) {
+  node.userData.disposed = true
+  clearTimeout(node.userData.fallTimer)
+  detachModel(node)
+  disposeTree(node)
+}
+
+// Figures come, go and walk to their new squares. `fallAt(figure)`: when a hero who just
+// dropped to 0 HP should fall over (after the attack animation that downs them), in ms.
+function syncFigures(stage, figures, art, fallAt) {
   const seen = new Set()
   for (const f of figures) {
     seen.add(f.id)
     const url = f.art ? artUrl(art, f.art) : null
+    const look = stage.heroModels && f.model ? f.model : null
     let node = stage.nodes.get(f.id)
-    if (node && node.userData.url !== url) {
+    if (node && (node.userData.url !== url || node.userData.look !== look)) {
       stage.figures.remove(node)
-      disposeTree(node)
+      forget(node)
       stage.nodes.delete(f.id)
       node = null
     }
@@ -527,8 +542,18 @@ function syncFigures(stage, figures, art) {
     if (!node) {
       node = makeStandee(stage, f, url)
       node.position.copy(to)
+      node.userData.look = look
       stage.figures.add(node)
       stage.nodes.set(f.id, node)
+      if (look) {
+        const n = node
+        attachModel(n, look, figureColor(f), () => {
+          // A new figure looks at the camera, so its face shows.
+          face(n, stage.camera.position.x - n.position.x, stage.camera.position.z - n.position.z)
+          setDown(n, n.userData.faded)
+          stage.render()
+        })
+      }
     } else if (node.position.distanceTo(to) > 0.01) {
       glide(stage, node, to)
     }
@@ -539,12 +564,19 @@ function syncFigures(stage, figures, art) {
     faceMat.opacity = f.faded ? 0.35 : 1
     baseMat.color.set(f.faded ? '#3f3f46' : figureColor(f))
     if (node.userData.torch) node.userData.torch.visible = !f.faded
+    if (node.userData.faded !== f.faded) {
+      node.userData.faded = f.faded
+      clearTimeout(node.userData.fallTimer)
+      const wait = f.faded ? fallAt(f) : 0
+      if (wait > 0) node.userData.fallTimer = setTimeout(() => (setDown(node, true), stage.render()), wait)
+      else setDown(node, f.faded)
+    }
     setIcons(stage, node, f.icons ?? [])
   }
   for (const [id, node] of stage.nodes) {
     if (seen.has(id)) continue
     stage.figures.remove(node)
-    disposeTree(node)
+    forget(node)
     stage.nodes.delete(id)
   }
 }
@@ -554,13 +586,20 @@ function glide(stage, node, to) {
   stage.tweens = stage.tweens.filter((t) => t.node !== node)
   const from = node.position.clone()
   const hops = Math.max(1, Math.round(from.distanceTo(to)))
-  const ms = stage.still ? 1 : Math.min(hops, 6) * STEP_MS
+  const ms = stage.still ? 1 : Math.min(hops, 6) * STEP_MS * (node.userData.model ? 1.6 : 1)
+  // A hero figure walks there, facing the way it goes; a standee hops.
+  const walker = Boolean(node.userData.model)
+  if (walker) {
+    face(node, to.x - from.x, to.z - from.z)
+    if (!stage.still) setWalking(node, true)
+  }
   stage.tweens.push({
     node,
     ms,
     step: (k) => {
       node.position.lerpVectors(from, to, k)
-      node.userData.body.position.y = stage.still ? 0 : Math.abs(Math.sin(k * Math.PI * hops)) * 0.12
+      node.userData.body.position.y = stage.still || walker ? 0 : Math.abs(Math.sin(k * Math.PI * hops)) * 0.12
+      if (k >= 1 && walker) setWalking(node, false)
     },
   })
   stage.render()
@@ -617,6 +656,27 @@ function tapHit(stage, event) {
   return {}
 }
 
+const cornerButton = (calm) =>
+  `rounded-lg border border-zinc-700 bg-zinc-950/70 text-zinc-300 hover:text-white ${calm ? 'px-3 py-1 text-sm' : 'px-[0.8vw] py-[0.3vw] text-[0.9vw]'}`
+
+// Heroes as 3D figures (the KayKit models) or as standees with their token, per screen.
+const FIGURES_KEY = 'ashardalon-board3d-figures'
+function heroModelsWanted() {
+  try {
+    return localStorage.getItem(FIGURES_KEY) !== 'standees'
+  } catch {
+    return true
+  }
+}
+
+// A hero downed by an attack falls when the animation's blow lands, not when the die is
+// rolled (the board already knows they're at 0 HP by then). Ms from now, 0 for at once.
+function fallDelay(moment, at) {
+  const shot = moment?.fx?.shots.find((s) => s.result === 'down' && s.to[0] === at[0] && s.to[1] === at[1])
+  if (!shot) return 0
+  return Math.max(0, moment.at + FX_DELAY_MS + msAt(IMPACT + 0.25) - serverNow())
+}
+
 // `taps` (a board that moves figures): { targets, selected, onSquare, onFigure, onItem,
 // onMarker, onBackground }, the same handlers the flat board uses. `calm`: see makeStage.
 export default function Board3D({ state, onFail, onSlow, taps = null, calm = false }) {
@@ -626,6 +686,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
   tapsRef.current = taps
   const art = useArt()
   const [ready, setReady] = useState(false)
+  const [heroModels, setHeroModels] = useState(heroModelsWanted)
   const board = state.board
   // Rebuilt only when the dungeon itself changes (a tile, a door), not every time a figure moves.
   const layoutKey = board ? `${board.tiles.map((t) => t.uid).join()}|${(board.doors ?? []).map((d) => d.id).join()}` : ''
@@ -651,6 +712,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
     }
     stage.still = stillWanted()
     stage.calm = calm
+    stage.heroModels = heroModels
     // Torch flicker, lava and fog keep the board drawing all the time: only on the big screen.
     stage.ambient = !stage.still && !calm
     let frame = 0
@@ -681,6 +743,8 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
           if (torch) torch.intensity = 6 + Math.sin(now / 90 + node.position.x) * 0.6 + Math.sin(now / 37 + node.position.z) * 0.4
         }
       }
+      // Hero figures breathe on the big screen, and make their moves everywhere.
+      const models = stepModels(stage.nodes.values(), last ? Math.min(0.1, (now - last) / 1000) : 0, stage.ambient)
       // Standees turn to face the camera.
       for (const node of stage.nodes.values()) {
         const p = node.position
@@ -688,7 +752,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
       }
       stage.renderer.render(stage.scene, stage.camera)
       const torches = stage.ambient && [...stage.nodes.values()].some((n) => n.userData.torch?.visible)
-      const keepGoing = stage.tweens.length > 0 || torches || (stage.ambient && stage.animators.length > 0)
+      const keepGoing = models || stage.tweens.length > 0 || torches || (stage.ambient && stage.animators.length > 0)
       last = now
       if (keepGoing) stage.render()
     }
@@ -754,7 +818,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
     buildDungeon(stage, layout)
     for (const node of stage.nodes.values()) {
       stage.figures.remove(node)
-      disposeTree(node)
+      forget(node)
     }
     stage.nodes.clear()
     stage.resize()
@@ -782,7 +846,8 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
   useEffect(() => {
     const stage = stageRef.current
     if (!ready || !stage?.at) return
-    syncFigures(stage, figures, art)
+    stage.heroModels = heroModels
+    syncFigures(stage, figures, art, (f) => fallDelay(state.moment, f.at))
     stage.render()
   })
 
@@ -811,6 +876,16 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, healsKey])
 
+  const switchFigures = () => {
+    const on = !heroModels
+    setHeroModels(on)
+    try {
+      localStorage.setItem(FIGURES_KEY, on ? 'models' : 'standees')
+    } catch {
+      // Private browsing: it just isn't remembered.
+    }
+  }
+
   const fit = () => {
     const stage = stageRef.current
     if (!stage || !layout) return
@@ -822,13 +897,14 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
   return (
     <section className="relative h-full min-h-0 flex-1 overflow-hidden rounded-2xl" data-board3d>
       <div ref={mountRef} className="h-full w-full" />
-      <button
-        type="button"
-        onClick={fit}
-        className={`absolute right-2 top-2 rounded-lg border border-zinc-700 bg-zinc-950/70 text-zinc-300 hover:text-white ${calm ? 'px-3 py-1 text-sm' : 'px-[0.8vw] py-[0.3vw] text-[0.9vw]'}`}
-      >
-        Fit
-      </button>
+      <div className="absolute right-2 top-2 flex gap-2">
+        <button type="button" onClick={switchFigures} aria-pressed={heroModels} className={cornerButton(calm)}>
+          {heroModels ? '🧍 Heroes: 3D' : '🪪 Heroes: tokens'}
+        </button>
+        <button type="button" onClick={fit} className={cornerButton(calm)}>
+          Fit
+        </button>
+      </div>
     </section>
   )
 }
