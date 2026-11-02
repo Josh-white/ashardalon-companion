@@ -8,8 +8,9 @@ import { openingPlaying } from '../state/opening.js'
 import { rollD20 } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { serverNow } from '../state/useSharedGame.js'
-import { activeAlly, allyStep, bonusAttack } from './brain.js'
+import { activeAlly, allyStep, bonusAttack, offTurnMove } from './brain.js'
 import { allyReaction } from './powers.js'
+import { fanReaction } from './fanPowers.js'
 import { teamReaction } from './boardPowers.js'
 import { audioBusy } from '../audio/busy.js'
 import { isReading } from '../components/CardReading.jsx'
@@ -106,7 +107,7 @@ export function useAllyDriver(state, dispatch, drive) {
       }
       // A reaction or a hero card ability for a computer hero, on anyone's turn (Tumbling
       // Escape, Furious Assault, Healing Hands, Bravery, To Arms!, One for the Team...).
-      const reaction = allyReaction(s, rollD20) ?? teamReaction(s)
+      const reaction = allyReaction(s, rollD20) ?? fanReaction(s, rollD20) ?? offTurnMove(s) ?? teamReaction(s)
       if (reaction) {
         setSay(reaction.say)
         send(reaction.action)

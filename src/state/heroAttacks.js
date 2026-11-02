@@ -3,7 +3,10 @@
 import { XP_TO_LEVEL_UP, hasAbility, levelCrits } from '../data/heroes.js'
 import { attackItems, heroItems, itemAttackParts } from '../data/items.js'
 import { hasSecondChance } from '../data/difficulty.js'
-import { effectsOf, maxRolls, onHitHeals, shadowAfter, shadowKept } from '../data/powerEffects.js'
+import { effectsOf, maxRolls, onHitHeals, shadowAfter, shadowKept, wolfBlocked } from '../data/powerEffects.js'
+import { addStatus, attackedStatus } from './monsterStatus.js'
+import { summonPets } from './pets.js'
+import { applyFanUse, fanUseBlocked, resolveUse, sendSeeker, targetAllowed } from './fanPowers.js'
 import { queueFearMove, queueMoves } from '../board/powerMoves.js'
 import { heroesInReach } from '../board/encounters.js'
 import { clamp, findFoe, foes, heroLabel, markUsed, updateHero, updateMonster, validRoll, withCast, withLog, withMoment } from './gameHelpers.js'
@@ -15,7 +18,7 @@ import { canSpendAttack, inHeroPhase, itemAttackIsMove, powerUsesAttack, removeC
 // One attack's numbers against a monster at this distance, with where each comes from so the
 // attack box can show the sum: { bonus, damage, miss, evenBonus, crits, parts }. parts.bonus and
 // parts.damage are [{ label, value }]; parts.crits are [{ label, from }] (+1 damage on a high roll).
-export function attackNumbers(hero, { item = null, power = null, extraAttack = null, adjacentCount = 0, startedAdjacent = false, distance, stayed = false } = {}) {
+export function attackNumbers(hero, { item = null, power = null, extraAttack = null, adjacentCount = 0, startedAdjacent = false, distance, stayed = false, fearless = false, pounce = false } = {}) {
   const effects = effectsOf(power)
   const source = item ?? power
   const bonusParts = [{ label: source.name, value: item ? item.card.attack.bonus : powerNumber(power.card?.attack) ?? 0 }]
@@ -23,14 +26,17 @@ export function attackNumbers(hero, { item = null, power = null, extraAttack = n
   const adjacent = effects.ask === 'adjacent-count' ? clamp(Number(adjacentCount) || 0, 0, 8) : 0
   if (adjacent) bonusParts.push({ label: adjacent === 1 ? '1 monster next to you' : `${adjacent} monsters next to you`, value: adjacent })
   if (effects.shadowBonus && hero.tokens?.shadow) bonusParts.push({ label: 'From the shadows', value: effects.shadowBonus })
-  for (const buff of hero.buffs ?? []) if (buff.attack) bonusParts.push({ label: buff.source, value: buff.attack })
+  for (const buff of hero.buffs ?? []) if (buff.attack && (!buff.only || source.name.startsWith(buff.only))) bonusParts.push({ label: buff.source, value: buff.attack })
+  // Fearless (a fan Battlemaster): a monster next to the hero when the turn started has -4 AC.
+  if (fearless) bonusParts.push({ label: 'Fearless (it has -4 AC)', value: 4 })
+  if (pounce && effects.wolf) bonusParts.push({ label: 'Pounce', value: -2 })
   for (const curse of hero.curses ?? []) if (curse.card?.attackPenalty) bonusParts.push({ label: curse.name, value: -curse.card.attackPenalty })
   const damageParts = [{ label: source.name, value: item ? item.card.attack.damage : powerNumber(power.card?.damage) ?? 0 }]
   if (effects.ask === 'started-adjacent' && startedAdjacent) damageParts.push({ label: 'Started next to it', value: 1 })
   const items = itemAttackParts(hero, distance, stayed)
   if (items.attack) bonusParts.push(items.attack)
   damageParts.push(...items.damage)
-  const crits = [...items.crits, ...levelCrits(hero)]
+  const crits = [...items.crits, ...levelCrits(hero), ...(effects.critFrom ? [{ label: source.name, from: effects.critFrom }] : [])]
   const total = (parts) => parts.reduce((n, p) => n + p.value, 0)
   return {
     bonus: total(bonusParts),
@@ -67,8 +73,13 @@ export function heroAttack(state, action) {
     .filter((t) => foes(state).some((m) => m.id === t.monsterId && m.ac) && validRoll(t.roll))
     // Hypnotism never hurts the monster it moved.
     .filter((t) => effects.ask !== 'moved-monster' || t.monsterId !== action.movedId)
+    // Fan powers that only hit some monsters (villains only, not on your tile...).
+    .filter((t) => !effects.targetOnly || targetAllowed(state, hero, { targetOnly: effects.targetOnly }, findFoe(state, t.monsterId)))
     .slice(0, item ? 1 : maxRolls(power))
+    // Advantage (Treetop, a fan Ranger): the device rolled twice, the better die counts.
+    .map((t) => (hasAdvantage(state, hero) && validRoll(t.roll2) ? { ...t, roll: Math.max(t.roll, t.roll2), advantage: [t.roll, t.roll2] } : t))
   if (!source || (baseBonus === null && !effects.autoHit) || power?.used || targets.length === 0) return state
+  if (power && wolfBlocked(hero, power)) return state
 
   // Magic weapons add to rolls against monsters close enough, so each target can differ.
   const distances = action.distances && typeof action.distances === 'object' ? action.distances : {}
@@ -81,13 +92,15 @@ export function heroAttack(state, action) {
       startedAdjacent: action.startedAdjacent,
       distance: distances[monsterId],
       stayed: action.stayed === true,
+      fearless: isFearlessTarget(state, hero, monsterId),
+      pounce: action.pounce === true,
     })
   const attack = numbers(null)
 
   let next = state
   const rolls = []
   const defeated = []
-  for (const { monsterId, roll } of targets) {
+  for (const { monsterId, roll, advantage } of targets) {
     const monster = findFoe(next, monsterId)
     if (!monster) {
       // Tornado Strike can aim a second roll at a monster the first one already beat.
@@ -100,11 +113,17 @@ export function heroAttack(state, action) {
     rolls.push({ monsterId, label: monster.name, value: roll, total: result.total, ac: monster.ac, hit: result.hit, outcome: result.outcome, dealt: result.dealt, attack: rowAttack })
     next = withLog(
       next,
-      `${hero.name}'s ${source.name} vs the ${monster.name}: rolled ${roll} + ${rowAttack.bonus} = ${result.total} against AC ${monster.ac}. ${result.outcome}`,
+      `${hero.name}'s ${source.name} vs the ${monster.name}: ${advantage ? `Advantage, rolled ${advantage.join(' and ')}, kept ${roll}` : `rolled ${roll}`} + ${rowAttack.bonus} = ${result.total} against AC ${monster.ac}. ${result.outcome}`,
     )
     const hurt = hurtMonster(next, monster, result.dealt)
     next = hurt.state
     if (hurt.defeated) defeated.push(monster)
+    else {
+      // Being attacked wears a status down (Pacified ends, Trapped loses a token); a hit can add one.
+      next = attackedStatus(next, monsterId)
+      const status = effects.onHit?.status ?? (effects.wolf && action.pounce === true ? 'slowed' : null)
+      if (result.hit && status) next = addStatus(next, monsterId, status, source.name)
+    }
   }
   const anyHit = rolls.some((r) => r.hit)
 
@@ -113,6 +132,10 @@ export function heroAttack(state, action) {
   if (item?.card.after) next = spendItem(next, hero.id, item.id)
   if (effects.onHit?.healSelf && anyHit) next = healHero(next, hero.id, effects.onHit.healSelf, power.name)
   if (effects.shadow) next = moveShadow(next, hero, effects, !anyHit)
+  if (effects.selfDamage > 0) {
+    const hp = Math.max(0, (next.heroes.find((h) => h.id === hero.id)?.hp ?? 0) - effects.selfDamage)
+    next = withLog(updateHero(next, hero.id, () => ({ hp })), `${hero.name} takes ${effects.selfDamage} damage from ${power.name}.`)
+  }
 
   let extras = extraAttack ? bonusAttacks.filter((b) => b !== extraAttack) : bonusAttacks
   if (effects.after === 'at-will') extras = [...extras, { heroId: hero.id, bonus: 0, source: power.name }]
@@ -138,6 +161,13 @@ export function heroAttack(state, action) {
     next = pass ? applyPasses(next, [pass], `${hero.name}'s ${power.name}`) : withLog(next, `${hero.name}'s ${power.name}: no monster on ${hero.name}'s tile to pass.`)
   }
   if (effects.board?.after) next = queueMoves(next, hero, power, effects.board.after, { attacked: targets.map((t) => t.monsterId), hit: anyHit, shadow: Boolean(hero.tokens?.shadow) })
+  // Follow My Lead (a fan Battlemaster): on a hit another hero moves next to a monster and makes an at-will attack.
+  const follower = effects.follower && anyHit && state.heroes.find((h) => h.id === action.followerId && h.id !== hero.id && h.hp > 0)
+  if (follower) {
+    next = { ...next, turn: { ...next.turn, bonusAttacks: [...(next.turn.bonusAttacks ?? []), { heroId: follower.id, bonus: 0, source: power.name }] } }
+    if (next.board?.tokens[follower.id] && !next.turn.boardMove) next = queueMoves(next, hero, power, [{ pick: 'listed', to: 'squares', n: 'speed' }], { tokens: [follower.id], prompt: `${follower.name} follows the lead: move next to a monster.` })
+    next = withLog(next, `${follower.name} follows ${hero.name}'s lead: a move and an at-will attack.`)
+  }
   next = queueFearMove(next)
 
   // Bloodlust ends when the hero defeats a monster.
@@ -298,8 +328,8 @@ export function powerDamage(state, action) {
 // A party or self bonus from a power (Song of Courage: all heroes +2 to attack until the end
 // of your next Hero Phase). Used in the caster's Hero Phase, that phase's end counts as one.
 function addBuff(next, state, hero, power, buff) {
-  const lasts = buff.lasts === 'turnStart' ? { untilTurnStart: true } : { phaseEnds: inHeroPhase(state, hero) ? 2 : 1 }
-  const entry = { source: power.name, casterId: hero.id, attack: Number(buff.attack) || 0, ac: Number(buff.ac) || 0, ...lasts }
+  const lasts = buff.lasts === 'turnStart' ? { untilTurnStart: true } : { phaseEnds: inHeroPhase(state, hero) && buff.lasts !== 'thisPhase' ? 2 : 1 }
+  const entry = { source: power.name, casterId: hero.id, attack: Number(buff.attack) || 0, ac: Number(buff.ac) || 0, ...lasts, ...(buff.only ? { only: String(buff.only) } : {}) }
   const who = buff.who === 'self' ? [hero.id] : next.heroes.map((h) => h.id)
   for (const id of who) {
     next = updateHero(next, id, (h) => ({ buffs: [...(h.buffs ?? []).filter((b) => b.source !== power.name), entry] }))
@@ -307,6 +337,22 @@ function addBuff(next, state, hero, power, buff) {
   const what = [entry.attack && `+${entry.attack} to attack`, entry.ac && `+${entry.ac} AC`].filter(Boolean).join(' and ')
   const until = lasts.untilTurnStart ? `the start of ${hero.name}'s next turn` : `the end of ${hero.name}'s ${lasts.phaseEnds === 2 ? 'next ' : ''}Hero Phase`
   return withLog(next, `${buff.who === 'self' ? hero.name : 'Every hero'} gets ${what} until ${until}.`)
+}
+
+// Treetop (a fan Ranger): the Hero Phase after perching has Advantage.
+export const hasAdvantage = (state, hero) => Boolean(hero) && state.turn.advantage === hero.id && inHeroPhase(state, hero)
+
+// Fearless (a fan Battlemaster): turn.fearless lists the monsters next to the hero when its turn started.
+export const isFearlessTarget = (state, hero, monsterId) =>
+  Boolean(monsterId) && state.turn.fearless?.heroId === hero?.id && state.turn.fearless.foes.includes(monsterId)
+
+// A utility with tokens ({ uses: n }): each use takes a token, and it's flipped with the last one.
+export const usesLeft = (power) => Math.max(0, (effectsOf(power).uses ?? 1) - (power.usesSpent ?? 0))
+function spendUse(state, hero, power) {
+  const uses = effectsOf(power).uses ?? 1
+  const spent = (power.usesSpent ?? 0) + 1
+  if (spent >= uses) return markUsed(state, hero.id, power.id)
+  return updateHero(state, hero.id, (h) => ({ powers: h.powers.map((p) => (p.id === power.id ? { ...p, usesSpent: spent } : p)) }))
 }
 
 // Bardic Song (a fan Bard's ability): 3 songs a game, each lets any hero roll a missed attack again.
@@ -334,8 +380,9 @@ function moveShadow(state, hero, effects, missed = false) {
   const was = Boolean(hero.tokens?.shadow)
   const now = shadowAfter(hero, effects, missed)
   if (was === now) return state
-  const next = updateHero(state, hero.id, (h) => ({ tokens: { ...h.tokens, shadow: now } }))
-  return withLog(next, now ? `${hero.name} slips into the shadows.` : `${hero.name} steps out of the shadows.`)
+  const next = withLog(updateHero(state, hero.id, (h) => ({ tokens: { ...h.tokens, shadow: now } })), now ? `${hero.name} slips into the shadows.` : `${hero.name} steps out of the shadows.`)
+  // Shadow Seekers (a fan Assassin): each trip into the shadows sends one out.
+  return now ? sendSeeker(next, next.heroes.find((h) => h.id === hero.id)) : next
 }
 
 // Shadowphage's own switch: entering the shadows takes the hero's attack in their Hero Phase
@@ -354,8 +401,8 @@ export function setShadow(state, action) {
 export function usePower(state, action) {
   const hero = state.heroes.find((h) => h.id === action.heroId)
   const power = hero?.powers.find((p) => p.id === action.powerId)
-  const use = effectsOf(power).use
-  if (!power || power.used || !use) return state
+  const use = resolveUse(effectsOf(power).use, action.option)
+  if (!power || power.used || !use || wolfBlocked(hero, power) || fanUseBlocked(state, hero, use)) return state
   const heroIds = (Array.isArray(action.heroIds) ? action.heroIds : []).filter((id) => state.heroes.some((h) => h.id === id))
   const picked = heroIds[0] && state.heroes.find((h) => h.id === heroIds[0])
   if (use.pick && !picked && !use.optional) return state
@@ -364,10 +411,16 @@ export function usePower(state, action) {
   const taken = use.takeEncounter ? state.encounter : null
   if (use.takeEncounter && (!taken || taken.attacked || taken.heroId === hero.id)) return state
 
-  let next = withCast(power.type === 'at-will' ? state : markUsed(state, hero.id, power.id), power)
+  // A card that 'remains in play and is not flipped' (Improvise, Fleetfooted) has reusable: true.
+  let next = withCast(power.type === 'at-will' || effectsOf(power).reusable ? state : spendUse(state, hero, power), power)
   next = withLog(next, `${heroLabel(hero)} used ${power.name}.`)
   if (use.healSelf) next = healHero(next, hero.id, use.healSelf, power.name)
-  if (use.heal && picked) next = healHero(next, picked.id, use.heal, power.name)
+  if (use.heal && picked) {
+    // Nature's Gifts: up to `count` heroes (in reach) each get the heal.
+    const reach = use.count ? heroesInReach(state, hero.id, use.reach) : null
+    const healed = use.count ? heroIds.filter((id) => !reach || reach.includes(id)).slice(0, use.count) : [picked.id]
+    for (const id of healed) next = healHero(next, id, use.heal, power.name)
+  }
   if (use.tokens) next = updateHero(next, hero.id, (h) => ({ tokens: { ...h.tokens, ...use.tokens } }))
   if (use.invisible) next = updateHero(next, hero.id, (h) => ({ tokens: { ...h.tokens, invisible: true } }))
   if (effectsOf(power).shadow) next = moveShadow(next, hero, effectsOf(power))
@@ -377,6 +430,8 @@ export function usePower(state, action) {
     next = withLog(next, `${picked.name} is safe in the Astral Refuge until their next turn.`)
   }
   if (use.cleanse) next = cleanseTile(next, hero, power)
+  next = applyFanUse(next, state, hero, power, use, action)
+  if (use.summon) next = summonPets(next, hero, use.summon, power.name)
   if (use.endCondition) {
     if (!picked.conditions.includes(action.condition)) return state
     next = updateHero(next, picked.id, (h) => ({ conditions: h.conditions.filter((c) => c !== action.condition) }))
@@ -409,8 +464,8 @@ export function dodgeHit(state, action) {
   const hero = state.heroes.find((h) => h.id === action.heroId)
   const power = hero?.powers.find((p) => p.id === action.powerId)
   const row = last?.results.find((r) => r.heroId === hero?.id && r.hit && !r.dodged)
-  if (!row || !power || power.used || effectsOf(power).reaction !== 'dodge') return state
-  let next = withCast(markUsed(state, hero.id, power.id), power)
+  if (!row || !power || power.used || effectsOf(power).reaction !== 'dodge' || wolfBlocked(hero, power)) return state
+  let next = withCast(spendUse(state, hero, power), power)
   next = updateHero(next, hero.id, (h) => ({
     hp: clamp(h.hp + row.dealt - row.miss, 0, h.maxHp),
     conditions: h.conditions.filter((c) => !row.conditions.includes(c)),
@@ -418,5 +473,10 @@ export function dodgeHit(state, action) {
   const results = last.results.map((r) => (r === row ? { ...r, dodged: true } : r))
   next = { ...next, turn: { ...next.turn, lastMonsterAttack: { ...last, results } } }
   next = queueMoves(next, hero, power, effectsOf(power).board?.dodge)
+  // Swift Evasion (a fan Assassin): in the shadows, an at-will attack too.
+  if (effectsOf(power).dodgeAttack === 'shadow' && hero.tokens?.shadow) {
+    next = { ...next, turn: { ...next.turn, bonusAttacks: [...(next.turn.bonusAttacks ?? []), { heroId: hero.id, bonus: 0, source: power.name }] } }
+    next = withLog(next, `${hero.name} strikes back from the shadows: an at-will attack.`)
+  }
   return withLog(next, `${hero.name} used Tumbling Escape: the attack misses!${row.miss > 0 ? ` (${row.miss} miss damage)` : ''} Put ${hero.name} on a tile within 1 tile.`)
 }

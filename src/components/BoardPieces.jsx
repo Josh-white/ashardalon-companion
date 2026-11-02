@@ -205,8 +205,13 @@ export function HeroTokenMark({ item, count, spin, selected, onTap }) {
     <g data-item={item.id} data-kind={item.kind} onClick={onTap} className={onTap ? 'cursor-pointer' : undefined} transform={spin ? `rotate(${-spin} ${cx} ${cy})` : undefined}>
       <circle cx={cx} cy={cy} r={SQUARE * 0.3} fill={look.color} fillOpacity="0.85" stroke={selected ? '#f59e0b' : '#0a0c10'} strokeWidth={selected ? 4 : 2} />
       <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fontSize={SQUARE * 0.32} pointerEvents="none">
-        {look.icon}
+        {item.icon ?? look.icon}
       </text>
+      {item.kind === 'pet' && (
+        <text x={cx + SQUARE * 0.3} y={cy - SQUARE * 0.24} textAnchor="middle" fontSize={SQUARE * 0.22} fontWeight="bold" fill="#86efac" stroke="#0a0c10" strokeWidth="3" paintOrder="stroke" pointerEvents="none">
+          {item.hp}
+        </text>
+      )}
       {count > 1 && (
         <text x={cx + SQUARE * 0.3} y={cy - SQUARE * 0.24} textAnchor="middle" fontSize={SQUARE * 0.22} fontWeight="bold" fill="#fde68a" stroke="#0a0c10" strokeWidth="3" paintOrder="stroke" pointerEvents="none">
           {count}
@@ -316,7 +321,7 @@ export function Token({ id, at, label, color, art, selected, active, aimed, acti
 
 // A tile just laid (useFreshTiles): a warm wash and a bright outline round its squares that
 // flash a few times and fade, so everyone spots it while the board settles into its new fit.
-export function NewTileGlow({ grid, uids }) {
+export function NewTileGlow({ grid, uids, style }) {
   const squares = [...grid.values()].filter((sq) => uids.includes(sq.area))
   if (squares.length === 0) return null
   const own = new Set(squares.map((sq) => key([sq.x, sq.y])))
@@ -329,7 +334,7 @@ export function NewTileGlow({ grid, uids }) {
       }),
   )
   return (
-    <g pointerEvents="none" className="new-tile-glow" data-new-tile={uids.join(' ')}>
+    <g pointerEvents="none" className="new-tile-glow" style={style} data-new-tile={uids.join(' ')}>
       {squares.map((sq) => (
         <rect key={`${sq.x},${sq.y}`} x={sq.x * SQUARE} y={sq.y * SQUARE} width={SQUARE} height={SQUARE} fill="#fde68a" fillOpacity="0.28" />
       ))}

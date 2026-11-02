@@ -87,6 +87,68 @@ const NAMED = [
   ['paladin', 'utility', 'Noble Shield'],
 ].map(([hero, type, name, attack = '', damage = '']) => ({ id: `robot-${name.toLowerCase().replace(/\W+/g, '-')}`, hero, type, name, attack, damage, text: 'Made-up power.', suggested: true }))
 
+// Made-up fan heroes (like the six on the test copy), so the computer plays their abilities
+// and powers in the robot's games too. Names and effects only; the text is made up.
+const FAN_HEROES = [
+  ['bard', 'Robot Bard', 'bardic-song', 6, 14, 3, 5, ['at-will', 'at-will', 'utility', 'utility', 'daily']],
+  ['monk', 'Robot Monk', 'mind-over-body', 8, 15, 4, 6, ['daily', 'utility', 'at-will', 'at-will', 'daily']],
+  ['assassin', 'Robot Assassin', 'shadowphage', 8, 14, 4, 7, ['at-will', 'at-will', 'utility', 'utility', 'daily']],
+  ['ranger', 'Robot Ranger', null, 8, 14, 4, 6, ['at-will', 'at-will', 'utility', 'utility', 'daily']],
+  ['battlemaster', 'Robot Battlemaster', 'fearless', 10, 17, 5, 5, ['at-will', 'at-will', 'utility', 'utility', 'daily']],
+  ['druid', 'Robot Druid', 'natures-healing', 8, 14, 4, 6, ['at-will', 'at-will', 'utility', 'utility', 'daily']],
+].map(([hero, name, effect, hp, ac, surge, speed, powerSlots]) => ({
+  hero, name, className: 'Robot', homebrew: true, powerSlots,
+  levels: [{ level: 1, hp, ac, surge, speed }, { level: 2, hp: hp + 2, ac: ac + 1, surge: surge + 1, addSlot: 'daily' }],
+  abilities: effect ? [{ name: `Robot ${effect}`, text: 'Made-up ability.', effect }] : [],
+}))
+// [hero, type, name, attack, damage, effect, suggested]
+const FAN_POWERS = [
+  ['bard', 'at-will', 'Guiding Strike', '', '1', { autoHit: true, targetOnly: 'nextToHero' }, true],
+  ['bard', 'at-will', 'Vicious Mockery', '+6', '1', { range: 'within2', board: { after: [{ pick: 'attacked', to: 'tileCloser', miss: true, minApart: 2 }] } }, true],
+  ['bard', 'utility', 'Ballad of Life', '', '', { use: { heal: 2, pick: 'other' } }, true, 'Made-up power: a hero at 0 HP gets 2 HP.'],
+  ['bard', 'utility', 'Song of Courage', '', '', { use: { buff: { attack: 2, who: 'all', lasts: 'heroPhaseEnd' } } }, true],
+  ['bard', 'utility', 'Melody of Defense', '', '', { use: { buff: { ac: 2, who: 'all', lasts: 'heroPhaseEnd' } } }],
+  ['bard', 'daily', 'Song of Storms', '+6', '2', { targets: 3, range: 'within2' }, true],
+  ['monk', 'at-will', 'Five Storms', '+4', '1', { targets: 'any' }, true],
+  ['monk', 'at-will', 'Flurry of Blows', '+6', '1', { board: { after: [{ pick: 'attacked', to: 'ownTile', hit: true }] } }, true],
+  ['monk', 'daily', 'Cobra Strike', '+8', '3', null, true],
+  ['monk', 'daily', 'One Hundred Leaves', '+7', '1', { targets: 'any', range: 'sameTile', board: { after: [{ each: 'monsterOnTile', to: 'tileWithin', n: 1 }] } }],
+  ['monk', 'utility', 'Centered Defense', '', '', { use: { buff: { ac: 3, who: 'self', lasts: 'turnStart' } } }, true],
+  ['monk', 'at-will', "Crane's Wings", '+7', '1', { range: 'within1', board: { after: [{ pick: 'self', to: 'nextToAttacked', miss: true }] } }],
+  ['monk', 'daily', 'Whirling Mantis Step', '+7', '1', { targets: 'any', before: 'First move your speed.', board: { before: [{ pick: 'self', to: 'squares', n: 'speed' }] } }, true],
+  ['monk', 'daily', 'Comet Strike', '+6', '2', { targets: 'any', before: 'First move your speed.', board: { before: [{ pick: 'self', to: 'squares', n: 'speed' }] } }],
+  ['monk', 'utility', 'Psionic Stride', '', '', { use: { board: [{ pick: 'otherHero', to: 'swap' }] } }, true],
+  ['assassin', 'at-will', 'Alshabbah', '+7', '1', { shadow: 'leave', board: { after: [{ pick: 'self', to: 'squares', n: 3, ifShadow: true }] } }],
+  ['assassin', 'daily', 'Shadow Seekers', '', '', { use: { tokens: { seekersLeft: 5 } } }],
+  ['assassin', 'daily', 'Trapping Attack', '', '', { use: { moveTraps: 2 }, shadow: 'leave' }],
+  ['assassin', 'utility', 'Shadowmerge', '', '', { use: {}, shadow: 'enter' }, true],
+  ['assassin', 'utility', 'Swift Evasion', '', '', { reaction: 'dodge', dodgeAttack: 'shadow', board: { dodge: [{ pick: 'self', to: 'tileWithin', n: 1 }] } }, true],
+  ['assassin', 'at-will', 'Shadow Strike', '+7', '1', { shadow: 'leave', shadowBonus: 2 }, true],
+  ['assassin', 'at-will', 'Dagger Barrage', '+6', '1', { shadow: 'leave', shadowBonus: 4, range: 'within1' }, true],
+  ['assassin', 'daily', 'Into Darkness', '+7', '3', { shadow: 'enter', shadowKeep: true }, true],
+  ['assassin', 'utility', 'Fleetfooted', '', '', { use: { removeTrap: true }, shadow: 'leave', reusable: true }],
+  ['assassin', 'utility', 'Out of Darkness', '', '', { use: { healSelf: 3 }, shadow: 'leave' }],
+  ['ranger', 'at-will', 'Longbow: Oak Arrow', '+11', '1', { range: 'within2', targetOnly: 'notOwnTile' }, true],
+  ['ranger', 'at-will', 'Shortsword', '+8', '1', null, true],
+  ['ranger', 'daily', 'Longbow: Cedarwood Arrow', '+9', '1', { targets: 4, range: 'within2', targetOnly: 'notOwnTile', oneTile: true, onHit: { status: 'trapped' } }, true],
+  ['ranger', 'utility', 'Power of Earth', '', '', { use: { buff: { attack: 2, who: 'self', lasts: 'thisPhase', only: 'Longbow' } }, uses: 2 }, true],
+  ['ranger', 'utility', 'Reviving Roots', '', '', { use: { heal: 2, pick: 'any', reach: 'adjacent' }, uses: 2 }, true],
+  ['battlemaster', 'at-will', 'Double Whammy', '+4', '1', { targets: 2 }, true],
+  ['battlemaster', 'at-will', 'Willbreaker', '+7', '1', { board: { after: [{ pick: 'self', to: 'nextToMonsterWithin1', hit: true }] } }, true],
+  ['battlemaster', 'daily', 'Concussive Blow', '+11', '3', { targetOnly: 'villain', onHit: { status: 'immobilized' } }],
+  ['battlemaster', 'daily', 'Battle Worthy', '+9', '2', { targets: 3 }, true],
+  ['battlemaster', 'utility', 'Heavy Hitter', '', '', { use: { buff: { attack: 2, who: 'self', lasts: 'thisPhase' } }, uses: 2 }, true],
+  ['battlemaster', 'utility', 'Dwarven Ale', '', '', { use: { healSelf: 3 } }, true],
+  ['druid', 'at-will', 'Wolf Form', '+9', '1', { wolf: true }, true],
+  ['druid', 'at-will', 'Piercing Thorn', '+7', '1', { critFrom: 18, range: 'within1' }, true],
+  ['druid', 'at-will', 'Flaming Staff', '+8', '1', { board: { after: [{ pick: 'attacked', to: 'adjacentTile', hit: true }] } }],
+  ['druid', 'daily', 'Thorn Strike', '+8', '3', { targets: 3, range: 'within1' }, true],
+  ['druid', 'utility', 'Healing Herbs', '', '', { use: { heal: 1, pick: 'any', reach: 'adjacent' }, uses: 3 }, true],
+  ['druid', 'utility', 'Lupine Lore', '', '', { wolfOnly: true, reaction: 'dodge', uses: 2 }, true],
+].map(([hero, type, name, attack, damage, effect, suggested = false, text = 'Made-up power.']) => ({
+  id: `robot-fan-${name.toLowerCase().replace(/\W+/g, '-')}`, hero, type, name, attack, damage, text, ...(effect ? { effect } : {}), suggested,
+}))
+
 // A made-up campaign, so the robot plays campaign games too: the same adventure again and
 // again, with Treasure tokens for kills. No chambers, so beating it once ends the campaign.
 const CAMPAIGN = {
@@ -129,7 +191,8 @@ export const ROBOT_CARD_FILE = {
   // Shop prices, so the shop between campaign adventures has something to sell.
   treasures: EXAMPLE.treasures.map((t, i) => ({ ...t, cost: 100 * (i + 1) })),
   treasureTokens: TREASURE_TOKENS,
-  powers: [...EXAMPLE.powers, ...POWERS, ...NAMED],
+  heroes: [...(EXAMPLE.heroes ?? []), ...FAN_HEROES],
+  powers: [...EXAMPLE.powers, ...POWERS, ...NAMED, ...FAN_POWERS],
   monsters: [...EXAMPLE.monsters, ...MONSTERS],
   tiles: TILES,
 }

@@ -12,7 +12,7 @@ import { escapeBlockers } from '../state/adventure.js'
 import { activeVillains } from '../state/game.js'
 import { artUrl, useArt } from '../state/useArt.js'
 import { Carpet, Coin, ExitSquares, figureBadges, HeroTokenMark, heroTokenGroups, MarkerBadges, MarkerTiles, NewTileGlow, OpenEdges, PlacedTile, QuestToken, TileShadows, tileRects, Token } from './BoardPieces.jsx'
-import { useFreshTiles } from './useFreshTiles.js'
+import { dropStyle, useFreshTiles } from './useFreshTiles.js'
 import { ClosedDoor, SQUARE } from './TileDrawing.jsx'
 import { useBoardZoom } from './useBoardZoom.js'
 import { useAimed } from './useAimed.js'
@@ -69,6 +69,8 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
   const focusId = aimed.length ? aimed[aimed.length - 1] : acting && board?.tokens[acting] ? acting : null
   // A tile just laid glows for a few seconds while the board glides to its new fit.
   const fresh = useFreshTiles(board?.tiles)
+  // The tiles still dropping in (and the figures on them) wait for the board to move first.
+  const freshUids = new Set(fresh && !fresh.landed ? fresh.uids : [])
   const { boxRef, spin, viewW, viewH, viewBox, fit, scale, zoomIn, zoomOut, zoomTo } = useBoardZoom({ fill, bounds, activeId, activeAt, focusId, freshKey: fresh?.key })
   // An attack flying across the board (Colton's idea), once its die has been read.
   const playing = useAttackFx(state.moment)
@@ -94,6 +96,8 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
     ...(state.villagers ?? []).filter((v) => !v.removed).map((v) => ({ id: v.id, label: v.name, color: '#065f46' })),
   ]
   const onBoard = figures.filter((f) => board.tokens[f.id])
+  // Figures standing on a tile that's still dropping in show up once it's down.
+  const arriving = (at) => freshUids.size > 0 && Boolean(at) && freshUids.has(grid.get(key(at))?.area)
   const markers = boardMarkers(state)
   const placedMarkers = markers.filter((m) => m.squares.length > 0)
   const questTokens = adventureTokenSpots(state)
@@ -399,16 +403,22 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
         >
           <g transform={spin ? `rotate(${spin})` : undefined}>
             <g ref={anchorRef} />
-            {/* No box behind the map: the area's artwork shows around the tiles (JJ's pick, 2026-11-02). */}
-            <TileShadows rects={tiles} />
-            {board.tiles.map((placed) => board.defs[placed.tileId] && <PlacedTile key={placed.uid} placed={placed} def={board.defs[placed.tileId]} spin={spin} />)}
+            {/* No box behind the map: the area's artwork shows around the tiles (JJ's pick, 2026-11-02).
+                A tile still dropping in gets its shadow once it lands. */}
+            <TileShadows rects={tiles.filter((t) => !freshUids.has(t.id))} />
+            {/* A tile just laid waits for the board to move, then drops in (useFreshTiles). */}
+            {board.tiles.map((placed) => board.defs[placed.tileId] && (
+              <g key={placed.uid} className={freshUids.has(placed.uid) ? 'tile-drop' : undefined} style={freshUids.has(placed.uid) ? dropStyle : undefined} data-dropping={freshUids.has(placed.uid) ? '' : undefined}>
+                <PlacedTile placed={placed} def={board.defs[placed.tileId]} spin={spin} />
+              </g>
+            ))}
             <MarkerTiles markers={placedMarkers} />
             {(board.doors ?? []).map((door) => (
               <ClosedDoor key={door.id} squares={door.squares} kind={door.kind} special={Boolean(door.reveal)} spin={spin} />
             ))}
             {/* Open edges, exits, lit squares and figures stay on top of the dark. */}
             {torch && <Torchlight bounds={bounds} tiles={tiles} lights={lightSources({ heroes: state.heroes, tokens: board.tokens, activeId, markers: placedMarkers })} />}
-            {fresh && <NewTileGlow key={fresh.key} grid={grid} uids={fresh.uids} />}
+            {fresh && <NewTileGlow key={fresh.key} grid={grid} uids={fresh.uids} style={dropStyle} />}
             <OpenEdges grid={grid} />
             <ExitSquares squares={exits} open={exitOpen} />
             {targets.map((k) => {
@@ -445,7 +455,9 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
             {[...onBoard.filter((f) => f.id !== activeId), ...onBoard.filter((f) => f.id === activeId)].map((f) => (
               // An attack makes its target flinch or dodge, and a sword swing lunges in.
               <g key={f.id} {...tokenFx(playing, board.tokens[f.id])}>
+                <g className={arriving(board.tokens[f.id]) ? 'figure-arrive' : undefined} style={arriving(board.tokens[f.id]) ? dropStyle : undefined}>
                 <Token {...f} spin={spin} at={board.tokens[f.id]} active={f.id === activeId} aimed={aimed.includes(f.id.split('#')[0])} acting={acting === f.id.split('#')[0]} selected={picked === f.id || (Boolean(powerMove) && !picked && movable.includes(f.id)) || (readOnly && f.id === activeId)} onTap={watching && !peekTarget(state, f.id) ? undefined : () => tapFigure(f.id)} />
+                </g>
               </g>
             ))}
             <MarkerBadges markers={placedMarkers} spin={spin} taken={new Set([...Object.values(board.tokens), ...items.filter((i) => i.at).map((i) => i.at), ...questTokens.map((q) => q.at)].map(key))} onTap={(id) => { setPeek(null); setReading(reading === id ? null : id) }} />

@@ -11,7 +11,10 @@
 //         tileCloser (onto a tile 1 tile closer to the hero), swap; and for a villain's hit
 //         (move.from is the villain's token): awayFrom (`n` tiles farther from it), nextToFoe,
 //         triangle (the tile the hero's tile's triangle points to); nextToAttacked (next to a
-//         monster the power attacked: Crane's Wings, a fan hero's power)
+//         monster the power attacked: Crane's Wings, a fan hero's power), nextToMonsterWithin1
+//         (next to any monster within 1 tile: Willbreaker), crowdedTile (a tile within `n` tiles with
+//         `min` or more monsters: Experienced), nextToNewMonster (Come and Get It), onToken (from a
+//         `kind` token the hero stands on or next to, to another one: Secret Paths, Paths of Darkness)
 // `hit: true` steps only happen when the attack hit, `miss: true` steps only when it missed,
 // `ifShadow: true` only when the hero attacked from the shadows (Shadowphage).
 // `each: 'heroOnTile' | 'monsterOnTile'` makes the step once for every such figure (Tune of Ice
@@ -19,7 +22,8 @@
 // hero (Vicious Mockery). pick `otherHero` is any other hero on the board (Psionic Stride).
 
 import { baseId, key } from './grid.js'
-import { distances, reachable, tilesBetween } from './paths.js'
+import { adjacent, distances, reachable, tilesBetween } from './paths.js'
+import { newestMonster } from '../state/fanPowers.js'
 import { heroesFor } from './tactics.js'
 import { boardGrid, moveSpeed, occupied, placeToken } from './play.js'
 
@@ -211,7 +215,8 @@ export function moveTargets(state, id) {
   const hero = state.heroes.find((h) => h.id === move.heroId)
   switch (s.to) {
     case 'squares': {
-      const n = s.n === 'speed' ? moveSpeed(hero) : s.n ?? 1
+      // 'speed' is the moving hero's own speed (Nature's Gifts moves another hero).
+      const n = s.n === 'speed' ? moveSpeed(state.heroes.find((h) => h.id === id) ?? hero) : s.n ?? 1
       // Heroes can't walk through monsters; a moved monster can't walk through heroes.
       const isHero = state.heroes.some((h) => h.id === id)
       const blocked = isHero ? stops : new Set(heroTokens(state).map((h) => key(h.at)))
@@ -249,6 +254,10 @@ export function moveTargets(state, id) {
       const foeAt = state.board.tokens[move.from]
       return foeAt ? nextTo(foeAt) : []
     }
+    case 'nextToMonsterWithin1': {
+      const near = heroesFor('within1', grid, self, foeTokens(state))
+      return [...new Set(near.flatMap((f) => nextTo(f.at)))]
+    }
     case 'nextToAttacked': {
       const foes = foeTokens(state).filter((f) => (move.attacked ?? []).includes(baseId(f.id)))
       return [...new Set(foes.flatMap((f) => nextTo(f.at)))]
@@ -264,6 +273,26 @@ export function moveTargets(state, id) {
       const ys = own.map((sq) => sq.y)
       const past = { S: ([, y]) => y > Math.max(...ys), N: ([, y]) => y < Math.min(...ys), E: ([x]) => x > Math.max(...xs), W: ([x]) => x < Math.min(...xs) }[side]
       return all.filter((k) => past(parse(k)) && tilesBetween(grid, at, parse(k)) === 1)
+    }
+    case 'crowdedTile': {
+      // Experienced: a tile within n tiles with at least `min` monster figures on it.
+      const count = new Map()
+      for (const f of foeTokens(state)) count.set(grid.get(key(f.at))?.area, (count.get(grid.get(key(f.at))?.area) ?? 0) + 1)
+      return all.filter((k) => (count.get(grid.get(k).area) ?? 0) >= (s.min ?? 3) && tilesBetween(grid, self, parse(k)) <= (s.n ?? 2))
+    }
+    case 'nextToNewMonster': {
+      // Come and Get It: next to the monster drawn last this turn.
+      const newest = newestMonster(state)
+      const foes = foeTokens(state).filter((f) => baseId(f.id) === newest?.id)
+      return [...new Set(foes.flatMap((f) => nextTo(f.at)))]
+    }
+    case 'onToken': {
+      // Secret Paths, Paths of Darkness: from one of these tokens to (next to) another one.
+      const tokens = (state.board.items ?? []).filter((i) => i.kind === s.kind && i.at && (!s.own || i.owner === move.heroId))
+      const here = tokens.filter((t) => key(t.at) === key(at) || adjacent(grid, at, t.at))
+      if (here.length === 0) return []
+      const there = tokens.filter((t) => !here.includes(t))
+      return [...new Set(there.flatMap((t) => (free(key(t.at)) ? [key(t.at)] : nextTo(t.at))))]
     }
     case 'tileCloser': {
       const apart = tilesBetween(grid, at, self)

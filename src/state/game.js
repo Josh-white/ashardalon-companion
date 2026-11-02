@@ -26,11 +26,14 @@ import { discardEncounterCard, drawEncounter, oweEncounter } from './encounterDe
 import { dealStartingTreasure, drawTreasure, keepTreasure, oweTreasure, spendItem, treasureWords } from './treasureDeck.js'
 import { copyCard, createHero, heroesFromLobby, newPower, pickedElsewhere, POWER_LABELS, withPicks } from './heroSetup.js'
 import { buildDeckWithout, buyFromShop, campaignHeroes, campaignLobby, drawTreasureToken, fromCampaign, nextCampaignAdventure, sameHeroes, tagDrawn, useBoon } from './campaignPlay.js'
+import { cowardlyRoll, endTurnStatus } from './monsterStatus.js'
+import { petHurt, petsAct } from './pets.js'
+import { dropDarkness, mesmerizedTurn, springArmedTraps, springFanTokens, takePath } from './fanPowers.js'
 import { attackFollowUp, dodgeHit, heroAttack, powerDamage, rerollAttack, setShadow, usePower } from './heroAttacks.js'
 import { initialState } from './initialState.js'
 import { drawDungeonTile, openBoardDoor, revealDoor, revealTile } from './dungeon.js'
 import { addOffer, attackHeroes, damageHeroes, defeatVillain, dropOffer, figuresLeft, healHero, heroWith, hurtVillager, monsterAttack, offers, offerSavingGrace, placeVillain, resolveEncounter, villagerAttack, villagerRoll } from './combat.js'
-import { answerCheck, canSpendAttack, checksFor, endHeroPhase, endPhaseCurses, inHeroPhase, levelUp, mindOverBody, monsterControl, pruneMindTried, phaseChecks, removeCurse, spendAttack, startDamage, startTurn, updateEncounterCards, useItem, villagerRollDue } from './heroTurn.js'
+import { answerCheck, canSpendAttack, checksFor, endHeroPhase, endPhaseCurses, inHeroPhase, levelUp, mindOverBody, monsterControl, naturesHealing, wolfForm, pruneFanTokens, phaseChecks, removeCurse, spendAttack, startDamage, startTurn, updateEncounterCards, useItem, villagerRollDue } from './heroTurn.js'
 import { trapDisable } from './encounterRules.js'
 import { LOBBY_ACTIONS, lobbyReducer } from './lobby.js'
 import { PARTY_ACTIONS, partyReducer } from './party.js'
@@ -85,7 +88,9 @@ const reduceGame = (state, action) => {
   const attacker = action?.type === 'HERO_ATTACK' ? action.heroId : undefined
   const placed = pruneTokens(placeNewFigures(state, checkVictory(tagDrawn(reduceWithOpening(state, action)))), attacker)
   const sprung = springHeroTokens(placed)
-  return pruneMindTried(withHealFx(state, withAttackFx(state, trackStats(state, sprung === placed ? placed : pruneTokens(checkVictory(sprung), attacker), action), action)))
+  const fan = springFanTokens(state, sprung)
+  const settled = fan === placed ? placed : pruneTokens(checkVictory(fan), attacker)
+  return pruneFanTokens(withHealFx(state, withAttackFx(state, trackStats(state, settled, action), action)))
 }
 
 // The tokens heroes put on the virtual board (board/heroTokens.js): the board keeps up with
@@ -128,6 +133,16 @@ function tryAgain(state, action) {
   const board = state.board && Array.isArray(boardTiles) ? { boardTiles, boardRandom } : {}
   const next = reduce(setup, { ...rest, ...board, type: 'START_GAME', heroes, soloName: state.soloName })
   return next.status === 'playing' ? withLog(next, 'The heroes try again!') : state
+}
+
+// A monster, villain or trap finished its turn this Villain Phase. Kept in the game so every
+// screen sees it, and the turn can't pass until they all have. A monster's statuses (Trapped,
+// Pacified...) lose a token as its turn ends.
+function markActed(state, id) {
+  const acted = state.turn.acted ?? []
+  if (!id || acted.includes(id)) return state
+  const { acting, ...turn } = state.turn
+  return endTurnStatus({ ...state, turn: { ...turn, ...(acting && acting !== id ? { acting } : {}), acted: [...acted, id] } }, id)
 }
 
 function reduce(state, action) {
@@ -619,6 +634,8 @@ function reduce(state, action) {
       return setShadow(state, action)
     case 'MIND_OVER_BODY':
       return mindOverBody(state, action)
+    case 'NATURES_HEALING':
+      return naturesHealing(state, action)
 
     case 'DODGE_HIT':
       return dodgeHit(state, action)
@@ -650,14 +667,31 @@ function reduce(state, action) {
       return { ...state, turn: { ...state.turn, acting: id } }
     }
 
-    case 'MARK_ACTED': {
-      // A monster, villain or trap finished its turn this Villain Phase. Kept in the game so
-      // every screen sees it, and the turn can't pass until they all have.
-      const acted = state.turn.acted ?? []
-      if (!action.id || acted.includes(action.id)) return state
-      const { acting, ...turn } = state.turn
-      return { ...state, turn: { ...turn, ...(acting && acting !== action.id ? { acting } : {}), acted: [...acted, action.id] } }
+    case 'MESMERIZED_TURN':
+      return state.turn.acted?.includes(action.id) ? state : markActed(mesmerizedTurn(state, action), action.id)
+
+    case 'PETS_ACT':
+      return petsAct(state, action)
+
+    case 'PET_HURT':
+      return petHurt(state, action)
+
+    case 'DROP_DARKNESS':
+      return dropDarkness(state, action)
+
+    case 'TAKE_PATH':
+      return takePath(state, action)
+
+    case 'MARK_ACTED':
+      return markActed(state, action.id)
+
+    case 'COWARDLY_ROLL': {
+      const rolled = cowardlyRoll(state, action)
+      return rolled.flees ? markActed(rolled.state, action.id) : rolled.state
     }
+
+    case 'WOLF_FORM':
+      return wolfForm(state, action)
 
     case 'SET_EXPLORED': {
       // The Exploration Phase's question: is the hero on an unexplored edge? With no
@@ -946,6 +980,8 @@ function reduce(state, action) {
       if (phase < PHASES.length - 1) {
         const ended = endPhaseCurses(state, state.heroes[heroIndex], PHASES[phase].key, action.rolls)
         const next = { ...ended, turn: { ...ended.turn, phase: phase + 1 } }
+        // Trapping Attack (a fan Assassin): the traps the hero armed go off as the Villain Phase starts.
+        if (PHASES[phase + 1]?.key === 'villain') return springArmedTraps(next, next.heroes[heroIndex])
         if (PHASES[phase].key !== 'hero') return next
         const out = endHeroPhase(next, next.heroes[heroIndex], action.roll)
         // Ending the Hero Phase on the exit's stairs gets the hero out (virtual board).

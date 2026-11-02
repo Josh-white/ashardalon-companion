@@ -98,6 +98,12 @@ describe('powers that move figures on the board', () => {
     expect(moveChoices(queueMoves(state, heroes[0], power, steps, { shadow: true }))).toEqual([heroes[0].id])
   })
 
+  it('puts the hero next to any monster within 1 tile (Willbreaker)', () => {
+    const { state, heroes, power } = game()
+    const next = queueMoves(state, heroes[0], power, [{ pick: 'self', to: 'nextToMonsterWithin1' }])
+    expect(moveTargets(next, heroes[0].id)).toContain('1,-1')
+  })
+
   it('puts a monster onto a tile next to its own (Distant Diversion)', () => {
     const { state, heroes, power } = game()
     const next = queueMoves(state, heroes[0], power, [{ pick: 'monsterWithin3', to: 'adjacentTile' }])

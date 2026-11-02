@@ -11,7 +11,7 @@ import { boardGrid } from '../board/play.js'
 import { HERO_TOKENS, movableToken, sphereOf, sphereVictims, tokenMoveTargets, tokenTargets } from '../board/heroTokens.js'
 import { heroesInReach } from '../board/encounters.js'
 import { foesInRange } from '../board/monsters.js'
-import { effectsOf, pendingDodge } from '../data/powerEffects.js'
+import { effectsOf, pendingDodge, wolfBlocked } from '../data/powerEffects.js'
 import { hasAbility } from '../data/heroes.js'
 import { powerNumber } from '../state/combat.js'
 import { foes } from '../state/gameHelpers.js'
@@ -36,7 +36,7 @@ export function foeFigures(state) {
     .filter((f) => f.foe)
 }
 export const standingHeroes = (state) => state.heroes.filter((h) => h.hp > 0 && !h.escaped && state.board?.tokens[h.id])
-export const usable = (hero, test) => hero.powers.find((p) => !p.used && p.card && test(effectsOf(p), p))
+export const usable = (hero, test) => hero.powers.find((p) => !p.used && p.card && !wolfBlocked(hero, p) && test(effectsOf(p), p))
 
 // ---- Tokens on the board ----
 

@@ -14,7 +14,7 @@ export default function HeroCoach({ heroKey, isNew, voice }) {
   const [firstNew, setFirstNew] = useState(isNew)
   if (firstNew === null && isNew !== null) setFirstNew(isNew)
   if (!coach) return null
-  const color = HERO_COLORS[templateFor(heroKey).color]
+  const color = HERO_COLORS[templateFor(heroKey)?.color] ?? HERO_COLORS.sky
   const shown = open ?? Boolean(firstNew)
   const canHear = Boolean(voice?.available)
   const hear = () => {
