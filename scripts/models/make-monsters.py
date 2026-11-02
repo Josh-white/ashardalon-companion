@@ -94,6 +94,9 @@ PALETTE = {
     "gauth": "7a5c86",       # gauth
     "gauth_dark": "4c3858",
     "gauth_light": "b597b8",
+    "otyugh": "7b7648",      # otyugh
+    "otyugh_dark": "4f4b2c",
+    "otyugh_light": "aaa36c",
 }
 
 argv = sys.argv
@@ -1120,6 +1123,60 @@ def build_gauth():
                    0.05 - 0.03 * t, segments=7, rings=5)
 
 
+def build_otyugh():
+    """An otyugh: a bloated sack of a body on three stubby legs, a huge mouth of teeth across
+    the front, an eyestalk with three eyes on top and two long tentacles raised up, each
+    ending in a spiked club."""
+    centre = Vector((0, 0.05, 0.88))
+    sphere("Body", "otyugh", "body", centre, 0.62, scale=(1.08, 1.0, 0.9), segments=18, rings=12)
+    # Warty bumps and dark blotches.
+    for i in range(16):
+        a, b = DEG(i * 67 % 360), DEG(30 + (i * 37) % 100)
+        d = Vector((math.sin(b) * math.sin(a), math.sin(b) * math.cos(a), math.cos(b)))
+        if d.y < -0.5 and d.z < 0.5:
+            continue  # leave the mouth clear
+        at = centre + Vector((d.x * 0.62 * 1.08, d.y * 0.62, d.z * 0.62 * 0.9)) * 0.97
+        colour = "otyugh_dark" if i % 3 == 0 else "otyugh_light"
+        sphere(f"Wart{i}", colour, "body", at, 0.05 + 0.03 * (i % 3), scale=(1, 1, 0.7), segments=8, rings=5)
+    # The mouth: wide and toothy, on the head bone so it can chomp.
+    mouther_mouth("Mouth", "head", centre + Vector((0, -0.56, -0.05)), (0, -1, 0.05), 0.40, teeth=11)
+    # Three stubby legs: two at the front corners, one at the back (on the tail bone).
+    for name, bone, x, y in (("Leg.L", "leg.L", 0.42, -0.22), ("Leg.R", "leg.R", -0.42, -0.22), ("Leg.B", "tail", 0, 0.45)):
+        cone(name, "otyugh_dark", bone, (x, y, 0.20), 0.17, 0.42, sides=10, tip=0.21)
+        box(f"{name}Foot", "otyugh_dark", bone, (x, y - 0.04, 0.05), (0.32, 0.36, 0.10), bevel=0.04)
+        for i, dx in enumerate((-0.08, 0, 0.08)):
+            cone(f"{name}Claw{i}", "bone", bone, (x + dx, y - 0.22, 0.05), 0.03, 0.09, rot=(90, 0, 0), sides=4)
+    # The eyestalk rises from the top and bends forward, three eyes at its end.
+    p0, p1, p2, p3 = (Vector((0, 0.15, 1.35)), Vector((0, 0.25, 1.75)), Vector((0, -0.05, 1.95)),
+                      Vector((0, -0.15, 1.85)))
+    for j in range(12):
+        t = j / 11
+        sphere(f"Eyestalk{j}", "otyugh_light" if j % 3 == 0 else "otyugh", "head", bezier(p0, p1, p2, p3, t),
+               0.09 - 0.03 * t, segments=8, rings=6)
+    for i, (dx, dz, r) in enumerate(((0, 0.05, 0.08), (0.10, -0.04, 0.065), (-0.10, -0.04, 0.065))):
+        d = Vector((dx * 2, -1, dz * 2))
+        mouther_eye(f"StalkEye{i}", "head", p3 + Vector((dx, -0.06, dz)), d, r, "eye")
+    # Two tentacles: up from the shoulders in a curve, then a leafy spiked club.
+    for side, tag in ((1, "L"), (-1, "R")):
+        bone = f"arm.{tag}"
+        q0 = Vector((0.58 * side, -0.05, 1.05))
+        q1 = Vector((0.95 * side, -0.05, 1.20))
+        q2 = Vector((0.80 * side, -0.15, 1.75))
+        q3 = Vector((0.62 * side, -0.30, 1.95))
+        n = 16
+        for j in range(n):
+            t = j / (n - 1)
+            sphere(f"Tentacle{tag}{j}", "otyugh_light" if j % 4 == 0 else "otyugh", bone, bezier(q0, q1, q2, q3, t),
+                   0.10 - 0.04 * t, segments=8, rings=6)
+        club = q3 + Vector((-0.04 * side, -0.10, 0.05))
+        sphere(f"Club{tag}", "otyugh_dark", bone, club, 0.15, scale=(0.8, 1.3, 0.7), segments=10, rings=7)
+        for k, (dx, dy, dz) in enumerate(((1, 0, 0), (-1, 0, 0), (0, 0, 1), (0, -1, 0), (0.7, -0.5, 0.5),
+                                          (-0.7, -0.5, 0.5))):
+            d = Vector((dx, dy, dz)).normalized()
+            cone(f"ClubSpike{tag}{k}", "bone", bone, club + Vector((d.x * 0.12, d.y * 0.18, d.z * 0.10)), 0.035, 0.12,
+                 rot=turned(facing(d), (90, 0, 0)), sides=5)
+
+
 # ---- 4. Join, size it, origin on the floor --------------------------------------------------
 
 def join_parts(name, mat, height):
@@ -1223,6 +1280,16 @@ GAUTH_BONES = [
     ("tent.FR", (-0.15, -0.15, 0.9), (-0.2, -0.2, 0.2), "body"),
     ("tent.BL", (0.15, 0.15, 0.9), (0.2, 0.2, 0.2), "body"),
     ("tent.BR", (-0.15, 0.15, 0.9), (-0.2, 0.2, 0.2), "body"),
+]
+OTYUGH_BONES = [
+    ("root", (0, 0, 0), (0, 0, 0.2), None),
+    ("body", (0, 0.05, 0.40), (0, 0.05, 1.30), "root"),
+    ("head", (0, -0.40, 0.80), (0, -0.40, 1.20), "body"),
+    ("arm.L", (0.58, -0.05, 1.05), (0.65, -0.25, 1.95), "body"),
+    ("arm.R", (-0.58, -0.05, 1.05), (-0.65, -0.25, 1.95), "body"),
+    ("leg.L", (0.42, -0.22, 0.45), (0.42, -0.22, 0.02), "root"),
+    ("leg.R", (-0.42, -0.22, 0.45), (-0.42, -0.22, 0.02), "root"),
+    ("tail", (0, 0.45, 0.45), (0, 0.45, 0.02), "root"),
 ]
 KOBOLD_BONES = [
     ("root", (0, 0, 0), (0, 0, 0.2), None),
@@ -1627,11 +1694,63 @@ GAUTH_MOVES = [m for m in GRELL_MOVES if m[0] != "Idle"] + [
     ]),
 ]
 
+# The otyugh waddles on three legs, sways its tentacles and slams them down to attack.
+OTYUGH_FALLEN = {"body": {"rot": (-70, 0, 10), "loc": (0, -0.1, -0.35)}, "arm.L": (-30, 0, 40),
+                 "arm.R": (-30, 0, -40), "head": (-20, 0, 0)}
+OTYUGH_MOVES = [
+    ("Idle", True, [
+        (0, {}),
+        (30, {"body": {"scale": (1.03, 0.97, 1.03)}, "arm.L": (10, 0, -8), "arm.R": (-6, 0, 8), "head": (8, 0, 5)}),
+        (60, {}),
+    ]),
+    ("Walking_A", True, [
+        (0, {"body": {"rot": (0, 8, 0), "loc": (0, 0.03, 0)}, "leg.L": (25, 0, 0), "leg.R": (-25, 0, 0),
+             "tail": (-15, 0, 0), "arm.L": (8, 0, 0), "arm.R": (-8, 0, 0)}),
+        (12, {"body": {"rot": (0, -8, 0), "loc": (0, 0.03, 0)}, "leg.L": (-25, 0, 0), "leg.R": (25, 0, 0),
+              "tail": (15, 0, 0), "arm.L": (-8, 0, 0), "arm.R": (8, 0, 0)}),
+        (24, {"body": {"rot": (0, 8, 0), "loc": (0, 0.03, 0)}, "leg.L": (25, 0, 0), "leg.R": (-25, 0, 0),
+              "tail": (-15, 0, 0), "arm.L": (8, 0, 0), "arm.R": (-8, 0, 0)}),
+    ]),
+    ("1H_Melee_Attack_Chop", False, [
+        (0, {}),
+        (10, {"arm.R": (-35, 0, 10), "arm.L": (-25, 0, -10), "body": {"rot": (-10, 0, 0)}, "head": (-15, 0, 0)}),
+        (16, {"arm.R": (80, 0, 10), "arm.L": (70, 0, -10), "body": {"rot": (12, 0, 0), "loc": (0, -0.05, 0.08)},
+              "head": (15, 0, 0)}),
+        (24, {"arm.R": (70, 0, 5), "arm.L": (60, 0, -5), "body": {"rot": (8, 0, 0)}}),
+        (36, {}),
+    ]),
+    ("Hit_A", False, [
+        (0, {}),
+        (5, {"body": {"rot": (-14, 0, 6), "scale": (1.08, 0.9, 1.06)}, "arm.L": (-25, 0, 15),
+             "arm.R": (-25, 0, -15), "head": (-25, 0, 0)}),
+        (20, {}),
+    ]),
+    ("Dodge_Right", False, [
+        (0, {}),
+        (7, {"root": {"loc": (-0.3, 0, 0), "rot": (0, 0, 10)}, "arm.L": (0, 0, 20)}),
+        (22, {}),
+    ]),
+    ("Cheer", False, [
+        (0, {}),
+        (10, {"arm.L": (-20, 0, 30), "arm.R": (-20, 0, -30), "body": {"loc": (0, 0.1, 0)}, "head": (-20, 0, 0)}),
+        (18, {"arm.L": (-10, 0, 20), "arm.R": (-10, 0, -20), "body": {"loc": (0, 0.0, 0)}}),
+        (26, {"arm.L": (-20, 0, 30), "arm.R": (-20, 0, -30), "body": {"loc": (0, 0.1, 0)}}),
+        (36, {}),
+    ]),
+    ("Death_A", False, [
+        (0, {}),
+        (10, {"body": {"rot": (10, 0, 0)}, "arm.L": (-20, 0, 10), "arm.R": (-20, 0, -10)}),
+        (30, OTYUGH_FALLEN),
+    ]),
+    ("Death_A_Pose", False, [(0, OTYUGH_FALLEN), (1, OTYUGH_FALLEN)]),
+]
+
 # name, file, build, height, bones, extra moves (, own moves)
 # The board draws villains 1.3 times bigger, so a villain's height here is its real height / 1.3.
 MONSTERS = [
     ("orc-smasher", "orc-smasher.glb", lambda: build_orc("mace"), 2.4, ORC_BONES, []),
     ("orc-archer", "orc-archer.glb", lambda: build_orc("bow"), 2.4, ORC_BONES, ["1H_Ranged_Shoot"]),
+    ("otyugh", "otyugh.glb", build_otyugh, 2.0, OTYUGH_BONES, [], OTYUGH_MOVES),
     ("gauth", "gauth.glb", build_gauth, 1.8, GAUTH_BONES, [], GAUTH_MOVES),
     ("orc-storm-shaman", "orc-storm-shaman.glb", lambda: build_orc("staff"), 2.2, ORC_BONES, ["Spellcast_Shoot"]),
     ("kobold-dragonshield", "kobold-dragonshield.glb", build_kobold, 1.9, KOBOLD_BONES, []),

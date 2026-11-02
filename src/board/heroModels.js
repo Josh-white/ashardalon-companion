@@ -24,6 +24,7 @@ export const MODEL_PROPS = {
   Duergar_Captain: [],
   Orc_Storm_Shaman: [],
   Gauth: [],
+  Otyugh: [],
   Gibbering_Mouther: [],
 }
 
@@ -65,6 +66,7 @@ export const MONSTER_FIGURES = [
   [/duergar captain/i, 'Duergar_Captain'],
   [/storm shaman/i, 'Orc_Storm_Shaman'],
   [/^gauth$/i, 'Gauth'],
+  [/otyugh/i, 'Otyugh'],
   [/cultist/i, 'Human_Cultist'],
   [/duergar guard/i, 'Duergar_Guard'],
   [/^snake$/i, 'Snake'],
@@ -75,7 +77,7 @@ export const MONSTER_FIGURES = [
 ]
 
 // The figures above that are villains (the #models page lists them as villains).
-export const VILLAIN_MODELS = new Set(['Kobold_Dragonlord', 'Duergar_Captain', 'Orc_Storm_Shaman', 'Gauth'])
+export const VILLAIN_MODELS = new Set(['Kobold_Dragonlord', 'Duergar_Captain', 'Orc_Storm_Shaman', 'Gauth', 'Otyugh'])
 
 // { model, gear, height } for a monster ({ name }), or null.
 export function monsterModel(monster) {
