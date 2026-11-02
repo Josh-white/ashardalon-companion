@@ -16,7 +16,8 @@ import { AreaName } from './AreaBackdrop.jsx'
 import { CardReadingToggle, MusicToggle, SoundToggle, StayAwakeToggle } from './SoundToggle.jsx'
 import { BoardSwitch } from './SoundBoard.jsx'
 import { HpBar, LevelBadge } from './ui.jsx'
-import Board, { boardBounds } from './Board.jsx'
+import { boardBounds } from './Board.jsx'
+import ProjectorBoard, { Board3DToggle, useBoard3D } from './ProjectorBoard.jsx'
 import { useLayoutEffect, useRef, useState } from 'react'
 import AllyPanel from '../ally/AllyPanel.jsx'
 
@@ -49,6 +50,7 @@ function ProjectorScreen({ state, dispatch, onSwitchSeat, sound }) {
   const color = HERO_COLORS[activeHero.color]
   const latest = state.log[0]
   const side = Boolean(state.board)
+  const [threeD, toggle3D] = useBoard3D()
 
   const turn = (
     <section className={`rounded-[2vw] border border-zinc-800 p-[2vw] ${color.bg}`}>
@@ -218,6 +220,7 @@ function ProjectorScreen({ state, dispatch, onSwitchSeat, sound }) {
         <CardReadingToggle state={state} dispatch={dispatch} className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />
         <StayAwakeToggle className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />
         <BoardSwitch state={state} dispatch={dispatch} className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />
+        {side && <Board3DToggle on={threeD} toggle={toggle3D} className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />}
         <DifficultySwitch state={state} dispatch={dispatch} place="above" className="text-[1vw] text-zinc-600 [&>button]:!px-[0.6vw] [&>button]:!py-0 hover:text-zinc-300" />
         <button type="button" className="text-[1vw] text-zinc-700 hover:text-zinc-400" onClick={onSwitchSeat}>
           switch view
@@ -233,7 +236,7 @@ function ProjectorScreen({ state, dispatch, onSwitchSeat, sound }) {
     return (
       <div className="flex h-screen flex-col gap-[1.5vh] p-[1.2vw] text-[1.6vw]">
         <div className="min-h-0 flex-[3]">
-          <Board state={state} readOnly fill />
+          <ProjectorBoard state={state} on={threeD} />
         </div>
         <div className="flex min-h-0 flex-[2] gap-[1.5vw]">
           <FitToBox className="min-w-0 flex-1">
@@ -267,7 +270,7 @@ function ProjectorScreen({ state, dispatch, onSwitchSeat, sound }) {
     return (
       <div className="flex h-screen gap-[1.5vw] p-[1.5vw] text-[1.6vw]">
         <div className="min-w-0 flex-[3]">
-          <Board state={state} readOnly fill />
+          <ProjectorBoard state={state} on={threeD} />
         </div>
         <FitToBox className="min-w-0 flex-[2]">
           <div className="flex flex-col gap-[2vh]">

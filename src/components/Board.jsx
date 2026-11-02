@@ -26,7 +26,7 @@ import MonsterPeek, { peekTarget } from './MonsterPeek.jsx'
 // Tap your hero to see where it can go, then tap a square to move there. "Move by hand"
 // lets you put any figure on any free square, for anything the app doesn't move itself.
 
-const TOKEN_COLORS = {
+export const TOKEN_COLORS = {
   sky: '#0ea5e9', red: '#ef4444', amber: '#f59e0b', emerald: '#10b981', violet: '#8b5cf6',
   teal: '#14b8a6', rose: '#f43f5e', orange: '#f97316', lime: '#84cc16', fuchsia: '#d946ef',
 }
