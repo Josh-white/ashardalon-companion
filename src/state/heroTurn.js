@@ -241,8 +241,9 @@ export function mindOverBody(state, action) {
   return withMoment(next, { kind: 'roll', heroId: hero.id, value: action.roll, title: ignored ? 'Mind Over Body!' : `Still ${action.condition}`, detail: `${hero.name} needed 11 or more.` })
 }
 // After every action: a condition that's gone can be rolled for again the next time the hero
-// gets it (Mind Over Body), and a wolf that took damage changes back (Wolf Form).
-export function pruneFanTokens(state) {
+// gets it (Mind Over Body), and a wolf that took damage changes back (Wolf Form). A monster's
+// hit that ended Wolf Form is marked (wasWolf), so the wolf's Lupine Lore can still dodge it.
+export function pruneFanTokens(state, before) {
   if (!state?.heroes?.some((h) => h.tokens?.mindTried?.length || h.tokens?.wolf)) return state
   let next = state
   for (const h of state.heroes) {
@@ -256,6 +257,11 @@ export function pruneFanTokens(state) {
       tokens: { ...hero.tokens, ...(changed ? { mindTried } : {}), ...(hurt ? { wolf: null } : healed ? { wolf: { hp: h.hp } } : {}) },
     }))
     if (hurt) next = withLog(next, `${h.name} took damage and changes back from Wolf Form.`)
+    const last = next.turn.lastMonsterAttack
+    if (hurt && last && last !== before?.turn?.lastMonsterAttack && last.results.some((r) => r.heroId === h.id && r.hit && !r.dodged)) {
+      const results = last.results.map((r) => (r.heroId === h.id && r.hit && !r.dodged ? { ...r, wasWolf: true } : r))
+      next = { ...next, turn: { ...next.turn, lastMonsterAttack: { ...last, results } } }
+    }
   }
   return next
 }

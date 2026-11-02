@@ -90,12 +90,12 @@ const NAMED = [
 // Made-up fan heroes (like the six on the test copy), so the computer plays their abilities
 // and powers in the robot's games too. Names and effects only; the text is made up.
 const FAN_HEROES = [
-  ['bard', 'Robot Bard', 'bardic-song', 6, 14, 3, 5, ['at-will', 'at-will', 'utility', 'utility', 'daily']],
+  ['bard', 'Robot Bard', 'bardic-song', 6, 14, 3, 5, ['at-will', 'at-will', 'utility', 'utility', 'utility', 'daily', 'daily']],
   ['monk', 'Robot Monk', 'mind-over-body', 8, 15, 4, 6, ['daily', 'utility', 'at-will', 'at-will', 'daily']],
   ['assassin', 'Robot Assassin', 'shadowphage', 8, 14, 4, 7, ['at-will', 'at-will', 'utility', 'utility', 'daily']],
   ['ranger', 'Robot Ranger', null, 8, 14, 4, 6, ['at-will', 'at-will', 'utility', 'utility', 'daily']],
   ['battlemaster', 'Robot Battlemaster', 'fearless', 10, 17, 5, 5, ['at-will', 'at-will', 'utility', 'utility', 'daily']],
-  ['druid', 'Robot Druid', 'natures-healing', 8, 14, 4, 6, ['at-will', 'at-will', 'utility', 'utility', 'daily']],
+  ['druid', 'Robot Druid', 'natures-healing', 8, 14, 4, 6, ['at-will', 'at-will', 'utility', 'utility', 'utility', 'utility', 'daily', 'daily']],
 ].map(([hero, name, effect, hp, ac, surge, speed, powerSlots]) => ({
   hero, name, className: 'Robot', homebrew: true, powerSlots,
   levels: [{ level: 1, hp, ac, surge, speed }, { level: 2, hp: hp + 2, ac: ac + 1, surge: surge + 1, addSlot: 'daily' }],
@@ -149,6 +149,18 @@ const FAN_POWERS = [
   ['battlemaster', 'daily', 'Battle Worthy', '+9', '2', { targets: 3 }, true],
   ['battlemaster', 'utility', 'Heavy Hitter', '', '', { use: { buff: { attack: 2, who: 'self', lasts: 'thisPhase' } }, uses: 2 }, true],
   ['battlemaster', 'utility', 'Dwarven Ale', '', '', { use: { healSelf: 3 } }, true],
+  ['bard', 'utility', 'Chorus of Recovery', '', '', { use: { cleanse: 'tile' } }, true],
+  ['bard', 'daily', 'Tune of Ice and Wind', '+7', '1', { targets: 'any', range: 'sameTile', board: { after: [{ each: 'heroOnTile', to: 'squares', n: 2 }] } }, true],
+  ['bard', 'at-will', 'War Song Strike', '+5', '1', { onHit: { heal: 1, even: true } }],
+  ['druid', 'daily', 'Lizard and Lace', '', '', { use: { summon: [
+    { name: 'Lace', hp: 2, ac: 11, strong: { name: 'Fang', bonus: 7, damage: 1 }, weak: { name: 'Claw', bonus: 6, damage: 0, status: 'stunned' } },
+    { name: 'Lizard', hp: 2, ac: 11, strong: { name: 'Bite', bonus: 5, damage: 2 }, weak: { name: 'Tail', bonus: 6, damage: 2, push: 1 } },
+  ] } }, true],
+  ['druid', 'daily', 'Wolf Fangs', '+9', '3', { targets: 'any', selfDamage: 2 }],
+  ['druid', 'daily', 'Hallowed Staff', '+8', '2', { attacks: 2, sameTarget: true, board: { after: [{ pick: 'attacked', to: 'adjacentTile' }] } }],
+  ['druid', 'utility', "Nature's Gifts", '', '', { use: { choose: [{ label: 'Heal', pick: 'any', heal: 2, count: 2, reach: 'sameTile' }, { label: 'End a condition', pick: 'any', endCondition: true }] } }, true],
+  ['druid', 'utility', 'Charm Beast', '', '', { use: { charm: { types: ['Animal'], names: ['Snake'] } } }, true],
+  ['druid', 'utility', 'Druid Circle', '', '', { use: { board: [{ each: 'heroOnTile', to: 'tileWithin', n: 3 }] } }],
   ['druid', 'at-will', 'Wolf Form', '+9', '1', { wolf: true }, true],
   ['druid', 'at-will', 'Piercing Thorn', '+7', '1', { critFrom: 18, range: 'within1' }, true],
   ['druid', 'at-will', 'Flaming Staff', '+8', '1', { board: { after: [{ pick: 'attacked', to: 'adjacentTile', hit: true }] } }],

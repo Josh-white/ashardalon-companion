@@ -23,7 +23,8 @@ import { statusesOf } from '../state/monsterStatus.js'
 import { PHASES } from '../data/phases.js'
 import { powerNumber } from '../state/combat.js'
 import { foes } from '../state/gameHelpers.js'
-import { attackGone } from '../state/heroTurn.js'
+import { attackGone, canBecomeWolf, naturesHealingOk } from '../state/heroTurn.js'
+import { petsDue, petsOf } from '../state/pets.js'
 import { XP_TO_LEVEL_UP } from '../data/heroes.js'
 import { attackItems, heroItems, itemTrapBonus } from '../data/items.js'
 import { boardMarkers, trapsToDisable } from '../board/markers.js'
@@ -34,7 +35,7 @@ import { trapDisable } from '../state/encounterRules.js'
 import { cancelEncounter } from './cancelEncounter.js'
 import { castDaily, fearMove, figureHp, guardPower, placeHandToken, sphereStep } from './powers.js'
 import { divertMove, divertPower, wizardEyeStep } from './boardPowers.js'
-import { boostPower, buffPower, fanMove, fearlessStep, fleetfooted, improvise, perchPower, rescueStride, seekersPower, shadowStep, shadowmerge, trappingAttack } from './fanPowers.js'
+import { boostPower, buffPower, chorusStep, circleStep, fanMove, fearlessStep, fleetfooted, giftsStep, improvise, perchPower, rescueStride, seekersPower, shadowStep, shadowmerge, summonStep, trappingAttack } from './fanPowers.js'
 
 // A d20 the way the screens roll one; tests pass their own.
 const d20 = () => Math.floor(Math.random() * 20) + 1
@@ -225,6 +226,8 @@ export function attackOptions(state, hero, { atWill = false, all: every = false 
     const statusWorth = (m) => (!status || kills(m) || statusesOf(m).some((x) => x.kind === status) ? 0 : m.villain || threatensHurt(state, m) ? 2 : 0.5)
     const score = hit.reduce((sum, m) => sum + chance(m) * (damage + (kills(m) ? 4 : 0) + (m.villain ? 2 : 0) + statusWorth(m)), 0)
     const names = [...new Set(hit.map((m) => m.name))].join(' and the ')
+    // Wolf Fangs costs the hero HP: only for a finishing blow or the villain, with HP to spare.
+    if (effects.selfDamage && (hero.hp <= effects.selfDamage + 1 || !(hit.some(kills) || hit.some((m) => m.villain)))) continue
     options.push({
       power,
       targets: picked,
@@ -265,7 +268,14 @@ function attackAction(state, hero, option, roll) {
     ...askAnswers(state, hero, option.power),
     // Follow My Lead: the friend closest to a monster follows up.
     ...(effectsOf(option.power).follower ? { followerId: followerFor(state, hero) } : {}),
+    // The wolf Pounces (-2, Slows on a hit) on a monster about to go after a hurt friend.
+    ...(effectsOf(option.power).wolf ? { pounce: pounceOn(state, option) } : {}),
   }
+}
+
+function pounceOn(state, option) {
+  const target = foes(state).find((m) => m.id === option.targets[0])
+  return Boolean(target) && option.finishes.length === 0 && option.chance > 0.5 && threatensHurt(state, target) && !statusesOf(target).some((x) => x.kind === 'slowed')
 }
 
 // The other standing hero nearest a monster (Follow My Lead's follower).
@@ -829,6 +839,31 @@ function levelUpPick(hero, powerCards = []) {
   return card ? { slot, card } : null
 }
 
+// Nature's Healing (a fan Druid), at the very start of the Hero Phase: the whole phase for 2 HP
+// when there's no monster about and the hero is already on an unexplored edge (it still
+// explores) and down 2 or more; the attack for 1 HP when the hero is hurt and no monster is in
+// reach, even after a move.
+function naturesHealingStep(state, hero) {
+  if (!naturesHealingOk(state, hero) || hero.hp >= hero.maxHp || !state.board.tokens[hero.id]) return null
+  const quiet = foesOnBoard(state).length === 0
+  if (quiet && heroEdges(state).length > 0 && hero.maxHp - hero.hp >= 2) {
+    return { action: { type: 'NATURES_HEALING', heroId: hero.id, give: 'phase' }, say: `${hero.name} rests for Nature's Healing (+2 HP).` }
+  }
+  if (attackOptions(state, hero).length > 0) return null
+  const reach = quiet ? [] : heroReach(state, hero)
+  if (reach.some((k) => attackOptions(withHeroAt(state, hero, parse(k)), hero).length > 0)) return null
+  if (quiet && heroEdges(state).length === 0) return null
+  return { action: { type: 'NATURES_HEALING', heroId: hero.id, give: 'attack' }, say: `${hero.name} gives up the attack for Nature's Healing (+1 HP).` }
+}
+
+// Wolf Form (a fan Druid): at the start of the Hero Phase, when the hero is above half HP and
+// a monster is next to them.
+function wolfStep(state, hero) {
+  if (!canBecomeWolf(state, hero) || state.turn.boardMoves > 0 || state.turn.lastAttack) return null
+  if (hero.hp <= Math.ceil(hero.maxHp / 2) || adjacentFoes(state, hero) === 0) return null
+  return { action: { type: 'WOLF_FORM', heroId: hero.id, on: true }, say: `${hero.name} becomes the Ancient Wolf!` }
+}
+
 // The ally's next tap, or null to tap through the turn screen.
 export function allyStep(state, { powers = [], roll = d20 } = {}) {
   const hero = activeAlly(state)
@@ -859,7 +894,10 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
     if (hero.level === 1 && state.turn.natural20 === hero.id && state.xp >= XP_TO_LEVEL_UP) {
       return { action: { type: 'LEVEL_UP', heroId: hero.id }, say: `Natural 20! ${hero.name} levels up.` }
     }
-    const care = improvise(state, hero) ?? supportItem(state, hero) ?? supportPower(state, hero) ?? buffPower(state, hero) ?? rescueStride(state, hero) ?? seekersPower(state, hero)
+    // Nature's Healing and Wolf Form come before anything else in the Hero Phase.
+    const start = naturesHealingStep(state, hero) ?? wolfStep(state, hero)
+    if (start) return start
+    const care = improvise(state, hero) ?? supportItem(state, hero) ?? supportPower(state, hero) ?? buffPower(state, hero) ?? chorusStep(state, hero) ?? giftsStep(state, hero) ?? rescueStride(state, hero) ?? circleStep(state, hero) ?? seekersPower(state, hero)
     if (care) return care
     // A Treasure token on or next to the hero: pick it up (nothing else waiting to be handed out).
     const loot = treasureInReach(state, hero)
@@ -889,6 +927,9 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
     const daily = attackGone(state, hero) ? null : castDaily(state, hero, options, (h) => attackOptions(state, h, { atWill: true }).length > 0)
     if (daily) return daily
     const option = options[0]
+    // Lizard & Lace, once there's a monster about.
+    const pets = attackGone(state, hero) ? null : summonStep(state, hero, option)
+    if (pets) return pets
     // Hypnotism, when walking one monster over to hit another beats the best attack.
     const hypnosis = attackGone(state, hero) ? null : hypnotismPlan(state, hero)
     if (hypnosis && (!option || hypnosis.score > option.score)) return startMove(hero, hypnosis.power)
@@ -913,6 +954,10 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
     // The end of the Hero Phase: the Flaming Sphere burns, a hurt hero hides, and Command or
     // Distant Diversion sends a monster away from a hurt friend.
     return sphereStep(state, hero) ?? guardPower(state, hero) ?? perchPower(state, hero) ?? divertPower(state, hero) ?? shadowStep(state, hero, null) ?? fearlessStep(state, hero)
+  }
+  // Lizard & Lace: the hero's allies take their turn first in the Villain Phase.
+  if (phase === 'villain' && petsDue(state, hero)) {
+    return { action: { type: 'PETS_ACT', heroId: hero.id, rolls: petsOf(state, hero.id).map(() => roll()) }, say: `${hero.name}'s allies take their turn.` }
   }
   if (phase === 'exploration' && state.turn.explored !== true && state.turn.explored !== false && heroEdges(state).length === 0) {
     return { action: { type: 'SET_EXPLORED', explored: false, rolls: [roll(), roll()] }, say: `${hero.name} isn't on an unexplored edge.` }

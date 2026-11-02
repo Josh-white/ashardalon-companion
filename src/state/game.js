@@ -90,7 +90,7 @@ const reduceGame = (state, action) => {
   const sprung = springHeroTokens(placed)
   const fan = springFanTokens(state, sprung)
   const settled = fan === placed ? placed : pruneTokens(checkVictory(fan), attacker)
-  return pruneFanTokens(withHealFx(state, withAttackFx(state, trackStats(state, settled, action), action)))
+  return pruneFanTokens(withHealFx(state, withAttackFx(state, trackStats(state, settled, action), action)), state)
 }
 
 // The tokens heroes put on the virtual board (board/heroTokens.js): the board keeps up with

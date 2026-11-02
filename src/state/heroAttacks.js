@@ -3,7 +3,7 @@
 import { XP_TO_LEVEL_UP, hasAbility, levelCrits } from '../data/heroes.js'
 import { attackItems, heroItems, itemAttackParts } from '../data/items.js'
 import { hasSecondChance } from '../data/difficulty.js'
-import { effectsOf, maxRolls, onHitHeals, shadowAfter, shadowKept, wolfBlocked } from '../data/powerEffects.js'
+import { effectsOf, maxRolls, onHitHeals, shadowAfter, shadowKept, wolfBlocked, wolfDodge } from '../data/powerEffects.js'
 import { addStatus, attackedStatus } from './monsterStatus.js'
 import { summonPets } from './pets.js'
 import { applyFanUse, fanUseBlocked, resolveUse, sendSeeker, targetAllowed } from './fanPowers.js'
@@ -464,12 +464,14 @@ export function dodgeHit(state, action) {
   const hero = state.heroes.find((h) => h.id === action.heroId)
   const power = hero?.powers.find((p) => p.id === action.powerId)
   const row = last?.results.find((r) => r.heroId === hero?.id && r.hit && !r.dodged)
-  if (!row || !power || power.used || effectsOf(power).reaction !== 'dodge' || wolfBlocked(hero, power)) return state
+  if (!row || !power || power.used || effectsOf(power).reaction !== 'dodge' || (wolfBlocked(hero, power) && !wolfDodge(hero, power, row))) return state
   let next = withCast(spendUse(state, hero, power), power)
-  next = updateHero(next, hero.id, (h) => ({
-    hp: clamp(h.hp + row.dealt - row.miss, 0, h.maxHp),
-    conditions: h.conditions.filter((c) => !row.conditions.includes(c)),
-  }))
+  next = updateHero(next, hero.id, (h) => {
+    const hp = clamp(h.hp + row.dealt - row.miss, 0, h.maxHp)
+    // Lupine Lore: the hit never happened, so the hero is still the wolf.
+    const tokens = wolfDodge(hero, power, row) ? { tokens: { ...h.tokens, wolf: { hp } } } : {}
+    return { hp, conditions: h.conditions.filter((c) => !row.conditions.includes(c)), ...tokens }
+  })
   const results = last.results.map((r) => (r === row ? { ...r, dodged: true } : r))
   next = { ...next, turn: { ...next.turn, lastMonsterAttack: { ...last, results } } }
   next = queueMoves(next, hero, power, effectsOf(power).board?.dodge)
@@ -478,5 +480,5 @@ export function dodgeHit(state, action) {
     next = { ...next, turn: { ...next.turn, bonusAttacks: [...(next.turn.bonusAttacks ?? []), { heroId: hero.id, bonus: 0, source: power.name }] } }
     next = withLog(next, `${hero.name} strikes back from the shadows: an at-will attack.`)
   }
-  return withLog(next, `${hero.name} used Tumbling Escape: the attack misses!${row.miss > 0 ? ` (${row.miss} miss damage)` : ''} Put ${hero.name} on a tile within 1 tile.`)
+  return withLog(next, `${hero.name} used ${power.name}: the attack misses!${row.miss > 0 ? ` (${row.miss} miss damage)` : ''}${effectsOf(power).wolfOnly ? ` ${hero.name} is still the wolf.` : ` Put ${hero.name} on a tile within 1 tile.`}`)
 }

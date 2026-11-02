@@ -193,6 +193,9 @@ export function wolfBlocked(hero, power) {
   return hero?.tokens?.wolf ? !wolfy : wolfy
 }
 
+// Lupine Lore: the hit it dodges is the one that ended Wolf Form (the row is marked wasWolf).
+export const wolfDodge = (hero, power, row) => Boolean(effectsOf(power).wolfOnly && row?.wasWolf && !hero?.tokens?.wolf)
+
 // Sacred Flame, War Song Strike: an attack that hit lets the hero heal someone on their tile.
 export const onHitHeals = (effects, rolls = []) =>
   Boolean(effects.onHit?.heal) && rolls.some((r) => r.hit && (!effects.onHit.even || r.value % 2 === 0))
@@ -226,9 +229,10 @@ export function heroAc(hero) {
 // Practiced Evasion (an encounter card's or trap's attack). Returns the action, or null.
 export function pendingDodge(state, hero, power) {
   const reaction = effectsOf(power).reaction
-  if (power.used || (reaction !== 'dodge' && reaction !== 'evade') || wolfBlocked(hero, power)) return null
+  if (power.used || (reaction !== 'dodge' && reaction !== 'evade')) return null
   const last = reaction === 'dodge' ? state.turn.lastMonsterAttack : state.turn.lastEventAttack
   const flag = reaction === 'dodge' ? 'dodged' : 'evaded'
-  if (!last?.results.some((r) => r.heroId === hero.id && r.hit && !r[flag])) return null
+  const row = last?.results.find((r) => r.heroId === hero.id && r.hit && !r[flag])
+  if (!row || (wolfBlocked(hero, power) && !wolfDodge(hero, power, row))) return null
   return { type: reaction === 'dodge' ? 'DODGE_HIT' : 'EVADE_HIT', heroId: hero.id, powerId: power.id }
 }

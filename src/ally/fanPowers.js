@@ -15,7 +15,9 @@ import { powerNumber } from '../state/combat.js'
 import { foes } from '../state/gameHelpers.js'
 import { bardicSongsLeft } from '../state/heroAttacks.js'
 import { attackGone, canSpendAttack, mindOverBodyChoices } from '../state/heroTurn.js'
-import { fanUseBlocked, foesInReach, newestMonster, tilesWithin1, trapsOnTile } from '../state/fanPowers.js'
+import { fanUseBlocked, foesInReach, isCharmable, newestMonster, tilesWithin1, trapsOnTile } from '../state/fanPowers.js'
+import { heroesInReach } from '../board/encounters.js'
+import { petsOf } from '../state/pets.js'
 import { encounterHarm } from './cancelEncounter.js'
 import { figureHp, foeFigures, standingHeroes, usable } from './powers.js'
 
@@ -101,7 +103,7 @@ export function fanReaction(state, roll = d20) {
     if (condition) return { action: { type: 'MIND_OVER_BODY', heroId: hero.id, condition, roll: roll() }, say: `${hero.name} tries to shrug off being ${condition} (Mind Over Body).` }
   }
 
-  const tracked = trackersInstinct(state)
+  const tracked = trackersInstinct(state) ?? charmBeast(state, roll)
   if (tracked) return tracked
   const come = comeAndGetIt(state)
   if (come) return come
@@ -161,6 +163,97 @@ function comeAndGetIt(state) {
     return { action: { type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: [] }, say: `${hero.name}: "Come and get it!" (${power.name})` }
   }
   return null
+}
+
+// Charm Beast (a fan Druid's): on a monster just drawn. A beast turns on the nearest other
+// monster; anything else is discarded, which is just as good.
+function charmBeast(state, roll) {
+  const monster = newestMonster(state)
+  if (!monster || !state.board) return null
+  const grid = boardGrid(state.board)
+  const figures = foeFigures(state)
+  const spot = figures.find((f) => f.foe.id === monster.id)?.at
+  if (!spot) return null
+  for (const hero of state.heroes.filter((h) => h.ally && !h.escaped && h.hp > 0)) {
+    const power = usable(hero, (e) => Boolean(e.use?.charm))
+    if (!power || fanUseBlocked(state, hero, effectsOf(power).use)) continue
+    const beast = isCharmable(monster, effectsOf(power).use.charm)
+    const target = figures.filter((f) => f.foe.id !== monster.id).sort((a, b) => tilesBetween(grid, spot, a.at) - tilesBetween(grid, spot, b.at))[0]?.foe
+    if (beast && !target) continue
+    return {
+      action: { type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: [], monsterIds: [monster.id], ...(beast ? { targetId: target.id, roll: roll() } : {}) },
+      say: beast ? `${hero.name} charms the ${monster.name}: it turns on the ${target.name}!` : `${hero.name} uses ${power.name}: the ${monster.name} slinks away.`,
+    }
+  }
+  return null
+}
+
+// ---- Aldred (a fan Druid) and Berryloaf's other songs in the Hero Phase ----
+
+// Lizard & Lace: the allies come out as soon as there's a monster about, unless the attack
+// would finish one or hit the villain.
+export function summonStep(state, hero, option) {
+  if (!state.board?.tokens[hero.id] || foeFigures(state).length === 0 || petsOf(state, hero.id).length > 0) return null
+  if (option && (option.finishes.length > 0 || option.villain)) return null
+  const power = usable(hero, (e) => Array.isArray(e.use?.summon))
+  if (!power) return null
+  return { action: { type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: [] }, say: `${hero.name} calls ${power.name}!` }
+}
+
+const BAD = ['Dazed', 'Poisoned']
+const onTile = (state, hero) => (heroesInReach(state, hero.id, 'sameTile') ?? [hero.id]).map((id) => state.heroes.find((h) => h.id === id)).filter((h) => h && h.hp > 0)
+
+// Chorus of Recovery: ends a condition on everyone on the hero's tile. Used when that's 2 or
+// more conditions, or a Dazed or Poisoned one.
+export function chorusStep(state, hero) {
+  const power = usable(hero, (e) => e.use?.cleanse === 'tile')
+  if (!power) return null
+  const sick = onTile(state, hero).filter((h) => h.conditions?.length > 0)
+  if (sick.length < 2 && !sick.some((h) => h.conditions.some((c) => BAD.includes(c)))) return null
+  return { action: { type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: [] }, say: `${hero.name} sings ${power.name}: conditions fade away.` }
+}
+
+// Nature's Gifts (pick one): heal heroes on the tile when 2 of them are hurt; else end a Dazed
+// or Poisoned; else keep it.
+export function giftsStep(state, hero) {
+  const power = usable(hero, (e) => Array.isArray(e.use?.choose))
+  if (!power) return null
+  const options = effectsOf(power).use.choose
+  const heal = options.findIndex((o) => o.heal && o.count)
+  if (heal >= 0) {
+    const o = options[heal]
+    const near = heroesInReach(state, hero.id, o.reach ?? 'sameTile') ?? [hero.id]
+    const hurtOnes = state.heroes.filter((h) => near.includes(h.id) && h.hp > 0 && h.maxHp - h.hp >= o.heal).sort((a, b) => a.hp - b.hp).slice(0, o.count)
+    if (hurtOnes.length >= Math.min(2, o.count)) {
+      return { action: { type: 'USE_POWER', heroId: hero.id, powerId: power.id, option: heal, heroIds: hurtOnes.map((h) => h.id) }, say: `${hero.name} uses ${power.name} to heal ${hurtOnes.map((h) => h.name).join(' and ')}.` }
+    }
+  }
+  const cure = options.findIndex((o) => o.endCondition)
+  if (cure >= 0) {
+    const near = options[cure].reach ? heroesInReach(state, hero.id, options[cure].reach) ?? [hero.id] : state.heroes.map((h) => h.id)
+    const who = state.heroes.find((h) => near.includes(h.id) && h.hp > 0 && h.conditions?.some((c) => BAD.includes(c)))
+    if (who) {
+      const condition = who.conditions.find((c) => BAD.includes(c))
+      return { action: { type: 'USE_POWER', heroId: hero.id, powerId: power.id, option: cure, heroIds: [who.id], condition }, say: `${hero.name} uses ${power.name}: ${who.name} is no longer ${condition}.` }
+    }
+  }
+  return null
+}
+
+// Druid Circle: when a hurt friend on another tile (within its reach) has a monster next to
+// them, the hero and everyone on the hero's tile go to them.
+const circleUse = (e) => e.use?.board?.length === 1 && e.use.board[0].each === 'heroOnTile' && e.use.board[0].to === 'tileWithin'
+function strandedFriend(state, hero, n) {
+  const grid = boardGrid(state.board)
+  const tokens = state.board.tokens
+  const mates = new Set(heroesInReach(state, hero.id, 'sameTile') ?? [hero.id])
+  return standingHeroes(state).find((h) => !mates.has(h.id) && hurt(h) && nextToFoe(state, tokens[h.id]) && tilesBetween(grid, tokens[hero.id], tokens[h.id]) <= n) ?? null
+}
+export function circleStep(state, hero) {
+  if (!state.board?.tokens[hero.id] || hurt(hero) || state.turn.boardMove) return null
+  const power = usable(hero, circleUse)
+  if (!power || !strandedFriend(state, hero, effectsOf(power).use.board[0].n ?? 1)) return null
+  return { action: { type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: [] }, say: `${hero.name} uses ${power.name} to bring everyone to a friend in trouble.` }
 }
 
 // ---- Hjalmir (a fan Battlemaster) and Savryna (a fan Ranger) in the Hero Phase ----
@@ -305,7 +398,21 @@ export function fanMove(state, hero) {
   if (targets.length === 0) return null
   const tokens = state.board.tokens
   const person = state.heroes.find((h) => h.id === id)
-  if (person && person.id !== hero.id && move.source && effectsOf(hero.powers.find((p) => p.name === move.source)).follower) {
+  const source = hero.powers.find((p) => p.name === move.source)
+  if (person && source && circleUse(effectsOf(source))) {
+    // Druid Circle: everyone goes as close to the friend in trouble as they can.
+    const grid = boardGrid(state.board)
+    const moving = new Set(move.tokens ?? [])
+    const friend = standingHeroes(state)
+      .filter((h) => !moving.has(h.id) && hurt(h) && nextToFoe(state, tokens[h.id]))
+      .sort((a, b) => tilesBetween(grid, tokens[id], tokens[a.id]) - tilesBetween(grid, tokens[id], tokens[b.id]))[0]
+    if (!friend) return null
+    const there = tokens[friend.id]
+    const near = (sq) => tilesBetween(grid, sq, there) * 100 + Math.abs(sq[0] - there[0]) + Math.abs(sq[1] - there[1])
+    const best = [...targets].sort((a, b) => near(a) - near(b))[0]
+    return { action: { type: 'BOARD_MOVE', id, to: best }, say: `${person.name} joins ${friend.name}.` }
+  }
+  if (person && person.id !== hero.id && move.source && effectsOf(source).follower) {
     // Follow My Lead: the friend goes next to a monster (the closest such square) to attack it.
     const grid = boardGrid(state.board)
     const spots = foeFigures(state).map((f) => f.at)
