@@ -58,6 +58,8 @@ export function describeAction(state, action) {
       return hero ? `${hero.name}'s Practiced Evasion` : 'Practiced Evasion'
     case 'COWARDLY_ROLL':
       return 'Cowardly roll'
+    case 'MESMERIZED_TURN':
+      return 'Mesmerized monster'
     case 'PETS_ACT':
       return 'Allies act'
     case 'PET_HURT':

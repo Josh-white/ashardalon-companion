@@ -232,3 +232,23 @@ describe('Lizard & Lace', () => {
     expect(petsOf(state, state.heroes[0].id).map((p) => p.name)).toEqual(['Lizard'])
   })
 })
+
+describe('Beast Ally', () => {
+  it('Pacified or Trapped beasts become Mesmerized and attack the nearest monster for 2 turns', () => {
+    let state = game()
+    const orc = rat('m2', { name: 'Orc', card: { ...rat('m2').card, types: ['Orc'] } })
+    state = { ...state, monsters: [rat('m1'), orc], board: { ...state.board, tokens: { ...state.board.tokens, m2: [2, -2] } } }
+    const ally = { use: { mesmerize: { types: ['Animal'], names: ['Snake'], turns: 2 } } }
+    let { state: s, id } = give(state, 0, ally, 'daily')
+    // Nothing to Mesmerize until a beast is Pacified or Trapped.
+    expect(use(s, 0, id)).toBe(s)
+    s = { ...s, monsters: s.monsters.map((m) => ({ ...m, statuses: [{ kind: 'trapped', tokens: 2 }] })) }
+    state = use(s, 0, id)
+    expect(statusesOf(state.monsters[0]).map((x) => x.kind)).toEqual(['mesmerized'])
+    expect(statusesOf(state.monsters[1]).map((x) => x.kind)).toEqual(['trapped'])
+    state = gameReducer(state, { type: 'MESMERIZED_TURN', id: 'm1', roll: 15 })
+    expect(state.monsters[1].hp).toBe(1)
+    expect(state.turn.acted).toContain('m1')
+    expect(statusesOf(state.monsters[0])[0].tokens).toBe(1)
+  })
+})

@@ -3,6 +3,7 @@
 // in the Villain Phase (MARK_ACTED), and being attacked can take them off too.
 //   skip     the monster doesn't activate (Pacified, Stunned)
 //   roll     a d20 at the start of its turn: under 11 it doesn't activate (Cowardly)
+//   turnsOnFoes  it attacks the nearest other monster instead (Mesmerized)
 //   stays    it can't leave its tile (Trapped) or can't move at all (Immobilized)
 import { findFoe, updateMonster, validRoll, withLog } from './gameHelpers.js'
 
@@ -13,10 +14,14 @@ export const STATUSES = {
   trapped: { label: 'Trapped', icon: '🕸️', tokens: 2, onAttacked: 'one', text: "It can't move off its tile. It can still attack next to it or at range." },
   immobilized: { label: 'Immobilized', icon: '⛓️', tokens: 1, text: "It can't move this turn. It can still attack." },
   slowed: { label: 'Slowed', icon: '🐌', tokens: 1, text: 'It moves at most 1 tile this turn.' },
+  // Beast Ally (a fan Ranger), JJ's call: instead of its turn it attacks the nearest other monster,
+  // for 2 turns; a hero attacking it breaks the spell.
+  mesmerized: { label: 'Mesmerized', icon: '🌀', tokens: 2, turnsOnFoes: true, onAttacked: 'all', text: 'Instead of its turn, it attacks the nearest other monster.' },
 }
 
 export const statusesOf = (monster) => (monster?.statuses ?? []).filter((s) => STATUSES[s.kind] && s.tokens > 0)
 export const skipsTurn = (monster) => statusesOf(monster).find((s) => STATUSES[s.kind].skip) ?? null
+export const mesmerizedDue = (monster) => statusesOf(monster).find((s) => STATUSES[s.kind].turnsOnFoes) ?? null
 export const cowardlyDue = (monster) => statusesOf(monster).find((s) => STATUSES[s.kind].roll && !s.rolled) ?? null
 
 export function addStatus(state, monsterId, kind, source) {

@@ -11,6 +11,7 @@
 //   removeTrap  take one trap marker on the hero's tile away (action.trapIds[0]) (Fleetfooted)
 //   perch       Treetop: on a wall next to the tile; monsters' adjacent attacks can't reach the
 //               hero until the next Hero Phase, which then has Advantage (roll twice, keep the best)
+//   mesmerize   Beast Ally: { types, names, from: [statuses], turns } Pacified/Trapped beasts become Mesmerized
 //   charm       Charm Beast: { types: [monster types] } for the monster just drawn (action.monsterIds[0])
 
 import { baseId, key } from '../board/grid.js'
@@ -18,10 +19,10 @@ import { adjacent, tilesBetween } from '../board/paths.js'
 import { boardGrid, movesLeft } from '../board/play.js'
 import { HERO_TOKENS, tokenTargets } from '../board/heroTokens.js'
 import { queueMoves } from '../board/powerMoves.js'
-import { addStatus } from './monsterStatus.js'
+import { addStatus, mesmerizedDue, statusesOf } from './monsterStatus.js'
 import { inHeroPhase } from './heroTurn.js'
 import { defeatDetails, hurtMonster } from './combat.js'
-import { clamp, findFoe, updateHero, withLog, withMoment } from './gameHelpers.js'
+import { clamp, findFoe, updateHero, updateMonster, withLog, withMoment } from './gameHelpers.js'
 import { discardMonsterCard } from './monsterDeck.js'
 
 // The `use` a power works with once the player picked an option (null: no option picked yet).
@@ -42,6 +43,7 @@ export function fanUseBlocked(state, hero, use) {
   if (use.moveTraps && trapsOnTile(state, hero).length === 0) return `There's no trap on ${hero.name}'s tile.`
   if (use.removeTrap && trapsOnTile(state, hero).length === 0) return `There's no trap on ${hero.name}'s tile.`
   if (use.charm && !newestMonster(state)) return 'Use it when a new monster card is drawn.'
+  if (use.mesmerize && mesmerizeTargets(state, use.mesmerize).length === 0) return 'No Pacified or Trapped beast to Mesmerize yet.'
   return null
 }
 
@@ -128,6 +130,7 @@ export function applyFanUse(state, before, hero, power, use, action) {
     next = withLog(next, `${hero.name} climbs up a wall: monsters next to ${hero.name} can't attack until the next Hero Phase.`)
   }
   if (use.charm) next = charmBeast(next, hero, power, use.charm, action)
+  if (use.mesmerize) next = mesmerize(next, power, use.mesmerize)
   return next
 }
 
@@ -179,17 +182,43 @@ function charmBeast(state, hero, power, charm, action) {
   }
   // It has had its turn this Villain Phase.
   const acted = state.turn.acted ?? []
-  let next = { ...state, turn: { ...state.turn, acted: acted.includes(monster.id) ? acted : [...acted, monster.id] } }
-  const target = findFoe(state, action.targetId)
+  const next = { ...state, turn: { ...state.turn, acted: acted.includes(monster.id) ? acted : [...acted, monster.id] } }
+  return foeAttacksFoe(next, hero, monster, findFoe(state, action.targetId), action.roll, `${power.name}: the charmed ${monster.name}`)
+}
+
+// A monster turned against the others (Charm Beast, Mesmerized) attacks one with its first attack.
+export function foeAttacksFoe(state, hero, monster, target, roll, who) {
   const attack = monster.card?.attacks?.[0]
-  const roll = Number(action.roll)
-  if (!target || !attack || !(roll >= 1 && roll <= 20)) return withLog(next, `${power.name}: the ${monster.name} is charmed and skips this Villain Phase. No other monster to attack.`)
+  if (!target || !attack || !(roll >= 1 && roll <= 20)) return withLog(state, `${who} has no other monster to attack.`)
   const total = roll + (attack.bonus ?? 0)
   const hit = total >= target.ac
-  next = withLog(next, `${power.name}: the charmed ${monster.name} attacks the ${target.name} with ${attack.name}: ${roll} + ${attack.bonus ?? 0} = ${total} vs AC ${target.ac}, ${hit ? 'a hit' : 'a miss'}.`)
-  if (hit) next = hurtFoe(next, hero, target.id, attack.damage ?? 1, `The charmed ${monster.name}`)
-  else if (attack.miss) next = hurtFoe(next, hero, target.id, attack.miss, `The charmed ${monster.name}`)
+  let next = withLog(state, `${who} attacks the ${target.name} with ${attack.name}: ${roll} + ${attack.bonus ?? 0} = ${total} vs AC ${target.ac}, ${hit ? 'a hit' : 'a miss'}.`)
+  if (hit) next = hurtFoe(next, hero, target.id, attack.damage ?? 1, `The ${monster.name}'s ${attack.name}`)
+  else if (attack.miss) next = hurtFoe(next, hero, target.id, attack.miss, `The ${monster.name}'s ${attack.name}`)
   return next
+}
+
+// Beast Ally (a fan Ranger): every Pacified or Trapped forest creature becomes Mesmerized.
+export function mesmerizeTargets(state, rule) {
+  const from = Array.isArray(rule?.from) ? rule.from : ['pacified', 'trapped']
+  return state.monsters.filter((m) => isCharmable(m, rule) && statusesOf(m).some((s) => from.includes(s.kind)))
+}
+function mesmerize(state, power, rule) {
+  const from = Array.isArray(rule?.from) ? rule.from : ['pacified', 'trapped']
+  let next = state
+  for (const monster of mesmerizeTargets(state, rule)) {
+    const statuses = [...statusesOf(monster).filter((s) => !from.includes(s.kind) && s.kind !== 'mesmerized'), { kind: 'mesmerized', tokens: Number(rule.turns) || 2, source: power.name }]
+    next = withLog(updateMonster(next, monster.id, () => ({ statuses })), `The ${monster.name} is Mesmerized (${power.name}): on its next ${Number(rule.turns) || 2} turns it attacks the nearest other monster.`)
+  }
+  return next
+}
+
+// A Mesmerized monster's turn: it attacks the nearest other monster (the device's roll).
+export function mesmerizedTurn(state, action) {
+  const monster = findFoe(state, action.id)
+  if (!monster || !mesmerizedDue(monster)) return state
+  const hero = state.heroes[state.turn.heroIndex]
+  return foeAttacksFoe(state, hero, monster, nearestOtherFoe(state, monster.id), Number(action.roll), `The Mesmerized ${monster.name}`)
 }
 
 // The monster nearest the charmed one, for Charm Beast's attack (any other one at a table).

@@ -28,7 +28,7 @@ import { copyCard, createHero, heroesFromLobby, newPower, pickedElsewhere, POWER
 import { buildDeckWithout, buyFromShop, campaignHeroes, campaignLobby, drawTreasureToken, fromCampaign, nextCampaignAdventure, sameHeroes, tagDrawn, useBoon } from './campaignPlay.js'
 import { cowardlyRoll, endTurnStatus } from './monsterStatus.js'
 import { petHurt, petsAct } from './pets.js'
-import { dropDarkness, springArmedTraps, springFanTokens, takePath } from './fanPowers.js'
+import { dropDarkness, mesmerizedTurn, springArmedTraps, springFanTokens, takePath } from './fanPowers.js'
 import { attackFollowUp, dodgeHit, heroAttack, powerDamage, rerollAttack, setShadow, usePower } from './heroAttacks.js'
 import { initialState } from './initialState.js'
 import { drawDungeonTile, openBoardDoor, revealDoor, revealTile } from './dungeon.js'
@@ -666,6 +666,9 @@ function reduce(state, action) {
       if (!state.monsters.some((m) => m.id === id) && !activeVillains(state).some((v) => v.id === id)) return state
       return { ...state, turn: { ...state.turn, acting: id } }
     }
+
+    case 'MESMERIZED_TURN':
+      return state.turn.acted?.includes(action.id) ? state : markActed(mesmerizedTurn(state, action), action.id)
 
     case 'PETS_ACT':
       return petsAct(state, action)

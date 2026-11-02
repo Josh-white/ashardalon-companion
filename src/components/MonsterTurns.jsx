@@ -20,7 +20,7 @@ import { outOfReach, seesInvisible, unseenByTactics } from '../board/tactics.js'
 import { liveAc } from '../board/checks.js'
 import { hitMoveStep } from '../board/powerMoves.js'
 import { nobleShieldWorth } from '../ally/boardPowers.js'
-import { STATUSES, cowardlyDue, skipsTurn, statusesOf } from '../state/monsterStatus.js'
+import { STATUSES, cowardlyDue, mesmerizedDue, skipsTurn, statusesOf } from '../state/monsterStatus.js'
 
 // Keyleth's Bravery: when a monster within 1 tile of her activates, she can step next to it and heal 1.
 function Bravery({ state, name, monsterId, token, dispatch }) {
@@ -553,6 +553,13 @@ function TurnButton({ monster, onStart, onDone, dispatch, variant = 'danger' }) 
     return (
       <Button className="font-bold" onClick={onDone}>
         {STATUSES[skip.kind].icon} {STATUSES[skip.kind].label}: skip its turn
+      </Button>
+    )
+  }
+  if (mesmerizedDue(monster)) {
+    return (
+      <Button className="font-bold" onClick={() => dispatch({ type: 'MESMERIZED_TURN', id: monster.id, roll: rollD20() })}>
+        🌀 Mesmerized: it attacks the nearest monster
       </Button>
     )
   }
