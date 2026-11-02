@@ -1,7 +1,7 @@
 // The flow of a hero's turn: curses, the checks each phase asks about, starting and
 // ending the Hero Phase, whether the hero still has an attack, levelling up, items and
 // the Scroll of Monster Control. The reducer is in game.js.
-import { addedSlot, templateFor } from '../data/heroes.js'
+import { addedSlot, hasAbility, templateFor } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
 import { difficultyOf } from '../data/difficulty.js'
 import { heroItems } from '../data/items.js'
@@ -192,6 +192,32 @@ export function encounterCount(state, hero) {
   // Some adventures add an encounter to every Villain Phase (Roghar's Gear, once the Vault is found).
   const adventure = state.adventure?.extraEncounters ?? 0
   return Math.max(0, base + badLuck + adventure + encountersOwed - encountersDrawn)
+}
+
+// Mind Over Body (a fan Monk's ability): each time the hero gets a condition, one roll; 11-20
+// ignores it. tokens.mindTried lists the conditions already rolled for, while they last.
+export const mindOverBodyChoices = (hero) =>
+  hasAbility(hero, 'mind-over-body') ? (hero.conditions ?? []).filter((c) => !(hero.tokens?.mindTried ?? []).includes(c)) : []
+export function mindOverBody(state, action) {
+  const hero = state.heroes.find((h) => h.id === action.heroId)
+  if (!hero || !mindOverBodyChoices(hero).includes(action.condition) || !validRoll(action.roll)) return state
+  const ignored = action.roll >= 11
+  let next = updateHero(state, hero.id, (h) => ({
+    tokens: { ...h.tokens, mindTried: [...(h.tokens?.mindTried ?? []), action.condition] },
+    conditions: ignored ? h.conditions.filter((c) => c !== action.condition) : h.conditions,
+  }))
+  next = withLog(next, `${hero.name}'s Mind Over Body: rolled ${action.roll}${ignored ? `, and shrugs off being ${action.condition}!` : `. Still ${action.condition}.`}`)
+  return withMoment(next, { kind: 'roll', heroId: hero.id, value: action.roll, title: ignored ? 'Mind Over Body!' : `Still ${action.condition}`, detail: `${hero.name} needed 11 or more.` })
+}
+// A condition that's gone can be rolled for again the next time the hero gets it.
+export function pruneMindTried(state) {
+  if (!state?.heroes?.some((h) => h.tokens?.mindTried?.some((c) => !h.conditions.includes(c)))) return state
+  return {
+    ...state,
+    heroes: state.heroes.map((h) =>
+      h.tokens?.mindTried?.some((c) => !h.conditions.includes(c)) ? { ...h, tokens: { ...h.tokens, mindTried: h.tokens.mindTried.filter((c) => h.conditions.includes(c)) } } : h,
+    ),
+  }
 }
 
 // Bonuses this hero's powers gave (Song of Courage...) that run out now.

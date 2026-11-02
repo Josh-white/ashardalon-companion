@@ -3,8 +3,9 @@
 import { XP_TO_LEVEL_UP, hasAbility, levelCrits } from '../data/heroes.js'
 import { attackItems, heroItems, itemAttackParts } from '../data/items.js'
 import { hasSecondChance } from '../data/difficulty.js'
-import { effectsOf, maxRolls, shadowAfter, shadowKept } from '../data/powerEffects.js'
+import { effectsOf, maxRolls, onHitHeals, shadowAfter, shadowKept } from '../data/powerEffects.js'
 import { queueFearMove, queueMoves } from '../board/powerMoves.js'
+import { heroesInReach } from '../board/encounters.js'
 import { clamp, findFoe, foes, heroLabel, markUsed, updateHero, updateMonster, validRoll, withCast, withLog, withMoment } from './gameHelpers.js'
 import { spendItem } from './treasureDeck.js'
 import { applyPasses, heroOnRight, thunderPass } from './passMonsters.js'
@@ -67,7 +68,7 @@ export function heroAttack(state, action) {
     // Hypnotism never hurts the monster it moved.
     .filter((t) => effects.ask !== 'moved-monster' || t.monsterId !== action.movedId)
     .slice(0, item ? 1 : maxRolls(power))
-  if (!source || baseBonus === null || power?.used || targets.length === 0) return state
+  if (!source || (baseBonus === null && !effects.autoHit) || power?.used || targets.length === 0) return state
 
   // Magic weapons add to rolls against monsters close enough, so each target can differ.
   const distances = action.distances && typeof action.distances === 'object' ? action.distances : {}
@@ -94,7 +95,8 @@ export function heroAttack(state, action) {
       continue
     }
     const rowAttack = numbers(monsterId)
-    const result = rollAgainst(monster, roll, rowAttack)
+    // Guiding Strike (a fan power) hits without beating the monster's AC.
+    const result = effects.autoHit ? { ...rollAgainst({ ...monster, ac: -Infinity }, roll, rowAttack), outcome: `Hits! ${rowAttack.damage} damage` } : rollAgainst(monster, roll, rowAttack)
     rolls.push({ monsterId, label: monster.name, value: roll, total: result.total, ac: monster.ac, hit: result.hit, outcome: result.outcome, dealt: result.dealt, attack: rowAttack })
     next = withLog(
       next,
@@ -135,7 +137,7 @@ export function heroAttack(state, action) {
     next = { ...next, turn: { ...next.turn, lastAttack: { ...next.turn.lastAttack, followUpDone: true } } }
     next = pass ? applyPasses(next, [pass], `${hero.name}'s ${power.name}`) : withLog(next, `${hero.name}'s ${power.name}: no monster on ${hero.name}'s tile to pass.`)
   }
-  if (effects.board?.after) next = queueMoves(next, hero, power, effects.board.after, { attacked: targets.map((t) => t.monsterId), hit: anyHit })
+  if (effects.board?.after) next = queueMoves(next, hero, power, effects.board.after, { attacked: targets.map((t) => t.monsterId), hit: anyHit, shadow: Boolean(hero.tokens?.shadow) })
   next = queueFearMove(next)
 
   // Bloodlust ends when the hero defeats a monster.
@@ -162,7 +164,9 @@ export function heroAttack(state, action) {
 export function rerollAttack(state, action) {
   const last = state.turn.lastAttack
   const helper = state.heroes.find((h) => h.id === action.helperId)
-  const advice = action.helperItemId || action.secondChance ? null : helper?.powers.find((p) => p.id === action.helperPowerId)
+  const advice = action.helperItemId || action.secondChance || action.bardicSong ? null : helper?.powers.find((p) => p.id === action.helperPowerId)
+  // Bardic Song (a fan Bard): one of the bard's songs lets any hero roll a miss again.
+  const song = Boolean(action.bardicSong) && bardicSongsLeft(helper) > 0
   const charm = action.helperItemId ? heroItems(helper).find((i) => i.id === action.helperItemId && !i.used && i.card?.use === 'reroll') : null
   // Easy games: the hero who missed may roll again once per adventure.
   const second = Boolean(action.secondChance) && helper?.id === last?.heroId && hasSecondChance(state, helper)
@@ -170,15 +174,16 @@ export function rerollAttack(state, action) {
   const monster = findFoe(state, action.monsterId)
   const hero = state.heroes.find((h) => h.id === last?.heroId)
   const power = hero?.powers.find((p) => p.id === last.powerId)
-  const helps = second || charm || (advice && !advice.used && effectsOf(advice).reaction === 'reroll')
+  const helps = second || song || charm || (advice && !advice.used && effectsOf(advice).reaction === 'reroll')
   if (!row || !monster || !helps || !validRoll(action.roll)) return state
 
-  const helpName = second ? `${helper.name}'s second chance` : charm ? `${helper.name}'s Lucky Charm` : `${helper.name}'s Inspiring Advice`
+  const helpName = second ? `${helper.name}'s second chance` : song ? `${helper.name}'s Bardic Song` : charm ? `${helper.name}'s Lucky Charm` : `${helper.name}'s Inspiring Advice`
   const attack = row.attack ?? last.attack
   const before = { ...monster, hp: Math.min(monster.maxHp, monster.hp + row.dealt) }
   let next = updateMonster(state, monster.id, () => ({ hp: before.hp }))
   if (charm) next = spendItem(next, helper.id, charm.id)
   if (second) next = { ...next, secondChances: [...(next.secondChances ?? []), helper.id] }
+  if (song) next = updateHero(next, helper.id, (h) => ({ tokens: { ...h.tokens, bardicSongsUsed: (h.tokens?.bardicSongsUsed ?? 0) + 1 } }))
   const result = rollAgainst(before, action.roll, attack)
   next = withLog(
     next,
@@ -199,7 +204,7 @@ export function rerollAttack(state, action) {
   return withMoment(won.state, {
     kind: action.roll === 20 ? 'crit' : hurt.defeated ? 'defeat' : 'roll',
     heroId: hero.id,
-    title: `${second ? 'Second chance' : charm ? 'Lucky Charm' : 'Inspiring Advice'}: ${result.hit ? 'Hit!' : 'Missed again'}`,
+    title: `${second ? 'Second chance' : song ? 'Bardic Song' : charm ? 'Lucky Charm' : 'Inspiring Advice'}: ${result.hit ? 'Hit!' : 'Missed again'}`,
     detail: won.details.join(' '),
     rolls: [{ monsterId: monster.id, label: monster.name, value: action.roll, total: result.total, ac: monster.ac, hit: result.hit, outcome: result.outcome }],
   })
@@ -216,7 +221,7 @@ export function attackFollowUp(state, action) {
   const heroIds = (Array.isArray(action.heroIds) ? action.heroIds : []).filter((id) => state.heroes.some((h) => h.id === id))
   let next = { ...state, turn: { ...state.turn, lastAttack: { ...last, followUpDone: true } } }
 
-  if (effects.onHit?.heal && last.rolls.some((r) => r.hit) && heroIds.length === 1) {
+  if (onHitHeals(effects, last.rolls) && heroIds.length === 1) {
     return healHero(next, heroIds[0], effects.onHit.heal, power.name)
   }
   if (effects.after === 'heal-tile' && heroIds.length > 0) {
@@ -304,6 +309,26 @@ function addBuff(next, state, hero, power, buff) {
   return withLog(next, `${buff.who === 'self' ? hero.name : 'Every hero'} gets ${what} until ${until}.`)
 }
 
+// Bardic Song (a fan Bard's ability): 3 songs a game, each lets any hero roll a missed attack again.
+export const BARDIC_SONGS = 3
+export const bardicSongsLeft = (hero) => (hasAbility(hero, 'bardic-song') ? Math.max(0, BARDIC_SONGS - (hero.tokens?.bardicSongsUsed ?? 0)) : 0)
+
+// Chorus of Recovery (a fan Bard): on the virtual board, each hero on the bard's tile ends
+// one condition (the worst first). At a table the card's note says to do it.
+const WORST_FIRST = ['Poisoned', 'Immobilized', 'Slowed', 'Weakened', 'Dazed']
+function cleanseTile(state, hero, power) {
+  let next = state
+  for (const id of heroesInReach(state, hero.id, 'sameTile') ?? []) {
+    const target = next.heroes.find((h) => h.id === id)
+    const condition = [...(target?.conditions ?? [])].sort((a, b) => rank(a) - rank(b))[0]
+    if (!condition) continue
+    next = updateHero(next, id, (h) => ({ conditions: h.conditions.filter((c) => c !== condition) }))
+    next = withLog(next, `${power.name}: ${target.name} is no longer ${condition}.`)
+  }
+  return next
+}
+const rank = (condition) => (WORST_FIRST.includes(condition) ? WORST_FIRST.indexOf(condition) : WORST_FIRST.length)
+
 // Shadowphage (Fesud, a fan hero): a power can take him into or out of the shadows.
 function moveShadow(state, hero, effects, missed = false) {
   const was = Boolean(hero.tokens?.shadow)
@@ -351,6 +376,7 @@ export function usePower(state, action) {
     next = updateHero(next, picked.id, (h) => ({ tokens: { ...h.tokens, refuge: true } }))
     next = withLog(next, `${picked.name} is safe in the Astral Refuge until their next turn.`)
   }
+  if (use.cleanse) next = cleanseTile(next, hero, power)
   if (use.endCondition) {
     if (!picked.conditions.includes(action.condition)) return state
     next = updateHero(next, picked.id, (h) => ({ conditions: h.conditions.filter((c) => c !== action.condition) }))

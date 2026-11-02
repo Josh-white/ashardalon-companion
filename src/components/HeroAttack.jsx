@@ -5,7 +5,8 @@ import { figuresInRange, foeDistance, foesInRange, powerRange } from '../board/m
 import { hypnotized } from '../board/powerMoves.js'
 import { difficultyOf, hasSecondChance } from '../data/difficulty.js'
 import { asksIfStayed, attackItems, distanceChoices, heroItems, itemsWithUse } from '../data/items.js'
-import { effectsOf, maxRolls, reactionsFor } from '../data/powerEffects.js'
+import { effectsOf, maxRolls, onHitHeals, reactionsFor } from '../data/powerEffects.js'
+import { bardicSongsLeft } from '../state/heroAttacks.js'
 import { rollD20 } from '../state/random.js'
 import { attackGone, attackNumbers, foes, powerNumber } from '../state/game.js'
 import { itemAttackIsMove } from '../state/heroTurn.js'
@@ -21,8 +22,7 @@ function FollowUp({ state, hero, power, last, dispatch }) {
   const onTile = heroesInReach(state, hero.id, 'sameTile')
   const [chosen, setChosen] = useState(effects.after === 'heal-tile' ? onTile ?? [hero.id] : [])
   const [skipped, setSkipped] = useState(false)
-  const anyHit = last.rolls.some((r) => r.hit)
-  const kind = effects.onHit?.heal && anyHit ? 'heal-one' : effects.after
+  const kind = onHitHeals(effects, last.rolls) ? 'heal-one' : effects.after
   const asks = { 'heal-one': true, 'heal-tile': true, shield: true, 'pass-monster': state.monsters.length > 0 }
   if (last.followUpDone || skipped || !asks[kind]) return null
 
@@ -163,6 +163,7 @@ export function AttackAftermath({ state, last, dispatch }) {
   const advice = reactionsFor(state.heroes, 'reroll')
   // A Lucky Charm rerolls its owner's own miss.
   const charms = itemsWithUse([hero], 'reroll')
+  const bards = state.heroes.filter((h) => bardicSongsLeft(h) > 0)
   const furious = reactionsFor([hero], 'furious')[0]
   const rerollable = last.rolls.filter((r) => !r.hit && !r.rerolled && alive(r))
   const furiousRows = furious ? last.rolls.filter((r) => r.hit && alive(r)) : []
@@ -202,6 +203,17 @@ export function AttackAftermath({ state, last, dispatch }) {
             onClick={() => dispatch({ type: 'REROLL_ATTACK', helperId: hero.id, helperItemId: charm.id, monsterId: row.monsterId, roll: rollD20() })}
           >
             🍀 Lucky Charm: roll again against the {row.label} (then it's discarded)
+          </Button>
+        )),
+      )}
+      {once(rerollable).flatMap((row) =>
+        bards.map((bard) => (
+          <Button
+            key={`song-${row.monsterId}-${bard.id}`}
+            className="w-full"
+            onClick={() => dispatch({ type: 'REROLL_ATTACK', helperId: bard.id, bardicSong: true, monsterId: row.monsterId, roll: rollD20() })}
+          >
+            🎶 {bard.name}'s Bardic Song: roll again against the {row.label} ({bardicSongsLeft(bard)} left)
           </Button>
         )),
       )}
