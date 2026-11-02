@@ -122,6 +122,23 @@ describe('monster turn screen', () => {
     expect(screen.getByText('✓ Done')).toBeTruthy()
   })
 
+  it('comes back to the rolled attack after a look at another tab, without rolling again', () => {
+    const start = newGame()
+    const game = play({ ...start, monsters: [brute(start)] }, monsterTurns)
+    tap(/Take its turn/)
+    tap('Yes')
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(start.heroes[0].name) }))
+    tap(/Roll the Club attack/)
+    const rolled = game()
+    // The Party tab replaces the Turn tab, then the player comes back.
+    cleanup()
+    play(rolled, monsterTurns)
+    expect(screen.queryByRole('button', { name: /Roll the Club attack/ })).toBeNull()
+    expect(screen.getByText(/The Brute rolled/)).toBeTruthy()
+    tap(/Done with the Brute/)
+    expect(game().turn.acted).toContain('m1')
+  })
+
   it('moves toward a hero when nobody is in reach', () => {
     const start = newGame()
     play({ ...start, monsters: [brute(start)] }, monsterTurns)

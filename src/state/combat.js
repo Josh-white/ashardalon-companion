@@ -99,7 +99,7 @@ export function monsterAttack(state, action) {
     if (hp === 0) downed.push(villager.name)
   }
   // Remembered so Tumbling Escape can turn a hit into a miss.
-  next = { ...next, turn: { ...next.turn, lastMonsterAttack: { monsterId: monster.id, attackId: attack.id, tableRoll: table?.length ? action.tableRoll : null, results } } }
+  next = { ...next, turn: { ...next.turn, lastMonsterAttack: { monsterId: monster.id, ...(typeof action.token === 'string' ? { token: action.token } : {}), attackId: attack.id, tableRoll: table?.length ? action.tableRoll : null, results } } }
   for (const name of downed) next = withLog(next, `${name} is down!`)
   if (next.status === 'lost') return next
   return withMoment(next, {

@@ -66,11 +66,13 @@ export function pathOf(state) {
   const trail = s.trail ?? [at]
   return { trail, left: total - (trail.length - 1), total }
 }
-// The monsters (ids) next to any square of the path.
+// The monsters (ids) next to any square of the path, once per figure: a group card passed
+// by two of its figures (Legion Devils) is listed twice, so both get attacked.
 function passedBy(state, trail) {
   const grid = boardGrid(state.board)
-  const near = foeTokens(state).filter((f) => trail.some((sq) => adjacent(grid, sq, f.at)))
-  return [...new Set(near.map((f) => baseId(f.id)))]
+  return foeTokens(state)
+    .filter((f) => trail.some((sq) => adjacent(grid, sq, f.at)))
+    .map((f) => baseId(f.id))
 }
 function withPassed(state) {
   const move = state.turn.boardMove
