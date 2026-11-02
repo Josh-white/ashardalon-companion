@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AdminLink } from './AdminLink.jsx'
 
 // The #friends page: is anyone actually playing? Each friend who signed in through
 // Cloudflare (server/access.js), with their visits, games and taps (server/friendLog.js).
@@ -21,6 +22,7 @@ export default function FriendsPage() {
       <div className="mx-auto max-w-4xl">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="mr-auto font-display text-3xl text-amber-400">Friends playing</h1>
+          <AdminLink />
           <a href="/" className="text-sm text-amber-300 underline">
             Back to the game
           </a>

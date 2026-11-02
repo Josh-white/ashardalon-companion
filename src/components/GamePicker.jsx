@@ -240,7 +240,17 @@ export default function GamePicker({ current, onPick, onClose, startGame, change
           </ul>
         </details>
       )}
-      <p className="text-center text-xs text-zinc-600">{versionLine()}</p>
+      <p className="text-center text-xs text-zinc-600">
+        {versionLine()}
+        {list && !list.friend && (
+          <>
+            {' · '}
+            <a href="/#admin" className="underline hover:text-zinc-400">
+              🛠 Admin
+            </a>
+          </>
+        )}
+      </p>
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Button, Chip, useConfirm } from './ui.jsx'
+import { AdminLink } from './AdminLink.jsx'
 
 // The ideas box. Players send ideas and feedback from the 💡 button on any screen; the Pi
 // keeps them in ideas.json (server/ideas.js) and the #ideas page lists them for Dad to go
@@ -163,6 +164,7 @@ export default function IdeasPage() {
           <Chip active={showDone} onClick={() => setShowDone(true)}>
             All ({open.length + done.length})
           </Chip>
+          <AdminLink />
           <a href="/" className="text-sm text-amber-300 underline">
             Back to the game
           </a>

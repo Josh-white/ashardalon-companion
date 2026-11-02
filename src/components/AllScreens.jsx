@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { SCREEN_PREFIX } from '../state/screenStorage.js'
 import { Button } from './ui.jsx'
+import { AdminLink } from './AdminLink.jsx'
 
 // The screens at their real sizes in CSS pixels.
 const SIZES = {
@@ -101,6 +102,7 @@ export default function AllScreens() {
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100">
       <header className="flex flex-wrap items-center gap-3 px-4" style={{ minHeight: header }}>
+        <AdminLink />
         <h1 className="mr-auto font-display text-xl font-bold text-amber-400">All screens</h1>
         <span className="text-sm text-zinc-400">iPads</span>
         <Button className="!px-3 !py-1" disabled={setup.ipads <= 0} onClick={() => setSetup({ ...setup, ipads: setup.ipads - 1 })}>

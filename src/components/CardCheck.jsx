@@ -1,5 +1,6 @@
 import { missingCards } from '../data/cardCheck.js'
 import { useCards } from '../state/useCards.js'
+import { AdminLink } from './AdminLink.jsx'
 
 // The #cards page: anything in cards.json the app couldn't use, and the cards the app
 // looks for by name or id but can't find, so a spelling difference doesn't quietly
@@ -10,6 +11,7 @@ export default function CardCheck() {
   const loading = cards.source === 'loading'
   return (
     <main className="min-h-screen bg-zinc-950 p-4 text-zinc-100">
+      <AdminLink />
       <h1 className="font-display text-3xl text-amber-400">Card check</h1>
       <p className="mt-1 max-w-2xl text-zinc-400">
         {cards.source === 'custom'
