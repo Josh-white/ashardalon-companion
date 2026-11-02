@@ -371,7 +371,7 @@ export const inHeroPhase = (state, hero) => Boolean(hero) && PHASES[state.turn.p
 // An attack power whose move is part of the attack (Whirling Mantis Step: "move your speed,
 // then attack..."): the hero moves first, on the board or by hand.
 export const moveIsPartOfPower = (power) =>
-  Boolean(effectsOf(power).board?.before?.some((s) => s.pick === 'self' && s.to === 'squares'))
+  Boolean(effectsOf(power).board?.before?.some((s) => s.pick === 'self' && ['squares', 'path'].includes(s.to)))
 
 // Why the active hero has no attack left this Hero Phase, or null while they still have one.
 // A Hero Phase is move and attack, attack and move, or move twice (a Dazed hero gets one

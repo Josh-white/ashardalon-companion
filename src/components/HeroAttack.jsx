@@ -384,6 +384,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   const items = extra || walked.length > 0 ? [] : attackItems(hero, state.turn).filter((i) => !(moved && itemAttackIsMove(i.card)))
   const [powerId, setPowerId] = useState(null)
   const [chosen, setChosen] = useState([])
+  const [passedSeen, setPassedSeen] = useState(null)
   // The board on this screen lights up the picked monsters and brings the last one into view.
   useShareAim(chosen)
   const [answers, setAnswers] = useState({})
@@ -446,6 +447,14 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
     setAnswers({})
     setDistances({})
     setShowAll(false)
+  }
+  // Whirling Mantis Step: the monsters the hero walked past on the board are picked for them.
+  const passed = state.turn.powerPassed
+  const passedIds = power && passed?.heroId === hero.id && passed.source === power.name ? passed.ids : null
+  const passedKey = passedIds ? `${power.id}:${passedIds.join(',')}` : null
+  if (passedKey !== passedSeen) {
+    setPassedSeen(passedKey)
+    if (passedIds) setChosen(passedIds.filter((id) => foes(state).some((m) => m.id === id)))
   }
   const tap = (id) =>
     setChosen((list) => {
@@ -575,7 +584,12 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
                     <p className="mt-2 font-semibold">💫 {hero.name} is Dazed and already walked: that walk was this power's move. Pick the monsters.</p>
                   ) : state.board && effects.board?.before && !item && (
                     state.turn.boardMove?.source === power.name ? (
-                      <p className="mt-2 font-semibold">📍 Do it on the board, then pick the monster.</p>
+                      <p className="mt-2 font-semibold">
+                        📍 Do it on the board, then pick the monster.
+                        {passedIds && ` The monsters ${hero.name} is next to on the way get picked here (${passedIds.length} so far).`}
+                      </p>
+                    ) : passedIds ? (
+                      <p className="mt-2 font-semibold">📍 Picked the {passedIds.length === 1 ? 'monster' : `${passedIds.length} monsters`} {hero.name} was next to on the way. Tap to change.</p>
                     ) : (
                       <Button className="mt-2 w-full" onClick={() => dispatch({ type: 'START_BOARD_MOVE', heroId: hero.id, powerId: power.id })}>
                         📍 Move on the board

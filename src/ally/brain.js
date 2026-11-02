@@ -301,7 +301,7 @@ function moveFirstKind(power) {
   const pulls = (s) => /^monster/.test(s.pick) && s.to === 'nextToSelf'
   if (steps.length === 1 && steps[0].to === 'swap' && /^hero/.test(steps[0].pick)) return 'swap'
   if (steps.every(pulls)) return 'pull'
-  if (steps[0].pick === 'self' && ['squares', 'nextToHeroWithin2'].includes(steps[0].to) && steps.slice(1).every(pulls)) return 'walk'
+  if (steps[0].pick === 'self' && ['squares', 'path', 'nextToHeroWithin2'].includes(steps[0].to) && steps.slice(1).every(pulls)) return 'walk'
   return null
 }
 
