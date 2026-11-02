@@ -16,11 +16,9 @@ import { hasAbility } from '../data/heroes.js'
 import { powerNumber } from '../state/combat.js'
 import { foes } from '../state/gameHelpers.js'
 import { mesmerizeTargets } from '../state/fanPowers.js'
+import { areaAt, d20, parse } from './helpers.js'
 
-const d20 = () => Math.floor(Math.random() * 20) + 1
-const parse = (k) => k.split(',').map(Number)
 const items = (state) => state.board?.items ?? []
-const areaAt = (grid, sq) => (sq ? grid.get(key(sq))?.area : undefined)
 
 // Hit points the monster's next figure has left (a group card loses one figure at a time).
 export function figureHp(monster) {

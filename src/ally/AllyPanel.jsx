@@ -37,12 +37,14 @@ export function nextButton(root = document) {
   // A button the screen marks as the computer hero's own choice (Noble Shield) comes first.
   const pick = root.querySelector('[data-ally-scope] button[data-ally-pick]:not(:disabled)')
   if (pick) return { button: pick, label: label(pick) }
-  // Never the party falling: a hero down in the middle of their turn just goes on.
-  const buttons = [...root.querySelectorAll('[data-ally-scope] button[data-primary]:not(:disabled)')].filter((b) => !/No surges left/i.test(label(b)))
+  // Never the party falling (data-ally-never): a hero down in the middle of their turn just goes on.
+  const buttons = [...root.querySelectorAll('[data-ally-scope] button[data-primary]:not(:disabled):not([data-ally-never])')].filter((b) => !/No surges left/i.test(label(b)))
   const step = buttons.filter((b) => !b.closest('[data-turn-footer]'))
   const button = step[0] ?? buttons[0] ?? null
   if (!button) return { button: null }
-  if (/^Yes\b/i.test(label(button))) return { button: null, question: true }
+  // A question the board couldn't answer is left for the players: the Yes/No questions are
+  // marked data-ally-question; any other gold "Yes…" button counts too.
+  if (button.hasAttribute('data-ally-question') || /^Yes\b/i.test(label(button))) return { button: null, question: true }
   return { button, label: label(button) }
 }
 

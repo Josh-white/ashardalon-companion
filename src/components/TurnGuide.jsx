@@ -50,7 +50,7 @@ function YesNo({ question, onYes, onNo }) {
     <div className="mt-4">
       <p className="text-2xl font-semibold text-zinc-100">{question}</p>
       <div className="mt-3 grid grid-cols-2 gap-3">
-        <Button variant="gold" className="py-4 text-2xl" onClick={onYes}>
+        <Button variant="gold" className="py-4 text-2xl" onClick={onYes} data-ally-question="">
           Yes
         </Button>
         <Button className="py-4 text-2xl" onClick={onNo}>
@@ -92,6 +92,8 @@ function HeroPhase({ state, hero, dispatch }) {
           <Button
             variant={state.surges > 0 ? 'gold' : 'danger'}
             className="mt-2"
+            // A computer hero never taps the party into falling.
+            data-ally-never={state.surges > 0 ? undefined : ''}
             onClick={() => dispatch({ type: 'USE_SURGE', heroId: hero.id })}
           >
             {state.surges > 0 ? `Use a healing surge (heal to ${surgeHp(state, hero)})` : 'No surges left: the party falls'}

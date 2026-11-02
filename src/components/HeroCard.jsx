@@ -383,7 +383,7 @@ export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, 
       {down && (
         <div className="mt-3 rounded-xl bg-red-950/70 p-3 text-center">
           <p className="font-bold text-red-300">{hero.name} is down!</p>
-          <Button variant={surges > 0 ? 'gold' : 'danger'} className="mt-2" onClick={() => dispatch({ type: 'USE_SURGE', heroId: hero.id })}>
+          <Button variant={surges > 0 ? 'gold' : 'danger'} className="mt-2" data-ally-never={surges > 0 ? undefined : ''} onClick={() => dispatch({ type: 'USE_SURGE', heroId: hero.id })}>
             {surges > 0 ? `Use a healing surge (heal to ${surgeHp(state, hero)})` : 'No surges left: the party falls'}
           </Button>
         </div>

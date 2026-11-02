@@ -20,9 +20,8 @@ import { heroesInReach } from '../board/encounters.js'
 import { petsOf } from '../state/pets.js'
 import { encounterHarm } from './cancelEncounter.js'
 import { figureHp, foeFigures, standingHeroes, usable } from './powers.js'
+import { badlyHurt, d20, parse } from './helpers.js'
 
-const d20 = () => Math.floor(Math.random() * 20) + 1
-const hurt = (h) => h.hp > 0 && h.hp <= Math.ceil(h.maxHp / 2)
 const hasBuff = (hero, power) => (hero.buffs ?? []).some((b) => b.source === power.name)
 
 // How many tiles the nearest monster or villain figure is from a square (99: none on the board).
@@ -54,7 +53,7 @@ export function buffPower(state, hero) {
     return { action: { type: 'USE_POWER', heroId: hero.id, powerId: courage.id, heroIds: [] }, say: `${hero.name} sings ${courage.name}: everyone hits harder!` }
   }
   const melody = mine((b) => b.who === 'all' && b.ac > 0)
-  if (melody && party.some((h) => hurt(h) && nearestFoe(state, tokens[h.id]) <= 1)) {
+  if (melody && party.some((h) => badlyHurt(h) && nearestFoe(state, tokens[h.id]) <= 1)) {
     return { action: { type: 'USE_POWER', heroId: hero.id, powerId: melody.id, heroIds: [] }, say: `${hero.name} sings ${melody.name}: everyone is harder to hit.` }
   }
   const stance = mine((b) => b.who === 'self' && b.ac > 0)
@@ -153,10 +152,10 @@ function comeAndGetIt(state) {
   const tokens = state.board.tokens
   const spots = foeFigures(state).filter((f) => f.foe.id === newest.id).map((f) => f.at)
   if (spots.length === 0) return null
-  for (const hero of state.heroes.filter((h) => h.ally && !h.escaped && h.hp > 0 && !hurt(h) && tokens[h.id])) {
+  for (const hero of state.heroes.filter((h) => h.ally && !h.escaped && h.hp > 0 && !badlyHurt(h) && tokens[h.id])) {
     const power = usable(hero, (e) => e.use?.board?.some((s) => s.to === 'nextToNewMonster'))
     if (!power || nextToFoe(state, tokens[hero.id])) continue
-    const friends = standingHeroes(state).filter((h) => h.id !== hero.id && hurt(h))
+    const friends = standingHeroes(state).filter((h) => h.id !== hero.id && badlyHurt(h))
     if (!friends.some((h) => spots.some((at) => tilesBetween(grid, at, tokens[h.id]) <= 1))) continue
     const queued = queueMoves(state, hero, power, effectsOf(power).use.board)
     if (!queued.turn.boardMove || moveTargets(queued, hero.id).length === 0) continue
@@ -247,10 +246,10 @@ function strandedFriend(state, hero, n) {
   const grid = boardGrid(state.board)
   const tokens = state.board.tokens
   const mates = new Set(heroesInReach(state, hero.id, 'sameTile') ?? [hero.id])
-  return standingHeroes(state).find((h) => !mates.has(h.id) && hurt(h) && nextToFoe(state, tokens[h.id]) && tilesBetween(grid, tokens[hero.id], tokens[h.id]) <= n) ?? null
+  return standingHeroes(state).find((h) => !mates.has(h.id) && badlyHurt(h) && nextToFoe(state, tokens[h.id]) && tilesBetween(grid, tokens[hero.id], tokens[h.id]) <= n) ?? null
 }
 export function circleStep(state, hero) {
-  if (!state.board?.tokens[hero.id] || hurt(hero) || state.turn.boardMove) return null
+  if (!state.board?.tokens[hero.id] || badlyHurt(hero) || state.turn.boardMove) return null
   const power = usable(hero, circleUse)
   if (!power || !strandedFriend(state, hero, effectsOf(power).use.board[0].n ?? 1)) return null
   return { action: { type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: [] }, say: `${hero.name} uses ${power.name} to bring everyone to a friend in trouble.` }
@@ -276,7 +275,7 @@ export function improvise(state, hero) {
 // (monsters next to them can't attack, and the next Hero Phase has Advantage).
 export function perchPower(state, hero) {
   const at = state.board?.tokens[hero.id]
-  if (!at || !hurt(hero) || hero.tokens?.treetop || !nextToFoe(state, at)) return null
+  if (!at || !badlyHurt(hero) || hero.tokens?.treetop || !nextToFoe(state, at)) return null
   const power = usable(hero, (e) => Boolean(e.use?.perch))
   if (!power) return null
   return { action: { type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: [] }, say: `${hero.name} climbs up out of reach (${power.name}).` }
@@ -286,7 +285,7 @@ export function perchPower(state, hero) {
 // so it starts the next turn with -4 AC.
 export function fearlessStep(state, hero) {
   const at = state.board?.tokens[hero.id]
-  if (!at || !hasAbility(hero, 'fearless') || hurt(hero) || !attackGone(state, hero) || movesLeft(state, hero) === 0 || nextToFoe(state, at)) return null
+  if (!at || !hasAbility(hero, 'fearless') || badlyHurt(hero) || !attackGone(state, hero) || movesLeft(state, hero) === 0 || nextToFoe(state, at)) return null
   const grid = boardGrid(state.board)
   const spots = foeFigures(state).map((f) => f.at)
   const squares = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1])
@@ -307,7 +306,7 @@ const inShadow = (hero) => Boolean(hero.tokens?.shadow)
 // strikes from them (the shadow bonus) instead.
 export function shadowStep(state, hero, option) {
   if (!hasAbility(hero, 'shadowphage') || inShadow(hero) || !canSpendAttack(state, hero) || !state.board?.tokens[hero.id]) return null
-  if (option && (option.finishes.length > 0 || option.villain || !hurt(hero))) return null
+  if (option && (option.finishes.length > 0 || option.villain || !badlyHurt(hero))) return null
   if (!option && foeFigures(state).length === 0) return null
   return { action: { type: 'SET_SHADOW', heroId: hero.id, on: true }, say: `${hero.name} slips into the shadows.` }
 }
@@ -355,10 +354,10 @@ export function trappingAttack(state, hero) {
 const swapUtility = (e) => e.use?.board?.length === 1 && /^(other)?[hH]ero/.test(e.use.board[0].pick) && e.use.board[0].to === 'swap'
 function endangered(state, hero) {
   const tokens = state.board.tokens
-  return standingHeroes(state).filter((h) => h.id !== hero.id && hurt(h) && h.hp < hero.hp && nearestFoe(state, tokens[h.id]) === 0 && nextToFoe(state, tokens[h.id]))
+  return standingHeroes(state).filter((h) => h.id !== hero.id && badlyHurt(h) && h.hp < hero.hp && nearestFoe(state, tokens[h.id]) === 0 && nextToFoe(state, tokens[h.id]))
 }
 export function rescueStride(state, hero) {
-  if (!state.board?.tokens[hero.id] || hurt(hero) || state.turn.boardMove) return null
+  if (!state.board?.tokens[hero.id] || badlyHurt(hero) || state.turn.boardMove) return null
   const power = usable(hero, swapUtility)
   if (!power || endangered(state, hero).length === 0) return null
   const queued = queueMoves(state, hero, power, effectsOf(power).use.board)
@@ -378,7 +377,6 @@ function safety(state, at) {
   if (near.length === 0) return 0
   return nearestFoe(state, at) * 100 + Math.min(...near.map((f) => Math.abs(f[0] - at[0]) + Math.abs(f[1] - at[1])))
 }
-const parse = (k) => k.split(',').map(Number)
 
 // A move a fan power left for one of the hero's figures, once the attack is done:
 //   the hero itself or a friend (Alshabbah, Swift Evasion, Tune of Ice and Wind): a hurt
@@ -404,7 +402,7 @@ export function fanMove(state, hero) {
     const grid = boardGrid(state.board)
     const moving = new Set(move.tokens ?? [])
     const friend = standingHeroes(state)
-      .filter((h) => !moving.has(h.id) && hurt(h) && nextToFoe(state, tokens[h.id]))
+      .filter((h) => !moving.has(h.id) && badlyHurt(h) && nextToFoe(state, tokens[h.id]))
       .sort((a, b) => tilesBetween(grid, tokens[id], tokens[a.id]) - tilesBetween(grid, tokens[id], tokens[b.id]))[0]
     if (!friend) return null
     const there = tokens[friend.id]
@@ -424,10 +422,10 @@ export function fanMove(state, hero) {
   }
   if (person) {
     if (/monster|attacked/i.test(s.to)) {
-      if (hurt(person)) return null
+      if (badlyHurt(person)) return null
       return { action: { type: 'BOARD_MOVE', id, to: targets[0] }, say: `${person.name} closes in.` }
     }
-    if (!hurt(person) || !nextToFoe(state, tokens[id])) return null
+    if (!badlyHurt(person) || !nextToFoe(state, tokens[id])) return null
     const best = [...targets].sort((a, b) => safety(state, b) - safety(state, a))[0]
     if (safety(state, best) <= safety(state, tokens[id])) return null
     return { action: { type: 'BOARD_MOVE', id, to: best }, say: `${person.name} gets away from the monsters.` }
@@ -438,7 +436,7 @@ export function fanMove(state, hero) {
   const self = tokens[hero.id]
   const squares = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1])
   const score = (at) =>
-    others.reduce((sum, h) => sum + (Math.min(3, tilesBetween(grid, at, tokens[h.id])) * 100 + Math.min(8, squares(at, tokens[h.id]))) * (hurt(h) ? 3 : 1), 0) - (self ? squares(at, self) / 10 : 0)
+    others.reduce((sum, h) => sum + (Math.min(3, tilesBetween(grid, at, tokens[h.id])) * 100 + Math.min(8, squares(at, tokens[h.id]))) * (badlyHurt(h) ? 3 : 1), 0) - (self ? squares(at, self) / 10 : 0)
   const best = [...targets].sort((a, b) => score(b) - score(a))[0]
   return { action: { type: 'BOARD_MOVE', id, to: best }, say: `${hero.name} sends the monster away from the others.` }
 }
