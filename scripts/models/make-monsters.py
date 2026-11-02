@@ -2,7 +2,8 @@
 spiked mace), Orc Archer (a bow and a quiver), Kobold Dragonshield (a dragon shield
 and a spear) Human Cultist (hooded robes, a sun sceptre and a dagger)
 Duergar Guard (a helmet, a beard, a round shield and a warhammer)
-and Snake (coiled, with its own legless skeleton and moves).
+Snake (coiled, with its own legless skeleton and moves) and Cave Bear
+(on all fours; rears up to maul).
 
 Run it in Blender (tested headless on 5.2; written for 3.6 and newer):
   * Scripting workspace: open this file (or paste it), press Run Script (Alt+P).
@@ -72,6 +73,9 @@ PALETTE = {
     "snake": "557d3b",
     "snake_dark": "2e4a22",
     "snake_belly": "cdbf78",
+    "fur": "6e4b2e",
+    "fur_dark": "48311f",
+    "fur_light": "a8865e",
 }
 
 argv = sys.argv
@@ -598,6 +602,47 @@ def build_snake():
         box(f"Scale{i}", "snake_dark", "head", (0, y, 1.585), (0.10, 0.08, 0.03), bevel=0.012, rot=(0, 0, 45))
 
 
+def build_bear():
+    """A big brown cave bear on all fours: a shoulder hump, a growling open mouth, little ears,
+    heavy paws with bone claws. Its front legs use the arm bones and its back legs the leg
+    bones, so it walks with the same swings as the others."""
+    # Body: the back end, the chest and the hump over the shoulders, a stub of a tail.
+    sphere("Rump", "fur", "hips", (0, 0.28, 0.78), 0.44, scale=(1.0, 1.15, 0.92), segments=14, rings=9)
+    sphere("Tail", "fur_dark", "hips", (0, 0.76, 0.86), 0.08, segments=8, rings=6)
+    sphere("Chest", "fur", "body", (0, -0.20, 0.86), 0.48, scale=(1.0, 1.05, 0.95), segments=14, rings=9)
+    sphere("Hump", "fur_dark", "body", (0, -0.12, 1.20), 0.30, scale=(1.15, 1.2, 0.6), segments=12, rings=8)
+    sphere("Belly", "fur_light", "body", (0, -0.05, 0.50), 0.30, scale=(1.1, 1.6, 0.5), segments=12, rings=8)
+
+    # Legs: the front pair on the arm bones, the back pair on the leg bones.
+    for side, tag in ((1, "L"), (-1, "R")):
+        for bone, y, upper in ((f"arm.{tag}", -0.32, 0.18), (f"leg.{tag}", 0.40, 0.22)):
+            x = (0.30 if bone.startswith("arm") else 0.32) * side
+            sphere(f"Upper.{bone}", "fur", bone, (x, y, 0.56), upper, scale=(1, 1.1, 1.25))
+            box(f"Lower.{bone}", "fur", bone, (x, y, 0.25), (0.26, 0.28, 0.34), bevel=0.09)
+            box(f"Paw.{bone}", "fur_dark", bone, (x, y - 0.04, 0.07), (0.30, 0.34, 0.14), bevel=0.06)
+            for i, dx in enumerate((-0.08, 0, 0.08)):
+                cone(f"Claw.{bone}{i}", "bone", bone, (x + dx, y - 0.24, 0.06), 0.03, 0.10, rot=(100, 0, 0), sides=4)
+
+    # Head: round, with a pale muzzle, an open growling mouth, small round ears, angry brows.
+    hy, hz = -0.66, 1.06
+    sphere("Head", "fur", "head", (0, hy, hz), 0.28, scale=(1.05, 1.0, 0.92), segments=14, rings=9)
+    box("Muzzle", "fur_light", "head", (0, hy - 0.24, hz - 0.06), (0.24, 0.24, 0.16), bevel=0.07, segments=3)
+    box("Nose", "black", "head", (0, hy - 0.37, hz - 0.01), (0.10, 0.06, 0.07), bevel=0.025)
+    box("LowerJaw", "fur_light", "head", (0, hy - 0.22, hz - 0.20), (0.20, 0.22, 0.06), bevel=0.025, rot=(16, 0, 0))
+    box("MouthInside", "red", "head", (0, hy - 0.24, hz - 0.15), (0.17, 0.18, 0.05), bevel=0.01, rot=(8, 0, 0))
+    for side in (1, -1):
+        sphere(f"Eye{side}", "black", "head", (0.12 * side, hy - 0.22, hz + 0.07), 0.035, scale=(1, 0.6, 1),
+               segments=8, rings=6)
+        box(f"Brow{side}", "fur_dark", "head", (0.12 * side, hy - 0.22, hz + 0.13), (0.12, 0.06, 0.04), bevel=0.015,
+            rot=(0, -16 * side, 0))
+        sphere(f"Ear{side}", "fur_dark", "head", (0.19 * side, hy + 0.05, hz + 0.22), 0.08, scale=(1, 0.5, 1),
+               segments=8, rings=6)
+        sphere(f"EarIn{side}", "fur_light", "head", (0.19 * side, hy + 0.02, hz + 0.22), 0.045, scale=(1, 0.4, 1),
+               segments=8, rings=6)
+        cone(f"Fang{side}", "bone", "head", (0.07 * side, hy - 0.33, hz - 0.13), 0.022, 0.08, rot=(180, 0, 0), sides=5)
+        cone(f"LowFang{side}", "bone", "head", (0.06 * side, hy - 0.31, hz - 0.20), 0.02, 0.07, sides=5)
+
+
 # ---- 4. Join, size it, origin on the floor --------------------------------------------------
 
 def join_parts(name, mat, height):
@@ -663,6 +708,16 @@ SNAKE_BONES = [
     ("neck1", (0, 0.06, 0.42), (0, 0.10, 0.90), "hips"),
     ("neck2", (0, 0.10, 0.90), (0, -0.22, 1.30), "neck1"),
     ("head", (0, -0.22, 1.30), (0, -0.30, 1.70), "neck2"),
+]
+BEAR_BONES = [
+    ("root", (0, 0, 0), (0, 0, 0.2), None),
+    ("hips", (0, 0.28, 0.55), (0, 0.28, 0.95), "root"),
+    ("body", (0, -0.12, 0.65), (0, -0.12, 1.05), "hips"),
+    ("head", (0, -0.52, 0.92), (0, -0.52, 1.32), "body"),
+    ("arm.L", (0.30, -0.32, 0.72), (0.30, -0.32, 0.05), "body"),
+    ("arm.R", (-0.30, -0.32, 0.72), (-0.30, -0.32, 0.05), "body"),
+    ("leg.L", (0.32, 0.40, 0.72), (0.32, 0.40, 0.05), "hips"),
+    ("leg.R", (-0.32, 0.40, 0.72), (-0.32, 0.40, 0.05), "hips"),
 ]
 KOBOLD_BONES = [
     ("root", (0, 0, 0), (0, 0, 0.2), None),
@@ -870,6 +925,59 @@ SNAKE_MOVES = [
     ("Death_A_Pose", False, [(0, SNAKE_FALLEN), (1, SNAKE_FALLEN)]),
 ]
 
+# The bear's own moves: it walks on all fours, rears up to maul and roar, falls on its side.
+BEAR_GAIT = {"arm.L": (24, 0, 0), "arm.R": (-24, 0, 0), "leg.L": (-24, 0, 0), "leg.R": (24, 0, 0), "head": (0, 0, 5)}
+BEAR_GAIT2 = {"arm.L": (-24, 0, 0), "arm.R": (24, 0, 0), "leg.L": (24, 0, 0), "leg.R": (-24, 0, 0), "head": (0, 0, -5)}
+BEAR_FALLEN = {"root": {"rot": (0, 0, 82), "loc": (0, 0.42, 0)}, "head": (20, 0, 10),
+               "arm.L": (30, 0, 0), "arm.R": (-20, 0, 0), "leg.L": (20, 0, 0), "leg.R": (-30, 0, 0)}
+BEAR_REAR = {"body": (-38, 0, 0), "arm.L": (55, 0, 12), "arm.R": (65, 0, -12), "head": (-18, 0, 0),
+             "hips": {"loc": (0, 0.05, 0)}}
+BEAR_MOVES = [
+    ("Idle", True, [
+        (0, {}),
+        (30, {"body": (3, 0, 0), "head": (-6, 6, 0), "hips": {"loc": (0, -0.02, 0)}}),
+        (60, {}),
+    ]),
+    ("Walking_A", True, [
+        (0, BEAR_GAIT),
+        (6, {"hips": {"loc": (0, 0.03, 0)}}),
+        (12, BEAR_GAIT2),
+        (18, {"hips": {"loc": (0, 0.03, 0)}}),
+        (24, BEAR_GAIT),
+    ]),
+    ("1H_Melee_Attack_Chop", False, [
+        (0, {}),
+        (10, BEAR_REAR),
+        (16, {"body": (10, 0, 0), "arm.L": (25, 0, 0), "arm.R": (45, 0, 0), "head": (12, 0, 0),
+              "hips": {"loc": (0, -0.03, 0)}}),
+        (22, {"body": (8, 0, 0), "arm.R": (30, 0, 0), "head": (8, 0, 0)}),
+        (34, {}),
+    ]),
+    ("Hit_A", False, [
+        (0, {}),
+        (5, {"body": (-14, 0, 5), "head": (-22, 0, 0), "root": {"loc": (0, 0, -0.12)}}),
+        (20, {}),
+    ]),
+    ("Dodge_Right", False, [
+        (0, {}),
+        (7, {"root": {"loc": (-0.3, 0, 0), "rot": (0, 0, 8)}, "head": (0, 0, -8)}),
+        (22, {}),
+    ]),
+    ("Cheer", False, [
+        (0, {}),
+        (10, BEAR_REAR),
+        (16, {**BEAR_REAR, "head": (-28, 8, 0)}),
+        (22, {**BEAR_REAR, "head": (-28, -8, 0)}),
+        (34, {}),
+    ]),
+    ("Death_A", False, [
+        (0, {}),
+        (10, {"head": (15, 0, 0), "body": (8, 0, 0)}),
+        (30, BEAR_FALLEN),
+    ]),
+    ("Death_A_Pose", False, [(0, BEAR_FALLEN), (1, BEAR_FALLEN)]),
+]
+
 # name, file, build, height, bones, extra moves (, own moves)
 MONSTERS = [
     ("orc-smasher", "orc-smasher.glb", lambda: build_orc("mace"), 2.4, ORC_BONES, []),
@@ -878,6 +986,7 @@ MONSTERS = [
     ("human-cultist", "human-cultist.glb", build_cultist, 2.5, CULTIST_BONES, []),
     ("duergar-guard", "duergar-guard.glb", build_duergar, 2.15, DUERGAR_BONES, []),
     ("snake", "snake.glb", build_snake, 1.75, SNAKE_BONES, [], SNAKE_MOVES),
+    ("cave-bear", "cave-bear.glb", build_bear, 1.65, BEAR_BONES, [], BEAR_MOVES),
 ]
 # Moves only some figures have.
 EXTRA_MOVES = {"1H_Ranged_Shoot"}

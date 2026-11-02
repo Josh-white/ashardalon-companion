@@ -17,6 +17,7 @@ export const MODEL_PROPS = {
   Human_Cultist: [],
   Duergar_Guard: [],
   Snake: [],
+  Cave_Bear: [],
 }
 
 // By hero (the box's five by key), then by the words in a hero's class, for fan heroes.
@@ -56,6 +57,7 @@ const MONSTER_FIGURES = [
   [/cultist/i, 'Human_Cultist'],
   [/duergar guard/i, 'Duergar_Guard'],
   [/^snake$/i, 'Snake'],
+  [/bear/i, 'Cave_Bear'],
 ]
 
 // { model, gear, height } for a monster ({ name }), or null.
