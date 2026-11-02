@@ -46,14 +46,13 @@ export function heroModel(hero) {
 // The monsters with their own 3D figure (made by scripts/models/make-test-orc.py), by card
 // name. Any other monster gets null and stays a standee.
 export const MONSTER_FIGURES = [
-  { name: 'Orc Smasher', model: 'Orc_Smasher' },
-  { name: 'Orc Archer', model: 'Orc_Archer' },
+  [/orc smasher/i, 'Orc_Smasher'],
+  [/orc archer/i, 'Orc_Archer'],
 ]
 
 // { model, gear, height } for a monster ({ name }), or null.
 export function monsterModel(monster) {
-  const name = (monster?.name ?? '').toLowerCase()
-  const model = MONSTER_FIGURES.find((f) => name.includes(f.name.toLowerCase()))?.model
+  const model = MONSTER_FIGURES.find(([words]) => words.test(monster?.name ?? ''))?.[1]
   return model ? { model, gear: [], height: 1 } : null
 }
 
