@@ -588,9 +588,16 @@ export function playAttack3D(stage, fx, picture) {
   })
 
   // A hero figure turns to its (first) target and swings, shoots, throws or casts.
-  if (!still && attacker?.userData.anim && aims.length > 0) {
-    face(attacker, aims[0].x - origin.x, aims[0].z - origin.z)
-    parts.push(once(IMPACT - 0.3, () => playMove(attacker, attackMove(fx.look))))
+  // (A figure whose model is still loading turns and swings once it's in.)
+  if (!still && attacker && aims.length > 0) {
+    const turn = () => face(attacker, aims[0].x - origin.x, aims[0].z - origin.z)
+    turn()
+    parts.push(
+      once(IMPACT - 0.3, () => {
+        turn()
+        playMove(attacker, attackMove(fx.look))
+      }),
+    )
   }
 
   // A fighter (or a monster's claws and jaws) lunges in at a single target.

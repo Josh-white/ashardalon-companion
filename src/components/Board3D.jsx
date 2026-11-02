@@ -530,8 +530,11 @@ function syncFigures(stage, figures, art, fallAt) {
     seen.add(f.id)
     const url = f.art ? artUrl(art, f.art) : null
     const look = stage.heroModels && f.model ? f.model : null
+    // Compared by what it says: boardFigures makes a new look object every time the game
+    // changes, and a figure rebuilt then has no moves yet for the attack about to play.
+    const lookKey = look ? JSON.stringify(look) : null
     let node = stage.nodes.get(f.id)
-    if (node && (node.userData.url !== url || node.userData.look !== look)) {
+    if (node && (node.userData.url !== url || node.userData.lookKey !== lookKey)) {
       stage.figures.remove(node)
       forget(node)
       stage.nodes.delete(f.id)
@@ -543,6 +546,7 @@ function syncFigures(stage, figures, art, fallAt) {
       node = makeStandee(stage, f, url)
       node.position.copy(to)
       node.userData.look = look
+      node.userData.lookKey = lookKey
       stage.figures.add(node)
       stage.nodes.set(f.id, node)
       if (look) {

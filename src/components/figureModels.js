@@ -155,7 +155,8 @@ function settle(anim, now = false) {
 export function playMove(node, move) {
   const anim = node?.userData.anim
   if (!anim) return
-  const next = anim.action(move)
+  // A monster figure with no shooting or casting move swings instead.
+  const next = anim.action(move) ?? (['shoot', 'cast', 'throw'].includes(move) ? anim.action('attack') : null)
   if (!next) return
   next.reset().setLoop(THREE.LoopOnce, 1)
   next.clampWhenFinished = true
