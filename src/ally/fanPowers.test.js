@@ -6,6 +6,7 @@ import { key } from '../board/grid.js'
 import { boardGrid } from '../board/play.js'
 import { attackOptions, allyStep } from './brain.js'
 import { fanReaction } from './fanPowers.js'
+import { offTurnMove } from './brain.js'
 
 // A made-up Start tile (its two halves count as two tiles), open to the north.
 const TILES = normalizeTiles(
@@ -206,5 +207,117 @@ describe('on anyone\'s turn', () => {
       state = run(state, step)
       expect(state.monsters).toEqual([])
     }
+  })
+})
+
+describe('Fesud in the shadows (a fan Assassin)', () => {
+  const ASSASSIN = { ...fan(3, 'assassin', ['shadowphage']), powerSlots: ['at-will', 'utility', 'utility', 'daily'] }
+  const strike = card('Shadow Strike', 'at-will', '+7', '1', { shadow: 'leave', shadowBonus: 2 })
+  const merge = card('Shadowmerge', 'utility', '', '', { use: {}, shadow: 'enter' })
+
+  it('a hurt Fesud slips into the shadows instead of a so-so attack, then strikes from them', () => {
+    let state = start([[ASSASSIN, [strike]]])
+    state = place(state, hero(state, 0).id, [0, 6])
+    state = withMonsters(state, [[0, 5]], 3)
+    state = { ...state, heroes: state.heroes.map((h) => ({ ...h, hp: 2 })) }
+    const step = allyStep(state, { roll })
+    expect(step.action).toMatchObject({ type: 'SET_SHADOW', on: true })
+    state = run(state, step)
+    expect(hero(state, 0).tokens.shadow).toBe(true)
+    // In the shadows the attack counts the shadow bonus: a better chance than before.
+    const before = attackOptions({ ...state, heroes: state.heroes.map((h) => ({ ...h, tokens: { ...h.tokens, shadow: false } })) }, { ...hero(state, 0), tokens: {} })[0]
+    const after = attackOptions(state, hero(state, 0))
+    expect(after).toEqual([])
+    const fresh = { ...state, turn: { ...state.turn, attackSpent: null } }
+    expect(attackOptions(fresh, hero(fresh, 0))[0].chance).toBeGreaterThan(before?.chance ?? 0)
+  })
+
+  it('a healthy Fesud just attacks', () => {
+    let state = start([[ASSASSIN, [strike]]])
+    state = place(state, hero(state, 0).id, [0, 6])
+    state = withMonsters(state, [[0, 5]], 3)
+    expect(allyStep(state, { roll }).action.type).toBe('HERO_ATTACK')
+  })
+
+  it("with nothing to attack and nowhere to go, he ends the Hero Phase in the shadows", () => {
+    let state = start([[ASSASSIN, [strike]]])
+    state = place(state, hero(state, 0).id, [0, 7])
+    state = withMonsters(state, [[0, 0]], 3)
+    state = { ...state, heroes: state.heroes.map((h) => ({ ...h, conditions: ['Immobilized'] })) }
+    const step = allyStep(state, { roll })
+    expect(step.action).toMatchObject({ type: 'SET_SHADOW', on: true })
+  })
+
+  it('uses Shadowmerge before a finishing blow that could miss', () => {
+    let state = start([[ASSASSIN, [card('Shadow Strike', 'at-will', '+1', '1', { shadow: 'leave', shadowBonus: 2 }), merge]]])
+    state = place(state, hero(state, 0).id, [0, 6])
+    state = withMonsters(state, [[0, 5]], 1)
+    const step = allyStep(state, { roll })
+    expect(step.action).toMatchObject({ type: 'USE_POWER', powerId: powerId(state, 0, 'Shadowmerge') })
+    state = run(state, step)
+    expect(hero(state, 0).tokens.shadow).toBe(true)
+    expect(allyStep(state, { roll }).action.type).toBe('HERO_ATTACK')
+  })
+})
+
+describe("where a fan power's move takes a figure", () => {
+  const MONK = fan(1, 'monk', ['mind-over-body'])
+  const flurry = card('Flurry of Blows', 'at-will', '+6', '1', { board: { after: [{ pick: 'attacked', to: 'ownTile', hit: true }] } })
+
+  it('Flurry of Blows drags the monster away from a hurt friend', () => {
+    let state = start([[MONK, [flurry]], [HERO_TEMPLATES[0], [jab], false]])
+    state = place(state, hero(state, 0).id, [1, 6])
+    state = place(state, hero(state, 1).id, [1, 4])
+    state = { ...state, heroes: state.heroes.map((h, i) => (i === 1 ? { ...h, hp: 2 } : h)) }
+    state = withMonsters(state, [[1, 5]], 3)
+    state = run(state, allyStep(state, { roll }))
+    expect(state.turn.boardMove).toBeTruthy()
+    const step = allyStep(state, { roll })
+    expect(step.action.type).toBe('BOARD_MOVE')
+    const [x, y] = step.action.to
+    // Farther from the hurt friend at [1,4] than where it was.
+    expect(Math.abs(x - 1) + Math.abs(y - 4)).toBeGreaterThan(1)
+  })
+
+  it('a hurt hero dodging with Swift Evasion on a player\'s turn jumps away from the monster', () => {
+    const swift = card('Swift Evasion', 'utility', '', '', { reaction: 'dodge', board: { dodge: [{ pick: 'self', to: 'tileWithin', n: 1 }] } })
+    let state = start([[HERO_TEMPLATES[1], [jab], false], [{ ...fan(3, 'assassin', ['shadowphage']), powerSlots: ['at-will', 'utility'] }, [jab, swift]]])
+    state = place(state, hero(state, 0).id, [3, 0])
+    state = place(state, hero(state, 1).id, [0, 1])
+    state = withMonsters(state, [[0, 0]], 3)
+    state = { ...state, heroes: state.heroes.map((h, i) => (i === 1 ? { ...h, hp: 2 } : h)) }
+    state = { ...state, turn: { ...state.turn, boardMove: { heroId: hero(state, 1).id, source: 'Swift Evasion', attacked: [], steps: [{ pick: 'self', to: 'tileWithin', n: 1 }] } } }
+    const step = offTurnMove(state)
+    expect(step.action).toMatchObject({ type: 'BOARD_MOVE', id: hero(state, 1).id })
+    // Onto the Start tile's other half, a tile away from the monster.
+    expect(step.action.to[1]).toBeGreaterThanOrEqual(4)
+  })
+
+  it('Psionic Stride swaps a hurt friend out from next to a monster', () => {
+    const stride = card('Psionic Stride', 'utility', '', '', { use: { board: [{ pick: 'otherHero', to: 'swap' }] } })
+    let state = start([[MONK, [jab, stride]], [HERO_TEMPLATES[0], [jab], false]])
+    state = place(state, hero(state, 0).id, [0, 7])
+    state = place(state, hero(state, 1).id, [0, 1])
+    state = withMonsters(state, [[0, 0]], 3)
+    state = { ...state, heroes: state.heroes.map((h, i) => (i === 1 ? { ...h, hp: 2 } : h)) }
+    let step = allyStep(state, { roll })
+    expect(step.action).toMatchObject({ type: 'USE_POWER', powerId: powerId(state, 0, 'Psionic Stride') })
+    state = run(state, step)
+    step = allyStep(state, { roll })
+    expect(step.action).toMatchObject({ type: 'BOARD_MOVE', id: hero(state, 1).id })
+    state = run(state, step)
+    expect(state.board.tokens[hero(state, 0).id]).toEqual([0, 1])
+    expect(state.board.tokens[hero(state, 1).id]).toEqual([0, 7])
+  })
+})
+
+describe('Whirling Mantis Step (a fan Monk)', () => {
+  it('walks over to two monsters to hit both', () => {
+    const mantis = card('Whirling Mantis Step', 'daily', '+7', '1', { targets: 'any', before: 'First move your speed.', board: { before: [{ pick: 'self', to: 'squares', n: 'speed' }] } })
+    let state = start([[fan(1, 'monk', ['mind-over-body']), [jab, mantis]]])
+    state = place(state, hero(state, 0).id, [0, 7])
+    state = withMonsters(state, [[1, 2], [1, 4]], 3)
+    const step = allyStep(state, { roll })
+    expect(step.action).toMatchObject({ type: 'START_BOARD_MOVE', powerId: powerId(state, 0, 'Whirling Mantis Step') })
   })
 })

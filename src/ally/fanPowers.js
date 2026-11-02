@@ -5,13 +5,17 @@
 // (Bardic Song rerolls, Mind Over Body rolls). Each returns { action, say } or null, like the
 // rest of the brain (brain.js and powers.js call them).
 
-import { tilesBetween } from '../board/paths.js'
+import { key } from '../board/grid.js'
+import { adjacent, tilesBetween } from '../board/paths.js'
 import { boardGrid } from '../board/play.js'
+import { moveChoices, moveTargets, queueMoves } from '../board/powerMoves.js'
+import { effectsOf } from '../data/powerEffects.js'
+import { hasAbility } from '../data/heroes.js'
 import { powerNumber } from '../state/combat.js'
 import { foes } from '../state/gameHelpers.js'
 import { bardicSongsLeft } from '../state/heroAttacks.js'
 import { canSpendAttack, mindOverBodyChoices } from '../state/heroTurn.js'
-import { trapsOnTile } from '../state/fanPowers.js'
+import { tilesWithin1, trapsOnTile } from '../state/fanPowers.js'
 import { figureHp, foeFigures, standingHeroes, usable } from './powers.js'
 
 const d20 = () => Math.floor(Math.random() * 20) + 1
@@ -114,4 +118,133 @@ export function fanReaction(state, roll = d20) {
     }
   }
   return null
+}
+
+// ---- Fesud (a fan Assassin): in and out of the shadows ----
+
+const inShadow = (hero) => Boolean(hero.tokens?.shadow)
+
+// Shadowphage instead of attacking: when the hero is hurt and the attack wouldn't finish a
+// monster or hit a villain, or when there's nothing to attack. A hero already in the shadows
+// strikes from them (the shadow bonus) instead.
+export function shadowStep(state, hero, option) {
+  if (!hasAbility(hero, 'shadowphage') || inShadow(hero) || !canSpendAttack(state, hero) || !state.board?.tokens[hero.id]) return null
+  if (option && (option.finishes.length > 0 || option.villain || !hurt(hero))) return null
+  if (!option && foeFigures(state).length === 0) return null
+  return { action: { type: 'SET_SHADOW', heroId: hero.id, on: true }, say: `${hero.name} slips into the shadows.` }
+}
+
+// Shadowmerge: into the shadows for free just before an attack that matters (a finishing blow
+// or the villain) and could miss, when the attack gets more from the shadows.
+export function shadowmerge(state, hero, option) {
+  if (!option || inShadow(hero) || !(option.finishes.length > 0 || option.villain) || option.chance >= 0.9) return null
+  if (!effectsOf(option.power).shadowBonus) return null
+  const merge = usable(hero, (e) => e.shadow === 'enter' && e.use && Object.keys(e.use).length === 0)
+  if (!merge) return null
+  return { action: { type: 'USE_POWER', heroId: hero.id, powerId: merge.id, heroIds: [] }, say: `${hero.name} uses ${merge.name} to strike from the shadows.` }
+}
+
+// Shadow Seekers: the tokens are ready as soon as monsters are about (one goes out each time
+// the hero slips into the shadows).
+export function seekersPower(state, hero) {
+  if (!hasAbility(hero, 'shadowphage') || foeFigures(state).length === 0 || hero.tokens?.seekersLeft > 0) return null
+  const seekers = usable(hero, (e) => e.use?.tokens?.seekersLeft > 0)
+  if (!seekers) return null
+  return { action: { type: 'USE_POWER', heroId: hero.id, powerId: seekers.id, heroIds: [] }, say: `${hero.name} readies ${seekers.name}.` }
+}
+
+// Trapping Attack: a trap on the hero's tile goes off on the busiest tile within 1 tile. Worth
+// it with 2 or more monster figures (or a villain) on a tile there.
+export function trappingAttack(state, hero) {
+  if (!state.board?.tokens[hero.id] || trapsOnTile(state, hero).length === 0) return null
+  const power = usable(hero, (e) => e.use?.moveTraps > 0)
+  if (!power) return null
+  const grid = boardGrid(state.board)
+  const tiles = new Set(tilesWithin1(state, hero))
+  const crowd = new Map()
+  for (const f of foeFigures(state)) {
+    const area = grid.get(key(f.at))?.area
+    if (tiles.has(area)) crowd.set(area, (crowd.get(area) ?? 0) + (f.foe.villain ? 2 : 1))
+  }
+  if (Math.max(0, ...crowd.values()) < 2) return null
+  return { action: { type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: [] }, say: `${hero.name} turns the trap against the monsters (${power.name}).` }
+}
+
+// ---- Swapping places: Psionic Stride, Yer Own Size ----
+
+// A utility that swaps the hero with a friend: used to pull a hurt friend (half HP or less)
+// out from next to a monster, when the hero has more HP and stays above half.
+const swapUtility = (e) => e.use?.board?.length === 1 && /^(other)?[hH]ero/.test(e.use.board[0].pick) && e.use.board[0].to === 'swap'
+function endangered(state, hero) {
+  const tokens = state.board.tokens
+  return standingHeroes(state).filter((h) => h.id !== hero.id && hurt(h) && h.hp < hero.hp && nearestFoe(state, tokens[h.id]) === 0 && nextToFoe(state, tokens[h.id]))
+}
+export function rescueStride(state, hero) {
+  if (!state.board?.tokens[hero.id] || hurt(hero) || state.turn.boardMove) return null
+  const power = usable(hero, swapUtility)
+  if (!power || endangered(state, hero).length === 0) return null
+  const queued = queueMoves(state, hero, power, effectsOf(power).use.board)
+  if (!queued.turn.boardMove || !moveChoices(queued).some((id) => endangered(state, hero).some((h) => h.id === id))) return null
+  return { action: { type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds: [] }, say: `${hero.name} uses ${power.name} to take a hurt friend's place.` }
+}
+
+// ---- Where the figures go after a fan power's move ----
+
+function nextToFoe(state, at) {
+  const grid = boardGrid(state.board)
+  return foeFigures(state).some((f) => adjacent(grid, at, f.at))
+}
+// Farther from every monster is better: whole tiles first, then squares.
+function safety(state, at) {
+  const near = foeFigures(state).map((f) => f.at)
+  if (near.length === 0) return 0
+  return nearestFoe(state, at) * 100 + Math.min(...near.map((f) => Math.abs(f[0] - at[0]) + Math.abs(f[1] - at[1])))
+}
+const parse = (k) => k.split(',').map(Number)
+
+// A move a fan power left for one of the hero's figures, once the attack is done:
+//   the hero itself or a friend (Alshabbah, Swift Evasion, Tune of Ice and Wind): a hurt
+//     hero gets away from the monsters; one in good shape stays put. A move toward a monster
+//     (Crane's Wings, Willbreaker) is taken while the hero is above half HP.
+//   a monster (Flurry of Blows, One Hundred Leaves, Mighty Heave, the staffs): as far from
+//     the other heroes as it can go, the hurt ones most, staying near the hero.
+//   a monster pulled closer (Vicious Mockery): left where it is.
+// Null leaves it to the brain (which skips a move it may skip).
+export function fanMove(state, hero) {
+  const move = state.turn.boardMove
+  if (!move || move.heroId !== hero.id || move.from || !state.board) return null
+  const s = move.steps?.[0]
+  const id = moveChoices(state)[0]
+  if (!s || !id || s.to === 'swap' || s.to === 'tileCloser') return swapPick(state, hero, s)
+  const targets = moveTargets(state, id).map(parse)
+  if (targets.length === 0) return null
+  const tokens = state.board.tokens
+  const person = state.heroes.find((h) => h.id === id)
+  if (person) {
+    if (/monster|attacked/i.test(s.to)) {
+      if (hurt(person)) return null
+      return { action: { type: 'BOARD_MOVE', id, to: targets[0] }, say: `${person.name} closes in.` }
+    }
+    if (!hurt(person) || !nextToFoe(state, tokens[id])) return null
+    const best = [...targets].sort((a, b) => safety(state, b) - safety(state, a))[0]
+    if (safety(state, best) <= safety(state, tokens[id])) return null
+    return { action: { type: 'BOARD_MOVE', id, to: best }, say: `${person.name} gets away from the monsters.` }
+  }
+  // A monster figure: away from the others, the hurt ones most; near the hero among equals.
+  const grid = boardGrid(state.board)
+  const others = standingHeroes(state).filter((h) => h.id !== hero.id)
+  const self = tokens[hero.id]
+  const squares = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1])
+  const score = (at) =>
+    others.reduce((sum, h) => sum + (Math.min(3, tilesBetween(grid, at, tokens[h.id])) * 100 + Math.min(8, squares(at, tokens[h.id]))) * (hurt(h) ? 3 : 1), 0) - (self ? squares(at, self) / 10 : 0)
+  const best = [...targets].sort((a, b) => score(b) - score(a))[0]
+  return { action: { type: 'BOARD_MOVE', id, to: best }, say: `${hero.name} sends the monster away from the others.` }
+}
+
+// A swap a utility asked for: the hurt friend next to a monster (null skips it).
+function swapPick(state, hero, s) {
+  if (s?.to !== 'swap') return null
+  const friend = endangered(state, hero).find((h) => moveChoices(state).includes(h.id))
+  if (!friend) return null
+  return { action: { type: 'BOARD_MOVE', id: friend.id, to: state.board.tokens[friend.id] }, say: `${hero.name} swaps places with ${friend.name}.` }
 }

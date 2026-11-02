@@ -33,7 +33,7 @@ import { trapDisable } from '../state/encounterRules.js'
 import { cancelEncounter } from './cancelEncounter.js'
 import { castDaily, fearMove, figureHp, guardPower, placeHandToken, sphereStep } from './powers.js'
 import { divertMove, divertPower, wizardEyeStep } from './boardPowers.js'
-import { boostPower, buffPower, fleetfooted } from './fanPowers.js'
+import { boostPower, buffPower, fanMove, fleetfooted, rescueStride, seekersPower, shadowStep, shadowmerge, trappingAttack } from './fanPowers.js'
 
 // A d20 the way the screens roll one; tests pass their own.
 const d20 = () => Math.floor(Math.random() * 20) + 1
@@ -116,6 +116,9 @@ function pendingMove(state, hero) {
   if (divert) return divert
   const first = moveFirstStep(state, hero)
   if (first) return first
+  // A fan power's move afterwards (Alshabbah, Flurry of Blows, Swift Evasion...).
+  const fan = fanMove(state, hero)
+  if (fan) return fan
   if (!move.from) return { action: { type: 'SKIP_BOARD_MOVE' }, say: `${hero.name} stays where it is.` }
   const id = moveChoices(state)[0]
   const to = id && moveTargets(state, id)[0]
@@ -193,7 +196,7 @@ export function attackOptions(state, hero, { atWill = false, all: every = false 
     const inReach = foesInRange(state, hero.id, range, all).filter((m) => !effects.targetOnly || targetAllowed(state, hero, effects, m))
     if (inReach.length === 0) continue
     const answers = askAnswers(state, hero, power)
-    const bonus = (powerNumber(power.card.attack) ?? 0) + (answers.adjacentCount ?? 0) + buffBonus(hero, power)
+    const bonus = (powerNumber(power.card.attack) ?? 0) + (answers.adjacentCount ?? 0) + buffBonus(hero, power) + (hero.tokens?.shadow ? effects.shadowBonus ?? 0 : 0)
     const damage = (powerNumber(power.card.damage) ?? 1) + (answers.startedAdjacent ? 1 : 0)
     const chance = (m) => (effects.autoHit ? 1 : Math.min(0.95, Math.max(0.05, (21 - (m.ac - bonus)) / 20)))
     const kills = (m) => damage >= figureHp(m)
@@ -224,7 +227,8 @@ export function attackOptions(state, hero, { atWill = false, all: every = false 
   const atWills = options.filter((o) => o.power.type !== 'daily')
   const atWillFinishes = new Set(atWills.flatMap((o) => o.finishes))
   return options
-    .filter((o) => every || o.power.type !== 'daily' || atWills.length === 0 || o.villain || o.finishes.some((id) => !atWillFinishes.has(id)))
+    // A daily that isn't used up when it misses from the shadows (Into Darkness) is fine there too.
+    .filter((o) => every || o.power.type !== 'daily' || atWills.length === 0 || o.villain || o.finishes.some((id) => !atWillFinishes.has(id)) || (hero.tokens?.shadow && effectsOf(o.power).shadowKeep))
     .sort((a, b) => b.score - a.score)
 }
 
@@ -327,6 +331,29 @@ function moveFirstPlans(state, hero, { kinds = ['walk', 'pull', 'swap'] } = {}) 
     if (best) plans.push(best)
   }
   return plans.sort((a, b) => b.score - a.score)
+}
+
+// Whirling Mantis Step, Comet Strike (a fan Monk's dailies): move first, then attack every
+// monster next to the hero. Worth the daily when the walk reaches 2 or more monsters, a villain
+// or a finishing blow, and does more than the best attack from here.
+function sweepAttack(state, hero, option) {
+  if (state.turn.boardMove) return null
+  const plan = moveFirstPlans(state, hero, { kinds: ['walk'] }).find((p) => p.power.type === 'daily' && effectsOf(p.power).targets === 'any')
+  if (!plan || (option && plan.score <= option.score * 1.3)) return null
+  const at = plan.to ? parse(plan.to) : state.board.tokens[hero.id]
+  const ready = { ...withHeroAt(state, hero, at), turn: { ...state.turn, beforeMoved: plan.power.id } }
+  const after = attackOptions(ready, ready.heroes.find((h) => h.id === hero.id), { all: true }).find((o) => o.power.id === plan.power.id)
+  if (!after || !(after.targets.length >= 2 || after.villain || after.finishes.length > 0)) return null
+  return startMove(hero, plan.power)
+}
+
+// A move waiting for a computer hero on someone else's turn (Swift Evasion or Tumbling Escape
+// during a player's Villain Phase, a monster's push): the computer makes it, as on its own turn.
+export function offTurnMove(state) {
+  const move = state?.status === 'playing' ? state.turn.boardMove : null
+  const hero = move && state.heroes.find((h) => h.id === move.heroId && h.ally)
+  if (!hero || activeAlly(state)?.id === hero.id) return null
+  return pendingMove(state, hero)
 }
 
 const startMove = (hero, power) => ({ action: { type: 'START_BOARD_MOVE', heroId: hero.id, powerId: power.id }, say: `${hero.name} uses ${power.name}!` })
@@ -806,7 +833,7 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
     if (hero.level === 1 && state.turn.natural20 === hero.id && state.xp >= XP_TO_LEVEL_UP) {
       return { action: { type: 'LEVEL_UP', heroId: hero.id }, say: `Natural 20! ${hero.name} levels up.` }
     }
-    const care = supportItem(state, hero) ?? supportPower(state, hero) ?? buffPower(state, hero)
+    const care = supportItem(state, hero) ?? supportPower(state, hero) ?? buffPower(state, hero) ?? rescueStride(state, hero) ?? seekersPower(state, hero)
     if (care) return care
     // A Treasure token on or next to the hero: pick it up (nothing else waiting to be handed out).
     const loot = treasureInReach(state, hero)
@@ -820,7 +847,7 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
     if (rescue) return { action: { type: 'MOVE_HERO', heroId: hero.id, to: rescue.to }, say: rescue.say }
     const unlock = freeFromCurse(state, hero, roll)
     if (unlock) return unlock
-    const disable = fleetfooted(state, hero) ?? disableTrap(state, hero, roll)
+    const disable = fleetfooted(state, hero) ?? trappingAttack(state, hero) ?? disableTrap(state, hero, roll)
     if (disable) return disable
     // Hypnotism's monster was moved: now it attacks the monster it ended up next to.
     const thrall = hypnotismAttack(state, hero, roll)
@@ -839,9 +866,15 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
     // Hypnotism, when walking one monster over to hit another beats the best attack.
     const hypnosis = attackGone(state, hero) ? null : hypnotismPlan(state, hero)
     if (hypnosis && (!option || hypnosis.score > option.score)) return startMove(hero, hypnosis.power)
-    // Heavy Hitter or Power of Earth first, when the attack matters and could miss.
-    const boost = boostPower(state, hero, option)
+    // Heavy Hitter, Power of Earth or Shadowmerge first, when the attack matters and could miss.
+    const boost = boostPower(state, hero, option) ?? shadowmerge(state, hero, option)
     if (boost) return boost
+    // Shadowphage: a hurt hero slips into the shadows instead of a so-so attack.
+    const shade = option ? shadowStep(state, hero, option) : null
+    if (shade) return shade
+    // A daily that walks first (Whirling Mantis Step, Comet Strike) when it reaches more.
+    const sweep = attackGone(state, hero) ? null : sweepAttack(state, hero, option)
+    if (sweep) return sweep
     if (option) return { action: attackAction(state, hero, option, roll), say: option.say }
     // Nothing in reach: Charge, Into the Fray or Taunting Advance moves first, then attacks.
     const charge = attackGone(state, hero) ? null : moveFirst(state, hero)
@@ -853,7 +886,7 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
     if (move) return { action: { type: 'MOVE_HERO', heroId: hero.id, to: move.to }, say: move.say }
     // The end of the Hero Phase: the Flaming Sphere burns, a hurt hero hides, and Command or
     // Distant Diversion sends a monster away from a hurt friend.
-    return sphereStep(state, hero) ?? guardPower(state, hero) ?? divertPower(state, hero)
+    return sphereStep(state, hero) ?? guardPower(state, hero) ?? divertPower(state, hero) ?? shadowStep(state, hero, null)
   }
   if (phase === 'exploration' && state.turn.explored !== true && state.turn.explored !== false && heroEdges(state).length === 0) {
     return { action: { type: 'SET_EXPLORED', explored: false, rolls: [roll(), roll()] }, say: `${hero.name} isn't on an unexplored edge.` }
