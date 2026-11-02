@@ -16,3 +16,23 @@ describe('undo labels', () => {
     expect(describeAction(state, { type: 'SOMETHING_NEW' })).toBe('Last change')
   })
 })
+
+describe('every undoable action has its own label', () => {
+  it('names board moves, doors, villains and setup', async () => {
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const dirs = ['src/state', 'src/board']
+    const handled = new Set()
+    for (const dir of dirs) {
+      for (const file of fs.readdirSync(dir)) {
+        if (!file.endsWith('.js') || file.includes('.test.') || file === 'describeAction.js') continue
+        for (const m of fs.readFileSync(path.join(dir, file), 'utf8').matchAll(/case '([A-Z_]+)'/g)) handled.add(m[1])
+      }
+    }
+    const server = fs.readFileSync('server/server.js', 'utf8')
+    const notUndoable = new Set([...server.match(/NOT_UNDOABLE = new Set\(\[([^\]]*)\]/)[1].matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]))
+    const state = initialState
+    const missing = [...handled].filter((type) => !notUndoable.has(type) && describeAction(state, { type }) === 'Last change')
+    expect(missing).toEqual([])
+  })
+})

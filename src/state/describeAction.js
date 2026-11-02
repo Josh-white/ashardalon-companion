@@ -173,6 +173,55 @@ export function describeAction(state, action) {
       return hero ? `${hero.name} picks up the Treasure token` : 'Treasure token'
     case 'USE_BOON':
       return action.boon?.name ?? 'Boon'
+    case 'MOVE_HERO':
+    case 'MOVE_HERO_ITEM':
+    case 'BOARD_MOVE':
+    case 'START_BOARD_MOVE':
+    case 'SKIP_BOARD_MOVE':
+    case 'PATH_BACK':
+      return hero ? `${hero.name}'s move` : 'A move on the board'
+    case 'MOVE_TOKEN':
+    case 'CONTROL_MOVE':
+    case 'FOE_STEP':
+    case 'HIT_MOVES':
+      return 'A move on the board'
+    case 'TRAP_STEP':
+      return 'A trap moves'
+    case 'FLY_CARPET':
+      return 'Flying Carpet'
+    case 'SKIP_BONUS_ATTACK':
+      return 'Skipping an extra attack'
+    case 'DOOR_REVEALED':
+      return 'Opening a door'
+    case 'DOOR_UNLOCK':
+      return 'Unlocking a door'
+    case 'PLACE_VILLAIN':
+      return 'Placing a villain'
+    case 'REMOVE_VILLAIN':
+      return 'Removing a villain'
+    case 'VILLAGER_ROLL':
+    case 'VILLAGER_ATTACK':
+    case 'ADJUST_VILLAGER_HP':
+      return 'Villager'
+    case 'ADVENTURE_TAKE_TOKEN':
+      return hero ? `${hero.name} takes the ${action.name ?? 'token'}` : 'Adventure token'
+    case 'ADVENTURE_REVEAL':
+    case 'ADVENTURE_CHAMBER_DONE':
+    case 'ADVENTURE_STORY_DONE':
+      return 'Adventure step'
+    case 'ADVENTURE_ESCAPED':
+      return hero ? `${hero.name} escapes` : 'Escaping'
+    case 'CHOOSE_ADVENTURE':
+      return 'Choosing the adventure'
+    case 'SET_LOBBY_BOARD':
+    case 'SET_LOBBY_DIFFICULTY':
+    case 'SET_LOBBY_SURGES':
+    case 'SET_LOBBY_TILES':
+      return 'Game setup'
+    case 'SET_ALLY':
+      return hero ? (action.ally ? `Computer plays ${hero.name}` : `${hero.name} back to a player`) : 'Computer hero'
+    case 'JOIN_GAME':
+      return 'A hero joining'
     default:
       return 'Last change'
   }
