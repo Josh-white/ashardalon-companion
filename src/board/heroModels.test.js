@@ -26,13 +26,14 @@ describe("the heroes' 3D figures", () => {
     expect(attackMove('fire')).toBe('cast')
   })
 
-  it('gives the orcs and the kobold their own figures and leaves other monsters as standees', () => {
+  it('gives the monsters we made their own figures and leaves other monsters as standees', () => {
     expect(monsterModel({ name: 'Orc Smasher' })).toEqual({ model: 'Orc_Smasher', gear: [], height: 1 })
     expect(monsterModel({ name: 'Orc Archer' }).model).toBe('Orc_Archer')
     expect(monsterModel({ name: 'Kobold Dragonshield' }).model).toBe('Kobold_Dragonshield')
     // Not the villain: Kobold Dragonlord gets his own figure later.
     expect(monsterModel({ name: 'Kobold Dragonlord' })).toBeNull()
+    expect(monsterModel({ name: 'Human Cultist' }).model).toBe('Human_Cultist')
     expect(monsterModel({ name: 'Grell' })).toBeNull()
-    for (const name of ['Orc_Smasher', 'Orc_Archer', 'Kobold_Dragonshield']) expect(MODEL_PROPS[name]).toEqual([])
+    for (const name of ['Orc_Smasher', 'Orc_Archer', 'Kobold_Dragonshield', 'Human_Cultist']) expect(MODEL_PROPS[name]).toEqual([])
   })
 })

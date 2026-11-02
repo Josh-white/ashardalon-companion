@@ -14,6 +14,7 @@ export const MODEL_PROPS = {
   Orc_Smasher: [],
   Orc_Archer: [],
   Kobold_Dragonshield: [],
+  Human_Cultist: [],
 }
 
 // By hero (the box's five by key), then by the words in a hero's class, for fan heroes.
@@ -50,6 +51,7 @@ const MONSTER_FIGURES = [
   [/orc smasher/i, 'Orc_Smasher'],
   [/orc archer/i, 'Orc_Archer'],
   [/kobold dragonshield/i, 'Kobold_Dragonshield'],
+  [/cultist/i, 'Human_Cultist'],
 ]
 
 // { model, gear, height } for a monster ({ name }), or null.

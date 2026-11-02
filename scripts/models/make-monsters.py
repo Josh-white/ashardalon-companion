@@ -1,6 +1,6 @@
 """Builds the monsters' 3D figures for the 3D board as .glb files: Orc Smasher (a big
-spiked mace), Orc Archer (a bow and a quiver) and Kobold Dragonshield (a dragon shield
-and a short sword).
+spiked mace), Orc Archer (a bow and a quiver), Kobold Dragonshield (a dragon shield
+and a spear) and Human Cultist (hooded robes, a sun sceptre and a dagger).
 
 Run it in Blender (tested headless on 5.2; written for 3.6 and newer):
   * Scripting workspace: open this file (or paste it), press Run Script (Alt+P).
@@ -60,6 +60,11 @@ PALETTE = {
     "scale_dark": "6e2a1a",
     "belly": "d6a25e",
     "crest": "e07a2a",
+    "robe": "5a1e24",        # cultist crimson
+    "robe_dark": "2a1418",
+    "gold": "c9a23a",
+    "skin_pale": "c7a68c",
+    "glow": "ff3b2e",
 }
 
 argv = sys.argv
@@ -314,7 +319,7 @@ def build_bow():
 
 def build_kobold():
     """A small red dragon-kin: snout, horns and crest, scale armour, a tail, a big shield with
-    a dragon's face on the left arm and a short sword in the right hand."""
+    a dragon's face on the left arm and a spear in the right hand."""
     for side, tag in ((1, "L"), (-1, "R")):
         x = 0.2 * side
         leg = f"leg.{tag}"
@@ -349,13 +354,16 @@ def build_kobold():
         box(f"Forearm.{tag}", "scale", arm, (0.41 * side, -0.02, 0.84), (0.14, 0.15, 0.26), bevel=0.05)
         sphere(f"Hand.{tag}", "scale_dark", arm, (0.43 * side, -0.04, 0.66), 0.085)
 
-    # Short sword in the right hand, pointing forward.
+    # A spear in the right hand, its point forward and a little up, a red tassel under the head.
     hand = Vector((-0.43, -0.04, 0.66))
-    box("Grip", "leather_dark", "arm.R", hand + Vector((0, -0.08, 0)), (0.05, 0.16, 0.05), bevel=0.012)
-    box("Crossguard", "iron_dark", "arm.R", hand + Vector((0, -0.17, 0)), (0.05, 0.04, 0.20), bevel=0.012)
-    box("SwordBlade", "iron", "arm.R", hand + Vector((0, -0.42, 0)), (0.03, 0.46, 0.10), bevel=0.01)
-    cone("SwordTip", "iron", "arm.R", hand + Vector((0, -0.70, 0)), 0.05, 0.12, rot=(90, 0, 0), sides=4,
-         scale=(0.3, 1, 1))
+    d = Vector((0, -0.97, 0.26))  # 15 degrees above forward
+    tilt = (75, 0, 0)  # turns a +Z part to point along d
+    cone("SpearShaft", "wood", "arm.R", hand + d * 0.26, 0.04, 1.14, rot=tilt, sides=6, tip=0.03)
+    cone("SpearButt", "iron_dark", "arm.R", hand - d * 0.32, 0.05, 0.06, rot=tilt, sides=6, tip=0.03)
+    cone("SpearCollar", "iron_dark", "arm.R", hand + d * 0.82, 0.055, 0.06, rot=tilt, sides=6, tip=0.04)
+    cone("SpearHead", "iron", "arm.R", hand + d * 0.99, 0.11, 0.30, rot=tilt, sides=4, scale=(1, 0.35, 1))
+    sphere("Tassel", "red", "arm.R", hand + d * 0.78 + Vector((0, 0, -0.07)), 0.055, scale=(0.8, 0.8, 1.4),
+           segments=8, rings=6)
 
     # The dragon shield on the left arm, facing forward.
     sc = Vector((0.47, -0.17, 0.80))
@@ -387,6 +395,71 @@ def build_kobold():
              scale=(1, 0.3, 1), sides=5)
     for i, (y, z, h) in enumerate(((-0.05, 1.70, 0.12), (0.08, 1.70, 0.15), (0.20, 1.64, 0.12))):
         cone(f"Crest{i}", "crest", "head", (0, y, z), 0.06, h, rot=(-15, 0, 0), scale=(0.3, 1, 1), sides=4)
+
+
+def build_cultist():
+    """A hooded cultist in crimson robes: a pale face in the hood's shadow with glowing red
+    eyes, a sun-topped sceptre in the left hand and a curved dagger in the right."""
+    for side, tag in ((1, "L"), (-1, "R")):
+        box(f"Boot.{tag}", "leather_dark", f"leg.{tag}", (0.16 * side, -0.10, 0.07), (0.20, 0.30, 0.14), bevel=0.05)
+        cone(f"Shin.{tag}", "robe_dark", f"leg.{tag}", (0.16 * side, 0, 0.25), 0.09, 0.30, sides=8, tip=0.09)
+
+    # The long robe, flaring at the hem with a gold trim, a sash and a dark front panel.
+    cone("Robe", "robe", "hips", (0, 0, 0.55), 0.46, 0.80, sides=12, tip=0.31)
+    cone("Hem", "gold", "hips", (0, 0, 0.17), 0.47, 0.05, sides=12, tip=0.465)
+    box("Panel", "robe_dark", "hips", (0, -0.30, 0.52), (0.22, 0.06, 0.72), bevel=0.02, rot=(-12, 0, 0))
+    box("PanelSigil", "gold", "hips", (0, -0.355, 0.62), (0.10, 0.02, 0.10), bevel=0.01, rot=(-12, 0, 45))
+    box("Sash", "gold", "hips", (0, 0, 0.94), (0.66, 0.50, 0.08), bevel=0.03)
+
+    # Upper body under a dark mantle, with an amulet.
+    box("Torso", "robe", "body", (0, 0, 1.14), (0.60, 0.44, 0.44), bevel=0.15, segments=3)
+    sphere("Mantle", "robe_dark", "body", (0, 0.02, 1.34), 0.36, scale=(1.12, 0.92, 0.42))
+    sphere("Amulet", "gold", "body", (0, -0.25, 1.16), 0.06, scale=(1, 0.5, 1))
+    sphere("Gem", "glow", "body", (0, -0.28, 1.16), 0.03, scale=(1, 0.5, 1), segments=8, rings=6)
+
+    # Bell sleeves and pale hands.
+    for side, tag in ((1, "L"), (-1, "R")):
+        arm = f"arm.{tag}"
+        cone(f"Sleeve.{tag}", "robe", arm, (0.43 * side, -0.02, 1.03), 0.15, 0.46, rot=(180, 0, 0), sides=10, tip=0.10)
+        cone(f"Cuff.{tag}", "gold", arm, (0.45 * side, -0.03, 0.82), 0.155, 0.04, sides=10, tip=0.15)
+        sphere(f"Hand.{tag}", "skin_pale", arm, (0.46 * side, -0.05, 0.74), 0.085)
+
+    # Sun sceptre in the left hand, standing upright.
+    hand = Vector((0.46, -0.05, 0.74))
+    cone("Sceptre", "wood", "arm.L", Vector((hand.x, hand.y, 1.08)), 0.032, 2.0, sides=6, tip=0.032)
+    cone("SceptreFoot", "gold", "arm.L", Vector((hand.x, hand.y, 0.10)), 0.045, 0.08, sides=6, tip=0.03)
+    top = Vector((hand.x, hand.y, 2.12))
+    cone("SceptreNeck", "gold", "arm.L", top - Vector((0, 0, 0.12)), 0.03, 0.10, sides=6, tip=0.07)
+    sphere("Sun", "gold", "arm.L", top, 0.09, segments=10, rings=7)
+    sphere("SunGem", "glow", "arm.L", top + Vector((0, -0.075, 0)), 0.035, scale=(1, 0.5, 1), segments=8, rings=6)
+    for i in range(8):
+        a = i * 45
+        d = Vector((math.sin(DEG(a)), 0, math.cos(DEG(a))))
+        cone(f"Ray{i}", "gold", "arm.L", top + d * 0.13, 0.03, 0.12, rot=(0, a, 0), sides=4, scale=(1, 0.4, 1))
+
+    # Curved dagger in the right hand, pointing forward.
+    hand = Vector((-0.46, -0.05, 0.74))
+    box("DaggerGrip", "leather_dark", "arm.R", hand + Vector((0, -0.06, 0)), (0.04, 0.12, 0.04), bevel=0.01)
+    box("DaggerGuard", "gold", "arm.R", hand + Vector((0, -0.13, 0)), (0.04, 0.03, 0.14), bevel=0.01)
+    box("DaggerBlade", "iron", "arm.R", hand + Vector((0, -0.25, 0.015)), (0.025, 0.22, 0.06), bevel=0.008, rot=(-8, 0, 0))
+    cone("DaggerTip", "iron", "arm.R", hand + Vector((0, -0.39, 0.04)), 0.03, 0.09, rot=(80, 0, 0), sides=4,
+         scale=(0.4, 1, 1))
+
+    # Head: a deep hood with a peak, the face in its shadow.
+    sphere("Hood", "robe", "head", (0, 0.10, 1.82), 0.40, scale=(1.0, 1.0, 1.05), segments=16, rings=10)
+    cone("HoodPeak", "robe", "head", (0, 0.30, 2.10), 0.17, 0.32, rot=(-55, 0, 0), sides=8)
+    sphere("Face", "skin_pale", "head", (0, -0.12, 1.72), 0.25, scale=(0.95, 0.85, 1.0), segments=14, rings=9)
+    sphere("Shadow", "black", "head", (0, -0.14, 1.80), 0.22, scale=(0.95, 0.88, 0.62), segments=14, rings=9)
+    for side in (1, -1):
+        sphere(f"Glow{side}", "glow", "head", (0.085 * side, -0.345, 1.82), 0.03, scale=(1.2, 0.5, 0.8),
+               segments=8, rings=6)
+    box("Mouth", "black", "head", (0, -0.335, 1.64), (0.10, 0.02, 0.025), bevel=0.006)
+    # The hood's rim round the face, over the top and down the sides.
+    for i in range(13):
+        a = -30 + i * 20
+        x, z = math.cos(DEG(a)) * 0.30, math.sin(DEG(a)) * 0.30
+        box(f"Brim{i}", "robe_dark", "head", (x, -0.27, 1.74 + z), (0.13, 0.10, 0.07), bevel=0.025,
+            rot=(0, -(90 + a), 0))
 
 
 # ---- 4. Join, size it, origin on the floor --------------------------------------------------
@@ -427,6 +500,16 @@ ORC_BONES = [
     ("arm.R", (-0.58, 0, 1.36), (-0.65, 0, 0.72), "body"),
     ("leg.L", (0.26, 0, 0.62), (0.26, 0, 0.05), "hips"),
     ("leg.R", (-0.26, 0, 0.62), (-0.26, 0, 0.05), "hips"),
+]
+CULTIST_BONES = [
+    ("root", (0, 0, 0), (0, 0, 0.2), None),
+    ("hips", (0, 0, 0.45), (0, 0, 0.92), "root"),
+    ("body", (0, 0, 0.92), (0, 0, 1.45), "hips"),
+    ("head", (0, 0, 1.45), (0, 0, 2.20), "body"),
+    ("arm.L", (0.38, 0, 1.30), (0.46, 0, 0.74), "body"),
+    ("arm.R", (-0.38, 0, 1.30), (-0.46, 0, 0.74), "body"),
+    ("leg.L", (0.16, 0, 0.45), (0.16, 0, 0.05), "hips"),
+    ("leg.R", (-0.16, 0, 0.45), (-0.16, 0, 0.05), "hips"),
 ]
 KOBOLD_BONES = [
     ("root", (0, 0, 0), (0, 0, 0.2), None),
@@ -594,6 +677,7 @@ MONSTERS = [
     ("orc-smasher", "orc-smasher.glb", lambda: build_orc("mace"), 2.4, ORC_BONES, []),
     ("orc-archer", "orc-archer.glb", lambda: build_orc("bow"), 2.4, ORC_BONES, ["1H_Ranged_Shoot"]),
     ("kobold-dragonshield", "kobold-dragonshield.glb", build_kobold, 1.9, KOBOLD_BONES, []),
+    ("human-cultist", "human-cultist.glb", build_cultist, 2.5, CULTIST_BONES, []),
 ]
 # Moves only some figures have.
 EXTRA_MOVES = {"1H_Ranged_Shoot"}
