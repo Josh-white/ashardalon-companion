@@ -92,7 +92,7 @@ function makeStage(mount, calm) {
   // The wall torches' real lights, big screen only, made now for the same reason; the
   // dungeon moves them to its torches (dungeonLook3d.js).
   const torchLights = calm ? [] : Array.from({ length: TORCH_LIGHTS }, () => new THREE.PointLight('#ff9a4a', 0, 4.5, 1.6))
-  scene.add(...torchLights)
+  if (torchLights.length > 0) scene.add(...torchLights)
 
   const blob = canvasTexture(64, 64, (g, w) => {
     const r = g.createRadialGradient(w / 2, w / 2, 2, w / 2, w / 2, w / 2)
@@ -259,7 +259,7 @@ function buildDungeon(stage, layout) {
   // Torch lights left over (a small dungeon) stay dark.
   for (const light of stage.torchLights) light.intensity = 0
   stage.dungeonAnimators = stone && stage.look !== 'stone' ? dressDungeon(dungeon, layout, at, { lights: stage.torchLights, wallH: WALL_H, props: stage.look === 'full' }) : []
-  setAir(stage, layout, stone && stage.look !== 'stone')
+  setAir(stage, stone && stage.look !== 'stone')
 
   // Shadows cover the whole dungeon.
   const span = Math.max(bounds.w, bounds.h) / 2 + 2
@@ -276,12 +276,16 @@ function stepMaterial(base, shade) {
   return mat
 }
 
-// Torchlit: darker blue-black air that swallows the far edges, so the torches carry the light.
-function setAir(stage, layout, torchlit) {
-  const span = Math.max(layout.bounds.w, layout.bounds.h)
-  stage.hemi.intensity = torchlit ? 0.55 : 0.9
-  stage.moon.intensity = torchlit ? 0.35 : 0.55
-  stage.scene.fog = torchlit ? new THREE.Fog('#07060a', span * 1.6, span * 3.5) : null
+// Torchlit: a darker room, so the torches carry the light. Calm screens (phones, iPads)
+// have no real torch lights and small, often dim screens, so they stay much brighter (JJ:
+// too dark on the phone). No fog: with the camera pulled back to fit a long dungeon on a
+// narrow screen it swallowed the whole board.
+function setAir(stage, torchlit) {
+  const calm = stage.calm
+  stage.hemi.intensity = torchlit ? (calm ? 1.25 : 0.6) : 0.9
+  stage.moon.intensity = torchlit ? (calm ? 0.7 : 0.4) : 0.55
+  stage.scene.fog = null
+  stage.renderer.toneMappingExposure = torchlit && calm ? 1.3 : 1
   stage.scene.background.set(torchlit ? '#07060a' : '#0c0a09')
 }
 
