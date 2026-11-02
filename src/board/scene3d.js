@@ -4,7 +4,7 @@
 // Board3D.jsx turns this into stone blocks and standees.
 
 import { boardSquares, key, OPPOSITE, STEP } from './grid.js'
-import { heroModel } from './heroModels.js'
+import { heroModel, monsterModel } from './heroModels.js'
 import { boardGrid, figureToken, figuresLeft } from './play.js'
 import { activeVillains } from '../state/game.js'
 import { escapeBlockers } from '../state/adventure.js'
@@ -82,6 +82,7 @@ export function boardFigures(state) {
         kind: 'monster',
         label: figuresLeft(m) > 1 ? `${m.name} ${i + 1}` : m.name,
         art: monsterArt(m),
+        model: monsterModel(m),
         acting: acting === m.id,
         icons: conditionIcons(m),
       })),

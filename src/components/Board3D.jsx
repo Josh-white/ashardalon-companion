@@ -659,7 +659,8 @@ function tapHit(stage, event) {
 const cornerButton = (calm) =>
   `rounded-lg border border-zinc-700 bg-zinc-950/70 text-zinc-300 hover:text-white ${calm ? 'px-3 py-1 text-sm' : 'px-[0.8vw] py-[0.3vw] text-[0.9vw]'}`
 
-// Heroes as 3D figures (the KayKit models) or as standees with their token, per screen.
+// Heroes and the monsters that have one as 3D figures, or all as standees with their token,
+// per screen.
 const FIGURES_KEY = 'ashardalon-board3d-figures'
 function heroModelsWanted() {
   try {
@@ -899,7 +900,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
       <div ref={mountRef} className="h-full w-full" />
       <div className="absolute right-2 top-2 flex gap-2">
         <button type="button" onClick={switchFigures} aria-pressed={heroModels} className={cornerButton(calm)}>
-          {heroModels ? '🧍 Heroes: 3D' : '🪪 Heroes: tokens'}
+          {heroModels ? '🧍 Figures: 3D' : '🪪 Figures: tokens'}
         </button>
         <button type="button" onClick={fit} className={cornerButton(calm)}>
           Fit

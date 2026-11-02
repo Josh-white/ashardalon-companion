@@ -1,7 +1,8 @@
 // Which 3D figure each hero gets on the 3D board (Board3D.jsx, figureModels.js): one of the
 // KayKit Adventurers (CC0, src/models), the gear it carries and how tall it stands. The
 // hero's cape is dyed the hero's colour, so two heroes on the same figure still look apart.
-// Monsters stay standees with their card art: there are no free models that look like them.
+// Monsters stay standees with their card art, except the ones we made figures for
+// (monsterModel below).
 
 // The gear each figure comes with, all hidden but what a hero carries.
 export const MODEL_PROPS = {
@@ -10,6 +11,8 @@ export const MODEL_PROPS = {
   Mage: ['1H_Wand', '2H_Staff', 'Spellbook', 'Spellbook_open', 'Mage_Hat'],
   Rogue: ['Knife', 'Knife_Offhand', '1H_Crossbow', '2H_Crossbow', 'Throwable'],
   Rogue_Hooded: ['Knife', 'Knife_Offhand', '1H_Crossbow', '2H_Crossbow', 'Throwable'],
+  Orc_Smasher: [],
+  Orc_Archer: [],
 }
 
 // By hero (the box's five by key), then by the words in a hero's class, for fan heroes.
@@ -38,6 +41,19 @@ const FALLBACK = { model: 'Knight', gear: ['1H_Sword', 'Round_Shield'] }
 export function heroModel(hero) {
   const pick = BY_KEY[hero?.key] ?? BY_CLASS.find(([words]) => words.test(`${hero?.key ?? ''} ${hero?.className ?? ''}`.toLowerCase()))?.[1] ?? FALLBACK
   return { height: 1, ...pick }
+}
+
+// The monsters with their own 3D figure (made by scripts/models/make-test-orc.py), by card
+// name. Any other monster gets null and stays a standee.
+const MONSTER_FIGURES = [
+  [/orc smasher/i, 'Orc_Smasher'],
+  [/orc archer/i, 'Orc_Archer'],
+]
+
+// { model, gear, height } for a monster ({ name }), or null.
+export function monsterModel(monster) {
+  const model = MONSTER_FIGURES.find(([words]) => words.test(monster?.name ?? ''))?.[1]
+  return model ? { model, gear: [], height: 1 } : null
 }
 
 // The move a figure makes for an attack's look (board/attackFx.js).
