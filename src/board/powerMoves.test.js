@@ -62,6 +62,19 @@ describe('powers that move figures on the board', () => {
     expect(moveChoices(gone)).toEqual([heroes[0].id])
   })
 
+  it("puts the hero next to the attacked monster only on a miss (Crane's Wings)", () => {
+    const { state, heroes, power } = game()
+    const steps = [{ pick: 'self', to: 'nextToAttacked', miss: true }]
+    expect(queueMoves(state, heroes[0], power, steps, { attacked: ['m1'], hit: true }).turn.boardMove ?? null).toBeNull()
+    const missed = queueMoves(state, heroes[0], power, steps, { attacked: ['m1'], hit: false })
+    expect(moveChoices(missed)).toEqual([heroes[0].id])
+    const targets = moveTargets(missed, heroes[0].id)
+    expect(targets).toContain('1,-1')
+    expect(targets).not.toContain('1,-2')
+    const [x, y] = [1, -2]
+    expect(targets.every((k) => { const [a, b] = k.split(',').map(Number); return Math.max(Math.abs(a - x), Math.abs(b - y)) === 1 })).toBe(true)
+  })
+
   it('puts a monster onto a tile next to its own (Distant Diversion)', () => {
     const { state, heroes, power } = game()
     const next = queueMoves(state, heroes[0], power, [{ pick: 'monsterWithin3', to: 'adjacentTile' }])
