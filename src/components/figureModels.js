@@ -16,6 +16,7 @@ import Snake from '../models/Snake.glb?url'
 import CaveBear from '../models/Cave_Bear.glb?url'
 import LegionDevil from '../models/Legion_Devil.glb?url'
 import Grell from '../models/Grell.glb?url'
+import Gibbering_Mouther from '../models/Gibbering_Mouther.glb?url'
 
 // The 3D figures on the 3D board: the heroes are KayKit Adventurers (CC0, src/models, trimmed
 // to the moves used here by scripts/models/trim-models.mjs); the monsters are our own, made in
@@ -41,6 +42,7 @@ const FILES = {
   Cave_Bear: CaveBear,
   Legion_Devil: LegionDevil,
   Grell,
+  Gibbering_Mouther,
 }
 // The figures are about 2.5 units tall: this makes them one square tall.
 const SCALE = 0.44
