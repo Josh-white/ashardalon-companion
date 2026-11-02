@@ -6,3 +6,5 @@ art/*
 sounds/*
 !sounds/README.md
 sound-downloads/
+# The nightly robot check (scripts/nightly-robot.sh).
+robot-check.json

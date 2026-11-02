@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { useMe } from '../state/useMe.js'
 
 // The #admin page: one place to find the hidden pages, opened from the 🛠 Admin link at
@@ -12,6 +13,56 @@ export const ADMIN_PAGES = [
   { hash: '#screens', title: '🖥 All screens', about: 'The big screen, iPads and a phone side by side, for testing turns.' },
   { href: '/?intro', title: '🐉 Replay the intro', about: 'Plays the opening intro again on this screen.' },
 ]
+
+// The last nightly robot check with this Pi's own cards (scripts/nightly-robot.sh).
+export function RobotCheck() {
+  const [check, setCheck] = useState(null)
+  useEffect(() => {
+    let active = true
+    fetch('/robot-check.json')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => active && setCheck(data))
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [])
+  if (!check) return null
+  if (check.none) {
+    return <p className="mt-6 rounded-2xl bg-zinc-900 p-4 text-zinc-400 ring-1 ring-zinc-800">🤖 The nightly robot check hasn't run on this Pi yet (scripts/nightly-robot.sh).</p>
+  }
+  const when = check.at ? new Date(check.at).toLocaleString() : 'some time'
+  return (
+    <section className={`mt-6 rounded-2xl bg-zinc-900 p-4 ring-1 ${check.ok ? 'ring-emerald-700' : 'ring-red-700'}`}>
+      <h2 className="text-xl font-semibold text-amber-300">🤖 Robot check with this Pi's cards</h2>
+      <p className={check.ok ? 'text-emerald-300' : 'text-red-300'}>
+        {check.ok ? '✓' : '⚠'} {check.line}
+      </p>
+      <p className="text-xs text-zinc-500">
+        {when} · {check.cards} · {check.commit}
+      </p>
+      {(check.failures ?? []).length > 0 && (
+        <ul className="mt-2 space-y-1 text-sm text-zinc-300">
+          {check.failures.map((f, i) => (
+            <li key={i}>
+              <span className="text-red-300">{f.name}</span>: {f.why}
+            </li>
+          ))}
+        </ul>
+      )}
+      {(check.games ?? []).length > 0 && (
+        <details className="mt-2 text-sm text-zinc-400">
+          <summary className="cursor-pointer">Every game</summary>
+          <ul className="mt-1 space-y-0.5">
+            {check.games.map((g, i) => (
+              <li key={i}>{g}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </section>
+  )
+}
 
 export default function AdminPage() {
   const me = useMe()
@@ -40,6 +91,7 @@ export default function AdminPage() {
                 </li>
               ))}
             </ul>
+            <RobotCheck />
           </>
         )}
       </div>
