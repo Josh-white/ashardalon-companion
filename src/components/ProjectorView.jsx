@@ -13,7 +13,7 @@ import { DifficultySwitch, ProjectorAdventure } from './Adventure.jsx'
 import { TilesLeft } from './Tiles.jsx'
 import Art from './Art.jsx'
 import { AreaName } from './AreaBackdrop.jsx'
-import { MusicToggle, SoundToggle, StayAwakeToggle } from './SoundToggle.jsx'
+import { CardReadingToggle, MusicToggle, SoundToggle, StayAwakeToggle } from './SoundToggle.jsx'
 import { BoardSwitch } from './SoundBoard.jsx'
 import { HpBar, LevelBadge } from './ui.jsx'
 import Board, { boardBounds } from './Board.jsx'
@@ -215,6 +215,7 @@ function ProjectorScreen({ state, dispatch, onSwitchSeat, sound }) {
       <span className="flex items-center gap-[1vw]">
         <SoundToggle on={sound.on} setOn={sound.setOn} elsewhere={sound.elsewhere} className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />
         <MusicToggle on={sound.musicOn} setOn={sound.setMusicOn} soundOn={sound.on} className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />
+        <CardReadingToggle state={state} dispatch={dispatch} className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />
         <StayAwakeToggle className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />
         <BoardSwitch state={state} dispatch={dispatch} className="!px-[0.6vw] !py-0 text-[1vw] !text-zinc-600 hover:!text-zinc-300" />
         <DifficultySwitch state={state} dispatch={dispatch} place="above" className="text-[1vw] text-zinc-600 [&>button]:!px-[0.6vw] [&>button]:!py-0 hover:text-zinc-300" />

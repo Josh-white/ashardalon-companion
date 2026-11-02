@@ -196,8 +196,10 @@ export function useNarrator(on, { onHold, onReading } = {}) {
     // The card the hero whose turn it is would draw next gets recorded now, so it's read
     // the moment it's drawn instead of a few seconds later.
     const ahead = audioContext()
-    if (ahead) for (const line of nextReadings(before, after)) fetchLine(ahead, line).catch(() => {})
-    const lines = narrationFor(before, after, serverNow())
+    // Heroes reading cards aloud can be switched off for the game (players who know the cards).
+    const cardsOff = Boolean(after.readCardsOff)
+    if (ahead && !cardsOff) for (const line of nextReadings(before, after)) fetchLine(ahead, line).catch(() => {})
+    const lines = narrationFor(before, after, serverNow()).filter((line) => !(cardsOff && line.read))
     if (lines.length === 0) return
     queue.current = [...queue.current, ...lines].slice(-MAX_QUEUE)
     syncReading()

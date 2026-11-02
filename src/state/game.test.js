@@ -1201,4 +1201,20 @@ describe('a hero reading a card out loud', () => {
     expect(state.readSkips).toBe(1)
     expect(gameReducer(state, { type: 'CARD_READING', on: false }).reading).toBeNull()
   })
+
+  it('turns heroes reading cards off for the game, stopping a reading, and keeps it off in the next game', () => {
+    let state = startGame()
+    const hero = state.heroes[0]
+    state = gameReducer(state, { type: 'CARD_READING', on: true, heroId: hero.id, at: 5 })
+    state = gameReducer(state, { type: 'SET_CARD_READING', on: false })
+    expect(state.readCardsOff).toBe(true)
+    expect(state.reading).toBeNull()
+    expect(state.readSkips).toBe(1)
+    state = gameReducer(state, { type: 'NEW_GAME' })
+    expect(state.status).not.toBe('playing')
+    expect(state.readCardsOff).toBe(true)
+    state = gameReducer(state, { type: 'SET_CARD_READING', on: true })
+    expect(state.readCardsOff).toBe(false)
+    expect(gameReducer(state, { type: 'NEW_GAME' }).readCardsOff).toBeFalsy()
+  })
 })
