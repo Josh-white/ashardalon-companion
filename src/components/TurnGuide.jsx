@@ -7,6 +7,7 @@ import HeroAttack, { AttackAftermath } from './HeroAttack.jsx'
 import { Doors, EscapeNote, RevealButtons } from './Adventure.jsx'
 import MonsterTurns, { DrawMonsterButton, VillainTurns } from './MonsterTurns.jsx'
 import { rollD20 } from '../state/random.js'
+import SongRollOffer from './BardicSong.jsx'
 import { checksFor, phaseChecks, phaseTodo, poisonBonus, villagerRollDue } from '../state/game.js'
 import { VillagerTurn } from './Villagers.jsx'
 import { useCards } from '../state/useCards.js'
@@ -360,6 +361,7 @@ export default function TurnGuide({ state, dispatch }) {
       </div>
 
       <EnvironmentBanner environment={state.environment} className="mt-4" />
+      <SongRollOffer state={state} dispatch={dispatch} className="mt-4" />
 
       {current.key === 'hero' && <HeroPhase key={stepKey} state={state} hero={hero} dispatch={dispatch} />}
       {current.key === 'exploration' && <ExplorationPhase state={state} hero={hero} dispatch={dispatch} />}

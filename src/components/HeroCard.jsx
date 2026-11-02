@@ -10,6 +10,7 @@ import { HERO_TOKENS, sphereOf, sphereVictims } from '../board/heroTokens.js'
 import { canDropDarkness, pathKinds } from '../state/fanPowers.js'
 import { canBecomeWolf, canSpendAttack, inHeroPhase, mindOverBodyChoices, naturesHealingOk } from '../state/heroTurn.js'
 import { BARDIC_SONGS, bardicSongsLeft } from '../state/heroAttacks.js'
+import SongRollOffer from './BardicSong.jsx'
 import { rollD20 } from '../state/random.js'
 import { MonsterChoice } from './Pickers.jsx'
 import PowerList from './PowerList.jsx'
@@ -112,9 +113,10 @@ function FanAbilities({ state, hero, dispatch }) {
       )}
       {songs !== null && (
         <p className="rounded-lg bg-zinc-950/60 px-3 py-2 text-sm text-sky-200">
-          🎶 Bardic Song: {songs} of {BARDIC_SONGS} left. When any hero misses, the attack box offers a song to roll again.
+          🎶 Bardic Song: {songs} of {BARDIC_SONGS} left. When any hero misses an attack, or fails a roll to unlock a door, disable a trap, break a curse or shrug off a condition, a song rolls it again.
         </p>
       )}
+      {songs !== null && <SongRollOffer state={state} dispatch={dispatch} only={hero.id} />}
       {conditions.map((condition) => (
         <Button key={condition} className="w-full" onClick={() => dispatch({ type: 'MIND_OVER_BODY', heroId: hero.id, condition, roll: rollD20() })}>
           🧘 Mind Over Body: roll to shrug off {condition} (11 or more)

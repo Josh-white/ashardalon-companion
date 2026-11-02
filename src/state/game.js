@@ -29,6 +29,7 @@ import { buildDeckWithout, buyFromShop, campaignHeroes, campaignLobby, drawTreas
 import { cowardlyRoll, endTurnStatus } from './monsterStatus.js'
 import { petHurt, petsAct } from './pets.js'
 import { dropDarkness, mesmerizedTurn, springArmedTraps, springFanTokens, takePath } from './fanPowers.js'
+import { singAgain, trackSongRoll } from './bardicSong.js'
 import { attackFollowUp, dodgeHit, heroAttack, powerDamage, rerollAttack, setShadow, usePower } from './heroAttacks.js'
 import { initialState } from './initialState.js'
 import { drawDungeonTile, openBoardDoor, revealDoor, revealTile } from './dungeon.js'
@@ -77,7 +78,9 @@ function evadeHit(state, action) {
 }
 
 // Every action, then a check for an adventure's victory, then the recap's counts.
-export const gameReducer = (state, action) => keepCardsQuiet(state, reduceGame(state, action))
+// A failed roll a bard can sing for keeps the game from before it (bardicSong.js).
+export const gameReducer = (state, action) =>
+  action?.type === 'BARDIC_SONG' ? singAgain(state, action, gameReducer) : keepCardsQuiet(state, trackSongRoll(state, reduceGame(state, action), action))
 
 // Heroes reading drawn cards aloud switched off (players who know the cards) stays off
 // through new games, Try again and the next campaign adventure, until someone turns it on.

@@ -16,6 +16,8 @@ export function describeAction(state, action) {
       return 'Healing Hands'
     case 'BRUTAL_RECOVERY':
       return 'Brutal Recovery'
+    case 'BARDIC_SONG':
+      return 'Bardic Song'
     case 'USE_SURGE':
       return hero ? `${hero.name}'s healing surge` : 'Healing surge'
     case 'TOGGLE_POWER': {
