@@ -27,6 +27,11 @@ export const MODEL_PROPS = {
   Otyugh: [],
   Rage_Drake: [],
   Ashardalon: [],
+  Villager_Alek: [],
+  Villager_Brandis: [],
+  Villager_Cassi: [],
+  Villager_Donnel: [],
+  Villager_Elizar: [],
   Gibbering_Mouther: [],
 }
 
@@ -71,6 +76,11 @@ export const MONSTER_FIGURES = [
   [/otyugh/i, 'Otyugh'],
   [/rage drake/i, 'Rage_Drake'],
   [/^ashardalon$/i, 'Ashardalon'],
+  [/\balek$/i, 'Villager_Alek'],
+  [/\bbrandis$/i, 'Villager_Brandis'],
+  [/\bcassi$/i, 'Villager_Cassi'],
+  [/\bdonnel$/i, 'Villager_Donnel'],
+  [/\belizar$/i, 'Villager_Elizar'],
   [/cultist/i, 'Human_Cultist'],
   [/duergar guard/i, 'Duergar_Guard'],
   [/^snake$/i, 'Snake'],
@@ -82,6 +92,9 @@ export const MONSTER_FIGURES = [
 
 // The figures above that are villains (the #models page lists them as villains).
 export const VILLAIN_MODELS = new Set(['Kobold_Dragonlord', 'Duergar_Captain', 'Orc_Storm_Shaman', 'Gauth', 'Otyugh', 'Rage_Drake', 'Ashardalon'])
+
+// The villagers (the #models page lists them as villagers).
+export const VILLAGER_MODELS = new Set(['Villager_Alek', 'Villager_Brandis', 'Villager_Cassi', 'Villager_Donnel', 'Villager_Elizar'])
 
 // { model, gear, height } for a monster ({ name }), or null.
 export function monsterModel(monster) {

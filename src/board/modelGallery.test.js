@@ -23,6 +23,11 @@ describe('3D figures page', () => {
       'Otyugh',
       'Rage_Drake',
       'Ashardalon',
+      'Villager_Alek',
+      'Villager_Brandis',
+      'Villager_Cassi',
+      'Villager_Donnel',
+      'Villager_Elizar',
       'Human_Cultist',
       'Duergar_Guard',
       'Snake',
@@ -32,6 +37,7 @@ describe('3D figures page', () => {
       'Gibbering_Mouther',
     ])
     expect(g.monsters.find((m) => m.look.model === 'Kobold_Dragonlord').about).toBe('Villain')
+    expect(g.monsters.find((m) => m.look.model === 'Villager_Cassi').about).toBe('Villager')
     expect(g.standees).toEqual([{ name: 'Gelatinous Cube', kind: 'Monster' }, { name: 'Lich Queen', kind: 'Villain' }])
   })
   it("orders the moves and skips Blender's leftover copies", () => {

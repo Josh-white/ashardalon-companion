@@ -23,6 +23,11 @@ import Gauth from '../models/Gauth.glb?url'
 import Otyugh from '../models/Otyugh.glb?url'
 import Rage_Drake from '../models/Rage_Drake.glb?url'
 import Ashardalon from '../models/Ashardalon.glb?url'
+import Villager_Alek from '../models/Villager_Alek.glb?url'
+import Villager_Brandis from '../models/Villager_Brandis.glb?url'
+import Villager_Cassi from '../models/Villager_Cassi.glb?url'
+import Villager_Donnel from '../models/Villager_Donnel.glb?url'
+import Villager_Elizar from '../models/Villager_Elizar.glb?url'
 import Gibbering_Mouther from '../models/Gibbering_Mouther.glb?url'
 
 // The 3D figures on the 3D board: the heroes are KayKit Adventurers (CC0, src/models, trimmed
@@ -56,6 +61,11 @@ const FILES = {
   Otyugh,
   Rage_Drake,
   Ashardalon,
+  Villager_Alek,
+  Villager_Brandis,
+  Villager_Cassi,
+  Villager_Donnel,
+  Villager_Elizar,
   Gibbering_Mouther,
 }
 // The figures are about 2.5 units tall: this makes them one square tall.
