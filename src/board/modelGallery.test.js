@@ -5,7 +5,7 @@ import { galleryFigures, galleryMoves } from './modelGallery.js'
 describe('3D figures page', () => {
   const cards = {
     heroes: [...HERO_TEMPLATES, { key: 'monk', name: 'Darna', className: 'Human Monk', color: 'teal' }],
-    monsters: [{ name: 'Orc Smasher' }, { name: 'Orc Smasher' }, { name: 'Orc Archer' }, { name: 'Gibbering Mouther' }],
+    monsters: [{ name: 'Orc Smasher' }, { name: 'Orc Smasher' }, { name: 'Orc Archer' }, { name: 'Gibbering Mouther' }, { name: 'Gelatinous Cube' }],
     villains: [{ name: 'Otyugh' }],
   }
   it('splits box heroes, fan heroes, 3D monsters and standees', () => {
@@ -22,8 +22,9 @@ describe('3D figures page', () => {
       'Cave_Bear',
       'Legion_Devil',
       'Grell',
+      'Gibbering_Mouther',
     ])
-    expect(g.standees).toEqual([{ name: 'Gibbering Mouther', kind: 'Monster' }, { name: 'Otyugh', kind: 'Villain' }])
+    expect(g.standees).toEqual([{ name: 'Gelatinous Cube', kind: 'Monster' }, { name: 'Otyugh', kind: 'Villain' }])
   })
   it("orders the moves and skips Blender's leftover copies", () => {
     const moves = galleryMoves(['Hit_A', 'Idle.001', 'Walking_A', 'Idle', 'Hit_A.001'])

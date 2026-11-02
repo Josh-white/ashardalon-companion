@@ -84,6 +84,11 @@ PALETTE = {
     "brain_dark": "7e5458",
     "brain_light": "d8b3ae",
     "beak": "3a3336",
+    "flesh": "b98274",       # gibbering mouther
+    "flesh_dark": "7f4c4a",
+    "flesh_light": "d9aa96",
+    "eye_white": "f2eee2",
+    "eye_green": "7fbf3a",
 }
 
 argv = sys.argv
@@ -776,6 +781,121 @@ def build_grell():
              rot=(0, 0, 0), sides=4)
 
 
+def facing(direction):
+    """The turn that points a part built facing front (-Y) along `direction`."""
+    d = Vector(direction).normalized()
+    pitch = math.asin(max(-1, min(1, -d.z)))
+    yaw = math.atan2(d.x, -d.y)
+    return Matrix.Rotation(yaw, 3, "Z") @ Matrix.Rotation(pitch, 3, "X")
+
+
+def turned(m, local_rot=(0, 0, 0)):
+    """Degrees (x, y, z) for finish() of frame m applied after a part's own turn."""
+    own = (Matrix.Rotation(DEG(local_rot[2]), 3, "Z") @ Matrix.Rotation(DEG(local_rot[1]), 3, "Y")
+           @ Matrix.Rotation(DEG(local_rot[0]), 3, "X"))
+    e = (m @ own).to_euler("XYZ")
+    return tuple(math.degrees(a) for a in e)
+
+
+def mouther_eye(name, bone, at, direction, r, iris="eye"):
+    m = facing(direction)
+    out = m @ Vector((0, -1, 0))
+    sphere(f"{name}White", "eye_white", bone, at, r, scale=(1, 0.8, 1), rot=turned(m), segments=10, rings=7)
+    sphere(f"{name}Iris", iris, bone, at + out * r * 0.62, r * 0.55, scale=(1, 0.5, 1), rot=turned(m),
+           segments=8, rings=6)
+    sphere(f"{name}Pupil", "black", bone, at + out * r * 0.86, r * 0.28, scale=(1, 0.5, 1.2), rot=turned(m),
+           segments=6, rings=4)
+    # A fleshy lid over the top of the eye.
+    sphere(f"{name}Lid", "flesh_dark", bone, at + m @ Vector((0, -0.15 * r, 0.42 * r)), r * 1.08,
+           scale=(1.05, 0.75, 0.42), rot=turned(m), segments=10, rings=6)
+
+
+def mouther_mouth(name, bone, at, direction, w, teeth=7):
+    m = facing(direction)
+
+    def put(local):
+        return at + m @ Vector(local)
+
+    sphere(f"{name}Hole", "black", bone, put((0, 0.04 * w, 0)), w, scale=(1, 0.25, 0.42), rot=turned(m),
+           segments=10, rings=6)
+    sphere(f"{name}LipUp", "red", bone, put((0, -0.08 * w, 0.32 * w)), w, scale=(1.08, 0.32, 0.2),
+           rot=turned(m), segments=10, rings=6)
+    sphere(f"{name}LipLow", "red", bone, put((0, -0.08 * w, -0.32 * w)), w, scale=(1.0, 0.32, 0.2),
+           rot=turned(m), segments=10, rings=6)
+    for i in range(teeth):
+        x = (i / (teeth - 1) - 0.5) * 1.4 * w
+        bend = 1 - (2 * x / (1.5 * w)) ** 2  # the teeth follow the lips' curve
+        cone(f"{name}ToothUp{i}", "bone", bone, put((x, -(0.10 + 0.16 * bend) * w, 0.22 * w)), 0.11 * w,
+             0.30 * w, rot=turned(m, (180, 0, 0)), sides=4)
+        if i % 2 == 0 or teeth < 6:
+            cone(f"{name}ToothLow{i}", "bone", bone, put((x * 0.9, -(0.10 + 0.16 * bend) * w, -0.22 * w)),
+                 0.10 * w, 0.30 * w, rot=turned(m), sides=4)
+
+
+def build_mouther():
+    """A gibbering mouther: a heap of pink flesh crawling with eyes and toothy mouths, one big
+    mouth on the top lump at the front."""
+    lumps = [  # name, bone, centre, radius, scale
+        ("Mound", "body", (0, 0.05, 0.42), 0.62, (1.05, 1.0, 0.72)),
+        ("Top", "head", (0, -0.18, 0.98), 0.40, (1.0, 0.95, 0.9)),
+        ("LumpL", "lobe.L", (0.52, -0.05, 0.32), 0.36, (1, 1, 0.85)),
+        ("LumpR", "lobe.R", (-0.50, 0.02, 0.34), 0.38, (1, 1, 0.85)),
+        ("LumpB", "lobe.B", (0.05, 0.50, 0.42), 0.40, (1.1, 1, 0.85)),
+        ("Shoulder", "body", (0.30, 0.22, 0.78), 0.30, (1, 1, 0.9)),
+        ("Hump", "body", (-0.28, 0.12, 0.80), 0.30, (1, 1, 0.9)),
+        ("FrontL", "lobe.L", (0.38, -0.42, 0.22), 0.24, (1, 1, 0.85)),
+        ("FrontR", "lobe.R", (-0.36, -0.44, 0.22), 0.25, (1, 1, 0.85)),
+    ]
+    for name, bone, c, r, sc in lumps:
+        sphere(name, "flesh", bone, c, r, scale=sc, segments=14, rings=9)
+    # Darker blotches and pale bulges so it reads as wet, lumpy flesh.
+    for i, (bone, c, r, colour) in enumerate((
+            ("body", (0.15, -0.38, 0.62), 0.16, "flesh_light"), ("lobe.B", (-0.30, 0.55, 0.30), 0.18, "flesh_dark"),
+            ("body", (-0.55, -0.20, 0.55), 0.14, "flesh_light"), ("lobe.L", (0.75, 0.15, 0.25), 0.15, "flesh_dark"),
+            ("lobe.B", (0.40, 0.55, 0.55), 0.15, "flesh_light"), ("head", (0.22, 0.05, 1.18), 0.13, "flesh_dark"),
+            ("lobe.R", (-0.72, 0.25, 0.25), 0.15, "flesh_light"), ("body", (0.0, 0.40, 0.88), 0.14, "flesh_dark"))):
+        sphere(f"Blob{i}", colour, bone, c, r, scale=(1, 1, 0.8), segments=10, rings=7)
+
+    def on(c, r, sc, direction):
+        """A point on a lump's skin in a direction from its centre."""
+        d = Vector(direction).normalized()
+        return Vector(c) + Vector((d.x * r * sc[0], d.y * r * sc[1], d.z * r * sc[2])) * 0.92
+
+    # The big mouth on the top lump, and smaller ones all over.
+    top = lumps[1]
+    mouther_mouth("MouthBig", "head", on(top[2], top[3], top[4], (0, -1, -0.15)), (0, -1, -0.1), 0.24, teeth=9)
+    for i, (bone, c, r, sc, d, w) in enumerate((
+            ("lobe.L", lumps[2][2], 0.36, (1, 1, 0.85), (0.6, -0.8, 0.1), 0.14),
+            ("lobe.R", lumps[3][2], 0.38, (1, 1, 0.85), (-0.7, -0.6, 0.2), 0.15),
+            ("lobe.B", lumps[4][2], 0.40, (1.1, 1, 0.85), (-0.3, 0.8, 0.4), 0.16),
+            ("body", lumps[5][2], 0.30, (1, 1, 0.9), (0.6, -0.3, 0.7), 0.11),
+            ("lobe.R", lumps[8][2], 0.25, (1, 1, 0.85), (-0.3, -1, 0.2), 0.10))):
+        mouther_mouth(f"Mouth{i}", bone, on(c, r, sc, d), d, w, teeth=5)
+
+    # Eyes everywhere, all sizes, a few with green irises.
+    eyes = (
+        ("head", top[2], top[3], top[4], (-0.45, -0.75, 0.45), 0.10, "eye"),
+        ("head", top[2], top[3], top[4], (0.40, -0.80, 0.50), 0.12, "eye"),
+        ("head", top[2], top[3], top[4], (0.05, -0.45, 0.90), 0.08, "eye_green"),
+        ("head", top[2], top[3], top[4], (0.85, -0.2, 0.3), 0.07, "eye"),
+        ("head", top[2], top[3], top[4], (-0.8, 0.1, 0.5), 0.09, "eye_green"),
+        ("body", lumps[0][2], 0.62, (1.05, 1.0, 0.72), (0.25, -1, 0.15), 0.09, "eye"),
+        ("body", lumps[0][2], 0.62, (1.05, 1.0, 0.72), (-0.35, -1, 0.35), 0.07, "eye_green"),
+        ("body", lumps[5][2], 0.30, (1, 1, 0.9), (0.2, -0.6, 0.8), 0.07, "eye"),
+        ("body", lumps[6][2], 0.30, (1, 1, 0.9), (-0.4, -0.7, 0.6), 0.10, "eye"),
+        ("body", lumps[6][2], 0.30, (1, 1, 0.9), (-0.7, 0.4, 0.6), 0.06, "eye_green"),
+        ("lobe.L", lumps[2][2], 0.36, (1, 1, 0.85), (0.9, 0.1, 0.5), 0.09, "eye"),
+        ("lobe.L", lumps[7][2], 0.24, (1, 1, 0.85), (0.2, -1, 0.5), 0.08, "eye"),
+        ("lobe.R", lumps[3][2], 0.38, (1, 1, 0.85), (-0.9, 0.2, 0.5), 0.11, "eye_green"),
+        ("lobe.R", lumps[3][2], 0.38, (1, 1, 0.85), (-0.3, -0.5, 0.85), 0.07, "eye"),
+        ("lobe.B", lumps[4][2], 0.40, (1.1, 1, 0.85), (0.5, 0.6, 0.6), 0.10, "eye"),
+        ("lobe.B", lumps[4][2], 0.40, (1.1, 1, 0.85), (0.0, 0.5, 0.9), 0.07, "eye_green"),
+        ("lobe.B", lumps[4][2], 0.40, (1.1, 1, 0.85), (0.9, 0.3, 0.2), 0.08, "eye"),
+    )
+    for i, (bone, c, r, sc, d, size, iris) in enumerate(eyes):
+        mouther_eye(f"Eye{i}", bone, on(c, r, sc, d), d, size, iris)
+
+
 # ---- 4. Join, size it, origin on the floor --------------------------------------------------
 
 def join_parts(name, mat, height):
@@ -861,6 +981,14 @@ GRELL_BONES = [
     ("tent.FR", (-0.22, -0.22, 1.0), (-0.26, -0.26, 0.10), "body"),
     ("tent.BL", (0.22, 0.22, 1.0), (0.26, 0.26, 0.10), "body"),
     ("tent.BR", (-0.22, 0.22, 1.0), (-0.26, 0.26, 0.10), "body"),
+]
+MOUTHER_BONES = [
+    ("root", (0, 0, 0), (0, 0, 0.2), None),
+    ("body", (0, 0.05, 0.05), (0, 0.05, 0.75), "root"),
+    ("head", (0, -0.18, 0.70), (0, -0.18, 1.30), "body"),
+    ("lobe.L", (0.48, -0.15, 0.05), (0.48, -0.15, 0.55), "body"),
+    ("lobe.R", (-0.46, -0.15, 0.05), (-0.46, -0.15, 0.55), "body"),
+    ("lobe.B", (0.05, 0.50, 0.05), (0.05, 0.50, 0.65), "body"),
 ]
 KOBOLD_BONES = [
     ("root", (0, 0, 0), (0, 0, 0.2), None),
@@ -972,6 +1100,7 @@ def pose(rig, spec):
         pb.rotation_mode = "XYZ"
         pb.rotation_euler = (0, 0, 0)
         pb.location = (0, 0, 0)
+        pb.scale = (1, 1, 1)
     for bone, value in spec.items():
         pb = rig.pose.bones.get(bone)
         if pb is None:  # a bone this figure doesn't have (a tail)
@@ -982,10 +1111,15 @@ def pose(rig, spec):
             rot, loc = value, (0, 0, 0)
         pb.rotation_euler = tuple(DEG(a) for a in rot)
         pb.location = loc
+        if isinstance(value, dict) and "scale" in value:
+            pb.scale = value["scale"]
 
 
 def add_moves(rig, moves):
     rig.animation_data_create()
+    # Only figures whose moves squash or swell get scale keys (the others stay as they were).
+    scales = any(isinstance(v, dict) and "scale" in v for _n, _l, keys in moves for _f, spec in keys
+                 for v in spec.values())
     for name, _loops, keys in moves:
         action = bpy.data.actions.new(name)
         action.use_fake_user = True
@@ -995,6 +1129,8 @@ def add_moves(rig, moves):
             for pb in rig.pose.bones:
                 pb.keyframe_insert("rotation_euler", frame=frame, group=pb.name)
                 pb.keyframe_insert("location", frame=frame, group=pb.name)
+                if scales:
+                    pb.keyframe_insert("scale", frame=frame, group=pb.name)
         # Each move goes on its own NLA track so the exporter writes it as its own clip.
         track = rig.animation_data.nla_tracks.new()
         track.name = name
@@ -1173,6 +1309,64 @@ GRELL_MOVES = [
     ("Death_A_Pose", False, [(0, GRELL_FALLEN), (1, GRELL_FALLEN)]),
 ]
 
+# The mouther oozes: its lumps swell and sag, it heaves itself forward and the top lump
+# lunges to bite. "scale" is (side, up, forward) too.
+LOBES = ("lobe.L", "lobe.R", "lobe.B")
+MOUTHER_FALLEN = {"body": {"scale": (1.25, 0.45, 1.2)}, "head": {"rot": (35, 0, 0), "loc": (0, -0.1, 0.15)},
+                  "lobe.L": {"rot": (0, 0, -30), "scale": (1.2, 0.7, 1.1)},
+                  "lobe.R": {"rot": (0, 0, 30), "scale": (1.2, 0.7, 1.1)},
+                  "lobe.B": {"rot": (-30, 0, 0), "scale": (1.2, 0.7, 1.1)}}
+MOUTHER_MOVES = [
+    ("Idle", True, [
+        (0, {}),
+        (20, {"body": {"scale": (1.04, 0.96, 1.04)}, "head": {"rot": (-5, 0, 4), "scale": (1.06, 1.06, 1.06)},
+              "lobe.L": {"scale": (0.94, 0.94, 0.94)}, "lobe.B": {"scale": (1.06, 1.06, 1.06)}}),
+        (40, {"body": {"scale": (0.97, 1.04, 0.97)}, "head": {"rot": (4, 0, -4)},
+              "lobe.R": {"scale": (0.94, 0.94, 0.94)}, "lobe.L": {"scale": (1.05, 1.05, 1.05)}}),
+        (60, {}),
+    ]),
+    ("Walking_A", True, [
+        (0, {"body": {"scale": (1.06, 0.92, 1.1), "rot": (6, 0, 0)}, "lobe.B": {"rot": (-15, 0, 0)},
+             "head": (10, 0, 0)}),
+        (12, {"body": {"scale": (0.95, 1.08, 0.94), "rot": (-3, 0, 0)}, "lobe.L": {"rot": (15, 0, 0)},
+              "lobe.R": {"rot": (15, 0, 0)}, "head": (-6, 0, 0)}),
+        (24, {"body": {"scale": (1.06, 0.92, 1.1), "rot": (6, 0, 0)}, "lobe.B": {"rot": (-15, 0, 0)},
+              "head": (10, 0, 0)}),
+    ]),
+    ("1H_Melee_Attack_Chop", False, [
+        (0, {}),
+        (10, {"body": {"rot": (-10, 0, 0), "scale": (0.95, 1.1, 0.95)}, "head": {"rot": (-30, 0, 0)}}),
+        (15, {"body": {"rot": (14, 0, 0), "scale": (1.05, 0.9, 1.12)},
+              "head": {"rot": (45, 0, 0), "loc": (0, 0, 0.30), "scale": (1.15, 1.15, 1.15)},
+              "lobe.L": (25, 0, 0), "lobe.R": (25, 0, 0)}),
+        (22, {"body": {"rot": (8, 0, 0)}, "head": {"rot": (30, 0, 0), "loc": (0, 0, 0.2)}}),
+        (34, {}),
+    ]),
+    ("Hit_A", False, [
+        (0, {}),
+        (5, {"body": {"rot": (-14, 0, 5), "scale": (1.12, 0.82, 1.1)}, "head": (-20, 0, 0)}),
+        (20, {}),
+    ]),
+    ("Dodge_Right", False, [
+        (0, {}),
+        (7, {"root": {"loc": (-0.3, 0, 0)}, "body": {"scale": (1.1, 0.9, 1.0), "rot": (0, 0, 10)}}),
+        (22, {}),
+    ]),
+    ("Cheer", False, [
+        (0, {}),
+        (10, {"body": {"scale": (1.1, 1.15, 1.1)}, "head": {"rot": (-20, 0, 0), "scale": (1.15, 1.15, 1.15)},
+              **{lobe: {"scale": (1.12, 1.12, 1.12)} for lobe in LOBES}}),
+        (22, {"body": {"scale": (1.05, 1.08, 1.05)}, "head": {"rot": (-10, 0, 0)}}),
+        (34, {}),
+    ]),
+    ("Death_A", False, [
+        (0, {}),
+        (10, {"body": {"scale": (0.95, 1.12, 0.95)}, "head": (-20, 0, 0)}),
+        (32, MOUTHER_FALLEN),
+    ]),
+    ("Death_A_Pose", False, [(0, MOUTHER_FALLEN), (1, MOUTHER_FALLEN)]),
+]
+
 # name, file, build, height, bones, extra moves (, own moves)
 MONSTERS = [
     ("orc-smasher", "orc-smasher.glb", lambda: build_orc("mace"), 2.4, ORC_BONES, []),
@@ -1184,6 +1378,7 @@ MONSTERS = [
     ("cave-bear", "cave-bear.glb", build_bear, 1.65, BEAR_BONES, [], BEAR_MOVES),
     ("legion-devil", "legion-devil.glb", build_devil, 2.5, DEVIL_BONES, []),
     ("grell", "grell.glb", build_grell, 2.2, GRELL_BONES, [], GRELL_MOVES),
+    ("gibbering-mouther", "gibbering-mouther.glb", build_mouther, 1.75, MOUTHER_BONES, [], MOUTHER_MOVES),
 ]
 # Moves only some figures have.
 EXTRA_MOVES = {"1H_Ranged_Shoot"}
