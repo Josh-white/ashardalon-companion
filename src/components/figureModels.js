@@ -7,16 +7,19 @@ import Barbarian from '../models/Barbarian.glb?url'
 import Mage from '../models/Mage.glb?url'
 import Rogue from '../models/Rogue.glb?url'
 import RogueHooded from '../models/Rogue_Hooded.glb?url'
+import OrcSmasher from '../models/Orc_Smasher.glb?url'
+import OrcArcher from '../models/Orc_Archer.glb?url'
 
-// The heroes' 3D figures on the 3D board: KayKit Adventurers (CC0, src/models, trimmed to
-// the moves used here by scripts/models/trim-models.mjs). Each file is downloaded once, the
+// The 3D figures on the 3D board: the heroes are KayKit Adventurers (CC0, src/models, trimmed
+// to the moves used here by scripts/models/trim-models.mjs); the orcs are our own, made in
+// Blender by scripts/models/make-test-orc.py with the same move names. Each file is downloaded once, the
 // first time a hero needs it, then copied for every hero on that figure.
 //
 // A figure stands idle, walks when it moves, swings, shoots or casts when it attacks,
 // staggers when hit, sidesteps a miss and falls at 0 HP. On the big screen the idle breathes
 // all the time; on iPads the figure only moves while something happens (the iPad lag lesson).
 
-const FILES = { Knight, Barbarian, Mage, Rogue, Rogue_Hooded: RogueHooded }
+const FILES = { Knight, Barbarian, Mage, Rogue, Rogue_Hooded: RogueHooded, Orc_Smasher: OrcSmasher, Orc_Archer: OrcArcher }
 // The figures are about 2.5 units tall: this makes them one square tall.
 const SCALE = 0.44
 // How long a figure takes to ease back into standing (seconds).
@@ -69,7 +72,7 @@ export function attachModel(node, look, color, ready) {
       const cape = new THREE.MeshStandardMaterial({ color, roughness: 0.85, side: THREE.DoubleSide })
       const gear = new Set(look.gear)
       figure.traverse((o) => {
-        if (MODEL_PROPS[look.model].includes(o.name)) o.visible = gear.has(o.name)
+        if (MODEL_PROPS[look.model]?.includes(o.name)) o.visible = gear.has(o.name)
         if (!o.isMesh) return
         o.castShadow = true
         o.frustumCulled = false

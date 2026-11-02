@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
-import { attackMove, heroModel, MODEL_PROPS } from './heroModels.js'
+import { attackMove, heroModel, MODEL_PROPS, monsterModel } from './heroModels.js'
 
 describe("the heroes' 3D figures", () => {
   it('gives each box hero its own look, carrying gear its figure has', () => {
@@ -24,5 +24,12 @@ describe("the heroes' 3D figures", () => {
     expect(attackMove('arrow')).toBe('shoot')
     expect(attackMove('shield')).toBe('throw')
     expect(attackMove('fire')).toBe('cast')
+  })
+
+  it('gives the two orcs their own figures and leaves other monsters as standees', () => {
+    expect(monsterModel({ name: 'Orc Smasher' })).toEqual({ model: 'Orc_Smasher', gear: [], height: 1 })
+    expect(monsterModel({ name: 'Orc Archer' }).model).toBe('Orc_Archer')
+    expect(monsterModel({ name: 'Grell' })).toBeNull()
+    for (const name of ['Orc_Smasher', 'Orc_Archer']) expect(MODEL_PROPS[name]).toEqual([])
   })
 })
