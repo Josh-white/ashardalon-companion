@@ -51,6 +51,53 @@ describe('attack animations on the virtual board', () => {
     expect(fx.shots[1]).toMatchObject({ to: [2, 0], result: 'miss', dealt: 0, art: null })
   })
 
+  // JJ (2026-11-02): Fesud's Throwing Shield felled the Legion Devil right below him, but
+  // the animation flew to one of the other two devils.
+  describe('a card with several figures (the Legion Devils)', () => {
+    const devils = (hp = 3) => ({ id: 'dv', name: 'Legion Devil', hp, maxHp: 3, ac: 10, xp: 2, conditions: [], card: { hp: 1, figures: 3, attacks: [bite], tactics: [] } })
+    function devilGame(heroAt = [1, 2], squares = [[0, 6], [1, 5], [1, 3]]) {
+      const { state: base, heroes } = game()
+      const [hero, other] = heroes
+      const tokens = { [hero.id]: heroAt, [other.id]: [3, 7], dv: squares[0], 'dv#2': squares[1], 'dv#3': squares[2] }
+      return { state: { ...base, monsters: [{ ...devils(), ownerId: hero.id }], board: { ...base.board, tokens } }, heroes }
+    }
+
+    it('a hit flies to the devil that falls, the one next to the hero', () => {
+      const { state, heroes } = devilGame()
+      const next = gameReducer(state, { type: 'HERO_ATTACK', heroId: heroes[0].id, powerId: 'arc', targets: [{ monsterId: 'dv', roll: 19 }] })
+      expect(Object.values(next.board.tokens)).not.toContainEqual([1, 3])
+      expect(next.moment.fx.shots).toEqual([expect.objectContaining({ to: [1, 3], result: 'kill', art: 'monster-legion-devil' })])
+    })
+
+    it("an ally's attack fells the devil next to that ally, not the active hero's", () => {
+      const { state, heroes } = devilGame([1, 2], [[0, 6], [3, 6], [1, 3]])
+      const next = gameReducer(state, { type: 'HERO_ATTACK', heroId: heroes[1].id, powerId: 'ss', targets: [{ monsterId: 'dv', roll: 19 }] })
+      expect(Object.values(next.board.tokens)).not.toContainEqual([3, 6])
+      expect(next.moment.fx.shots[0]).toMatchObject({ to: [3, 6], result: 'kill' })
+    })
+
+    it('two shots at the devils go to two different devils', () => {
+      const { state, heroes } = devilGame()
+      const next = gameReducer(state, { type: 'HERO_ATTACK', heroId: heroes[0].id, powerId: 'arc', targets: [{ monsterId: 'dv', roll: 19 }, { monsterId: 'dv', roll: 19 }] })
+      const shots = next.moment.fx.shots
+      expect(shots.map((s) => s.result)).toEqual(['kill', 'kill'])
+      expect(shots.map((s) => s.to)).toEqual([[1, 3], [1, 5]])
+      expect(Object.values(next.board.tokens)).toContainEqual([0, 6])
+    })
+
+    it('a miss flies at the nearest devil', () => {
+      const { state, heroes } = devilGame()
+      const next = gameReducer(state, { type: 'HERO_ATTACK', heroId: heroes[0].id, powerId: 'arc', targets: [{ monsterId: 'dv', roll: 2 }] })
+      expect(next.moment.fx.shots[0]).toMatchObject({ to: [1, 3], result: 'miss', art: null })
+    })
+
+    it("each devil's own attack starts from that devil", () => {
+      const { state, heroes } = devilGame()
+      const next = gameReducer(state, { type: 'MONSTER_ATTACK', monsterId: 'dv', token: 'dv#2', attackId: 'bite', targets: [{ heroId: heroes[0].id, roll: 18 }] })
+      expect(next.moment.fx.from).toEqual([1, 5])
+    })
+  })
+
   it("draws a monster's bite at the hero it hurt", () => {
     const { state, heroes } = game()
     const next = gameReducer(state, { type: 'MONSTER_ATTACK', monsterId: 'm2', attackId: 'bite', targets: [{ heroId: heroes[1].id, roll: 18 }] })
