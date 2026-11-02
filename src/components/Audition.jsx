@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from './ui.jsx'
+import { AdminLink } from './AdminLink.jsx'
 
 // The #audition page: every ElevenLabs sound with its takes, to listen to and pick the
 // one the game plays. Takes are made on the Pi by server/generate-sounds.js.
@@ -43,6 +44,7 @@ export default function Audition() {
   return (
     <main className="mx-auto max-w-3xl space-y-6 px-4 py-6 text-zinc-100">
       <header className="space-y-1">
+        <AdminLink />
         <h1 className="font-display text-2xl font-bold text-amber-400">Sound audition</h1>
         <p className="text-zinc-400">
           Tap a take to hear it, then <b>Use this</b> on your favourite. Screens pick up new sounds the next time they load.

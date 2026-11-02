@@ -1,5 +1,6 @@
 import { useCards } from '../state/useCards.js'
 import TileDrawing from './TileDrawing.jsx'
+import { AdminLink } from './AdminLink.jsx'
 
 // The #tiles page: every dungeon tile layout in cards.json, drawn the way the virtual
 // board will draw it, to check against the real tiles. The real tile wins.
@@ -8,6 +9,7 @@ export default function TileCheck() {
   const tileProblems = cards.problems.filter((p) => /tile/i.test(p))
   return (
     <main className="min-h-screen bg-zinc-950 p-4 text-zinc-100">
+      <AdminLink />
       <h1 className="font-display text-3xl text-amber-400">Tile check</h1>
       <p className="mt-1 max-w-2xl text-zinc-400">
         Each tile is drawn with its triangle at the bottom. Grey is floor, black is wall, the dark circle is the scorch mark
