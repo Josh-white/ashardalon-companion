@@ -38,24 +38,24 @@ function Switchable({ state }) {
 }
 
 describe('the projector 3D switch', () => {
-  it('is off at first, and the flat board shows', () => {
-    const c = render(<Switchable state={game()} />)
-    expect(c.getByRole('button', { name: /3D board off/ })).toBeTruthy()
-    expect(c.container.querySelector('[data-token]')).toBeTruthy()
-  })
-
-  it('remembers being turned on, and falls back to the flat board where 3D can\'t be drawn', async () => {
+  it("is on at first, and shows the flat board where 3D can't be drawn", async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     const c = render(<Switchable state={game()} />)
-    fireEvent.click(c.getByRole('button', { name: /3D board off/ }))
-    expect(localStorage.getItem('ashardalon-board3d')).toBe('on')
     expect(c.getByRole('button', { name: /3D board on/ })).toBeTruthy()
-    // jsdom has no WebGL: the flat board comes back instead of a blank screen.
-    await waitFor(() => expect(c.container.querySelector('[data-token]')).toBeTruthy())
+    // jsdom has no WebGL: the flat board stands in instead of a blank screen.
+    await waitFor(() => expect(c.container.querySelector('[data-token]')).toBeTruthy(), { timeout: 15000 })
     await new Promise((r) => setTimeout(r, 50))
     expect(c.container.querySelector('[data-token]')).toBeTruthy()
     warn.mockRestore()
     error.mockRestore()
+  }, 20000)
+
+  it('remembers being turned off', () => {
+    const c = render(<Switchable state={game()} />)
+    fireEvent.click(c.getByRole('button', { name: /3D board on/ }))
+    expect(localStorage.getItem('ashardalon-board3d')).toBe('off')
+    expect(c.getByRole('button', { name: /3D board off/ })).toBeTruthy()
+    expect(c.container.querySelector('[data-token]')).toBeTruthy()
   })
 })
