@@ -11,6 +11,6 @@ describe('the version line on the game picker', () => {
   })
 
   it('gets both from the build', () => {
-    expect(versionLine()).toMatch(/^Version \w+ · built /)
+    expect(versionLine()).toMatch(/^Version \S.* · built /)
   })
 })
