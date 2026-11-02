@@ -2,8 +2,8 @@
 spiked mace), Orc Archer (a bow and a quiver), Kobold Dragonshield (a dragon shield
 and a spear) Human Cultist (hooded robes, a sun sceptre and a dagger)
 Duergar Guard (a helmet, a beard, a round shield and a warhammer)
-Snake (coiled, with its own legless skeleton and moves) and Cave Bear
-(on all fours; rears up to maul).
+Snake (coiled, with its own legless skeleton and moves) , Cave Bear
+(on all fours; rears up to maul) and Legion Devil (horns, black armour, a tail and a longsword).
 
 Run it in Blender (tested headless on 5.2; written for 3.6 and newer):
   * Scripting workspace: open this file (or paste it), press Run Script (Alt+P).
@@ -76,6 +76,9 @@ PALETTE = {
     "fur": "6e4b2e",
     "fur_dark": "48311f",
     "fur_light": "a8865e",
+    "devil": "a3262a",
+    "devil_dark": "6a1519",
+    "armour": "2c2a30",
 }
 
 argv = sys.argv
@@ -643,6 +646,84 @@ def build_bear():
         cone(f"LowFang{side}", "bone", "head", (0.06 * side, hy - 0.31, hz - 0.20), 0.02, 0.07, sides=5)
 
 
+def build_devil():
+    """A legion devil: red skin, curling horns, black spiked plate armour, a pointed tail, a
+    longsword in the right hand and a small spiked buckler on the left arm."""
+    for side, tag in ((1, "L"), (-1, "R")):
+        x = 0.24 * side
+        leg = f"leg.{tag}"
+        box(f"Hoof.{tag}", "armour", leg, (x, -0.05, 0.10), (0.28, 0.40, 0.20), bevel=0.07)
+        box(f"Greave.{tag}", "armour", leg, (x, -0.02, 0.32), (0.28, 0.30, 0.26), bevel=0.08)
+        cone(f"KneeSpike.{tag}", "armour", leg, (x, -0.18, 0.42), 0.05, 0.12, rot=(90, 0, 0), sides=5)
+        box(f"Thigh.{tag}", "devil", leg, (x, 0, 0.52), (0.26, 0.28, 0.16), bevel=0.06)
+
+    # Hips: an armoured skirt of plates, a belt with a skull-ish clasp; the tail behind.
+    box("Faulds", "armour", "hips", (0, 0, 0.68), (0.80, 0.52, 0.24), bevel=0.10, segments=3)
+    box("Belt", "devil_dark", "hips", (0, 0, 0.80), (0.86, 0.56, 0.08), bevel=0.03)
+    box("Clasp", "gold", "hips", (0, -0.29, 0.80), (0.16, 0.05, 0.14), bevel=0.02)
+    for i, (y, z, r, depth, tilt) in enumerate(((0.32, 0.66, 0.08, 0.34, -115), (0.58, 0.48, 0.055, 0.32, -130),
+                                                (0.80, 0.30, 0.035, 0.28, -140))):
+        cone(f"Tail{i}", "devil", "tail", (0, y, z), r, depth, rot=(tilt, 0, 0), sides=8, tip=r * 0.6)
+    cone("TailBarb", "devil_dark", "tail", (0, 0.94, 0.16), 0.08, 0.16, rot=(-140, 0, 0), sides=4, scale=(1, 0.3, 1))
+
+    # Body: a black breastplate on a red chest, spiked pauldrons.
+    box("Chest", "devil", "body", (0, 0, 1.15), (0.86, 0.56, 0.66), bevel=0.20, segments=3)
+    box("Breastplate", "armour", "body", (0, -0.14, 1.12), (0.74, 0.34, 0.56), bevel=0.14, segments=3)
+    box("PlateTrim", "gold", "body", (0, -0.315, 1.14), (0.06, 0.03, 0.40), bevel=0.01)
+    for side in (1, -1):
+        sphere(f"Pauldron{side}", "armour", "body", (0.50 * side, 0, 1.44), 0.25, scale=(1.15, 1.05, 0.72))
+        for i, dz in enumerate((0.0, 0.10)):
+            cone(f"PSpike{side}{i}", "devil_dark", "body", (0.62 * side, -0.04 + 0.10 * i, 1.52 + dz * 0.3), 0.05,
+                 0.20, rot=(0, 60 * side, 0), sides=5)
+
+    # Arms: red upper arms, black vambraces with fins, clawed red hands.
+    for side, tag in ((1, "L"), (-1, "R")):
+        arm = f"arm.{tag}"
+        sphere(f"UpperArm.{tag}", "devil", arm, (0.60 * side, 0, 1.20), 0.15, scale=(1, 1, 1.35))
+        box(f"Vambrace.{tag}", "armour", arm, (0.64 * side, -0.02, 0.93), (0.27, 0.27, 0.30), bevel=0.07)
+        cone(f"Fin.{tag}", "devil_dark", arm, (0.78 * side, 0.02, 0.98), 0.07, 0.20, rot=(0, 90 * side, 0),
+             scale=(1, 0.3, 1), sides=4)
+        sphere(f"Hand.{tag}", "devil", arm, (0.65 * side, -0.05, 0.72), 0.15, scale=(1, 1.1, 0.95))
+
+    # Longsword in the right hand, pointing forward.
+    hand = Vector((-0.65, -0.05, 0.72))
+    box("SwordGrip", "leather_dark", "arm.R", hand + Vector((0, -0.04, 0)), (0.06, 0.24, 0.06), bevel=0.015)
+    box("SwordGuard", "gold", "arm.R", hand + Vector((0, -0.18, 0)), (0.06, 0.06, 0.30), bevel=0.015)
+    box("SwordBlade", "iron", "arm.R", hand + Vector((0, -0.58, 0)), (0.035, 0.74, 0.13), bevel=0.012)
+    cone("SwordPoint", "iron", "arm.R", hand + Vector((0, -1.00, 0)), 0.065, 0.14, rot=(90, 0, 0), sides=4,
+         scale=(0.3, 1, 1))
+    box("Fuller", "iron_dark", "arm.R", hand + Vector((0, -0.55, 0)), (0.04, 0.60, 0.03), bevel=0.005)
+
+    # Small spiked buckler on the left forearm.
+    bc = Vector((0.70, -0.20, 0.90))
+    cone("Buckler", "armour", "arm.L", bc, 0.24, 0.07, rot=(90, 0, 0), sides=12, tip=0.24)
+    cone("BucklerSpike", "devil_dark", "arm.L", bc + Vector((0, -0.10, 0)), 0.07, 0.18, rot=(90, 0, 0), sides=6)
+
+    # Head: red, with heavy brows, yellow eyes, a fanged grin, curling horns and a black crest.
+    hy = -0.06
+    sphere("Skull", "devil", "head", (0, hy, 1.88), 0.38, scale=(1.0, 0.95, 0.95), segments=16, rings=10)
+    box("Jaw", "devil", "head", (0, hy - 0.14, 1.66), (0.50, 0.40, 0.22), bevel=0.10, segments=3)
+    box("Mouth", "black", "head", (0, hy - 0.335, 1.68), (0.34, 0.03, 0.05), bevel=0.01)
+    box("Nose", "devil_dark", "head", (0, hy - 0.37, 1.84), (0.10, 0.08, 0.12), bevel=0.03)
+    box("Goatee", "black", "head", (0, hy - 0.30, 1.54), (0.12, 0.10, 0.14), bevel=0.04)
+    for side in (1, -1):
+        x = side
+        cone(f"Fang{x}", "bone", "head", (0.10 * x, hy - 0.345, 1.66), 0.025, 0.07, sides=4)
+        box(f"Brow{x}", "devil_dark", "head", (0.14 * x, hy - 0.33, 1.98), (0.22, 0.10, 0.07), bevel=0.03,
+            rot=(0, -20 * x, 0))
+        sphere(f"Eye{x}", "eye", "head", (0.14 * x, hy - 0.33, 1.91), 0.055, scale=(1, 0.5, 0.75))
+        box(f"Pupil{x}", "black", "head", (0.14 * x, hy - 0.36, 1.91), (0.014, 0.012, 0.06), bevel=0.004)
+        cone(f"Ear{x}", "devil", "head", (0.38 * x, hy + 0.02, 1.90), 0.07, 0.24, rot=(0, 75 * x, 0),
+             scale=(1, 0.4, 1), sides=5)
+        # Horns: up and out, then curling back.
+        cone(f"HornA{x}", "bone", "head", (0.22 * x, hy - 0.02, 2.18), 0.085, 0.24, rot=(0, 25 * x, 0), sides=8,
+             tip=0.06)
+        cone(f"HornB{x}", "bone", "head", (0.30 * x, hy + 0.04, 2.36), 0.06, 0.22, rot=(-35, 15 * x, 0), sides=8,
+             tip=0.035)
+        cone(f"HornC{x}", "devil_dark", "head", (0.33 * x, hy + 0.17, 2.48), 0.035, 0.18, rot=(-75, 0, 0), sides=6)
+    box("Crest", "black", "head", (0, hy + 0.06, 2.24), (0.08, 0.50, 0.12), bevel=0.03, rot=(-10, 0, 0))
+
+
 # ---- 4. Join, size it, origin on the floor --------------------------------------------------
 
 def join_parts(name, mat, height):
@@ -719,6 +800,7 @@ BEAR_BONES = [
     ("leg.L", (0.32, 0.40, 0.72), (0.32, 0.40, 0.05), "hips"),
     ("leg.R", (-0.32, 0.40, 0.72), (-0.32, 0.40, 0.05), "hips"),
 ]
+DEVIL_BONES = ORC_BONES + [("tail", (0, 0.22, 0.70), (0, 0.95, 0.15), "hips")]
 KOBOLD_BONES = [
     ("root", (0, 0, 0), (0, 0, 0.2), None),
     ("hips", (0, 0, 0.50), (0, 0, 0.72), "root"),
@@ -987,6 +1069,7 @@ MONSTERS = [
     ("duergar-guard", "duergar-guard.glb", build_duergar, 2.15, DUERGAR_BONES, []),
     ("snake", "snake.glb", build_snake, 1.75, SNAKE_BONES, [], SNAKE_MOVES),
     ("cave-bear", "cave-bear.glb", build_bear, 1.65, BEAR_BONES, [], BEAR_MOVES),
+    ("legion-devil", "legion-devil.glb", build_devil, 2.5, DEVIL_BONES, []),
 ]
 # Moves only some figures have.
 EXTRA_MOVES = {"1H_Ranged_Shoot"}
