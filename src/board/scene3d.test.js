@@ -3,7 +3,7 @@ import { HERO_TEMPLATES } from '../data/heroes.js'
 import { normalizeCardFile } from '../data/cards.js'
 import { normalizeTiles } from './tileDefs.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
-import { boardFigures, boardLayout } from './scene3d.js'
+import { boardExtras, boardFigures, boardLayout } from './scene3d.js'
 
 const TILES = normalizeTiles(
   [
@@ -58,5 +58,53 @@ describe('the 3D board layout', () => {
     const figures = boardFigures(down)
     expect(figures.find((f) => f.id === state.heroes[1].id).faded).toBe(true)
     expect(figures.some((f) => f.id === 'm1')).toBe(false)
+  })
+})
+
+describe('markers and tokens on the 3D board', () => {
+  it('puts a hazard floor and its badge on a free square of its tile', () => {
+    const state = game()
+    const tile = state.board.tiles[0].uid
+    const lava = { ...state, traps: [{ id: 't1', cardId: 'lava-flow', name: 'Lava Flow', type: 'hazard', tiles: [tile] }] }
+    const [marker] = boardExtras(lava).markers
+    expect(marker).toMatchObject({ id: 't1', floor: 'lava', icon: '🌋' })
+    expect(marker.squares.length).toBeGreaterThan(0)
+    const taken = new Set(Object.values(lava.board.tokens).map(String))
+    expect(taken.has(String(marker.badge.at))).toBe(false)
+    expect(marker.badge.small).toBe(false)
+  })
+
+  it('tints a trap that has no floor of its own, and leaves out a marker with no tile', () => {
+    const state = game()
+    const tile = state.board.tiles[0].uid
+    const traps = [
+      { id: 't1', cardId: 'poisoned-dart-trap', name: 'Poisoned Dart Trap', type: 'trap', tile },
+      { id: 't2', cardId: 'pit', name: 'Pit', type: 'hazard' },
+    ]
+    const markers = boardExtras({ ...state, traps }).markers
+    expect(markers.map((m) => [m.id, m.floor])).toEqual([['t1', 'tint']])
+  })
+
+  it('lists Treasure tokens, hero tokens with their stack and the carpet', () => {
+    const state = game()
+    const owner = state.heroes[0]
+    const items = [
+      { id: 'i1', kind: 'treasure', at: [2, 2] },
+      { id: 'i2', kind: 'sphere', owner: owner.id, at: [2, 3] },
+      { id: 'i3', kind: 'carpet', at: [1, 1] },
+      { id: 'i4', kind: 'treasure' },
+    ]
+    const withItems = { ...state, heroes: state.heroes.map((h) => (h.id === owner.id ? { ...h, tokens: { ...h.tokens, flamingSphere: 3 } } : h)), board: { ...state.board, items } }
+    expect(boardExtras(withItems).items).toEqual([
+      { id: 'i1', kind: 'treasure', at: [2, 2] },
+      { id: 'i3', kind: 'carpet', at: [1, 1] },
+      { id: 'i2', kind: 'token', at: [2, 3], icon: '🔥', color: '#c2410c', count: 3 },
+    ])
+  })
+
+  it('shows a figure\'s conditions as icons', () => {
+    const state = game()
+    const sick = { ...state, heroes: state.heroes.map((h, i) => (i === 0 ? { ...h, conditions: ['Poisoned', 'Dazed'] } : h)) }
+    expect(boardFigures(sick)[0].icons).toEqual(['🧪', '💫'])
   })
 })
