@@ -988,10 +988,13 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // A new tile (or a door opening) redraws the dungeon and looks over all of it again.
+  // A new tile (or a door opening) redraws the dungeon. The first time, the camera looks
+  // over all of it; after that it keeps this screen's zoom and angle on the same spot (the
+  // dungeon's middle moves as it grows), and Follow slides it on to the hero.
   useEffect(() => {
     const stage = stageRef.current
     if (!ready || !stage || !layout) return
+    const before = stage.viewed ? stage.center.clone() : null
     buildDungeon(stage, layout)
     for (const node of stage.nodes.values()) {
       stage.figures.remove(node)
@@ -1001,7 +1004,16 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
     for (const node of [...stage.leaving]) node.userData.gone()
     stage.bounds = layout.bounds
     stage.resize()
-    fitCamera(stage, layout.bounds, stage.camera.aspect)
+    if (before) {
+      const shift = before.sub(stage.center)
+      stage.controls.target.add(shift)
+      stage.camera.position.add(shift)
+      keepOnBoard(stage)
+      stage.controls.update()
+    } else {
+      fitCamera(stage, layout.bounds, stage.camera.aspect)
+      stage.viewed = true
+    }
     stage.render()
   }, [ready, layout])
 
