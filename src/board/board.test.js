@@ -40,10 +40,14 @@ describe('tile layouts', () => {
       { id: 'e', rows: RAW[0].rows, exits: RAW[0].exits, features: [{ type: 'stairs', at: [[4, 0]] }] },
       { id: 'room', rows: RAW[0].rows, exits: RAW[0].exits, features: [{ type: 'stairs', at: [[1, 1], [2, 1]] }] },
       { id: 'room', rows: RAW[0].rows, exits: RAW[0].exits },
+      // A tile joins the board by its south side: a wall all along it can't be walked onto.
+      { id: 'shut', rows: RAW[0].rows, exits: { ...RAW[0].exits, S: 'xxxx' } },
+      { id: 'shut-start', kind: 'start', rows: RAW[0].rows, exits: { ...RAW[0].exits, S: 'xxxx' } },
     ], bad)
-    expect(kept.map((t) => t.id)).toEqual(['room'])
+    expect(kept.map((t) => t.id)).toEqual(['room', 'shut-start'])
     expect(kept[0].features).toEqual([{ type: 'stairs', at: [[1, 1], [2, 1]] }])
-    expect(bad).toHaveLength(6)
+    expect(bad).toHaveLength(7)
+    expect(bad.at(-1)).toMatch(/south side/)
   })
 
   it('reads tiles from cards.json', () => {

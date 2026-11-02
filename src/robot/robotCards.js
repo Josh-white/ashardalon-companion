@@ -44,7 +44,7 @@ const TILES = [
   ...[
     ['....', '.S..', '....', '....', { N: 'oooo', S: 'oooo', W: 'oooo', E: 'oooo' }],
     ['#..#', '..S.', '....', '#..#', { N: 'xoox', S: 'xoox', W: 'xoox', E: 'xoox' }],
-    ['....', '....', '.S..', '####', { N: 'oooo', S: 'xxxx', W: 'ooox', E: 'ooox' }],
+    ['####', '....', '.S..', '....', { N: 'xxxx', S: 'oooo', W: 'xooo', E: 'xooo' }],
     ['#...', '#.S.', '#...', '#...', { N: 'xooo', S: 'xooo', W: 'xxxx', E: 'oooo' }],
     ['.##.', '.S..', '....', '.##.', { N: 'oxxo', S: 'oxxo', W: 'oooo', E: 'oooo' }],
     ['....', '#S.#', '#..#', '....', { N: 'oooo', S: 'oooo', W: 'oxxo', E: 'oxxo' }],
