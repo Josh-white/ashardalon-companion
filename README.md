@@ -187,6 +187,22 @@ docker compose up -d --build
 
 Open `http://piserver.local:8082`. Every screen shows a **Test copy** banner. To try a branch before it's merged: `git fetch && git checkout <branch> && docker compose up -d --build`.
 
+### Try every open pull request by itself
+
+`scripts/auto-update-test.sh` keeps the test copy on main plus every open pull request, so a feature can be tried before it's merged (and once it's merged, `scripts/auto-update.sh` puts it on the real game). When main or any pull request changes, it backs up the test games, builds a local `auto-test` branch with the pull requests merged in oldest first, rebuilds (the tests run in the build) and checks the app answers. If it doesn't, the test copy goes back to the version that worked.
+
+- Only pull requests from branches in this repo go on, never from forks.
+- Drafts, ones labelled `skip-test-copy`, ones whose GitHub checks failed and ones that clash with an older pull request are left out; the log names them.
+- The game picker's version line shows what's on, like `Version 1a2b3c4 + PRs 227, 228`.
+- To hold the test copy still (to try one branch by hand): `touch ~/ashardalon-test/.git/auto-test-hold`. To let it carry on: `rm ~/ashardalon-test/.git/auto-test-hold`.
+- The card files, art and sounds in `cards/` aren't in git, so the test copy keeps its own.
+
+To run it every 5 minutes:
+
+```sh
+(crontab -l 2>/dev/null; echo "*/5 * * * * $HOME/ashardalon-test/scripts/auto-update-test.sh >> $HOME/ashardalon-test-backups/auto-update-test.log 2>&1") | crontab -
+```
+
 On the setup screen, **Start a demo game** skips setup and drops you into round 2 with all five heroes and a few monsters.
 
 ## Develop
