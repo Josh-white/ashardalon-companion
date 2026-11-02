@@ -15,7 +15,8 @@ export function galleryFigures(cards) {
     heroes: heroes.filter((h) => !h.fan),
     fanHeroes: heroes.filter((h) => h.fan),
     // Every monster figure we made, even before its card is in this Pi's cards.json.
-    monsters: MONSTER_FIGURES.map((f) => ({ id: `monster-${f.name}`, name: f.name, about: 'Monster', color: null, look: monsterModel(f) })),
+    // (MONSTER_FIGURES holds [card name words, figure file] pairs; the file is named after the monster.)
+    monsters: MONSTER_FIGURES.map(([, model]) => model.replace(/_/g, ' ')).map((name) => ({ id: `monster-${name}`, name, about: 'Monster', color: null, look: monsterModel({ name }) })),
     standees: [
       ...monsters.filter((m) => !monsterModel(m)).map((m) => ({ name: m.name, kind: 'Monster' })),
       ...villains.map((v) => ({ name: v.name, kind: 'Villain' })),
