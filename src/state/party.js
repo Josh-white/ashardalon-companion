@@ -45,7 +45,9 @@ export function partyReducer(state, action) {
       if (state.status !== 'playing' || !state.board || !hero || Boolean(hero.ally) === ally) return state
       const next = updateHero(state, hero.id, () => ({ ally }))
       const text = ally ? `🤖 The computer is playing ${hero.name} now.` : playerName(hero) ? `${playerName(hero)} is playing ${hero.name} again.` : `You are playing ${hero.name} again.`
-      return withLog({ ...next, allyPaused: ally ? false : next.allyPaused, turn: { ...next.turn, allyHelp: null } }, text)
+      // The last computer hero handed back: nothing is left paused for the next time.
+      const anyAlly = next.heroes.some((h) => h.ally)
+      return withLog({ ...next, allyPaused: ally || !anyAlly ? false : next.allyPaused, turn: { ...next.turn, allyHelp: null } }, text)
     }
 
     // A hero joins a game already going (Easton wants in): on a free square next to whoever's

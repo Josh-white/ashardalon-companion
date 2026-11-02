@@ -257,6 +257,16 @@ describe('handing a hero to the computer', () => {
     expect(gameReducer({ ...state, board: null }, { type: 'SET_ALLY', heroId: id, ally: true }).heroes[0].ally).toBe(false)
   })
 
+  it('taking the last computer hero back leaves nothing paused or waiting for help', () => {
+    const state = { ...start(), heroes: start().heroes.map((h) => ({ ...h, ally: false })) }
+    const id = state.heroes[0].id
+    const handed = gameReducer(state, { type: 'SET_ALLY', heroId: id, ally: true })
+    const stuck = gameReducer(gameReducer(handed, { type: 'ALLY_PAUSE', paused: true }), { type: 'ALLY_HELP', reason: 'Which one?' })
+    const back = gameReducer(stuck, { type: 'SET_ALLY', heroId: id, ally: false })
+    expect(back.allyPaused).toBe(false)
+    expect(back.turn.allyHelp).toBe(null)
+  })
+
   it('pauses, and asks for a hand', () => {
     const state = start()
     const paused = gameReducer(state, { type: 'ALLY_PAUSE', paused: true })
