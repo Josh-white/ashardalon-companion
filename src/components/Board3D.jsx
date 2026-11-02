@@ -757,6 +757,42 @@ function heroModelsWanted() {
 // What one finger (or the left mouse button) does when it drags the 3D board, per screen:
 // 'turn' the camera around the dungeon, or 'move' (slide) the board like the flat one.
 // Two fingers or the right button always do the other one.
+// Whether the camera slides along to the hero whose turn it is, per screen (on at first).
+const FOLLOW_KEY = 'ashardalon-board3d-follow'
+function followWanted() {
+  try {
+    return localStorage.getItem(FOLLOW_KEY) !== 'off'
+  } catch {
+    return true
+  }
+}
+
+// Slides the camera (keeping its angle and zoom) so it looks at square [x, y].
+function centerOn(stage, square) {
+  const [x, z] = stage.at(square[0], square[1])
+  const t = stage.controls.target
+  const from = t.clone()
+  const to = new THREE.Vector3(x, 0, z)
+  if (from.distanceTo(to) < 0.05) return
+  let at = from.clone()
+  stage.tweens = stage.tweens.filter((tw) => !tw.follow)
+  const move = (k) => {
+    const next = from.clone().lerp(to, 1 - (1 - k) ** 3)
+    const d = next.clone().sub(at)
+    at = next
+    t.add(d)
+    stage.camera.position.add(d)
+    stage.controls.update()
+  }
+  if (stage.still) {
+    move(1)
+    stage.render()
+    return
+  }
+  stage.tweens.push({ follow: true, ms: 600, step: move })
+  stage.render()
+}
+
 const DRAG_KEY = 'ashardalon-board3d-drag'
 function dragWanted() {
   try {
@@ -805,6 +841,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
   const [ready, setReady] = useState(false)
   const [heroModels, setHeroModels] = useState(heroModelsWanted)
   const [drag, setDrag] = useState(dragWanted)
+  const [follow, setFollow] = useState(followWanted)
   const board = state.board
   // Rebuilt only when the dungeon itself changes (a tile, a door), not every time a figure moves.
   const layoutKey = board ? `${board.tiles.map((t) => t.uid).join()}|${(board.doors ?? []).map((d) => d.id).join()}` : ''
@@ -981,6 +1018,16 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
     stage.render()
   })
 
+  // The camera follows the hero whose turn it is: when the turn passes, and when they move.
+  const active = figures.find((f) => f.active)
+  const activeKey = active ? `${active.id}@${active.at.join(',')}` : ''
+  useEffect(() => {
+    const stage = stageRef.current
+    if (!ready || !stage?.at || !follow || !active) return
+    centerOn(stage, active.at)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, layout, activeKey, follow])
+
   // An attack flies, strikes and fades (one at a time: a new one clears the last).
   useEffect(() => {
     const stage = stageRef.current
@@ -1009,6 +1056,16 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
   useEffect(() => {
     if (ready && stageRef.current) setDragMode(stageRef.current.controls, drag)
   }, [ready, drag])
+
+  const switchFollow = () => {
+    const on = !follow
+    setFollow(on)
+    try {
+      localStorage.setItem(FOLLOW_KEY, on ? 'on' : 'off')
+    } catch {
+      // Private browsing: it just isn't remembered.
+    }
+  }
 
   const switchDrag = () => {
     const next = drag === 'move' ? 'turn' : 'move'
@@ -1044,6 +1101,9 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
       <div className="absolute right-2 top-2 flex gap-2">
         <button type="button" onClick={switchFigures} aria-pressed={heroModels} className={cornerButton(calm)}>
           {heroModels ? '🧍 Figures: 3D' : '🪪 Figures: tokens'}
+        </button>
+        <button type="button" onClick={switchFollow} aria-pressed={follow} title="The map slides to the hero whose turn it is" className={cornerButton(calm)}>
+          {follow ? '🎯 Follow: on' : '🎯 Follow: off'}
         </button>
         <button
           type="button"
