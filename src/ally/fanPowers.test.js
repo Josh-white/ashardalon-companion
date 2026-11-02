@@ -551,3 +551,49 @@ describe('Savryna (a fan Ranger)', () => {
     expect(state.xp).toBe(xp)
   })
 })
+
+describe('board tokens (slice 5)', () => {
+  const RANGER = { ...fan(2, 'ranger'), powerSlots: ['at-will', 'daily'] }
+  const traps = card('Boobytraps', 'daily', '', '', { use: { tokens: { boobytraps: 2 } } })
+  const beast = card('Beast Ally', 'daily', '', '', { use: { mesmerize: { types: ['Animal'], turns: 2 } } })
+
+  it('Boobytraps go down on the tile the monsters will walk onto', () => {
+    let state = start([[RANGER, [jab, traps]], [HERO_TEMPLATES[0], [jab], false]])
+    state = place(state, hero(state, 0).id, [0, 6])
+    state = place(state, hero(state, 1).id, [1, 7])
+    state = withMonsters(state, [[0, 0], [1, 0]], 3)
+    const step = allyStep(state, { roll })
+    expect(step.action).toMatchObject({ type: 'USE_POWER', powerId: powerId(state, 0, 'Boobytraps') })
+    state = run(state, step)
+    const put = allyStep(state, { roll })
+    expect(put.action.type).toBe('PLACE_ITEM')
+    // On the bottom half of the Start tile (the monsters' way in), not their own half.
+    const grid = boardGrid(state.board)
+    expect(grid.get(key(put.action.to)).area).toBe(grid.get(key([0, 6])).area)
+    expect(grid.get(key(put.action.to)).area).not.toBe(grid.get(key([0, 0])).area)
+  })
+
+  it('Beast Ally: a Trapped beast with another monster next to it', () => {
+    let state = start([[RANGER, [jab, beast]]])
+    state = place(state, hero(state, 0).id, [0, 7])
+    state = withMonsters(state, [[0, 0], [1, 0]], 3)
+    state = { ...state, monsters: state.monsters.map((m, i) => (i === 0 ? { ...m, card: { ...m.card, types: ['Animal'] }, statuses: [{ kind: 'trapped', tokens: 1 }] } : m)) }
+    const step = allyStep(state, { roll })
+    expect(step.action).toMatchObject({ type: 'USE_POWER', powerId: powerId(state, 0, 'Beast Ally') })
+  })
+})
+
+describe('the computer\'s starting powers', () => {
+  it('skips the path-token cards and takes Oak Arrow for Hunting Skills', async () => {
+    const { allyPicks } = await import('./picks.js')
+    const template = { ...fan(2, 'ranger'), powerSlots: ['at-will', 'utility', 'utility'] }
+    const cards = [
+      { id: 'birch', hero: 'ranger', type: 'at-will', name: 'Longbow: Birch Arrow', suggested: true },
+      { id: 'oak', hero: 'ranger', type: 'at-will', name: 'Longbow: Oak Arrow' },
+      { id: 'paths', hero: 'ranger', type: 'utility', name: 'Secret Paths', suggested: true, effect: { use: { tokens: { secretPaths: 2 } } } },
+      { id: 'roots', hero: 'ranger', type: 'utility', name: 'Reviving Roots', suggested: true },
+      { id: 'shroud', hero: 'ranger', type: 'utility', name: 'Forest Shroud' },
+    ]
+    expect(allyPicks(template, cards).map((c) => c?.id)).toEqual(['oak', 'shroud', 'roots'])
+  })
+})
