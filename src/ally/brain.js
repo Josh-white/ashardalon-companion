@@ -33,6 +33,7 @@ import { escapeBlockers } from '../state/adventure.js'
 import { escapeGoal, escapeHold, exitName, exitSquares } from '../board/exits.js'
 import { trapDisable } from '../state/encounterRules.js'
 import { cancelEncounter } from './cancelEncounter.js'
+import { doorGoals, doorStep, goalDoor } from './doors.js'
 import { castDaily, fearMove, figureHp, guardPower, placeHandToken, sphereStep } from './powers.js'
 import { divertMove, divertPower, wizardEyeStep } from './boardPowers.js'
 import { boostPower, buffPower, chorusStep, circleStep, fanMove, fearlessStep, fleetfooted, giftsStep, improvise, perchPower, rescueStride, seekersPower, shadowStep, shadowmerge, summonStep, trappingAttack } from './fanPowers.js'
@@ -800,7 +801,19 @@ export function bestMove(state, hero) {
   // others. A hero already on an edge draws there, unless it has wandered off on its own.
   const stray = strayDistance(state, hero) > STRAY_STEPS
   if (heroEdges(state).length > 0 && !stray) return null
-  const edges = unexploredEdges(grid)
+  // Closed Doors: the one the adventure waits for (or with a chamber behind it) comes before
+  // exploring; any other once there's no edge left to walk to.
+  const doors = doorGoals(state, hero)
+  const toDoor = (list) => {
+    const squares = list.flatMap((g) => g.squares)
+    if (squares.some((sq) => key(sq) === key(at))) return null
+    return walkToward(state, hero, groupedGoal(state, hero, list.map((g) => g.squares)) ?? squares, `${hero.name} heads for the door.`)
+  }
+  const keyDoors = doors.filter((g) => goalDoor(g.door))
+  if (keyDoors.length > 0) return toDoor(keyDoors)
+  // Edges it can walk to: one behind a closed door or a wall doesn't count.
+  const edges = unexploredEdges(grid).filter((e) => e.squares.some((sq) => fromHere.has(key(sq))))
+  if (edges.length === 0 && doors.length > 0) return toDoor(doors)
   if (edges.length === 0) return stray ? walkToward(state, hero, partySquares(state, hero), `${hero.name} goes back to the others.`) : null
   const goal = groupedGoal(state, hero, edges.map((e) => e.squares))
   const onEdge = new Set(goal.map(key))
@@ -868,7 +881,7 @@ function wolfStep(state, hero) {
 }
 
 // The ally's next tap, or null to tap through the turn screen.
-export function allyStep(state, { powers = [], roll = d20 } = {}) {
+export function allyStep(state, { powers = [], roll = d20, cards = {} } = {}) {
   const hero = activeAlly(state)
   if (!hero || !state.board) return null
   const phase = PHASES[state.turn.phase]?.key
@@ -952,6 +965,9 @@ export function allyStep(state, { powers = [], roll = d20 } = {}) {
     // Nothing to fight and no edge in reach: the Wizard Eye explores from farther away.
     const eye = exitGoal(state, hero) || looseTreasure(state).length > 0 ? null : wizardEyeStep(state, hero)
     if (eye) return eye
+    // Next to a Closed Door, with nothing to attack: open it, or roll to unlock it.
+    const door = doorStep(state, hero, { cards, roll })
+    if (door) return door
     const move = bestMove(state, hero)
     if (move) return { action: { type: 'MOVE_HERO', heroId: hero.id, to: move.to }, say: move.say }
     // The end of the Hero Phase: the Flaming Sphere burns, a hurt hero hides, and Command or

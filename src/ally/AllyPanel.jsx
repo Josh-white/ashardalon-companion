@@ -49,9 +49,9 @@ export function nextButton(root = document) {
 // Plays the ally's turns on this screen (only one screen does: allyHostSeat). Each tick it
 // asks the brain, or taps the turn screen's next button, then waits ALLY_STEP_MS.
 export function useAllyDriver(state, dispatch, drive) {
-  const { powers } = useCards()
-  const latest = useRef({ state, dispatch, powers })
-  latest.current = { state, dispatch, powers }
+  const cards = useCards()
+  const latest = useRef({ state, dispatch, cards })
+  latest.current = { state, dispatch, cards }
   const [say, setSay] = useState(null)
   const memory = useRef({ idle: 0, lastLabel: null, sameTaps: 0, lastState: null, attackSeen: null })
 
@@ -69,7 +69,7 @@ export function useAllyDriver(state, dispatch, drive) {
       if (s.turn.allyHelp !== reason) send({ type: 'ALLY_HELP', reason })
     }
     const act = () => {
-      const { state: s, dispatch: send, powers: cards } = latest.current
+      const { state: s, dispatch: send, cards } = latest.current
       const mem = memory.current
       if (s.status !== 'playing' || s.allyPaused || openingPlaying(s, serverNow())) return ALLY_STEP_MS
       // The roll for first turn: allies roll their own die.
@@ -123,7 +123,7 @@ export function useAllyDriver(state, dispatch, drive) {
         mem.attackSeen = hit
         if ((hit.results ?? []).some((r) => r.hit && !s.heroes.find((h) => h.id === r.heroId)?.ally)) return REACTION_MS
       }
-      const step = allyStep(s, { powers: cards, roll: rollD20 })
+      const step = allyStep(s, { powers: cards.powers, cards, roll: rollD20 })
       if (step) {
         mem.idle = 0
         if (s.turn.allyHelp) send({ type: 'ALLY_HELP', reason: null })
