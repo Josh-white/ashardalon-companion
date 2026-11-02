@@ -20,6 +20,9 @@ import { itemAc } from './items.js'
 //               A `use` can carry `board` too.
 //   keepOnMiss  a daily that isn't used up when it misses.
 //   free        doesn't use up the hero's attack (a trap can still be disabled after it).
+//   shadow      a Shadowphage hero (Fesud) goes 'enter' or 'leave' the shadows after it.
+//   shadowKeep  a daily that misses from the shadows isn't used up, and the hero leaves them instead.
+//   shadowBonus more attack while the hero is in the shadows.
 // Other powers have a `use`, done from the power's tile:
 //   healSelf, heal + pick ('other': one other hero; reach: 'sameTile', 'adjacent' or 'within2' on the
 //   virtual board), tokens, endCondition, refuge, invisible, causeFear, note,
@@ -132,7 +135,7 @@ BY_KEY.arcingstrike = BY_KEY.arcingsmite
 // The fields an effect can have, for checking a card's own `effect` in cards.json.
 export const EFFECT_FIELDS = [
   'targets', 'attacks', 'sameTarget', 'before', 'ask', 'evenBonus', 'onHit', 'after',
-  'note', 'hitNote', 'missNote', 'keepOnMiss', 'free', 'use', 'reaction',
+  'note', 'hitNote', 'missNote', 'keepOnMiss', 'free', 'use', 'reaction', 'shadow', 'shadowBonus', 'shadowKeep',
 ]
 
 const cardOf = (powerOrCard) => powerOrCard?.card ?? powerOrCard
@@ -160,6 +163,18 @@ export function reactionsFor(heroes, reaction) {
   )
 }
 
+// Shadowphage (a fan hero's ability): +2 AC while in the shadows.
+export const SHADOW_AC = 2
+
+// After a power, a Shadowphage hero enters or leaves the shadows ({ shadow } in its effect).
+// Into Darkness (shadowKeep) leaves them instead when it misses from the shadows.
+export const shadowKept = (hero, effects, missed) => Boolean(effects.shadowKeep && missed && hero?.tokens?.shadow)
+export function shadowAfter(hero, effects, missed = false) {
+  if (effects.shadow === 'leave' || shadowKept(hero, effects, missed)) return false
+  if (effects.shadow === 'enter') return true
+  return Boolean(hero?.tokens?.shadow)
+}
+
 // A hero's AC with Cleric's Shield, Mirror Image and treasure items counted.
 // Curses (encounter cards) can lower a hero's AC or attack rolls while they last.
 const curseTotal = (hero, field) => (hero.curses ?? []).reduce((sum, curse) => sum + (curse.card?.[field] ?? 0), 0)
@@ -167,7 +182,7 @@ export const heroAttackPenalty = (hero) => curseTotal(hero, 'attackPenalty')
 
 export function heroAc(hero) {
   const tokens = hero.tokens ?? {}
-  return hero.ac + (hero.shieldedBy ? 2 : 0) + 2 * (tokens.mirrorImage ?? 0) + itemAc(hero) - curseTotal(hero, 'acPenalty')
+  return hero.ac + (hero.shieldedBy ? 2 : 0) + 2 * (tokens.mirrorImage ?? 0) + (tokens.shadow ? SHADOW_AC : 0) + itemAc(hero) - curseTotal(hero, 'acPenalty')
 }
 
 // The hit a hero could still turn into a miss: Tumbling Escape (a monster's attack) or

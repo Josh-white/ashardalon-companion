@@ -4,7 +4,7 @@
 
 import { baseId, key, unexploredEdges } from './grid.js'
 import { adjacent, closest, distances, tilesBetween } from './paths.js'
-import { heroesFor, seesInvisible, tacticHolds } from './tactics.js'
+import { heroesFor, seesInvisible, tacticHolds, unseenByTactics } from './tactics.js'
 import { boardGrid } from './play.js'
 import { trapOnWay } from './heroTokens.js'
 
@@ -16,7 +16,7 @@ export function boardTargets(state) {
   const heroes = state.heroes.filter((h) => h.hp > 0 && !h.tokens?.refuge)
   return [...villagers.map((v) => ({ ...v, villager: true })), ...heroes]
     .filter((f) => tokens[f.id])
-    .map((f) => ({ id: f.id, at: tokens[f.id], hp: f.hp, villager: Boolean(f.villager), invisible: Boolean(f.tokens?.invisible) }))
+    .map((f) => ({ id: f.id, at: tokens[f.id], hp: f.hp, villager: Boolean(f.villager), invisible: unseenByTactics(f) }))
 }
 
 // The figures one tactic step can go after: an invisible hero only counts for the steps

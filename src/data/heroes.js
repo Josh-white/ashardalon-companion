@@ -56,6 +56,7 @@ export const ABILITY_EFFECTS = [
   'brutal-recovery', // a natural 20 can flip Furious Assault back over (Tarak)
   'cast-iron-stomach', // +5 to rolls to end Poisoned (Vistra)
   'mage-hand', // opens doors anywhere on the hero's tile (Heskan)
+  'shadowphage', // a Shadow switch: +2 AC, and monsters' tactics skip him as the closest hero (Fesud, a fan hero)
 ]
 // Each box ability in a few plain words, for the hero pick screens (our own short reminders,
 // not the card text). The Ready screen and the hero card show the card's own words.
@@ -65,6 +66,7 @@ export const ABILITY_HINTS = {
   'healing-hands': { name: 'Healing Hands', hint: 'Healing surges heal 1 extra HP, for you or a hero on your tile.' },
   'brutal-recovery': { name: 'Brutal Recovery', hint: 'A natural 20 on your tile flips Furious Assault back over to use again.' },
   'mage-hand': { name: 'Mage Hand', hint: 'Open doors anywhere on your tile, not just next to you.' },
+  shadowphage: { name: 'Shadowphage', hint: 'Instead of attacking, slip into the shadows: +2 AC, and monsters skip you when they look for the closest hero.' },
 }
 const simple = (name) => name.toLowerCase().replace(/[^a-z0-9]/g, '')
 

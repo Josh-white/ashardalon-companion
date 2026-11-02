@@ -7,6 +7,7 @@ import { artUrl, useArt } from '../state/useArt.js'
 import { useCards } from '../state/useCards.js'
 import Art from './Art.jsx'
 import { sphereOf, sphereVictims } from '../board/heroTokens.js'
+import { canSpendAttack, inHeroPhase } from '../state/heroTurn.js'
 import { MonsterChoice } from './Pickers.jsx'
 import PowerList from './PowerList.jsx'
 import { StatTiles } from './StatBoosts.jsx'
@@ -53,6 +54,23 @@ function TokenDamage({ state, hero, source, label, prompt, many, disabled, dispa
   )
 }
 
+// Shadowphage (Fesud, a fan hero): slip into the shadows instead of attacking, or step out.
+function ShadowSwitch({ state, hero, dispatch }) {
+  if (!hasAbility(hero, 'shadowphage') || hero.hp <= 0) return null
+  const on = Boolean(hero.tokens?.shadow)
+  const blocked = !on && inHeroPhase(state, hero) && !canSpendAttack(state, hero)
+  return (
+    <Button
+      variant={on ? 'ghost' : 'default'}
+      className="mt-3 w-full"
+      disabled={blocked}
+      onClick={() => dispatch({ type: 'SET_SHADOW', heroId: hero.id, on: !on })}
+    >
+      {on ? '🌑 Step out of the shadows' : blocked ? '🌑 Shadowphage: your attack is already used' : '🌑 Shadowphage: slip into the shadows (instead of attacking)'}
+    </Button>
+  )
+}
+
 // What the hero's powers have left on them: shields, mirror images, tokens on the board.
 function PowerMarkers({ state, hero, dispatch }) {
   const tokens = hero.tokens ?? {}
@@ -62,6 +80,7 @@ function PowerMarkers({ state, hero, dispatch }) {
     caster && `🛡️ +2 AC from ${caster.name}'s Cleric's Shield`,
     tokens.mirrorImage > 0 && `🪞 ${tokens.mirrorImage} mirror image${tokens.mirrorImage > 1 ? 's' : ''}: +${2 * tokens.mirrorImage} AC. A miss pops one.`,
     tokens.invisible && "👻 Invisible: monsters don't count you as the closest hero until your next turn.",
+    tokens.shadow && "🌑 In the shadows: +2 AC, and monsters don't count you as the closest hero.",
     tokens.refuge && '✨ In the Astral Refuge: off the board until your next turn.',
     // On the virtual board the Blade Barrier and Caltrop tokens go off by themselves.
     board && tokens.bladeBarrier > 0 && `🗡️ ${tokens.bladeBarrier} Blade Barrier token${tokens.bladeBarrier > 1 ? 's' : ''} on the board: a monster put on one takes 1 damage.`,
@@ -314,6 +333,7 @@ export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, 
       )}
 
       {state && <PowerMarkers state={state} hero={hero} dispatch={dispatch} />}
+      {state && dispatch && <ShadowSwitch state={state} hero={hero} dispatch={dispatch} />}
       {state && dispatch && <AbilityOffers state={state} hero={hero} dispatch={dispatch} />}
 
       <PowerList state={state} hero={hero} dispatch={dispatch} tilesHidden={powersInTurnGuide} compact={compact} />

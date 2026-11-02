@@ -8,6 +8,8 @@ import { adjacent, tilesBetween } from './paths.js'
 // Invisibility: the hero doesn't count as the closest hero for any monster's tactics, so a
 // step that goes for the closest hero acts as if they weren't there. Attacks on every hero
 // in reach, and "adjacent to a Hero, attacks that Hero" steps, still find them.
+// Invisibility and Shadowphage: monsters don't count this hero as the closest hero.
+export const unseenByTactics = (hero) => Boolean(hero?.tokens?.invisible || hero?.tokens?.shadow)
 export const seesInvisible = (step) => step?.targets === 'all' || (step?.when === 'adjacent' && !step.move)
 
 // Which heroes make a tactic's condition true for a monster on `at`. `heroes` is a list
