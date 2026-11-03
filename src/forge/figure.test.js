@@ -75,6 +75,36 @@ describe('Hero Builder figures', () => {
     expect(pose(figure, 'Idle', 10)).toBe(false)
   })
 
+  it('closes a holding hand into a fist and stands poles up', () => {
+    const empty = buildFigure({ ...DEFAULT_RECIPE, parts: { ...DEFAULT_RECIPE.parts, hand: undefined, offhand: undefined } })
+    expect(empty.userData.frame.fist).toEqual({ R: false, L: false })
+    expect(empty.userData.joints['grip.R'].children).toHaveLength(0)
+    const sword = buildFigure({ ...DEFAULT_RECIPE, parts: { ...DEFAULT_RECIPE.parts, hand: { id: 'sword', shape: {} }, offhand: { id: 'round-shield', shape: {} } } })
+    expect(sword.userData.frame.fist).toEqual({ R: true, L: false })
+    const staff = buildFigure({ ...DEFAULT_RECIPE, parts: { ...DEFAULT_RECIPE.parts, hand: { id: 'staff', shape: {} } } })
+    expect(staff.userData.joints['grip.R'].rotation.x).toBeLessThan(sword.userData.joints['grip.R'].rotation.x)
+  })
+
+  it('moves a nudged hat with its head, and keeps the nudge through a save', () => {
+    const at = (recipe) => {
+      const figure = buildFigure(recipe)
+      figure.updateMatrixWorld(true)
+      const hat = figure.userData.joints.hat
+      const box = new THREE.Box3()
+      hat.traverse((o) => o.isMesh && box.expandByObject(o))
+      return box.getCenter(new THREE.Vector3())
+    }
+    const plain = { ...DEFAULT_RECIPE, parts: { ...DEFAULT_RECIPE.parts, hat: { id: 'wizard-hat', shape: {} } } }
+    const nudged = cleanRecipe({ ...plain, parts: { ...plain.parts, hat: { id: 'wizard-hat', shape: {}, nudge: { up: -0.5, forward: 1, side: 0, tilt: 0.3, junk: 4 } } } })
+    expect(nudged.parts.hat.nudge).toEqual({ up: -0.5, forward: 1, tilt: 0.3 })
+    const a = at(plain)
+    const b = at(nudged)
+    expect(b.y).toBeLessThan(a.y - 0.03)
+    expect(b.z).toBeGreaterThan(a.z + 0.08)
+    // A nudge on a slot that can't be moved is dropped by the figure.
+    expect(meshes(buildFigure({ ...nudged, parts: { ...nudged.parts, body: { ...nudged.parts.body, nudge: { up: 1 } } } }))).toBeGreaterThan(5)
+  })
+
   it('ignores parts it does not know', () => {
     const figure = buildFigure({ ...DEFAULT_RECIPE, parts: { ...DEFAULT_RECIPE.parts, hand: { id: 'laser-cannon', shape: {} } } })
     expect(meshes(figure)).toBeGreaterThan(5)

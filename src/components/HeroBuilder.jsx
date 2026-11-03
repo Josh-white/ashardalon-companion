@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Button, Chip, useConfirm } from './ui.jsx'
-import { COLOR_ROLES, MAX_NAME_LENGTH, MAX_SIZE, MIN_SIZE, SWATCHES } from '../data/forge.js'
+import { COLOR_ROLES, MAX_NAME_LENGTH, MAX_SIZE, MIN_SIZE, NUDGE, SWATCHES } from '../data/forge.js'
 import { PARTS, SLOTS, findPart, shapeOf } from '../forge/parts.js'
 import { DEFAULT_RECIPE, randomRecipe, STARTERS } from '../forge/recipes.js'
 
@@ -90,7 +90,16 @@ export default function HeroBuilder() {
     else delete parts[slot]
     change({ parts })
   }
-  const setShape = (slot, key, value) => change({ parts: { ...recipe.parts, [slot]: { ...recipe.parts[slot], shape: { ...recipe.parts[slot].shape, [key]: value } } } })
+  // One slider, or every slider back to normal (key null) in one change: one setShape per
+  // slider would each start from the same old recipe, and only the last would stick.
+  const setShape = (slot, key, value) =>
+    change({ parts: { ...recipe.parts, [slot]: { ...recipe.parts[slot], shape: key === null ? {} : { ...recipe.parts[slot].shape, [key]: value } } } })
+  // The ↔ Move it sliders; `null` puts the part back where it was made to sit.
+  const setNudge = (slot, key, value) => {
+    const { nudge, ...pick } = recipe.parts[slot]
+    const next = key ? { ...nudge, [key]: value } : {}
+    change({ parts: { ...recipe.parts, [slot]: Object.values(next).some((v) => v) ? { ...pick, nudge: next } : pick } })
+  }
   const open = (next, nextId = null) => {
     setStatus(null)
     setDraft({ recipe: structuredClone(next), id: nextId })
@@ -164,7 +173,7 @@ export default function HeroBuilder() {
             </div>
 
             <div className="mt-2 rounded-2xl border border-zinc-800 bg-zinc-900/70 p-3">
-              {SLOTS.some((s) => s.key === tab) && <SlotPanel slot={SLOTS.find((s) => s.key === tab)} pick={recipe.parts[tab]} setPart={setPart} setShape={setShape} />}
+              {SLOTS.some((s) => s.key === tab) && <SlotPanel slot={SLOTS.find((s) => s.key === tab)} pick={recipe.parts[tab]} setPart={setPart} setShape={setShape} setNudge={setNudge} />}
               {tab === 'colors' && <ColorPanel recipe={recipe} change={change} />}
               {tab === 'figures' && (
                 <FigureList
@@ -214,7 +223,7 @@ function SlotTab({ active, onClick, emoji, label }) {
   )
 }
 
-function SlotPanel({ slot, pick, setPart, setShape }) {
+function SlotPanel({ slot, pick, setPart, setShape, setNudge }) {
   const part = findPart(slot.key, pick?.id)
   const shape = part ? shapeOf(part, pick.shape) : {}
   return (
@@ -232,7 +241,7 @@ function SlotPanel({ slot, pick, setPart, setShape }) {
         <div className="mt-4">
           <div className="flex items-center gap-2">
             <h3 className="mr-auto font-semibold text-zinc-200">Change its shape</h3>
-            <button type="button" className="min-h-9 rounded-full bg-zinc-800 px-3 text-sm text-zinc-300" onClick={() => part.shape.forEach((s) => setShape(slot.key, s.key, s.value))}>
+            <button type="button" className="min-h-9 rounded-full bg-zinc-800 px-3 text-sm text-zinc-300" onClick={() => setShape(slot.key, null)}>
               ↺ Normal
             </button>
           </div>
@@ -255,6 +264,33 @@ function SlotPanel({ slot, pick, setPart, setShape }) {
                 </label>
               )
             })}
+          </div>
+        </div>
+      )}
+      {part && slot.nudge && (
+        <div className="mt-4">
+          <div className="flex items-center gap-2">
+            <h3 className="mr-auto font-semibold text-zinc-200">↔ Move it</h3>
+            <button type="button" className="min-h-9 rounded-full bg-zinc-800 px-3 text-sm text-zinc-300" onClick={() => setNudge(slot.key, null)}>
+              ↺ Back in place
+            </button>
+          </div>
+          <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+            {NUDGE.map(({ key, label }) => (
+              <label key={key} className="block text-zinc-200">
+                {label}
+                <input
+                  type="range"
+                  className="mt-1 h-8 w-full accent-sky-400"
+                  min={-1}
+                  max={1}
+                  step={0.02}
+                  value={pick.nudge?.[key] ?? 0}
+                  aria-label={`Move it: ${label}`}
+                  onChange={(e) => setNudge(slot.key, key, Number(e.target.value))}
+                />
+              </label>
+            ))}
           </div>
         </div>
       )}
