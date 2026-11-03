@@ -1,5 +1,5 @@
 import { BARDIC_SONGS, bardicSongsLeft } from '../state/heroAttacks.js'
-import { singers, songRollLabel } from '../state/bardicSong.js'
+import { singers, songRollLabel, songTokens } from '../state/bardicSong.js'
 import { rollD20 } from '../state/random.js'
 import { Button } from './ui.jsx'
 
@@ -19,5 +19,24 @@ export default function SongRollOffer({ state, dispatch, only = null, className 
         </Button>
       ))}
     </div>
+  )
+}
+
+// The bard's Bardic Song tokens on the top bars, next to the healing surges: one 🎶 per song,
+// spent ones faded. Nothing shows in a game without a bard.
+export function SongTokens({ state, className = '', names = false }) {
+  const bards = songTokens(state)
+  if (bards.length === 0) return null
+  return (
+    <span className={`inline-flex items-center gap-2 whitespace-nowrap ${className}`}>
+      {bards.map((bard) => (
+        <span key={bard.id} title={`${bard.name}'s Bardic Song: ${bard.left} of ${bard.total} left`} aria-label={`${bard.name}'s Bardic Song: ${bard.left} of ${bard.total} left`}>
+          {names && <span className="mr-1 text-sky-300">{bard.name}</span>}
+          {Array.from({ length: bard.total }, (_, i) => (
+            <span key={i} className={i < bard.left ? '' : 'opacity-25 grayscale'}>🎶</span>
+          ))}
+        </span>
+      ))}
+    </span>
   )
 }

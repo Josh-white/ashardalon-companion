@@ -9,6 +9,7 @@ import { asksIfStayed, attackItems, distanceChoices, heroItems, itemsWithUse } f
 import { effectsOf, maxRolls, onHitHeals, reactionsFor, wolfBlocked } from '../data/powerEffects.js'
 import { POWER_KINDS, byKind, powerKind } from '../data/powerKinds.js'
 import { bardicSongsLeft, isFearlessTarget } from '../state/heroAttacks.js'
+import { singers } from '../state/bardicSong.js'
 import { rollD20 } from '../state/random.js'
 import { targetAllowed } from '../state/fanPowers.js'
 import { attackGone, attackNumbers, foes, powerNumber } from '../state/game.js'
@@ -166,7 +167,7 @@ export function AttackAftermath({ state, last, dispatch }) {
   const advice = reactionsFor(state.heroes, 'reroll')
   // A Lucky Charm rerolls its owner's own miss.
   const charms = itemsWithUse([hero], 'reroll')
-  const bards = state.heroes.filter((h) => bardicSongsLeft(h) > 0)
+  const bards = singers(state)
   const furious = reactionsFor([hero], 'furious')[0]
   const rerollable = last.rolls.filter((r) => !r.hit && !r.rerolled && alive(r))
   const furiousRows = furious ? last.rolls.filter((r) => r.hit && alive(r)) : []

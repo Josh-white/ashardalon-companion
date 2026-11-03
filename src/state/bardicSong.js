@@ -9,7 +9,8 @@
 // and makes the same roll again with the new die, so whatever the first roll did is done
 // over. Anything else that happens in the game first ends the chance.
 
-import { bardicSongsLeft } from './heroAttacks.js'
+import { BARDIC_SONGS, bardicSongsLeft } from './heroAttacks.js'
+import { hasAbility } from '../data/heroes.js'
 import { updateHero, withLog } from './gameHelpers.js'
 
 const hasCurse = (state, heroId, curseId) => Boolean(state.heroes.find((h) => h.id === heroId)?.curses?.some((c) => c.id === curseId))
@@ -30,7 +31,12 @@ const QUIET = new Set([
   'ATTACH_MONSTER_CARDS', 'UPDATE_ENCOUNTER_CARDS', 'OPENING_NARRATING', 'OPENING_QUIET', 'FIRST_ROLL_NARRATING', 'FIRST_ROLL_QUIET',
 ])
 
-export const singers = (state) => (state?.heroes ?? []).filter((h) => bardicSongsLeft(h) > 0)
+// The bards who can sing right now: songs left and still in the dungeon (not escaped).
+export const singers = (state) => (state?.heroes ?? []).filter((h) => bardicSongsLeft(h) > 0 && !h.escaped)
+
+// Every bard in the game with their songs, for the token pips on the top bars.
+export const songTokens = (state) =>
+  (state?.heroes ?? []).filter((h) => hasAbility(h, 'bardic-song') && !h.escaped).map((h) => ({ id: h.id, name: h.name, left: bardicSongsLeft(h), total: BARDIC_SONGS }))
 
 // After every action: keep the copy from before a failed roll, or let go of the old one.
 export function trackSongRoll(before, after, action) {

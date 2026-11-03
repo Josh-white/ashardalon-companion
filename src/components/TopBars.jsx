@@ -6,6 +6,7 @@ import { AreaName } from './AreaBackdrop.jsx'
 import { LOST_QUESTION, newGameQuestion } from './Recap.jsx'
 import { TilesLeft } from './Tiles.jsx'
 import UndoButton from './UndoButton.jsx'
+import { SongTokens } from './BardicSong.jsx'
 import { CardReadingToggle, MusicToggle, SoundToggle, StayAwakeToggle } from './SoundToggle.jsx'
 import { BoardSwitch } from './SoundBoard.jsx'
 import { Button, useConfirm } from './ui.jsx'
@@ -31,6 +32,7 @@ export function PartyBar({ state, dispatch, undo, undoDepth, seatLabel, onSwitch
           </span>
           <Button className="!px-2 !py-0" onClick={() => dispatch({ type: 'ADJUST_SURGES', amount: 1 })}>+</Button>
         </div>
+        <SongTokens state={state} names className="text-xl" />
         {state.tileStack && (
           <div className="flex items-center gap-2">
             <Button className="!px-2 !py-0" onClick={() => dispatch({ type: 'ADJUST_TILES', amount: -1 })}>−</Button>
@@ -99,6 +101,7 @@ export function SoloBar({ state, dispatch, undo, undoDepth, onSwitchSeat, sound,
         <span className={`whitespace-nowrap text-sm ${state.surges === 0 ? 'text-red-400' : 'text-emerald-400'}`} title="Healing surges">
           {state.surges === 0 ? '0 ❤' : '❤'.repeat(state.surges)}
         </span>
+        <SongTokens state={state} className="text-sm" />
         {state.tileStack && <TilesLeft state={state} className="whitespace-nowrap text-sm" />}
         <Button variant={open ? 'gold' : 'default'} className="min-h-10 min-w-10 !px-3 !py-1" onClick={() => setOpen(!open)} aria-label="Menu" aria-expanded={open}>
           ☰
