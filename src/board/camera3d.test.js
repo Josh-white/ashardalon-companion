@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { behindShot, closeUpShot, HERO_TILT, restShot, tourShot, turnBy, viewAngles } from './camera3d.js'
+import { behindShot, EYE_H, eyesShot, EYES_TILT, closeUpShot, HERO_TILT, restShot, tourShot, turnBy, viewAngles } from './camera3d.js'
 
 const close = (a, b) => expect(Math.abs(turnBy(a, b))).toBeLessThan(1e-6)
 
@@ -51,5 +51,26 @@ describe('the 3D camera', () => {
     expect(tourShot('top', [4, 4], [[0, 0]], keep)).toEqual({ yaw: 0, tilt: 0.8, dist: 6.5, target: [4, 4] })
     // Behind hero: from behind the monster, at the hero.
     close(tourShot('hero', [0, 4], [[0, 0]], keep).yaw, 0)
+  })
+
+  it("looks through the hero's eyes at the nearest monster", () => {
+    const shot = eyesShot([0, 0], [[0, 6], [0, 3]])
+    // Looking toward +z: the camera sits on the -z side of what it looks at.
+    close(shot.yaw, Math.PI)
+    expect(shot.tilt).toBe(EYES_TILT)
+    // The camera itself is at eye height, just in front of the hero.
+    const camY = shot.lift + Math.cos(shot.tilt) * shot.dist
+    const camZ = shot.target[1] + Math.cos(shot.yaw) * Math.sin(shot.tilt) * shot.dist
+    expect(camY).toBeCloseTo(EYE_H)
+    expect(camZ).toBeGreaterThan(0)
+    expect(camZ).toBeLessThan(0.5)
+    expect(shot.dist).toBeGreaterThanOrEqual(3)
+  })
+
+  it('watches a monster come from the eyes of the hero it goes for', () => {
+    const keep = { yaw: 0, tilt: 0.8, dist: 14 }
+    const shot = tourShot('eyes', [0, 4], [[0, 0], [9, 9]], keep)
+    close(shot.yaw, Math.PI)
+    expect(restShot('eyes', [0, 0], [[3, 0]], keep).yaw).toBeCloseTo(-Math.PI / 2)
   })
 })

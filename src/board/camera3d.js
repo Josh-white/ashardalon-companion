@@ -5,10 +5,11 @@
 //
 // Views (the 🎥 button): 'top' looks over the dungeon the way the board was fitted,
 // 'corner' along its diagonal (the squares look like diamonds), 'hero' from behind the
-// hero whose turn it is, toward the nearest monster.
+// hero whose turn it is, toward the nearest monster, 'eyes' through the hero's own eyes.
+// An 'eyes' shot also has `lift`: how high the point looked at is off the floor.
 
-export const VIEWS = ['top', 'corner', 'hero']
-export const VIEW_LABELS = { top: 'Top', corner: 'Corner', hero: 'Behind hero' }
+export const VIEWS = ['top', 'corner', 'hero', 'eyes']
+export const VIEW_LABELS = { top: 'Top', corner: 'Corner', hero: 'Behind hero', eyes: 'Hero eyes' }
 
 export const CORNER_TILT = 0.95
 export const HERO_TILT = 1.05
@@ -45,10 +46,32 @@ export function behindShot(me, foes, { yaw = 0, dist = HERO_DIST } = {}) {
   return { target: [me[0] + d[0] * ahead, me[1] + d[1] * ahead], yaw: yawOf([-d[0], -d[1]]), tilt: HERO_TILT, dist }
 }
 
+// Through the eyes of the figure standing at `me`, looking at the nearest of `foes` (with
+// none, the way `yaw` faces). The camera stands just in front of the figure's own face.
+export const EYES_TILT = 1.45
+export const EYE_H = 0.7
+const LOOK = 3.2
+const FACE = 0.35
+export function eyesShot(me, foes, { yaw = 0 } = {}) {
+  const foe = nearest(me, foes)
+  const d = foe ? sub(foe, me) : [0, 0]
+  const far = len(d)
+  const u = far > 1e-3 ? [d[0] / far, d[1] / far] : [-Math.sin(yaw), -Math.cos(yaw)]
+  const ahead = FACE + LOOK * Math.sin(EYES_TILT)
+  return {
+    target: [me[0] + u[0] * ahead, me[1] + u[1] * ahead],
+    lift: EYE_H - Math.cos(EYES_TILT) * LOOK,
+    yaw: yawOf([-u[0], -u[1]]),
+    tilt: EYES_TILT,
+    dist: LOOK,
+  }
+}
+
 // The rest shot for `view`, on the hero `me`: 'top' and 'corner' keep the screen's own
 // angle and zoom (`keep`), 'hero' goes behind the hero.
 export function restShot(view, me, foes, keep) {
   if (view === 'hero') return behindShot(me, foes, { yaw: keep.yaw })
+  if (view === 'eyes') return eyesShot(me, foes, { yaw: keep.yaw })
   return { ...keep, target: me }
 }
 
@@ -72,9 +95,16 @@ export function closeUpShot(from, to, yaw) {
   return { target, yaw: Math.abs(turnBy(yaw, side)) <= Math.abs(turnBy(yaw, other)) ? side : other, tilt: CLOSE_TILT, dist }
 }
 
+// An attack through the eyes of the hero in it (`hero` is one end, `other` the other).
+export function eyesCloseUp(hero, other) {
+  return eyesShot(hero, [other])
+}
+
 // A monster or villain taking its turn: the camera glides over to it. Behind the hero, it
 // looks from behind the monster at the hero it goes for; otherwise it keeps its angle.
 export function tourShot(view, monster, heroes, keep) {
   if (view === 'hero') return behindShot(monster, heroes, { yaw: keep.yaw })
+  // Through the eyes of the hero it comes for, watching it come.
+  if (view === 'eyes') return heroes.length ? eyesShot(nearest(monster, heroes), [monster]) : { ...keep, target: monster }
   return { ...keep, target: monster, dist: Math.min(keep.dist, 6.5) }
 }
