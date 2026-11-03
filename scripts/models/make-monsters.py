@@ -2372,6 +2372,32 @@ MOVES += [
 ]
 
 
+# Moves only some figures have.
+EXTRA_MOVES = {"1H_Ranged_Shoot", "Spellcast_Shoot"}
+
+
+def hero_moves(extra, staff=False, twist=90):
+    """The usual moves, but a knocked-down hero lies with both arms out flat on the floor, so the
+    weapon in each hand lies on the floor too (the usual backward arm swing sinks the hands and
+    weapons through the floor). A hero with a staff taller than he is (Heskan) keeps his staff
+    arm close beside him: swung out, the top of the staff would cross his face."""
+    side, staff_out = 35, 8
+    # Twisted a quarter turn, the weapon in the hand lies out on the floor instead of pointing up.
+    arm_r = (0, twist, -(staff_out if staff else side))
+    fallen = {**FALLEN, "arm.L": (0, 0, side), "arm.R": arm_r}
+    falling = {"arm.L": (0, 0, side * 0.7), "arm.R": (0, twist * 0.7, arm_r[2] * 0.7)}
+    moves = []
+    for name, loops, keys in MOVES:
+        if name in EXTRA_MOVES and name not in extra:
+            continue
+        if name == "Death_A":
+            keys = [(f, {**spec, **falling} if f == 22 else (fallen if f == 30 else spec)) for f, spec in keys]
+        elif name == "Death_A_Pose":
+            keys = [(0, fallen), (1, fallen)]
+        moves.append((name, loops, keys))
+    return moves
+
+
 def build_rig(orc, size, bones):
     arm_data = bpy.data.armatures.new("Orc_Rig")
     rig = bpy.data.objects.new("Orc_Rig", arm_data)
@@ -2794,16 +2820,21 @@ MONSTERS = [
     ("colton-lizard-mage", "colton-lizard-mage.glb", build_lizard_mage, 2.5, LIZARD_BONES, ["Spellcast_Shoot"]),
     # The heroes, from their card art (src/models/Hero_*.glb). Each has a cape mesh (Hero_X_Cape)
     # the board dyes the hero's colour.
-    ("hero-quinn", "hero-quinn.glb", build_quinn, 2.45, CULTIST_BONES, ["Spellcast_Shoot"]),
-    ("hero-vistra", "hero-vistra.glb", build_vistra, 2.05, DUERGAR_BONES, []),
-    ("hero-keyleth", "hero-keyleth.glb", build_keyleth, 2.45, CULTIST_BONES, ["Spellcast_Shoot"]),
-    ("hero-tarak", "hero-tarak.glb", build_tarak, 2.45, ORC_BONES, ["1H_Ranged_Shoot"]),
-    ("hero-heskan", "hero-heskan.glb", build_heskan, 2.55, LIZARD_BONES, ["Spellcast_Shoot"]),
-    ("hero-berryloaf", "hero-berryloaf.glb", build_berryloaf, 1.85, CULTIST_BONES, ["Spellcast_Shoot", "1H_Ranged_Shoot"]),
-    ("hero-darna", "hero-darna.glb", build_darna, 2.4, CULTIST_BONES, []),
+    ("hero-quinn", "hero-quinn.glb", build_quinn, 2.45, CULTIST_BONES, ["Spellcast_Shoot"],
+     hero_moves(["Spellcast_Shoot"])),
+    ("hero-vistra", "hero-vistra.glb", build_vistra, 2.05, DUERGAR_BONES, [],
+     hero_moves([])),
+    ("hero-keyleth", "hero-keyleth.glb", build_keyleth, 2.45, CULTIST_BONES, ["Spellcast_Shoot"],
+     hero_moves(["Spellcast_Shoot"])),
+    ("hero-tarak", "hero-tarak.glb", build_tarak, 2.45, ORC_BONES, ["1H_Ranged_Shoot"],
+     hero_moves(["1H_Ranged_Shoot"])),
+    ("hero-heskan", "hero-heskan.glb", build_heskan, 2.55, LIZARD_BONES, ["Spellcast_Shoot"],
+     hero_moves(["Spellcast_Shoot"], staff=True)),
+    ("hero-berryloaf", "hero-berryloaf.glb", build_berryloaf, 1.85, CULTIST_BONES, ["Spellcast_Shoot", "1H_Ranged_Shoot"],
+     hero_moves(["Spellcast_Shoot", "1H_Ranged_Shoot"])),
+    ("hero-darna", "hero-darna.glb", build_darna, 2.4, CULTIST_BONES, [],
+     hero_moves([])),
 ]
-# Moves only some figures have.
-EXTRA_MOVES = {"1H_Ranged_Shoot", "Spellcast_Shoot"}
 
 
 def make(label, file_name, build, height, bones, extra, own_moves=None):
