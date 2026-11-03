@@ -96,6 +96,9 @@ export function Workshop({ names = [], me = '', onClose = null }) {
         )}
       </div>
       <p className="mt-1 text-zinc-400">Dream up your own 3D figure. Claude builds it and sends pictures here for you to check.</p>
+      <a href="/#builder" className="mt-2 inline-block rounded-xl bg-amber-500/15 px-3 py-2 text-amber-200 underline-offset-2 hover:underline">
+        🛠️ Or build one yourself right now in the Hero Builder
+      </a>
       <div className="mt-3 flex gap-2">
         <Chip active={shownTab === 'new'} onClick={() => setTab('new')}>
           ✏️ Make a new one
