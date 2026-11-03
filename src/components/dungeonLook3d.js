@@ -26,6 +26,9 @@ function texture(canvas, color = true) {
   const tex = new THREE.CanvasTexture(canvas)
   if (color) tex.colorSpace = THREE.SRGBColorSpace
   tex.anisotropy = 4
+  // Tall walls repeat their bricks up the face instead of stretching them.
+  tex.wrapS = THREE.RepeatWrapping
+  tex.wrapT = THREE.RepeatWrapping
   return tex
 }
 
@@ -260,18 +263,23 @@ export function dressDungeon(group, layout, at, { lights = [], wallH, props = tr
     flame.scale.set(0.34, 0.46, 1)
     flame.position.set(px - dx * 0.08, y + 0.24, pz - dz * 0.08)
     flame.renderOrder = 5
-    group.add(stick, cup, flame)
+    // One group per torch, so a torch on a wall cut low (hideTorches) can go away.
+    const torch = new THREE.Group()
+    torch.userData.torchSide = t.side
+    torch.add(stick, cup, flame)
     // The pool of light on the floor below.
     const pool = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 1.8), poolMat)
     pool.rotation.x = -Math.PI / 2
     pool.position.set(px - dx * 0.6, 0.012, pz - dz * 0.6)
-    group.add(pool)
+    torch.add(pool)
+    group.add(torch)
     const phase = seeded(i * 9.1) * 10
     const light = lights[i]
     if (light) {
       light.position.set(px - dx * 0.3, y + 0.25, pz - dz * 0.3)
       light.intensity = 2.4
-      animators.push((now) => (light.intensity = 2.4 + Math.sin(now / 110 + phase) * 0.35 + Math.sin(now / 47 + phase) * 0.2))
+      torch.userData.light = light
+      animators.push((now) => (light.intensity = torch.visible ? 2.4 + Math.sin(now / 110 + phase) * 0.35 + Math.sin(now / 47 + phase) * 0.2 : 0))
     }
     animators.push((now) => {
       const k = 1 + Math.sin(now / 90 + phase) * 0.08 + Math.sin(now / 33 + phase) * 0.05
@@ -280,6 +288,17 @@ export function dressDungeon(group, layout, at, { lights = [], wallH, props = tr
   })
   if (props) addProps(group, layout, at)
   return animators
+}
+
+// Torches hang on the face of a wall toward their square; with the walls on the camera's
+// side cut low (`cut`: that side, or null), the torches on them are hidden.
+export function hideTorches(group, cut) {
+  group.traverse((o) => {
+    if (o.userData.torchSide === undefined) return
+    o.visible = o.userData.torchSide !== cut
+    if (!o.visible && o.userData.light) o.userData.light.intensity = 0
+    else if (o.userData.light) o.userData.light.intensity = 2.4
+  })
 }
 
 // Bones and loose stones lying against the walls: small and flat, so they never hide a
