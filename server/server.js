@@ -323,7 +323,23 @@ const gameSummary = (room, name, screens) => ({
 const SEEN_LIMIT = 500
 // How often the Pi pings each screen (see keepAlive in startServer).
 export const KEEP_ALIVE_MS = 30 * 1000
-const NOT_UNDOABLE = new Set(['ROLL_DIE', 'ATTACH_MONSTER_CARDS', 'UPDATE_ENCOUNTER_CARDS', 'CLAIM_HERO', 'RELEASE_HERO', 'SET_LOBBY_PLAYER', 'SET_LOBBY_PICK', 'SET_LOBBY_READY', 'SET_LOBBY_ALLY', 'PLAY_BOARD_SOUND', 'SET_SOUNDBOARD_OFF', 'SET_SOUNDBOARD_UNLIMITED', 'FIRST_ROLL_DONE', 'OPENING_NARRATING', 'OPENING_QUIET', 'OPENING_DONE', 'FIRST_ROLL_NARRATING', 'FIRST_ROLL_QUIET', 'ALLY_PAUSE', 'ALLY_HELP', 'CARD_READING', 'SKIP_READING', 'SET_CARD_READING'])
+const NOT_UNDOABLE = new Set(['ROLL_DIE', 'ATTACH_MONSTER_CARDS', 'UPDATE_ENCOUNTER_CARDS', 'CLAIM_HERO', 'RELEASE_HERO', 'SET_LOBBY_PLAYER', 'SET_LOBBY_PICK', 'SET_LOBBY_READY', 'SET_LOBBY_ALLY', 'PLAY_BOARD_SOUND', 'SET_SOUNDBOARD_OFF', 'SET_SOUNDBOARD_UNLIMITED', 'FIRST_ROLL_DONE', 'OPENING_NARRATING', 'OPENING_QUIET', 'OPENING_DONE', 'FIRST_ROLL_NARRATING', 'FIRST_ROLL_QUIET', 'ALLY_PAUSE', 'ALLY_HELP', 'SET_ALLY', 'CARD_READING', 'SKIP_READING', 'SET_CARD_READING'])
+
+// Who plays each hero (a player or the computer, src/ally/) isn't part of Undo: a hero taken
+// back from the computer stays with its player when someone undoes a move made before that,
+// and a hero handed to the computer stays with it.
+export function keepWhoPlays(undone, now) {
+  if (!Array.isArray(undone.heroes) || !Array.isArray(now.heroes)) return undone
+  const ally = new Map(now.heroes.map((h) => [h.id, Boolean(h.ally)]))
+  const heroes = undone.heroes.map((h) => {
+    if (!ally.has(h.id) || ally.get(h.id) === Boolean(h.ally)) return h
+    return ally.get(h.id) ? { ...h, ally: true } : { ...h, ally: false }
+  })
+  const changed = heroes.some((h, i) => h !== undone.heroes[i])
+  if (!changed) return undone
+  const anyAlly = heroes.some((h) => h.ally)
+  return { ...undone, heroes, ...(anyAlly ? {} : { allyPaused: false, turn: undone.turn ? { ...undone.turn, allyHelp: null } : undone.turn }) }
+}
 
 export function startServer({
   port = Number(process.env.PORT ?? 3000),
@@ -854,7 +870,7 @@ export function startServer({
         if (!previous) return
         // Clear the moment so screens don't replay an old celebration.
         // The sound board isn't part of Undo either, so Undo can't hand out more taps.
-        r.state = { ...previous.state, moment: null, soundboard: r.state.soundboard }
+        r.state = keepWhoPlays({ ...previous.state, moment: null, soundboard: r.state.soundboard }, r.state)
         // A computer ally would take the same step again straight away: it waits after an Undo
         // until someone lets it go on (src/ally/).
         if (r.state.status === 'playing' && r.state.heroes?.some((h) => h.ally)) r.state = { ...r.state, allyPaused: true }
