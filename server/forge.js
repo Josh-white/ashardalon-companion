@@ -11,12 +11,11 @@
 //   DELETE /forge/<id>      throws a figure away
 //
 // Friends from outside can't use it, like the Model Workshop.
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
-import { readBody } from './readBody.js'
+import { readJsonBody, readJsonFile, sendJson as send, writeJsonFile } from './jsonStore.js'
 import { cleanRecipe, MAX_FIGURES } from '../src/data/forge.js'
-import { playerKey } from '../src/data/workshop.js'
+import { playerKey, wearNone, wearOnly } from '../src/data/workshop.js'
 
 const ID = /^[a-z0-9-]{1,80}$/
 
@@ -27,20 +26,11 @@ export function isForgePath(path) {
 // `onUse(key)` hears when a player turns a figure on for the game.
 export function createForge(dir, { onUse } = {}) {
   const file = join(dir, 'figures.json')
-  let figures = []
-  try {
-    if (existsSync(file)) figures = JSON.parse(readFileSync(file, 'utf8')).figures ?? []
-  } catch (error) {
-    console.error(`Hero Builder: could not read ${file}:`, error.message)
-  }
+  let figures = readJsonFile(file, {}, 'the Hero Builder').figures ?? []
   function save(next) {
-    mkdirSync(dir, { recursive: true })
-    const temp = `${file}.tmp`
-    writeFileSync(temp, JSON.stringify({ figures: next }, null, 1))
-    renameSync(temp, file)
+    writeJsonFile(file, { figures: next })
     figures = next
   }
-  const send = (res, status, body) => res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(body))
   const failed = (res, error) => {
     // Most likely cards/workshop on the Pi belongs to root (made by Docker, not by auto-update.sh).
     console.error('Hero Builder: could not save:', error.message)
@@ -50,7 +40,7 @@ export function createForge(dir, { onUse } = {}) {
   async function respond(req, res) {
     const path = decodeURIComponent(req.url.split('?')[0])
     if (path === '/forge.json' && req.method === 'GET') return send(res, 200, { figures: [...figures].reverse() })
-    const readJson = async () => JSON.parse((await readBody(req, 32 * 1024)).toString('utf8') || '{}')
+    const readJson = () => readJsonBody(req, 32 * 1024)
     if (path === '/forge' && req.method === 'POST') {
       if (figures.length >= MAX_FIGURES) return send(res, 507, { error: 'There are too many saved heroes. Throw some away first.' })
       const recipe = cleanRecipe(await readJson())
@@ -73,7 +63,7 @@ export function createForge(dir, { onUse } = {}) {
         const key = playerKey(figures[index].recipe.from)
         if (on && !key) return send(res, 400, { error: 'Put your name in "Made by" and save first, so the game knows whose hero wears it.' })
         try {
-          save(figures.map((f, n) => (n === index ? { ...f, useInGame: on } : on && f.useInGame && playerKey(f.recipe.from) === key ? { ...f, useInGame: false } : f)))
+          save(wearOnly(figures, index, on, (f) => f.recipe.from))
         } catch (error) {
           return failed(res, error)
         }
@@ -108,7 +98,7 @@ export function createForge(dir, { onUse } = {}) {
     stopUsing(key) {
       if (!figures.some((f) => f.useInGame && playerKey(f.recipe.from) === key)) return
       try {
-        save(figures.map((f) => (f.useInGame && playerKey(f.recipe.from) === key ? { ...f, useInGame: false } : f)))
+        save(wearNone(figures, key, (f) => f.recipe.from))
       } catch (error) {
         console.error('Hero Builder: could not save:', error.message)
       }

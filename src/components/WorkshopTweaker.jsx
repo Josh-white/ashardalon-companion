@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { makeTurntable } from './turntable.js'
 import { Button } from './ui.jsx'
 import { boneScales, cleanTweaks, COLORS, NO_TWEAKS, TWEAK_SLIDERS, usedSlots } from '../data/workshop.js'
 
@@ -30,36 +30,29 @@ export default function WorkshopTweaker({ request, model, onSaved }) {
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
-    const el = mount.current
-    let renderer
-    try {
-      renderer = new THREE.WebGLRenderer({ antialias: true })
-    } catch {
+    const s = { scene: null, mixer: null, bones: {}, root: null, canvas: null, base: null, material: null, action: null, tweaks: null }
+    const table = makeTurntable(mount.current, {
+      light: ['#ffffff', '#3b2a4a', 2.2],
+      key: ['#fff4e0', 2.2, [3, 5, 4]],
+      stand: 1.4,
+      camera: [0, 1.7, 6.4],
+      target: [0, 1.25, 0],
+      near: 2.5,
+      far: 10,
+      spinSpeed: 1.2,
+      onFrame: (seconds) => {
+        s.mixer?.update(seconds)
+        // After the moves, so a move never undoes the sliders.
+        const scales = boneScales(s.tweaks ?? NO_TWEAKS)
+        for (const [name, k] of Object.entries(scales)) s.bones[name]?.scale.setScalar(k)
+      },
+    })
+    if (!table) {
       setFailed(true)
       return undefined
     }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
-    renderer.domElement.style.cssText = 'display:block;width:100%;height:100%;touch-action:none'
-    el.appendChild(renderer.domElement)
-    const scene = new THREE.Scene()
-    scene.background = new THREE.Color('#1c1426')
-    scene.add(new THREE.HemisphereLight('#ffffff', '#3b2a4a', 2.2))
-    const key = new THREE.DirectionalLight('#fff4e0', 2.2)
-    key.position.set(3, 5, 4)
-    scene.add(key)
-    const floor = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.5, 0.08, 48), new THREE.MeshStandardMaterial({ color: '#3f3a46', roughness: 0.9 }))
-    floor.position.y = -0.04
-    scene.add(floor)
-    const camera = new THREE.PerspectiveCamera(32, 1, 0.05, 50)
-    camera.position.set(0, 1.7, 6.4)
-    const controls = new OrbitControls(camera, renderer.domElement)
-    controls.target.set(0, 1.25, 0)
-    controls.enableDamping = true
-    controls.autoRotate = true
-    controls.autoRotateSpeed = 1.2
-    controls.minDistance = 2.5
-    controls.maxDistance = 10
-    const s = { scene, mixer: null, bones: {}, root: null, canvas: null, base: null, material: null, action: null, tweaks: null }
+    const scene = table.scene
+    s.scene = scene
     stage.current = s
 
     let disposed = false
@@ -109,39 +102,9 @@ export default function WorkshopTweaker({ request, model, onSaved }) {
       () => setFailed(true),
     )
 
-    const resize = () => {
-      renderer.setSize(el.clientWidth, el.clientHeight, false)
-      camera.aspect = el.clientWidth / Math.max(el.clientHeight, 1)
-      camera.updateProjectionMatrix()
-    }
-    resize()
-    const watcher = new ResizeObserver(resize)
-    watcher.observe(el)
-    let last = performance.now()
-    let frame = requestAnimationFrame(function draw(now) {
-      s.mixer?.update(Math.min((now - last) / 1000, 0.1))
-      last = now
-      // After the moves, so a move never undoes the sliders.
-      const scales = boneScales(s.tweaks ?? NO_TWEAKS)
-      for (const [name, k] of Object.entries(scales)) s.bones[name]?.scale.setScalar(k)
-      controls.update()
-      renderer.render(scene, camera)
-      frame = requestAnimationFrame(draw)
-    })
     return () => {
       disposed = true
-      cancelAnimationFrame(frame)
-      watcher.disconnect()
-      controls.dispose()
-      scene.traverse((o) => {
-        o.geometry?.dispose()
-        for (const m of [].concat(o.material ?? [])) {
-          m.map?.dispose()
-          m.dispose()
-        }
-      })
-      renderer.dispose()
-      renderer.domElement.remove()
+      table.dispose()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the figure loads once; tweaks reach it through apply()
   }, [request.id, model])

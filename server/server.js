@@ -17,6 +17,7 @@ import { createWorkshop } from './workshop.js'
 import { createForge, isForgePath } from './forge.js'
 import { createFriendLog } from './friendLog.js'
 import { readBody } from './readBody.js'
+import { writeJsonFile } from './jsonStore.js'
 import { normalizeCardFile } from '../src/data/cards.js'
 import { missingCards } from '../src/data/cardCheck.js'
 import { setHeroTemplates } from '../src/data/heroes.js'
@@ -67,12 +68,8 @@ export function loadSavedGame(file) {
   return initialState
 }
 
-function writeSave(file, state) {
-  mkdirSync(dirname(file), { recursive: true })
-  const temp = `${file}.tmp`
-  writeFileSync(temp, JSON.stringify(state))
-  renameSync(temp, file)
-}
+// Saved games are written without spaces: they are big and nobody reads them by hand.
+const writeSave = (file, state) => writeJsonFile(file, state, 0)
 
 // Reads the card file on every request, so edits show up on the next reload.
 export function loadCards(cardsFile, exampleFile) {
