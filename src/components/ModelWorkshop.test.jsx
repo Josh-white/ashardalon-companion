@@ -83,6 +83,27 @@ describe('Model Workshop', () => {
     await waitFor(() => expect(posts).toEqual([[`/workshop/${knight.id}`, { change: 'Bigger horns' }]]))
   })
 
+  it('puts a loved model in the game, and says how to play with it', async () => {
+    const loved = { ...knight, rounds: [{ note: '', pictures: ['front.png'], model: 'model-1.glb' }], answers: [{ round: 1, love: true }] }
+    const posts = pi([loved])
+    render(<WorkshopButton state={state} me="Colton" />)
+    fireEvent.click(await screen.findByText(/🧙/))
+    fireEvent.click(await screen.findByText('📦 Models (1)'))
+    await screen.findByText('🎮 Use it in the game')
+    screen.getByText(/type your name as/)
+    fireEvent.click(screen.getByText("🎮 Use it as Colton's hero"))
+    await waitFor(() => expect(posts).toEqual([[`/workshop/${knight.id}`, { useInGame: true }]]))
+  })
+
+  it('offers to stop using a figure that is in the game', async () => {
+    pi([{ ...knight, useInGame: true, rounds: [{ note: '', pictures: ['front.png'], model: 'model-1.glb' }], answers: [{ round: 1, love: true }] }])
+    render(<WorkshopButton state={state} me="Colton" />)
+    fireEvent.click(await screen.findByText(/🧙/))
+    fireEvent.click(await screen.findByText('📦 Models (1)'))
+    await screen.findByText('Stop using it')
+    screen.getByText('🎉 In the game')
+  })
+
   it('sums up the picks in one line', () => {
     expect(pickedLine(knight)).toBe('A monster · red · Big · holds Axe · Swings it')
   })
