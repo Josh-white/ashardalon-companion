@@ -83,7 +83,7 @@ export function workshopStatus(request) {
 }
 
 export const STATUS_TEXT = {
-  waiting: { badge: '⏳ Waiting', line: 'Sent! Claude will build it and send pictures here.' },
+  waiting: { badge: '⏳ Sent, being built', line: 'Sent! Building it takes time (it can take a day or two). The pictures will show up here.' },
   look: { badge: '📸 Pictures!', line: 'Your model is ready to look at. Do you love it?' },
   fixing: { badge: '🔨 Fixing', line: 'Claude is making your changes. New pictures come here.' },
   loved: { badge: '❤️ Loved', line: 'You love it! Claude is putting it in the game.' },
