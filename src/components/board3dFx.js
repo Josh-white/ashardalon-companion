@@ -406,10 +406,17 @@ function projectile(stage, group, fx, from, to, hitAt, miss) {
   }
 
   if (fx.look === 'shield') {
-    const shield = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.22, 0.22, 0.05, 24),
-      new THREE.MeshStandardMaterial({ color, metalness: 0.8, roughness: 0.3, emissive: '#92400e', emissiveIntensity: 0.5 }),
-    )
+    // A round red shield with a gold rim and boss, flying flat like a frisbee, spinning
+    // around its middle, out to the monster and back to the hero.
+    const shield = new THREE.Group()
+    const face = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.04, 28), new THREE.MeshStandardMaterial({ color: '#b91c1c', metalness: 0.3, roughness: 0.5 }))
+    const gold = new THREE.MeshStandardMaterial({ color: '#fbbf24', metalness: 0.9, roughness: 0.25, emissive: '#92400e', emissiveIntensity: 0.5 })
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.025, 8, 32), gold)
+    rim.rotation.x = Math.PI / 2
+    const boss = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), gold)
+    boss.position.y = 0.02
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.045, 0.05), gold)
+    shield.add(face, rim, boss, stripe)
     shield.visible = false
     group.add(shield)
     const shine = glow(stage, group, color, 0.55)
@@ -418,7 +425,8 @@ function projectile(stage, group, fx, from, to, hitAt, miss) {
       const back = seg(p, hitAt + 0.05, 0.85)
       shield.visible = shine.visible = out > 0 && back < 1
       shield.position.copy(out < 1 ? along(out, 0.4) : to.clone().lerp(from, back).add(new THREE.Vector3(0, Math.sin(Math.PI * back) * 0.4, 0)))
-      shield.rotation.set(0.3, p * 60, Math.PI / 2)
+      // Flat, tipped a little toward the camera so its face shows, spinning like a frisbee.
+      shield.rotation.set(0.35, p * 45, 0, 'XYZ')
       shine.position.copy(shield.position)
     }
   }
@@ -465,6 +473,195 @@ function ghost(stage, group, at, picture) {
     card.position.y = 0.08 - gone * 0.1
     for (const m of [back.material, face.material]) m.opacity = 1 - gone
   }
+}
+
+// A defeated monster crumbles to dust where it fell, and its gold flies to the hero.
+function crumble(stage, group, node, at, hero, hitAt, fewer) {
+  const start = Math.min(0.78, hitAt + 0.42)
+  const dust = burst(stage, group, new THREE.Vector3(at.x, 0.15, at.z), '#a8a29e', Math.round(26 * fewer), { smoke: true, size: 0.35, speed: 0.9, lift: 0.5, gravity: -0.2, life: 1.1 })
+  const dustSec = msAt(start) / 1000
+  const coins = []
+  const coinMat = new THREE.MeshStandardMaterial({ color: '#fbbf24', metalness: 0.9, roughness: 0.25, emissive: '#92400e', emissiveIntensity: 0.6 })
+  const coinGeo = new THREE.CylinderGeometry(0.11, 0.11, 0.03, 16)
+  const count = Math.round(9 * fewer) + 1
+  for (let i = 0; i < count; i++) {
+    const coin = new THREE.Mesh(coinGeo, i === 0 ? coinMat : coinMat.clone())
+    coin.visible = false
+    group.add(coin)
+    coins.push({ coin, wait: i * 0.025, side: (Math.random() - 0.5) * 0.9, up: 0.9 + Math.random() * 0.7 })
+  }
+  const pop = burst(stage, group, hero.clone(), '#fde68a', Math.round(14 * fewer), { size: 0.12, speed: 1.2, lift: 1.2 })
+  const popAt = Math.min(0.97, start + 0.36)
+  const popSec = msAt(popAt) / 1000
+  const across = hero.clone().sub(at).setY(0)
+  const sideways = new THREE.Vector3(-across.z, 0, across.x).normalize()
+  return (p, sec) => {
+    if (node) {
+      const k = seg(p, start, start + 0.2)
+      node.userData.body.scale.set(1 + k * 0.25, Math.max(0.02, 1 - k), 1 + k * 0.25)
+      node.userData.body.visible = k < 1
+    }
+    dust(sec - dustSec)
+    for (const c of coins) {
+      const k = seg(p, start + c.wait, popAt)
+      c.coin.visible = k > 0 && k < 1
+      if (!c.coin.visible) continue
+      const pos = at.clone().lerp(hero, k).addScaledVector(sideways, Math.sin(Math.PI * k) * c.side)
+      pos.y = 0.3 + Math.sin(Math.PI * k) * c.up
+      c.coin.position.copy(pos)
+      c.coin.rotation.set(p * 40, 0, p * 25)
+    }
+    pop(sec - popSec)
+  }
+}
+
+let crackTexture = null
+function crackPicture() {
+  crackTexture ??= canvasTexture(256, 256, (g, w) => {
+    const c = w / 2
+    g.translate(c, c)
+    g.lineCap = 'round'
+    for (const [width, color] of [
+      [14, 'rgba(220,38,38,0.35)'],
+      [6, 'rgba(248,113,113,0.9)'],
+      [2, 'rgba(254,240,138,1)'],
+    ]) {
+      g.strokeStyle = color
+      g.lineWidth = width
+      for (let i = 0; i < 7; i++) {
+        let a = (i / 7) * Math.PI * 2 + Math.sin(i * 7.1) * 0.3
+        let r = 8
+        g.beginPath()
+        g.moveTo(Math.cos(a) * r, Math.sin(a) * r)
+        while (r < c - 10) {
+          r += 14 + ((i * 13 + r) % 9)
+          a += Math.sin(r * 0.37 + i) * 0.35
+          g.lineTo(Math.cos(a) * r, Math.sin(a) * r)
+        }
+        g.stroke()
+      }
+    }
+  })
+  return crackTexture
+}
+
+// A defeated villain: the floor cracks open under it, red light pours out, and it sinks in.
+function villainCrack(stage, group, node, at, hitAt, fewer) {
+  const start = Math.min(0.7, hitAt + 0.3)
+  const crack = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.4, 2.4),
+    new THREE.MeshBasicMaterial({ map: crackPicture(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
+  )
+  crack.rotation.x = -Math.PI / 2
+  crack.position.set(at.x, 0.03, at.z)
+  crack.visible = false
+  group.add(crack)
+  const shine = glow(stage, group, '#dc2626', 3.2)
+  const embers = burst(stage, group, new THREE.Vector3(at.x, 0.1, at.z), '#f97316', Math.round(30 * fewer), { size: 0.16, speed: 0.7, lift: 2.4, gravity: -0.4, life: 1.2 })
+  const emberSec = msAt(start + 0.08) / 1000
+  return (p, sec) => {
+    const open = seg(p, start, start + 0.15)
+    const fade = 1 - seg(p, 0.9, 1)
+    crack.visible = shine.visible = open > 0 && fade > 0
+    crack.scale.setScalar(0.2 + open * 0.8)
+    crack.material.opacity = fade
+    shine.position.set(at.x, 0.4, at.z)
+    shine.material.opacity = open * fade * (0.75 + Math.sin(p * 90) * 0.25)
+    embers(sec - emberSec)
+    if (node) {
+      const sink = seg(p, start + 0.08, 0.92)
+      const { body } = node.userData
+      body.position.y = -sink * 1.6
+      body.position.x = sink > 0 && sink < 1 ? Math.sin(p * 260) * 0.03 : 0
+      body.visible = sink < 1
+    }
+  }
+}
+
+// A figure taken off the board without being defeated (a monster sent away, a villager who
+// leaves) drops through a purple portal; a hero who leaves (escapes, swaps out) rises up a
+// beam of light. `done` takes the figure away after. Returns stop().
+export function playExit3D(stage, node, done) {
+  const { group, dispose } = scratch(stage)
+  const fewer = stage.calm ? 0.5 : 1
+  const at = node.position.clone()
+  const hero = node.userData.kind === 'hero'
+  const { body } = node.userData
+  const parts = []
+  if (hero) {
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.42, 0.5, 7, 28, 1, true),
+      new THREE.MeshBasicMaterial({ color: '#fde68a', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }),
+    )
+    beam.position.set(at.x, 3.5, at.z)
+    group.add(beam)
+    const shine = glow(stage, group, '#fde68a', 1.8)
+    const sparkle = burst(stage, group, new THREE.Vector3(at.x, 0.2, at.z), '#fef08a', Math.round(24 * fewer), { size: 0.12, speed: 0.5, lift: 2.6, gravity: -0.6, life: 1.4 })
+    parts.push((k, sec) => {
+      const on = seg(k, 0, 0.18) * (1 - seg(k, 0.82, 1))
+      beam.material.opacity = on * 0.32
+      shine.visible = on > 0
+      shine.position.set(at.x, 0.5 + body.position.y, at.z)
+      shine.material.opacity = on
+      const lift = seg(k, 0.2, 0.85)
+      body.position.y = lift * lift * 3.2
+      body.scale.setScalar(1 - lift * 0.6)
+      body.rotation.y = lift * 4
+      body.visible = lift < 1
+      sparkle(sec - 0.3)
+    })
+  } else {
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.3, 0.52, 40),
+      new THREE.MeshBasicMaterial({ color: '#a855f7', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }),
+    )
+    const hole = new THREE.Mesh(new THREE.CircleGeometry(0.32, 40), new THREE.MeshBasicMaterial({ color: '#1e0b36', transparent: true, depthWrite: false }))
+    for (const m of [ring, hole]) {
+      m.rotation.x = -Math.PI / 2
+      m.position.set(at.x, 0.025, at.z)
+      group.add(m)
+    }
+    const shine = glow(stage, group, '#c084fc', 1.6)
+    const swirl = burst(stage, group, new THREE.Vector3(at.x, 0.05, at.z), '#d8b4fe', Math.round(22 * fewer), { size: 0.12, speed: 0.9, lift: 1.2, gravity: 1.5, life: 0.9 })
+    parts.push((k, sec) => {
+      const open = seg(k, 0, 0.2) * (1 - seg(k, 0.8, 1))
+      ring.scale.setScalar(0.1 + open * 1.1)
+      hole.scale.setScalar(0.1 + open * 1.1)
+      ring.rotation.z = k * 12
+      ring.material.opacity = open
+      hole.material.opacity = open * 0.95
+      shine.visible = open > 0
+      shine.position.set(at.x, 0.15, at.z)
+      shine.material.opacity = open * 0.8
+      const fall = seg(k, 0.22, 0.75)
+      body.position.y = -fall * fall * 1.1
+      body.scale.setScalar(1 - fall * 0.8)
+      body.rotation.y = fall * fall * 14
+      body.visible = fall < 1
+      swirl(sec - 0.25)
+    })
+  }
+  let over = false
+  const stop = () => {
+    if (over) return
+    over = true
+    dispose()
+    tween.start = -Infinity
+    done()
+    stage.render()
+  }
+  const ms = hero ? 1800 : 1500
+  const tween = {
+    ms,
+    step: (k) => {
+      if (over) return
+      for (const part of parts) part(k, (k * ms) / 1000)
+      if (k >= 1) stop()
+    },
+  }
+  stage.tweens.push(tween)
+  stage.render()
+  return stop
 }
 
 // A part that does something once, when the animation reaches `at`.
@@ -589,15 +786,22 @@ export function playAttack3D(stage, fx, picture) {
       const smoke = burst(stage, group, new THREE.Vector3(to.x, 0.3, to.z), '#57534e', Math.round(20 * fewer), { smoke: true, size: 0.55, speed: 0.8, lift: 0.9, gravity: -0.6, life: 1.4 })
       const stars = burst(stage, group, to, '#fde68a', Math.round(16 * fewer), { size: 0.14, speed: 1.8 })
       const smokeSec = msAt(hitAt + 0.2) / 1000
-      // The figure staggers, falls, and sinks away; a standee's token falls over instead.
+      // The figure staggers and falls (a standee tips over); then a monster crumbles to
+      // dust and its gold flies to the hero who won, and a villain sinks into a burning crack.
+      const villain = fallen?.userData.kind === 'villain'
       const fall = fallen
         ? (p) => {
-            if (p > hitAt + 0.15 && !fallen.userData.anim.down) setDown(fallen, true)
-            fallen.userData.body.position.y = -seg(p, Math.min(0.9, hitAt + 0.3), 1) * 0.9
+            const { body, anim } = fallen.userData
+            if (p > hitAt + 0.15) {
+              if (anim && !anim.down) setDown(fallen, true)
+              if (!anim) body.rotation.x = -seg(p, hitAt + 0.15, hitAt + 0.4) * 1.35
+            }
           }
         : shot.art
           ? ghost(stage, group, to, picture(shot.art))
           : null
+      const after = villain ? villainCrack(stage, group, fallen, to, hitAt, fewer) : crumble(stage, group, fallen, to, origin, hitAt, fewer)
+      parts.push(after)
       parts.push((p, sec) => {
         smoke(sec - smokeSec)
         stars(sec - smokeSec)
