@@ -24,7 +24,7 @@ import { describeAction } from '../src/state/describeAction.js'
 import { gameReducer, initialState } from '../src/state/game.js'
 import { migrateSave } from '../src/state/saves.js'
 import { refreshCardEffects } from '../src/state/cardRefresh.js'
-import { recordsReply, syncRecord } from '../src/state/records.js'
+import { markAdventure, recordsReply, syncRecord } from '../src/state/records.js'
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 
@@ -374,7 +374,9 @@ export function startServer({
     console.error('Could not read the players\' records:', error.message)
   }
   function updateRecords(r) {
-    const next = syncRecord(records, r.state, Date.now(), { game: r.id, friend: Boolean(otherGames.find((g) => g.id === r.id)?.owner) })
+    saveRecords(syncRecord(records, r.state, Date.now(), { game: r.id, friend: Boolean(otherGames.find((g) => g.id === r.id)?.owner) }))
+  }
+  function saveRecords(next) {
     if (!next) return
     records = next
     try {
@@ -542,6 +544,22 @@ export function startServer({
       res
         .writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
         .end(JSON.stringify(recordsReply(records, (g) => (who.family ? !g.friend : seen.has(g.game)), who.family)))
+      return
+    }
+    if (req.url === '/records/adventure' && req.method === 'POST') {
+      // "We beat this before" from the adventure picker: the family's own marks, never a friend's.
+      if (!who.family) {
+        res.writeHead(403).end()
+        return
+      }
+      readBody(req, 1000)
+        .then((body) => {
+          const { adventure, beaten } = JSON.parse(String(body) || '{}')
+          if (typeof adventure !== 'string' || !adventure.trim()) throw new Error('no adventure')
+          saveRecords(markAdventure(records, adventure, Boolean(beaten)))
+          res.writeHead(204).end()
+        })
+        .catch(() => res.writeHead(400).end())
       return
     }
     if (ideaBox.handle(req, res, who.family ? null : who.email)) return

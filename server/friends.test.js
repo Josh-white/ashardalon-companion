@@ -194,7 +194,11 @@ describe('friends on the real game', () => {
     const { ideas } = await (await get('/ideas.json')).json()
     expect(ideas[0]).toMatchObject({ text: 'More dragons', from: 'Amy', email: amy })
     expect((await fetch(`${url}/ideas/${ideas[0].id}`, { method: 'DELETE', headers: as(amy) })).status).toBe(403)
-    expect(await (await get('/records.json', amy)).json()).toEqual({ players: [], solo: [], adventures: {}, played: {} })
+    const mark = (headers) => fetch(`${url}/records/adventure`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ adventure: 'Into the Mountain', beaten: true }) })
+    expect((await mark(as(amy))).status).toBe(403)
+    expect((await mark({})).status).toBe(204)
+    expect((await (await get('/records.json')).json()).adventures['into the mountain']).toMatchObject({ marked: true })
+    expect(await (await get('/records.json', amy)).json()).toEqual({ players: [], solo: [], adventures: {}, played: {}, canMark: false })
   })
 })
 

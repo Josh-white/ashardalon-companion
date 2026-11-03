@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { TITLES } from '../data/titles.js'
 import { createHero, gameReducer, initialState } from './game.js'
-import { adventureRecord, findPlayer, gameRecord, playerRecords, recordGames, recordsReply, syncRecord } from './records.js'
+import { adventureRecord, findPlayer, markAdventure, gameRecord, playerRecords, recordGames, recordsReply, syncRecord } from './records.js'
 
 const start = (players) =>
   gameReducer(initialState, { type: 'START_GAME', heroes: players.map((player, i) => ({ ...createHero(HERO_TEMPLATES[i]), player })) })
@@ -114,5 +114,16 @@ describe("players' records", () => {
     expect(adventureRecord(adventures, { title: 'Into the Mountain' })).toEqual({ games: 3, wins: 2, winners: ['Colton', 'Easton', 'JJ'] })
     expect(adventureRecord(adventures, { title: 'The Lost Crown' })).toEqual({ games: 1, wins: 0, winners: [] })
     expect(adventureRecord(adventures, { title: 'Never Played' })).toBeNull()
+  })
+
+  it('keeps adventures marked as beaten by hand, for the family only', () => {
+    const file = markAdventure({ games: {} }, ' Into the Mountain ', true, 5)
+    expect(file.marked).toEqual({ 'into the mountain': { title: 'Into the Mountain', at: 5 } })
+    expect(markAdventure(file, 'Into the Mountain', true)).toBeNull()
+    expect(adventureRecord(recordsReply(file).adventures, { title: 'Into the Mountain' })).toEqual({ games: 0, wins: 0, winners: [], marked: true })
+    expect(recordsReply(file).canMark).toBe(true)
+    // A friend's screen doesn't see the family's marks.
+    expect(recordsReply(file, () => true, false).adventures).toEqual({})
+    expect(markAdventure(file, 'Into the Mountain', false).marked).toEqual({})
   })
 })
