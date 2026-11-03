@@ -263,13 +263,15 @@ const momentFor = (moment, heroId) => Boolean(moment) && (!heroId || moment.hero
 // (on a hero's iPad, one of theirs) puts a dot on Monsters until it's opened.
 export function usePlayTabs(state, heroId, myTurn) {
   const [tab, setTab] = useState('turn')
-  const resetKey = heroId ? (myTurn ? `${state.turn.round}-${state.turn.phase}` : 'waiting') : `${state.turn.heroIndex}-${state.turn.phase}`
+  const extraAttacks = (state.turn.bonusAttacks ?? []).filter((b) => !heroId || b.heroId === heroId).length
+  // A free attack from Cause Fear on someone else's turn also brings this iPad's turn column
+  // back to the top, where the attack is, even if the player had scrolled down to their card.
+  const resetKey = heroId ? (myTurn ? `${state.turn.round}-${state.turn.phase}` : `waiting-${extraAttacks}`) : `${state.turn.heroIndex}-${state.turn.phase}`
   useEffect(() => setTab('turn'), [resetKey])
   const momentId = momentFor(state.moment, heroId) ? state.moment.id : null
   useEffect(() => {
     if (momentId) setTab('turn')
   }, [momentId])
-  const extraAttacks = (state.turn.bonusAttacks ?? []).filter((b) => !heroId || b.heroId === heroId).length
   useEffect(() => {
     if (extraAttacks > 0) setTab('turn')
   }, [extraAttacks])

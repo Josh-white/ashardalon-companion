@@ -97,6 +97,9 @@ function PlayView({ state, dispatch, hero = null, soundBoard = null, allyHost = 
   const body = {
     turn: hero ? (
       <>
+        {/* Cause Fear gives other heroes an attack during someone else's turn: first thing on
+            their own iPad, so nobody has to scroll to find it. */}
+        {!myTurn && <ExtraAttacks state={state} dispatch={dispatch} onlyHeroId={hero.id} callout />}
         {myTurn && <SinceLastTurn state={state} hero={hero} />}
         {allyTurn && (allyHost || helping) ? (
           <AllyPanel state={state} dispatch={dispatch} drive={allyHost} treasure />
@@ -108,8 +111,6 @@ function PlayView({ state, dispatch, hero = null, soundBoard = null, allyHost = 
             {allyTurn && <AllyWatch state={state} dispatch={dispatch} />}
           </>
         )}
-        {/* Cause Fear gives other heroes an attack during someone else's turn. */}
-        {!myTurn && <ExtraAttacks state={state} dispatch={dispatch} onlyHeroId={hero.id} />}
         <AllyToggle state={state} dispatch={dispatch} hero={hero} />
         {heroCard(hero, true)}
         <HeroCheatCard hero={hero} />

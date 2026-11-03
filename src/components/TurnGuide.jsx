@@ -63,13 +63,22 @@ function YesNo({ question, onYes, onNo }) {
 }
 
 // Free at-will attacks from Cause Fear or Acrobatic Onslaught, and how the last one went.
-// `onlyHeroId` shows just one hero's, on that hero's own iPad.
-export function ExtraAttacks({ state, dispatch, onlyHeroId = null }) {
+// `onlyHeroId` shows just one hero's, on that hero's own iPad. `callout` adds a line saying
+// who gave the attack, for an iPad whose hero isn't taking their turn.
+export function ExtraAttacks({ state, dispatch, onlyHeroId = null, callout = false }) {
   const extras = (state.turn.bonusAttacks ?? []).filter((b) => !onlyHeroId || b.heroId === onlyHeroId)
   const last = state.turn.lastAttack
   const showLast = last?.bonus && (!onlyHeroId || last.heroId === onlyHeroId)
+  // Whose power it was: Quinn's Cause Fear, or the hero's own (a fan Assassin's Swift Evasion).
+  const giver = extras[0] && state.heroes.find((h) => (h.powers ?? []).some((p) => p.name === extras[0].source))
+  const whose = !giver ? 'A' : giver.id === onlyHeroId ? 'Your' : `${giver.name}'s`
   return (
     <>
+      {callout && extras.length > 0 && (
+        <Note tone="good">
+          ⚡ {whose} {extras[0].source} gives you a free attack right now! Pick an at-will power below.
+        </Note>
+      )}
       {showLast && (
         <div className="mt-5 rounded-2xl border-2 border-amber-600/60 bg-zinc-950/60 p-4">
           <AttackAftermath state={state} last={last} dispatch={dispatch} />
