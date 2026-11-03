@@ -4,7 +4,7 @@ import { createHero, gameReducer, initialState } from '../state/game.js'
 import { momentSounds } from '../audio/sfx.js'
 import { tokenFx } from '../components/AttackFx.jsx'
 import { msAt, slowMo } from '../components/attackFxDraw.js'
-import { FX_DELAY_MS, FX_IMPACT_MS, attackFx, heroLook, monsterLook, rayColor } from './attackFx.js'
+import { FX_DELAY_MS, FX_IMPACT_MS, attackFx, fxLeadMs, heroLook, monsterLook, rayColor } from './attackFx.js'
 import { normalizeTiles } from './tileDefs.js'
 
 const TILES = normalizeTiles(
@@ -102,6 +102,17 @@ describe('attack animations on the virtual board', () => {
     const { state, heroes } = game()
     const next = gameReducer(state, { type: 'MONSTER_ATTACK', monsterId: 'm2', attackId: 'bite', targets: [{ heroId: heroes[1].id, roll: 18 }] })
     expect(next.moment.fx).toMatchObject({ look: 'bite', by: 'monster', from: [2, 0], shots: [{ to: next.board.tokens[heroes[1].id], result: 'hit', dealt: 2 }] })
+  })
+
+  it('lets a monster that walked up to its hero be seen walking before the die and the sounds', () => {
+    const { state, heroes } = game()
+    const next = gameReducer(state, { type: 'MONSTER_ATTACK', monsterId: 'm2', attackId: 'bite', targets: [{ heroId: heroes[1].id, roll: 18 }], walked: 2 })
+    expect(next.moment.fx.walk).toBe(2)
+    const lead = fxLeadMs(next.moment)
+    expect(lead).toBeGreaterThan(500)
+    const still = { ...next.moment, fx: { ...next.moment.fx, walk: 0 } }
+    expect(fxLeadMs(still)).toBe(0)
+    expect(momentSounds(next.moment)).toEqual(momentSounds(still).map(([sound, ms]) => [sound, ms + lead]))
   })
 
   it('a hero knocked to 0 HP is down', () => {

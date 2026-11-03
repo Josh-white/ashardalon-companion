@@ -7,7 +7,7 @@ import { soundPlaying } from './busy.js'
 import { effectsOf } from '../data/powerEffects.js'
 import { newArrivals } from './narration.js'
 import { POWER_SPELLS, powerKey, spellKind } from './spellKind.js'
-import { FX_DELAY_MS, FX_IMPACT_MS } from '../board/attackFx.js'
+import { FX_DELAY_MS, FX_IMPACT_MS, fxLeadMs } from '../board/attackFx.js'
 
 export { spellKind }
 
@@ -178,6 +178,9 @@ function knownVoice(title = '') {
 // away and play their result when the die lands.
 export function momentSounds(moment) {
   if (!moment) return []
+  // A monster walking up first (board/attackFx.js fxLeadMs): every sound waits for the walk.
+  const lead = fxLeadMs(moment)
+  if (lead > 0) return momentSounds({ ...moment, fx: { ...moment.fx, walk: 0 } }).map(([sound, ms]) => [sound, ms + lead])
   const rolls = moment.rolls ?? (moment.value != null ? [{ value: moment.value }] : [])
   const values = rolls.map((r) => r.value)
 
