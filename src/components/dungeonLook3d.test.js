@@ -18,6 +18,8 @@ describe('torches on the 3D board', () => {
       const onRock = s.side === 'W' && s.x === 1
       const onWall = s.side === 'E' && s.x === 5
       expect(onRock || onWall).toBe(true)
+      // Thin walls are marked, so the torch sits on the wall's face, not inside it.
+      expect(Boolean(s.wall)).toBe(onWall)
     }
     for (const a of spots) for (const b of spots) if (a !== b) expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThanOrEqual(3.2)
   })

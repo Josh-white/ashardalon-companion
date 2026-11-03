@@ -8,7 +8,7 @@ import { TOKEN_COLORS } from './Board.jsx'
 import { useAttackFx } from './AttackFx.jsx'
 import { useHealFx } from './HealFx.jsx'
 import { canvasTexture, playAttack3D, playExit3D, playHeal3D } from './board3dFx.js'
-import { FLOOR_LOOKS, dressDungeon, hideTorches, stoneMaterials } from './dungeonLook3d.js'
+import { FLOOR_LOOKS, WALL_DEPTH, dressDungeon, hideTorches, stoneMaterials } from './dungeonLook3d.js'
 import { attachModel, detachModel, face, setDown, setWalking, stepModels } from './figureModels.js'
 import { FX_DELAY_MS, FX_MS, fxLeadMs } from '../board/attackFx.js'
 import { closeUpShot, EYES_TILT, eyesCloseUp, restShot, tourShot, turnBy, VIEW_LABELS, viewAngles, VIEWS } from '../board/camera3d.js'
@@ -273,8 +273,8 @@ function buildDungeon(stage, layout) {
   stage.torchGroup = new THREE.Group()
   dungeon.add(stage.torchGroup)
   const tall = (stage.walls ?? 'low') !== 'low'
-  stage.dungeonAnimators = stone && stage.look !== 'stone' ? dressDungeon(stage.torchGroup, layout, at, { lights: stage.torchLights, wallH: tall ? 1.05 : WALL_H, props: stage.look === 'full' }) : []
-  hideTorches(stage.torchGroup, stage.walls === 'cutaway' ? stage.front : null)
+  stage.dungeonAnimators = stone && stage.look !== 'stone' ? dressDungeon(stage.torchGroup, layout, at, { lights: stage.torchLights, wallH: tall ? 1.05 : WALL_H, wallTop: tall ? TALL_H - 0.1 : null, heights: stage.heights, props: stage.look === 'full' }) : []
+  hideTorches(stage.torchGroup, stage.torchCut)
   setAir(stage, stone && stage.look !== 'stone')
 
   // Shadows cover the whole dungeon.
@@ -325,8 +325,12 @@ function buildWalls(stage) {
     dungeon.add(rockMesh)
   }
 
-  // A wall on the camera's side of its floor square hides that square.
-  const wallFront = (w) => style !== 'low' && style !== 'tall' && w.side === front
+  // A wall on the camera's side of its floor square hides that square. Walls between two
+  // floor squares are kept once, on the square's east or south side, so seen from the west
+  // or north they're in front of the square on their far side.
+  const back = { N: 'S', S: 'N', E: 'W', W: 'E' }[front]
+  const wallFront = (w) =>
+    style !== 'low' && style !== 'tall' && (w.side === front || (w.side === back && floorAt.has(`${w.x + STEP[w.side][0]},${w.y + STEP[w.side][1]}`)))
   const wallMat = stone ? stone.wall : new THREE.MeshStandardMaterial({ color: '#3a322c', roughness: 1 })
   const turn = new THREE.Quaternion()
   const wallSets = [
@@ -335,7 +339,7 @@ function buildWalls(stage) {
   ]
   for (const [list, h, mat] of wallSets) {
     if (list.length === 0) continue
-    const wallMesh = new THREE.InstancedMesh(tallBox(1, h, stone ? 0.16 : 0.12), mat, list.length)
+    const wallMesh = new THREE.InstancedMesh(tallBox(1, h, stone ? WALL_DEPTH : 0.12), mat, list.length)
     list.forEach((w, i) => {
       const [x, z] = at(w.x, w.y)
       const dx = w.side === 'E' ? 0.5 : w.side === 'W' ? -0.5 : 0
@@ -349,7 +353,17 @@ function buildWalls(stage) {
     dungeon.add(wallMesh)
   }
 
-  if (stage.torchGroup) hideTorches(stage.torchGroup, style === 'cutaway' ? front : null)
+  // Torches on walls or rock cut low go too.
+  const cutWalls = new Set(layout.walls.filter(wallFront).map((w) => `${w.x},${w.y},${w.side}`))
+  const rockAt = new Set(rocks.map((s) => `${s.x},${s.y}`))
+  stage.torchCut =
+    style === 'low' || style === 'tall'
+      ? null
+      : (t) => {
+          const [nx, ny] = [t.x + STEP[t.side][0], t.y + STEP[t.side][1]]
+          return cutWalls.has(`${t.x},${t.y},${t.side}`) || (rockAt.has(`${nx},${ny}`) && rockFront({ x: nx, y: ny }))
+        }
+  if (stage.torchGroup) hideTorches(stage.torchGroup, stage.torchCut)
 }
 
 // A tile's own shade: a little lighter or darker than its neighbours, steady for the game.
