@@ -13,7 +13,7 @@ import { AreaName } from './AreaBackdrop.jsx'
 import { STARTING_TILES } from '../state/tiles.js'
 import { Button, Chip } from './ui.jsx'
 import { adventureRecord } from '../state/records.js'
-import { useRecordsFile } from '../state/useRecords.js'
+import { markAdventureBeaten, useRecordsFile } from '../state/useRecords.js'
 import { CampaignBoons } from './Campaign.jsx'
 import { VillagerList } from './Villagers.jsx'
 
@@ -26,9 +26,13 @@ const heading = (adventure) => (adventure.number ? `Adventure ${adventure.number
 // its goal, instead of one long scroll.
 export function AdventurePicker({ state, dispatch, board = false, compact = false }) {
   const { adventures } = useCards()
-  // Which adventures have been beaten already, from the Pi's finished games.
-  const beaten = useRecordsFile()?.adventures ?? null
   const chosen = state.lobbyAdventure
+  // Which adventures have been beaten already, from the Pi's finished games.
+  const [marks, setMarks] = useState(0)
+  const recordsFile = useRecordsFile(marks)
+  const beaten = recordsFile?.adventures ?? null
+  const chosenRecord = chosen && !chosen.practice ? adventureRecord(beaten, chosen) : null
+  const mark = (on) => markAdventureBeaten(chosen.title, on).then(() => setMarks((n) => n + 1)).catch(() => {})
   const surges = state.lobbySurges ?? 2
   const difficulty = difficultyOf(state.lobbyDifficulty)
   // The practice warm-up first, then the book's adventures in order.
@@ -58,6 +62,21 @@ export function AdventurePicker({ state, dispatch, board = false, compact = fals
         })}
       </div>
       {adventures.length === 0 && <p className="mt-2 text-sm text-zinc-500">No adventures in the card file yet.</p>}
+      {recordsFile?.canMark && chosen && !chosen.practice && !(chosenRecord?.wins > 0) && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-zinc-400">
+          {chosenRecord?.marked ? (
+            <>
+              <span className="text-emerald-400">✅ Marked as beaten before.</span>
+              <Button onClick={() => mark(false)}>Undo</Button>
+            </>
+          ) : (
+            <>
+              <span>Beat {chosen.number ? `Adventure ${chosen.number}` : 'this one'} before the app kept track?</span>
+              <Button onClick={() => mark(true)}>✅ We beat this before</Button>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="mt-4">
         <span className="text-zinc-400">How hard?</span>
@@ -101,7 +120,8 @@ export function AdventurePicker({ state, dispatch, board = false, compact = fals
 export function QuestLine({ state, dispatch, boardChoice = null, onBoard = false, big = true }) {
   const [open, setOpen] = useState(false)
   const chosen = state.lobbyAdventure
-  const beaten = adventureRecord(useRecordsFile(open)?.adventures, chosen)?.wins > 0
+  const chosenRecord = adventureRecord(useRecordsFile(open)?.adventures, chosen)
+  const beaten = chosenRecord?.wins > 0 || Boolean(chosenRecord?.marked)
   const surges = state.lobbySurges ?? 2
   const difficulty = difficultyOf(state.lobbyDifficulty)
   const facts = [
@@ -148,12 +168,12 @@ export function QuestLine({ state, dispatch, boardChoice = null, onBoard = false
 // How an adventure has gone so far: won (and by whom), or tried and not beaten yet.
 function recordLine(record) {
   if (!record) return null
-  if (record.wins === 0) return `Tried ${record.games}×, not beaten yet`
+  if (record.wins === 0) return record.marked ? 'Beaten before' : `Tried ${record.games}×, not beaten yet`
   return `Won${record.wins > 1 ? ` ${record.wins}×` : ''}${record.winners.length > 0 ? ` by ${record.winners.join(', ')}` : ''}`
 }
 
 function AdventureOption({ active, disabled, title, detail, players, onClick, compact = false, number = null, record = null }) {
-  const won = record?.wins > 0
+  const won = record?.wins > 0 || Boolean(record?.marked)
   const line = recordLine(record)
   const lineClass = won ? 'text-emerald-400' : 'text-zinc-500'
   if (compact) {

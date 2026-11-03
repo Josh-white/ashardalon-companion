@@ -191,9 +191,23 @@ export const recordsReply = (file, keep = () => true, played = true) => {
   return {
     players: playerRecords(games.filter((g) => !g.solo)),
     solo: playerRecords(games.filter((g) => g.solo)),
-    adventures: adventureRecords(games),
+    // Adventures the family marked as beaten by hand stay the family's.
+    adventures: adventureRecords(games, played ? file?.marked : {}),
     played: played ? (file?.played ?? {}) : {},
+    canMark: played,
   }
+}
+
+// "We beat this before": an adventure the family beat before the Pi kept records, marked
+// by hand from the adventure picker. { marked: { [adventure key]: { title, at } } }.
+// Returns the changed file, or null when nothing changed.
+export function markAdventure(file, title, beaten, now = Date.now()) {
+  const key = adventureKey(title)
+  if (!key) return null
+  const marked = file?.marked ?? {}
+  if (Boolean(marked[key]) === Boolean(beaten)) return null
+  const { [key]: _, ...rest } = marked
+  return { ...file, marked: beaten ? { ...rest, [key]: { title: title.trim(), at: now } } : rest }
 }
 
 // Which adventures have been beaten, for the checkmarks in the adventure picker:
@@ -201,8 +215,10 @@ export const recordsReply = (file, keep = () => true, played = true) => {
 // game of it (family and solo alike), in the order they first won it. The Hero Swap
 // Warm-up never gets here (gameRecord leaves practice out).
 export const adventureKey = (title) => (typeof title === 'string' ? title.trim().toLowerCase() : '')
-export function adventureRecords(games) {
+// `marked`: the adventures marked as beaten by hand (markAdventure), which get `marked: true`.
+export function adventureRecords(games, marked = {}) {
   const out = {}
+  for (const key of Object.keys(marked ?? {})) out[key] = { games: 0, wins: 0, winners: [], marked: true }
   for (const game of games) {
     const key = adventureKey(game.adventure)
     if (!key) continue
