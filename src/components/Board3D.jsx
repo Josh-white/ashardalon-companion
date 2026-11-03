@@ -154,7 +154,8 @@ function buildDungeon(stage, layout) {
       quarter.setFromAxisAngle(up, Math.floor(seeded(s.x * 5 + s.y * 9) * 4) * (Math.PI / 2))
       matrix.compose(new THREE.Vector3(x, -FLOOR_H / 2 - seeded(s.x * 7 + s.y) * 0.02, z), quarter, one)
       floorMesh.setMatrixAt(i, matrix)
-      const v = stone ? 0.82 + seeded(s.x * 31 + s.y * 17) * 0.3 : 0.34 + seeded(s.x * 31 + s.y * 17) * 0.1
+      // Each tile gets its own shade of stone, so neighbouring tiles read apart (JJ).
+      const v = (stone ? 0.82 + seeded(s.x * 31 + s.y * 17) * 0.3 : 0.34 + seeded(s.x * 31 + s.y * 17) * 0.1) * tileShade(s.tile)
       floorMesh.setColorAt(i, s.scorch ? color.setRGB(0.3, 0.2, 0.17) : color.setRGB(v * 1.03, v, v * 0.95))
     })
     floorMesh.receiveShadow = true
@@ -185,6 +186,19 @@ function buildDungeon(stage, layout) {
     door.castShadow = true
     dungeon.add(door)
   }
+
+  // A dark groove where one tile meets the next, so you can see where each tile ends (JJ).
+  const seams = layout.seams ?? []
+  const seamMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.012, 0.14), new THREE.MeshBasicMaterial({ color: '#000000' }), Math.max(seams.length, 1))
+  seamMesh.count = seams.length
+  seams.forEach((w, i) => {
+    const [x, z] = at(w.x, w.y)
+    const across = w.side === 'E'
+    quarter.setFromAxisAngle(up, across ? Math.PI / 2 : 0)
+    matrix.compose(new THREE.Vector3(x + (across ? 0.5 : 0), 0.004, z + (across ? 0 : 0.5)), quarter, one)
+    seamMesh.setMatrixAt(i, matrix)
+  })
+  dungeon.add(seamMesh)
 
   // Walls stand on the edge between squares (or round the outside of the dungeon).
   const wallMesh = new THREE.InstancedMesh(
@@ -255,6 +269,14 @@ function buildDungeon(stage, layout) {
   Object.assign(stage.moon.shadow.camera, { left: -span, right: span, top: span, bottom: -span, near: 1, far: span * 4 })
   stage.moon.shadow.camera.updateProjectionMatrix()
   stage.moon.position.set(-span * 0.6, span * 1.6, span * 0.5)
+}
+
+// A tile's own shade: a little lighter or darker than its neighbours, steady for the game.
+function tileShade(tile) {
+  const name = String(tile ?? '')
+  let n = 0
+  for (const ch of name) n = n * 31 + ch.charCodeAt(0)
+  return 0.74 + seeded(n % 9973) * 0.42
 }
 
 // A flight of stairs standing up out of the floor (JJ: we're 3D now). The Start tile's come
