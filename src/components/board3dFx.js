@@ -406,10 +406,17 @@ function projectile(stage, group, fx, from, to, hitAt, miss) {
   }
 
   if (fx.look === 'shield') {
-    const shield = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.22, 0.22, 0.05, 24),
-      new THREE.MeshStandardMaterial({ color, metalness: 0.8, roughness: 0.3, emissive: '#92400e', emissiveIntensity: 0.5 }),
-    )
+    // A round red shield with a gold rim and boss, flying flat like a frisbee, spinning
+    // around its middle, out to the monster and back to the hero.
+    const shield = new THREE.Group()
+    const face = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.04, 28), new THREE.MeshStandardMaterial({ color: '#b91c1c', metalness: 0.3, roughness: 0.5 }))
+    const gold = new THREE.MeshStandardMaterial({ color: '#fbbf24', metalness: 0.9, roughness: 0.25, emissive: '#92400e', emissiveIntensity: 0.5 })
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.025, 8, 32), gold)
+    rim.rotation.x = Math.PI / 2
+    const boss = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), gold)
+    boss.position.y = 0.02
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.045, 0.05), gold)
+    shield.add(face, rim, boss, stripe)
     shield.visible = false
     group.add(shield)
     const shine = glow(stage, group, color, 0.55)
@@ -418,7 +425,8 @@ function projectile(stage, group, fx, from, to, hitAt, miss) {
       const back = seg(p, hitAt + 0.05, 0.85)
       shield.visible = shine.visible = out > 0 && back < 1
       shield.position.copy(out < 1 ? along(out, 0.4) : to.clone().lerp(from, back).add(new THREE.Vector3(0, Math.sin(Math.PI * back) * 0.4, 0)))
-      shield.rotation.set(0.3, p * 60, Math.PI / 2)
+      // Flat, tipped a little toward the camera so its face shows, spinning like a frisbee.
+      shield.rotation.set(0.35, p * 45, 0, 'XYZ')
       shine.position.copy(shield.position)
     }
   }
