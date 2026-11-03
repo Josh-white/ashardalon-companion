@@ -1,5 +1,6 @@
 // The virtual monster deck: drawing a monster for a hero, discarding a defeated one's
 // card, and the encounters that draw a monster of one kind.
+import { HERO_EXIT_MS } from '../board/attackFx.js'
 import { monsterArt } from '../data/art.js'
 import { PHASES } from '../data/phases.js'
 import { objectiveInPlay, onceOnlyDraw } from './adventure.js'
@@ -100,11 +101,20 @@ export function drawMonster(state, heroId, random) {
   return withMoment(withLog(next, `${heroLabel(hero)} drew ${article(card.name)} ${card.name}!`), {
     kind: 'spawn',
     heroId: hero.id,
+    // Time Leap on the virtual board: the hero rises up a beam of light and the monster takes
+    // their square. Its card and roar wait until the hero is gone, so the vanishing is seen.
+    ...(timeLeapDraw(next, hero) && { wait: HERO_EXIT_MS + 300 }),
     art: monsterArt(monster),
     title: figures > 1 ? `${figures} ${card.name}s appear!` : `${article(card.name) === 'an' ? 'An' : 'A'} ${card.name} appears!`,
     detail: figures > 1 ? `Place ${figures} ${card.name} figures on the new tile.` : 'Place its figure on the new tile.',
   })
 }
+
+// The monster a Time Leap brings, drawn on the virtual board by the hero whose turn it is.
+const timeLeapDraw = (state, hero) =>
+  Boolean(state.board?.tokens) &&
+  state.heroes[state.turn.heroIndex]?.id === hero.id &&
+  Boolean(state.encounter?.card?.curse?.removeAtTurnStart || (hero.curses ?? []).some((c) => c.card?.removeAtTurnStart))
 
 // A defeated monster's card goes to the party's XP pile (the xp count), never back into
 // the deck. Only a monster removed by mistake goes to the discards.

@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { FX_MS } from '../board/attackFx.js'
+import { FIGURE_EXIT_MS, FX_MS, HERO_EXIT_MS } from '../board/attackFx.js'
 import { chained, IMPACT, msAt, shotOffset, slowMo } from './attackFxDraw.js'
 import { HEAL_MS } from './HealFx.jsx'
 import { attackMove } from '../board/heroModels.js'
@@ -650,7 +650,7 @@ export function playExit3D(stage, node, done) {
     done()
     stage.render()
   }
-  const ms = hero ? 1800 : 1500
+  const ms = hero ? HERO_EXIT_MS : FIGURE_EXIT_MS
   const tween = {
     ms,
     step: (k) => {

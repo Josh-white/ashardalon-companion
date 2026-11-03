@@ -130,6 +130,7 @@ describe('solo game on the virtual board', () => {
     // A monster that turns up later this turn, with no new tile for it, still goes on the board.
     state = gameReducer(state, { type: 'DRAW_MONSTER', heroId: hero(state, 1).id, cards: monsters, random: [] })
     expect(state.board.tokens[state.monsters[1].id]).toBeTruthy()
+    expect(state.moment.wait).toBeUndefined()
   })
 
   it('takes a hero off the board in a Time Leap, with the monster on their square, until their next turn', () => {
@@ -142,6 +143,8 @@ describe('solo game on the virtual board', () => {
     const rat = state.monsters[0]
     expect(at(state, rat.id)).toEqual(was)
     expect(at(state, h.id)).toBeUndefined()
+    // Its card waits for the hero to vanish up the beam of light on the 3D board.
+    expect(state.moment).toMatchObject({ kind: 'spawn', wait: 2100 })
     state = gameReducer(state, { type: 'RESOLVE_ENCOUNTER', random: [], monsterCards: monsters })
     expect(at(state, h.id)).toBeUndefined()
     // Placing the hero by hand before the curse ends doesn't stick.

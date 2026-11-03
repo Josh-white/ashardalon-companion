@@ -19,10 +19,17 @@ export const FX_IMPACT_MS = 1000
 // A monster that walks up to a hero before it attacks walks first, in view: the die and the
 // animation wait this long (about the 3D figure's walk, a step at a time).
 const WALK_STEP_MS = 290
+// A moment can also wait for something already playing on the board (`moment.wait`, in ms):
+// a Time Leap's monster card waits for the hero to vanish up the beam of light first.
 export function fxLeadMs(moment) {
   const steps = moment?.fx?.walk ?? 0
-  return steps > 0 ? Math.min(6, steps) * WALK_STEP_MS + 250 : 0
+  return (moment?.wait ?? 0) + (steps > 0 ? Math.min(6, steps) * WALK_STEP_MS + 250 : 0)
 }
+
+// How long a hero takes to rise up the beam of light off the 3D board (board3dFx.js
+// playExit3D), and a monster or villager to drop through the portal.
+export const HERO_EXIT_MS = 1800
+export const FIGURE_EXIT_MS = 1500
 
 // How a monster's attack looks, from its name on the card.
 const MONSTER_LOOKS = [

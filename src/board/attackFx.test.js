@@ -3,6 +3,7 @@ import { HERO_TEMPLATES } from '../data/heroes.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
 import { momentSounds } from '../audio/sfx.js'
 import { tokenFx } from '../components/AttackFx.jsx'
+import { momentBusyMs } from '../components/MomentOverlay.jsx'
 import { msAt, slowMo } from '../components/attackFxDraw.js'
 import { FX_DELAY_MS, FX_IMPACT_MS, attackFx, fxLeadMs, heroLook, monsterLook, rayColor } from './attackFx.js'
 import { normalizeTiles } from './tileDefs.js'
@@ -113,6 +114,13 @@ describe('attack animations on the virtual board', () => {
     const still = { ...next.moment, fx: { ...next.moment.fx, walk: 0 } }
     expect(fxLeadMs(still)).toBe(0)
     expect(momentSounds(next.moment)).toEqual(momentSounds(still).map(([sound, ms]) => [sound, ms + lead]))
+  })
+
+  it('holds a moment that waits for the board (a Time Leap) back, sounds and all', () => {
+    const spawn = { kind: 'spawn', title: 'A Cave Bear appears!' }
+    expect(fxLeadMs({ ...spawn, wait: 2000 })).toBe(2000)
+    expect(momentSounds({ ...spawn, wait: 2000 })).toEqual(momentSounds(spawn).map(([sound, ms]) => [sound, ms + 2000]))
+    expect(momentBusyMs({ ...spawn, wait: 2000 })).toBe(momentBusyMs(spawn) + 2000)
   })
 
   it('a hero knocked to 0 HP is down', () => {

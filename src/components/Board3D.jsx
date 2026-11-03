@@ -10,7 +10,7 @@ import { useHealFx } from './HealFx.jsx'
 import { canvasTexture, playAttack3D, playExit3D, playHeal3D } from './board3dFx.js'
 import { FLOOR_LOOKS, WALL_DEPTH, dressDungeon, hideTorches, stoneMaterials } from './dungeonLook3d.js'
 import { attachModel, detachModel, face, setDown, setWalking, stepModels } from './figureModels.js'
-import { FX_DELAY_MS, FX_MS, fxLeadMs } from '../board/attackFx.js'
+import { FIGURE_EXIT_MS, FX_DELAY_MS, FX_MS, HERO_EXIT_MS, fxLeadMs } from '../board/attackFx.js'
 import { closeUpShot, EYES_TILT, eyesCloseUp, restShot, tourShot, turnBy, VIEW_LABELS, viewAngles, VIEWS } from '../board/camera3d.js'
 import { IMPACT, msAt } from './attackFxDraw.js'
 import { serverNow } from '../state/useSharedGame.js'
@@ -803,6 +803,18 @@ function forget(node) {
 // dropped to 0 HP should fall over (after the attack animation that downs them), in ms.
 function syncFigures(stage, figures, art, fallAt, killedAt = () => false) {
   const seen = new Set()
+  // Squares a figure is about to leave (or is leaving) by portal or beam of light, and how
+  // long that takes. A figure arriving on one waits for it (a Time Leap's monster takes the
+  // vanishing hero's square), so the two don't play on top of each other.
+  const ids = new Set(figures.map((f) => f.id))
+  const exits = new Map()
+  if (!stage.still) {
+    for (const [id, node] of stage.nodes) {
+      if (!ids.has(id) && node.userData.at && !node.userData.anim?.down && !killedAt(node.userData.at)) {
+        exits.set(`${node.userData.at[0]},${node.userData.at[1]}`, node.userData.kind === 'hero' ? HERO_EXIT_MS : FIGURE_EXIT_MS)
+      }
+    }
+  }
   for (const f of figures) {
     seen.add(f.id)
     const url = f.art ? artUrl(art, f.art) : null
@@ -823,6 +835,8 @@ function syncFigures(stage, figures, art, fallAt, killedAt = () => false) {
     if (!node) {
       node = makeStandee(stage, f, url)
       node.position.copy(to)
+      const wait = exits.get(`${f.at[0]},${f.at[1]}`)
+      if (wait) arriveAfter(stage, node, wait)
       node.userData.look = look
       node.userData.lookKey = lookKey
       stage.figures.add(node)
@@ -887,6 +901,22 @@ function syncFigures(stage, figures, art, fallAt, killedAt = () => false) {
     stage.figures.remove(node)
     forget(node)
   }
+}
+
+// A figure that waits off the board, then pops up onto its square.
+function arriveAfter(stage, node, wait) {
+  node.scale.setScalar(0.001)
+  node.visible = false
+  stage.tweens.push({
+    wait,
+    ms: 380,
+    step: (k) => {
+      if (k <= 0) return
+      node.visible = true
+      // Grows with a little overshoot, then settles.
+      node.scale.setScalar(Math.max(0.001, 1 + 2.2 * (k - 1) ** 3 + 1.2 * (k - 1) ** 2))
+    },
+  })
 }
 
 // A figure standing still turns (quickly) to look at its foe (restFacing in scene3d.js).
