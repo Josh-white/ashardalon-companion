@@ -1,6 +1,7 @@
 // A picture of where the party is in the dungeon (state/area.js), drawn behind
 // everything: stone halls, caves, lava, the chambers. It's all drawn here as shapes,
 // so there are no image files to copy around, and it's dim enough to read over.
+import { memo } from 'react'
 
 const W = 1600
 const H = 900
@@ -414,7 +415,7 @@ const SCENES = {
   ),
 }
 
-export default function DungeonScene({ area, className = '' }) {
+function DungeonSceneDrawing({ area, className = '' }) {
   const Scene = SCENES[area]
   if (!Scene) return null
   return (
@@ -448,3 +449,8 @@ export default function DungeonScene({ area, className = '' }) {
     </svg>
   )
 }
+
+// The same picture for as long as the party is in the same area: drawn once, not again on
+// every tap (it sits behind every screen, a few hundred shapes).
+const DungeonScene = memo(DungeonSceneDrawing)
+export default DungeonScene

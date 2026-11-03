@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { refreshArt } from './useArt.js'
+import { applyPatch } from './statePatch.js'
 
 const RECONNECT_DELAY_MS = 1500
 // How long a tap may wait for the Pi to say it got it before this screen reconnects.
@@ -10,6 +11,10 @@ let loadedBuild = null
 let clockOffset = 0
 // The last state this page got, and everyone who wants to hear about each new one.
 let lastState = null
+// The Pi's number for lastState: its next change comes as a patch on that number.
+let lastSeq = null
+// Asked the Pi for the whole game and still waiting for it.
+let resyncAsked = false
 const listeners = new Set()
 
 // Now, by the Pi's clock. Moments are stamped by the Pi, so an iPad whose clock is
@@ -29,7 +34,8 @@ export const FAMILY_GAME = 'family'
 
 function socketUrl(game) {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}/ws?game=${encodeURIComponent(game)}`
+  // patch=1: send only what changed after each tap (statePatch.js).
+  return `${protocol}//${window.location.host}/ws?game=${encodeURIComponent(game)}&patch=1`
 }
 
 // onGameState for a component: `listener` may be a new function each render.
@@ -72,6 +78,8 @@ export function useSharedGame(seat, game = FAMILY_GAME, onMoved) {
     // A different game: its first state isn't a change from the last game's, and taps
     // made in the last game don't belong in this one.
     lastState = null
+    lastSeq = null
+    resyncAsked = false
     pendingRef.current = []
     setState(null)
     setGameInfo(null)
@@ -101,21 +109,34 @@ export function useSharedGame(seat, game = FAMILY_GAME, onMoved) {
         if (socketRef.current !== socket) return // from the game this screen just left
         const message = JSON.parse(event.data)
         if (message.type === 'state') {
+          // Only what changed since the game this screen has. One it can't use (it missed
+          // one, or it's from before it came in) is skipped and the whole game asked for.
+          let next = message.state
+          if (message.patch) {
+            if (!lastState || message.base !== lastSeq) {
+              lastSeq = null
+              if (!resyncAsked) socket.send(JSON.stringify({ type: 'resync' }))
+              resyncAsked = true
+              return
+            }
+            next = applyPatch(lastState, message.patch)
+          } else resyncAsked = false
+          lastSeq = typeof message.seq === 'number' ? message.seq : null
           if (message.game) {
             setGameInfo(message.game)
             if (message.game.id !== game) onMovedRef.current?.(message.game.id)
           }
           if (typeof message.now === 'number') clockOffset = message.now - Date.now()
           const before = lastState
-          lastState = message.state
+          lastState = next
           for (const listener of listeners) {
             try {
-              listener(before, message.state)
+              listener(before, next)
             } catch (error) {
               console.error(error)
             }
           }
-          setState(message.state)
+          setState(next)
           setUndo(message.undo ?? null)
           setUndoDepth(message.undoDepth ?? 0)
           setInstance(message.instance ?? null)
@@ -137,6 +158,7 @@ export function useSharedGame(seat, game = FAMILY_GAME, onMoved) {
           // A friend's screen isn't in a game (the one it asked for isn't theirs, or was
           // finished, or they were taken out of it): back to "Which game?".
           lastState = null
+          lastSeq = null
           setState(null)
           setGameInfo(null)
           onMovedRef.current?.(null)

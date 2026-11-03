@@ -14,7 +14,7 @@ import { IMPACT, msAt } from './attackFxDraw.js'
 import { serverNow } from '../state/useSharedGame.js'
 import { DRAG_KEY, FIGURES_KEY, FOLLOW_KEY, TAP_SLOP, VIEW_KEY, WALLS_KEY, aimCamera, cameraAngles, cornerButton, dragWanted, fitCamera, followWanted, heroModelsWanted, keepOnBoard, setDragMode, setMaxTilt, stillWanted, tapHit, viewWanted, wallsWanted } from './board3dCamera.js'
 import { buildDungeon, buildWalls, disposeTree, frontSide } from './board3dDungeon.js'
-import { buildExtras, buildLit, cachedPicture, lookAtRest, syncFigures } from './board3dFigures.js'
+import { buildExtras, buildLit, cachedPicture, HERO_LIGHTS, LAVA_LIGHTS, lookAtRest, makeHeroLight, makeLavaLight, placeHeroLights, syncFigures } from './board3dFigures.js'
 
 // The virtual board in 3D (three.js): the dungeon's stone floor and rock, walls along shut
 // edges, the stairs, and every figure as a standee carrying its round token art. Attacks
@@ -69,6 +69,11 @@ function makeStage(mount, calm) {
   // dungeon moves them to its torches (dungeonLook3d.js).
   const torchLights = calm ? [] : Array.from({ length: TORCH_LIGHTS }, () => new THREE.PointLight('#ff9a4a', 0, 4.5, 1.6))
   if (torchLights.length > 0) scene.add(...torchLights)
+  // The heroes' torches and the lava pools' glow, made now for the same reason
+  // (board3dFigures.js places them).
+  const heroLights = Array.from({ length: HERO_LIGHTS }, makeHeroLight)
+  const lavaLights = Array.from({ length: LAVA_LIGHTS }, makeLavaLight)
+  scene.add(...heroLights, ...lavaLights)
 
   const blob = canvasTexture(64, 64, (g, w) => {
     const r = g.createRadialGradient(w / 2, w / 2, 2, w / 2, w / 2, w / 2)
@@ -82,7 +87,7 @@ function makeStage(mount, calm) {
   const figures = new THREE.Group()
   const lit = new THREE.Group()
   scene.add(dungeon, extras, lit, figures)
-  return { renderer, scene, camera, controls, hemi, moon, flash, torchLights, blob, dungeon, extras, lit, figures, nodes: new Map(), textures: new Map(), tweens: [], animators: [], leaving: new Set(), center: new THREE.Vector3() }
+  return { renderer, scene, camera, controls, hemi, moon, flash, torchLights, heroLights, lavaLights, blob, dungeon, extras, lit, figures, nodes: new Map(), textures: new Map(), tweens: [], animators: [], leaving: new Set(), center: new THREE.Vector3() }
 }
 
 // three.js throws a shader away as soon as nothing drawn uses it, and builds it again the
@@ -191,10 +196,6 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
       if (stage.ambient) {
         for (const animate of stage.animators) animate(now)
         for (const animate of stage.dungeonAnimators ?? []) animate(now)
-        for (const node of stage.nodes.values()) {
-          const torch = node.userData.torch
-          if (torch) torch.intensity = 6 + Math.sin(now / 90 + node.position.x) * 0.6 + Math.sin(now / 37 + node.position.z) * 0.4
-        }
       }
       // Hero figures breathe on the big screen, and make their moves everywhere.
       const models = stepModels([...stage.nodes.values(), ...stage.leaving], last ? Math.min(0.1, (now - last) / 1000) : 0, stage.ambient)
@@ -208,6 +209,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
         stage.front = frontSide(stage)
         buildWalls(stage)
       }
+      placeHeroLights(stage, now)
       stage.renderer.render(stage.scene, stage.camera)
       keepPrograms(stage.renderer)
       const torches = stage.ambient && [...stage.nodes.values()].some((n) => n.userData.torch?.visible)
@@ -221,7 +223,11 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
     const resize = () => {
       const w = mount.clientWidth || 1
       const h = mount.clientHeight || 1
-      stage.renderer.setSize(w, h, false)
+      // Sizing the canvas throws its drawing away and makes a new one (a long stall on an
+      // iPad), even at the same size: the board's box is measured again on many updates
+      // (a new tile, the buttons above it changing) without really changing size.
+      const now = stage.renderer.getSize(stage.sizeWas ??= new THREE.Vector2())
+      if (now.x !== w || now.y !== h) stage.renderer.setSize(w, h, false)
       stage.camera.aspect = w / h
       stage.camera.updateProjectionMatrix()
       stage.render()
