@@ -76,5 +76,5 @@ export function closeUpShot(from, to, yaw) {
 // looks from behind the monster at the hero it goes for; otherwise it keeps its angle.
 export function tourShot(view, monster, heroes, keep) {
   if (view === 'hero') return behindShot(monster, heroes, { yaw: keep.yaw })
-  return { ...keep, target: monster, dist: Math.min(keep.dist, 8) }
+  return { ...keep, target: monster, dist: Math.min(keep.dist, 6.5) }
 }

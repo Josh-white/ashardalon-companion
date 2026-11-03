@@ -16,6 +16,13 @@ export const FX_DELAY_MS = 2400
 export const FX_MS = 2300
 // When the attack reaches its target, from the animation's start.
 export const FX_IMPACT_MS = 1000
+// A monster that walks up to a hero before it attacks walks first, in view: the die and the
+// animation wait this long (about the 3D figure's walk, a step at a time).
+const WALK_STEP_MS = 290
+export function fxLeadMs(moment) {
+  const steps = moment?.fx?.walk ?? 0
+  return steps > 0 ? Math.min(6, steps) * WALK_STEP_MS + 250 : 0
+}
 
 // How a monster's attack looks, from its name on the card.
 const MONSTER_LOOKS = [
@@ -123,7 +130,8 @@ export function attackFx(before, after, action) {
     })
     const attackName = moment.title?.split(': ')[1]?.replace(/!$/, '') ?? ''
     const look = monsterLook(attackName)
-    return shots.length > 0 ? { look, by: 'monster', from, shots, ...(look === 'ray' ? { color: rayColor(attackName) } : {}) } : null
+    const walk = action.walked > 0 ? { walk: action.walked } : {}
+    return shots.length > 0 ? { look, by: 'monster', from, shots, ...walk, ...(look === 'ray' ? { color: rayColor(attackName) } : {}) } : null
   }
   return null
 }

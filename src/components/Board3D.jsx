@@ -10,7 +10,7 @@ import { useHealFx } from './HealFx.jsx'
 import { canvasTexture, playAttack3D, playExit3D, playHeal3D } from './board3dFx.js'
 import { FLOOR_LOOKS, dressDungeon, hideTorches, stoneMaterials } from './dungeonLook3d.js'
 import { attachModel, detachModel, face, setDown, setWalking, stepModels } from './figureModels.js'
-import { FX_DELAY_MS, FX_MS } from '../board/attackFx.js'
+import { FX_DELAY_MS, FX_MS, fxLeadMs } from '../board/attackFx.js'
 import { closeUpShot, restShot, tourShot, turnBy, VIEW_LABELS, viewAngles, VIEWS } from '../board/camera3d.js'
 import { IMPACT, msAt } from './attackFxDraw.js'
 import { serverNow } from '../state/useSharedGame.js'
@@ -866,7 +866,7 @@ function syncFigures(stage, figures, art, fallAt, killedAt = () => false) {
         node.userData.claimed = true
         playExit3D(stage, node, gone)
       }
-      if (killedAt(node.userData.at)) node.userData.leaveTimer = setTimeout(exit, FX_DELAY_MS + 1500)
+      if (killedAt(node.userData.at)) node.userData.leaveTimer = setTimeout(exit, FX_DELAY_MS + 3500)
       else exit()
       continue
     }
@@ -1085,7 +1085,7 @@ function keepOnBoard(stage) {
 
 // Whether the attack about to play (or playing) defeats the figure on square `at`.
 function killedBy(moment, at) {
-  if (!moment?.fx || !at || serverNow() - moment.at > FX_DELAY_MS + FX_MS) return false
+  if (!moment?.fx || !at || serverNow() - moment.at > fxLeadMs(moment) + FX_DELAY_MS + FX_MS) return false
   return moment.fx.shots.some((s) => s.result === 'kill' && s.to[0] === at[0] && s.to[1] === at[1])
 }
 
@@ -1094,7 +1094,7 @@ function killedBy(moment, at) {
 function fallDelay(moment, at) {
   const shot = moment?.fx?.shots.find((s) => s.result === 'down' && s.to[0] === at[0] && s.to[1] === at[1])
   if (!shot) return 0
-  return Math.max(0, moment.at + FX_DELAY_MS + msAt(IMPACT + 0.25) - serverNow())
+  return Math.max(0, moment.at + fxLeadMs(moment) + FX_DELAY_MS + msAt(IMPACT + 0.25) - serverNow())
 }
 
 // `taps` (a board that moves figures): { targets, selected, onSquare, onFigure, onItem,
@@ -1330,6 +1330,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
     clearTimeout(stage.closeTimer)
     let shot = null
     let quick = false
+    let slow = 0
     if (playing && stage.closeUpOf !== playing.id) {
       const fx = playing.fx
       const from = stage.at(fx.from[0], fx.from[1])
@@ -1342,6 +1343,9 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
       // An attack still playing: stay close, and look again once it's over.
     } else if (acting) {
       shot = tourShot(view, where(acting), heroes.map(where), keep)
+      // It walks there: the camera goes along at its pace.
+      const walking = stage.nodes.get(acting.id) && stage.tweens.find((tw) => tw.node === stage.nodes.get(acting.id))
+      if (walking) slow = walking.ms
     } else if (active) {
       shot = restShot(view, where(active), foes.map(where), keep)
     }
@@ -1351,7 +1355,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
         setDirectTick((n) => n + 1)
       }, stage.closeUntil - performance.now())
     }
-    if (shot) aimCamera(stage, shot, quick ? 550 : 800)
+    if (shot) aimCamera(stage, shot, quick ? 550 : Math.max(800, slow))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, layout, directKey, follow, view, directTick])
   useEffect(() => () => clearTimeout(stageRef.current?.closeTimer), [])

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { FX_DELAY_MS, FX_MS } from '../board/attackFx.js'
+import { FX_DELAY_MS, FX_MS, fxLeadMs } from '../board/attackFx.js'
 import { SQUARE } from './TileDrawing.jsx'
 import { serverNow } from '../state/useSharedGame.js'
 import { chained, drawFrame, IMPACT, msAt, shotOffset, slowMo, wipe } from './attackFxDraw.js'
@@ -25,8 +25,8 @@ export function useAttackFx(moment) {
     if (!moment?.fx || serverNow() - moment.at > STALE_MS) return
     timers.current.forEach(clearTimeout)
     timers.current = [
-      setTimeout(() => setPlaying({ id: moment.id, fx: moment.fx }), FX_DELAY_MS),
-      setTimeout(() => setPlaying(null), FX_DELAY_MS + FX_MS + 800),
+      setTimeout(() => setPlaying({ id: moment.id, fx: moment.fx }), fxLeadMs(moment) + FX_DELAY_MS),
+      setTimeout(() => setPlaying(null), fxLeadMs(moment) + FX_DELAY_MS + FX_MS + 800),
     ]
   }, [moment?.id]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => timers.current.forEach(clearTimeout), [])

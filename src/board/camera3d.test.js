@@ -48,7 +48,7 @@ describe('the 3D camera', () => {
 
   it('glides to the monster taking its turn', () => {
     const keep = { yaw: 0, tilt: 0.8, dist: 14 }
-    expect(tourShot('top', [4, 4], [[0, 0]], keep)).toEqual({ yaw: 0, tilt: 0.8, dist: 8, target: [4, 4] })
+    expect(tourShot('top', [4, 4], [[0, 0]], keep)).toEqual({ yaw: 0, tilt: 0.8, dist: 6.5, target: [4, 4] })
     // Behind hero: from behind the monster, at the hero.
     close(tourShot('hero', [0, 4], [[0, 0]], keep).yaw, 0)
   })

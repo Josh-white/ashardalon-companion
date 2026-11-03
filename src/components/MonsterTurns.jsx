@@ -231,10 +231,14 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
   const { tapped, strongest, tied, top, targetIds } = chooseTargets(step, targetable, chosen, tiePick)
 
   const roll = (nobleShield) => {
-    // On the board it steps next to the hero first, when the card says so.
+    // On the board it steps next to the hero first, when the card says so (and the screens
+    // let it walk there before the die comes up: `walked`, in squares).
+    let walked = 0
     if (byBoard && step.move === 'adjacent') {
       const goal = targetable.find((h) => h.id === (step.targets === 'all' ? boardTargetIds(state, monster, { when: step.when }, token)[0] : targetIds[0]))
       const to = squareNextTo(state, token, state.board.tokens[goal?.id])
+      const at = state.board.tokens[token]
+      if (to && at) walked = Math.round(Math.hypot(to[0] - at[0], to[1] - at[1]))
       moveTo(to)
       // It stopped on a Blade Barrier or Caltrop token on the way, so it doesn't reach anyone.
       if (stoppedShort(state, to, state.board.tokens[goal?.id])) {
@@ -244,7 +248,7 @@ export function MonsterActivation({ monster, state, dispatch, activeHeroId, onDo
     }
     const targets = targetIds.map((heroId) => ({ heroId, roll: rollD20() }))
     const tableRoll = table.length > 0 ? rollD20() : undefined
-    dispatch({ type: 'MONSTER_ATTACK', monsterId: monster.id, token, attackId: attack.id, tableRoll, targets, nobleShield, tileGuarded: guarded })
+    dispatch({ type: 'MONSTER_ATTACK', monsterId: monster.id, token, attackId: attack.id, tableRoll, targets, nobleShield, tileGuarded: guarded, walked })
     setResults(true)
   }
   // Noble Shield: an attack on several heroes, one of them a paladin with the power unused.
