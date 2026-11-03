@@ -212,7 +212,7 @@ export function attackHeroes(state, { who, attack, targets: list, moment, tileGu
       next = withLog(next, `One of ${hero.name}'s mirror images vanished.`)
     }
   }
-  if (source) next = { ...next, turn: { ...next.turn, lastEventAttack: { ...source, results } } }
+  if (source) next = { ...next, turn: { ...next.turn, lastEventAttack: { ...source, results, rolls } } }
   for (const name of downed) next = withLog(next, `${name} is down!`)
   return withMoment(next, {
     kind: downed.length > 0 ? 'monster-down' : 'monster',

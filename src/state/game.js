@@ -121,9 +121,17 @@ function springHeroTokens(state) {
 
 // A game that just started begins with its story (state/opening.js).
 function reduceWithOpening(state, action) {
-  const next = reduce(state, action)
+  const next = markEncounterStep(state, reduce(state, action), action)
   const started = ['START_GAME', 'START_DEMO', 'TRY_AGAIN'].includes(action.type) && next !== state && next.status === 'playing'
   return started ? startOpening(next, Date.now()) : next
+}
+
+// An encounter card's own step (Thief in the Dark's pick, a monster healing, a daily flipped
+// back up) sends `encounterStep` with the words to show once it's done. Kept on the card, so a
+// tab switch or another screen shows the result instead of offering the step again.
+function markEncounterStep(state, next, action) {
+  if (!action.encounterStep || next === state || !next.encounter || next.encounter.id !== state.encounter?.id) return next
+  return { ...next, encounter: { ...next.encounter, stepDone: String(action.encounterStep) } }
 }
 
 // Try again after a loss: the same adventure, heroes, players and power cards, back at
@@ -682,7 +690,7 @@ function reduce(state, action) {
       // screen's board can light it up while it moves and attacks.
       const id = action.id
       if (!id || state.turn.acting === id || (state.turn.acted ?? []).includes(id)) return state
-      if (!state.monsters.some((m) => m.id === id) && !activeVillains(state).some((v) => v.id === id)) return state
+      if (!state.monsters.some((m) => m.id === id) && !activeVillains(state).some((v) => v.id === id) && !(state.traps ?? []).some((t) => t.id === id)) return state
       return { ...state, turn: { ...state.turn, acting: id } }
     }
 
@@ -819,7 +827,9 @@ function reduce(state, action) {
       const encounter = state.encounter
       if (!encounter?.card.attack || encounter.attacked) return state
       // Nobody it can reach (everyone in range is down at 0 HP, or no one is there).
-      if (action.nobody) return withLog({ ...state, encounter: { ...encounter, attacked: true } }, `${encounter.card.name} found nobody to attack.`)
+      // The rolls are kept on the card so every screen (and a tab switch) shows them, not a
+      // fresh Roll button.
+      if (action.nobody) return withLog({ ...state, encounter: { ...encounter, attacked: true, attackRolls: [] } }, `${encounter.card.name} found nobody to attack.`)
       const next = attackHeroes(state, {
         who: encounter.card.name,
         attack: encounter.card.attack,
@@ -828,7 +838,7 @@ function reduce(state, action) {
         moment: { title: `${encounter.card.name}!` },
         source: { kind: 'encounter' },
       })
-      return next === state ? state : { ...next, encounter: { ...encounter, attacked: true } }
+      return next === state ? state : { ...next, encounter: { ...encounter, attacked: true, attackRolls: next.turn.lastEventAttack.rolls } }
     }
 
     case 'RESOLVE_ENCOUNTER':
@@ -856,8 +866,9 @@ function reduce(state, action) {
 
     case 'TRAP_ATTACK': {
       const trap = (state.traps ?? []).find((t) => t.id === action.trapId)
-      if (!trap?.card.trap?.attack) return state
-      return attackHeroes(state, {
+      // A trap attacks once per Villain Phase; its rolls are kept so a tab switch shows them.
+      if (!trap?.card.trap?.attack || state.turn.trapRolls?.[trap.id]) return state
+      const next = attackHeroes(state, {
         who: `The ${trap.name}`,
         attack: trap.card.trap.attack,
         targets: action.targets,
@@ -865,6 +876,8 @@ function reduce(state, action) {
         moment: { title: `${trap.name}!`, trap: true },
         source: { kind: 'trap', trapId: trap.id },
       })
+      if (next === state) return state
+      return { ...next, turn: { ...next.turn, acting: trap.id, trapRolls: { ...next.turn.trapRolls, [trap.id]: next.turn.lastEventAttack.rolls } } }
     }
 
     case 'TRAP_STEP':
@@ -874,8 +887,9 @@ function reduce(state, action) {
       const trap = (state.traps ?? []).find((t) => t.id === action.trapId)
       const damage = trap?.card.trap?.damage ?? 0
       const heroIds = Array.isArray(action.heroIds) ? action.heroIds : []
-      if (!damage || heroIds.length === 0) return state
-      const { next, downed } = damageHeroes(state, heroIds, damage, `the ${trap.name}`)
+      if (!damage || heroIds.length === 0 || state.turn.trapRolls?.[trap.id]) return state
+      const { next: hurt, downed } = damageHeroes(state, heroIds, damage, `the ${trap.name}`)
+      const next = { ...hurt, turn: { ...hurt.turn, acting: trap.id, trapRolls: { ...hurt.turn.trapRolls, [trap.id]: [] } } }
       return withMoment(next, {
         kind: downed.length > 0 ? 'monster-down' : 'monster',
         trap: true,

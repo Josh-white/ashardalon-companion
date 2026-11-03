@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
-import { EncounterStep } from './Encounters.jsx'
+import { EncounterStep, TrapTurns } from './Encounters.jsx'
 
 const EVENT = { id: 'gust', name: 'Sudden Gust', type: 'event', text: 'A cold wind blows.' }
 const TRAP = { id: 'spikes', name: 'Spike Pit', type: 'trap', text: 'Place a Spike Pit marker on your tile.' }
@@ -151,5 +151,49 @@ describe('Time Leap', () => {
     expect(screen.queryByRole('button', { name: /Draw the Time Leap monster/ })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /vanishes until their next turn/ }))
     expect(lastAction(dispatch)).toMatchObject({ type: 'RESOLVE_ENCOUNTER' })
+  })
+})
+
+// JJ rolled a Pit's attack, switched to the Party tab and back, and the Roll button was back.
+describe('an attack that was already rolled', () => {
+  const PIT = { id: 'pit', name: 'Pit', type: 'hazard', text: 'Attack +10 vs the active hero.', attack: { bonus: 10, damage: 2, miss: 0, targets: 'active', conditions: [] } }
+
+  it('shows the kept rolls after the card comes back, not a new Roll button', () => {
+    let state = game({ card: PIT })
+    state = gameReducer(state, { type: 'ENCOUNTER_ATTACK', targets: [{ heroId: state.heroes[0].id, roll: 15 }] })
+    expect(state.encounter.attackRolls).toHaveLength(1)
+    show(state)
+    expect(screen.queryByRole('button', { name: /Roll the attack/ })).toBeNull()
+    expect(screen.getByText(/Pit rolled 15/)).toBeTruthy()
+  })
+
+  it('says it found nobody after "Nobody is there"', () => {
+    const state = gameReducer(game({ card: PIT }), { type: 'ENCOUNTER_ATTACK', nobody: true })
+    show(state)
+    expect(screen.queryByRole('button', { name: /Roll the attack/ })).toBeNull()
+    expect(screen.getByText(/Pit found nobody to attack/)).toBeTruthy()
+  })
+
+  it('keeps a trap that already attacked open with its rolls and the Done button', () => {
+    const base = game()
+    const card = { id: 'darts', name: 'Darts', type: 'trap', text: 'Trigger the trap during your Villain Phase: it attacks.', trap: { attack: { bonus: 8, damage: 1, miss: 0, targets: 'active', conditions: [] } } }
+    const trap = { id: 't1', cardId: 'darts', name: 'Darts', type: 'trap', ownerId: base.heroes[0].id, card }
+    let state = { ...base, traps: [trap] }
+    state = gameReducer(state, { type: 'TRAP_ATTACK', trapId: 't1', targets: [{ heroId: state.heroes[0].id, roll: 12 }] })
+    render(<TrapTurns state={state} hero={state.heroes[0]} dispatch={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: /Trigger it/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Roll the attack/ })).toBeNull()
+    expect(screen.getByText(/The Darts rolled 12/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Done with the Darts/ })).toBeTruthy()
+  })
+
+  it("keeps an encounter card's own step done after the card comes back (Revel in Destruction)", () => {
+    const HEAL = { id: 'revel', name: 'Revel in Destruction', type: 'event', text: 'A damaged monster heals 1.', healMonster: 1 }
+    let state = game({ card: HEAL })
+    state = { ...state, monsters: [{ id: 'm1', name: 'Snake', hp: 1, maxHp: 2, ownerId: state.heroes[0].id }] }
+    state = gameReducer(state, { type: 'ADJUST_MONSTER_HP', monsterId: 'm1', amount: 1, encounterStep: 'The Snake healed 1.' })
+    expect(state.encounter.stepDone).toBe('The Snake healed 1.')
+    show(state)
+    expect(screen.getByText(/The Snake healed 1/)).toBeTruthy()
   })
 })

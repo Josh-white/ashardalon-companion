@@ -785,6 +785,16 @@ describe('encounter deck', () => {
     expect(state.encounterDeck.discard).toContain('bad-air')
   })
 
+  it('lets a trap attack only once a turn and keeps its rolls for every screen', () => {
+    let state = resolve(drawCard(startGame(), 'darts'))
+    const trap = state.traps[0]
+    const hero = state.heroes[1]
+    state = gameReducer(state, { type: 'TRAP_ATTACK', trapId: trap.id, targets: [{ heroId: hero.id, roll: 19 }] })
+    expect(state.turn.trapRolls[trap.id]).toEqual([expect.objectContaining({ heroId: hero.id, value: 19, hit: true })])
+    expect(state.turn.acting).toBe(trap.id)
+    expect(gameReducer(state, { type: 'TRAP_ATTACK', trapId: trap.id, targets: [{ heroId: hero.id, roll: 19 }] })).toBe(state)
+  })
+
   it('places a trap that attacks on its turn and can be disabled', () => {
     let state = resolve(drawCard(startGame(), 'darts'))
     const trap = state.traps[0]
