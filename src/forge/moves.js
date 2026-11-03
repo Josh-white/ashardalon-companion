@@ -28,6 +28,27 @@ export const MOVES = {
       [1.13, {}],
     ],
   },
+  // A staff's attack, instead of Swing: both hands up over the head, then a bonk down in front.
+  // The wrist (hand.R) turns so the pole swings over the top instead of pointing back.
+  Bonk: {
+    frames: [
+      [0, {}],
+      [0.35, { 'arm.R': [165, 0, -5], 'hand.R': [-105, 0, 0], 'arm.L': [160, 0, -25], body: [-14, 0, 0], head: [-10, 0, 0] }],
+      [0.52, { 'arm.R': [75, 0, 5], 'hand.R': [-182, 0, 0], 'arm.L': [70, 0, -30], body: [22, 0, 0], head: [8, 0, 0], bob: -0.06 }],
+      [0.75, { 'arm.R': [65, 0, 5], 'hand.R': [-172, 0, 0], 'arm.L': [60, 0, -30], body: [18, 0, 0], bob: -0.05 }],
+      [1.2, {}],
+    ],
+  },
+  // A spear's attack: pull back, then a straight jab forward.
+  Thrust: {
+    frames: [
+      [0, {}],
+      [0.3, { 'arm.R': [10, 0, -10], 'hand.R': [-100, 0, 0], body: [-6, 25, 0], head: [0, -20, 0], 'arm.L': [40, 0, 10] }],
+      [0.45, { 'arm.R': [88, 0, 0], 'hand.R': [-178, 0, 0], body: [16, -20, 0], head: [0, 15, 0], 'arm.L': [-10, 0, 0], 'leg.L': [-20, 0, 0], 'leg.R': [15, 0, 0], bob: -0.04 }],
+      [0.7, { 'arm.R': [85, 0, 0], 'hand.R': [-175, 0, 0], body: [12, -15, 0], head: [0, 12, 0], bob: -0.03 }],
+      [1.1, {}],
+    ],
+  },
   Magic: {
     frames: [
       [0, {}],

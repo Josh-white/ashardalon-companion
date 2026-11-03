@@ -198,12 +198,16 @@ const HEADS = [
     name: 'Blocky',
     emoji: '🟫',
     shape: [sl('size', 'Size', 0.6, 1.6), sl('width', 'Wide', 0.7, 1.5), sl('eyes', 'Eyes', 0.4, 2.2), sl('chin', 'Big chin', 0, 2, 0)],
-    frame: (s, f) => headFrame(0.25 * s.size, s, f),
+    // A box is wider at its corners than a ball: hats and helmets go round the corners.
+    frame: (s, f) => {
+      headFrame(0.25 * s.size, s, f)
+      f.HR *= 1.3
+    },
     build(k, s, f) {
       const r = 0.25 * s.size
       const cy = f.HC
       neck(k)
-      k.box('skin', 'head', [0, cy, 0], [2 * r * s.width, 2 * r, 2 * r * 0.95], { round: r * 0.35 })
+      k.box('skin', 'head', [0, cy, 0], [2 * r * s.width, 2 * r, 2 * r * 0.95], { round: r * 0.45 })
       for (const [, x] of SIDES) k.box('eyes', 'head', [x * r * 0.4 * s.width, cy + r * 0.12, r * 0.96], [0.06 * s.eyes * s.size, 0.08 * s.eyes * s.size, 0.02], { round: 0.01 })
       k.box('hair', 'head', [0, cy + r * 0.4, r * 0.96], [r * 1.3 * s.width, 0.04, 0.03], { round: 0.01 })
       if (s.chin > 0.05) k.box('skin', 'head', [0, cy - r * 0.85, r * 0.35], [r * 1.4 * s.width, r * 0.45 * s.chin, r * 1.1], { round: 0.05 })
@@ -907,6 +911,7 @@ const WEAPONS = [
   },
   {
     id: 'spear',
+    moves: { Swing: 'Thrust' },
     grip: POLE,
     name: 'Spear',
     emoji: '🔱',
@@ -920,6 +925,7 @@ const WEAPONS = [
   },
   {
     id: 'trident',
+    moves: { Swing: 'Thrust' },
     grip: POLE,
     name: 'Trident',
     emoji: '🔱',
@@ -938,6 +944,7 @@ const WEAPONS = [
   },
   {
     id: 'staff',
+    moves: { Swing: 'Bonk' },
     grip: POLE,
     name: 'Magic staff',
     emoji: '🪄',
@@ -1706,12 +1713,12 @@ export const SLOTS = [
   { key: 'legs', label: 'Legs', emoji: '👖' },
   { key: 'arms', label: 'Arms', emoji: '💪' },
   { key: 'head', label: 'Head', emoji: '🙂' },
-  { key: 'hat', label: 'Hat & hair', emoji: '🎩', optional: true },
-  { key: 'face', label: 'Face', emoji: '🧔', optional: true },
+  { key: 'hat', label: 'Hat & hair', emoji: '🎩', optional: true, nudge: true },
+  { key: 'face', label: 'Face', emoji: '🧔', optional: true, nudge: true },
   { key: 'hand', label: 'Weapon', emoji: '⚔️', optional: true },
   { key: 'offhand', label: 'Other hand', emoji: '🛡️', optional: true },
-  { key: 'back', label: 'Back', emoji: '🦇', optional: true },
-  { key: 'tail', label: 'Tail', emoji: '🦎', optional: true },
+  { key: 'back', label: 'Back', emoji: '🦇', optional: true, nudge: true },
+  { key: 'tail', label: 'Tail', emoji: '🦎', optional: true, nudge: true },
   { key: 'fx', label: 'Magic', emoji: '✨', optional: true },
 ]
 

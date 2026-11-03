@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
-import { DEFAULT_COLORS } from '../data/forge.js'
+import { cleanNudge, DEFAULT_COLORS } from '../data/forge.js'
 import { PARTS, SLOTS, shapeOf } from './parts.js'
 import { BOARD_MOVES, MOVES } from './moves.js'
 
@@ -56,6 +56,8 @@ function skeleton(f) {
   ]
 }
 
+const SKELETON_NAMES = new Set(skeleton(BASE_FRAME).map(([name]) => name))
+
 const rad = (degrees) => degrees.map((d) => THREE.MathUtils.degToRad(d))
 const UP = new THREE.Vector3(0, 1, 0)
 
@@ -101,7 +103,9 @@ export function kit(joints, palette, materials = new Map()) {
       g.position.set(...at)
       g.rotation.set(...rad(rot), 'YXZ')
       ;(joints[joint] ?? joints.root).add(g)
-      const name = `g${groups++}`
+      // Unique across kits too: a nudged part's kit shares the joints.
+      let name = `g${groups++}`
+      while (name in joints) name = `g${groups++}`
       joints[name] = g
       return name
     },
@@ -176,22 +180,58 @@ export function buildFigure(recipe) {
   if (held.R?.grip) joints['grip.R'].rotation.set(...rad(held.R.grip), 'YXZ')
   if (held.L?.grip) joints['grip.L'].rotation.set(...rad(mirrored(held.L.grip)), 'YXZ')
   const palette = { ...DEFAULT_COLORS, ...recipe.colors }
-  const k = kit(joints, palette)
+  const materials = new Map()
+  const k = kit(joints, palette, materials)
   for (const slot of SLOTS) {
     const p = picked(recipe, slot)
-    p?.part.build(k, p.shape, f)
+    if (!p) continue
+    const nudge = slot.nudge ? cleanNudge(recipe.parts[slot.key].nudge) : null
+    p.part.build(nudge ? kit(nudgedJoints(joints, nudge), palette, materials) : k, p.shape, f)
   }
   const size = recipe.size ?? 1
   root.scale.setScalar(size)
-  root.userData = { joints, rest, frame: f, height: (f.LL + f.foot + f.BH + f.HS) * size }
+  // A weapon can attack its own way: a staff bonks and a spear jabs instead of the sword's Swing.
+  root.userData = { joints, rest, frame: f, height: (f.LL + f.foot + f.BH + f.HS) * size, moves: { ...held.R?.moves } }
   return root
+}
+
+// How far the nudge sliders move a part at their ends.
+const NUDGE_MOVE = 0.12
+const NUDGE_TILT = 35
+
+// The joints as a part sees them when its nudge sliders are moved: each skeleton joint gets a
+// child pivot shifted and tilted in the figure's own directions (up, forward, side; side is
+// outward on a left or right joint), so the part moves with its joint in every move.
+function nudgedJoints(joints, nudge) {
+  const shifted = {}
+  const offset = new THREE.Vector3()
+  const axis = new THREE.Vector3()
+  const turn = new THREE.Quaternion()
+  return new Proxy(joints, {
+    get(all, name) {
+      const joint = all[name]
+      if (typeof name !== 'string' || name === 'root' || !joint || !SKELETON_NAMES.has(name)) return joint
+      if (!shifted[name]) {
+        joint.updateWorldMatrix(true, false)
+        const back = joint.getWorldQuaternion(new THREE.Quaternion()).invert()
+        const out = name.endsWith('.R') ? -1 : 1
+        const g = new THREE.Group()
+        g.name = `${joint.name}_nudge`
+        g.position.copy(offset.set((nudge.side ?? 0) * out, nudge.up ?? 0, nudge.forward ?? 0).multiplyScalar(NUDGE_MOVE).applyQuaternion(back))
+        g.quaternion.copy(turn.setFromAxisAngle(axis.set(1, 0, 0).applyQuaternion(back), THREE.MathUtils.degToRad((nudge.tilt ?? 0) * NUDGE_TILT)))
+        joint.add(g)
+        shifted[name] = g
+      }
+      return shifted[name]
+    },
+  })
 }
 
 // Poses the figure partway through a move. `t` is seconds since it began. Returns true
 // once a move that doesn't loop has finished.
 export function pose(figure, moveName, t) {
   const { joints, rest } = figure.userData
-  const move = MOVES[moveName] ?? MOVES.Idle
+  const move = MOVES[figure.userData.moves?.[moveName] ?? moveName] ?? MOVES.Idle
   const len = move.frames.at(-1)[0]
   const time = move.loop ? t % len : Math.min(t, len)
   let i = 0
@@ -223,7 +263,7 @@ export function figureClips(figure) {
   const euler = new THREE.Euler()
   const q = new THREE.Quaternion()
   return Object.entries(BOARD_MOVES).map(([moveName, clipName]) => {
-    const move = MOVES[moveName]
+    const move = MOVES[figure.userData.moves?.[moveName] ?? moveName] ?? MOVES[moveName]
     const times = move.frames.map(([t]) => t)
     const tracks = POSED.map((name) => {
       const values = []

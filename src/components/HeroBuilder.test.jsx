@@ -54,6 +54,26 @@ describe('Hero Builder', () => {
     expect(calls[1][1]).toBe('/forge/new-1')
   })
 
+  it('puts every slider back with Normal, and moves a hat into place', async () => {
+    const calls = pi()
+    render(<HeroBuilder />)
+    await screen.findByTestId('stage')
+    fireEvent.click(screen.getByRole('button', { name: /Robe/ }))
+    fireEvent.change(screen.getByLabelText('Flare'), { target: { value: '1.5' } })
+    fireEvent.change(screen.getByLabelText('Tall'), { target: { value: '1.3' } })
+    fireEvent.click(screen.getByText('↺ Normal'))
+    fireEvent.click(screen.getByRole('tab', { name: /Hat/ }))
+    fireEvent.change(screen.getByLabelText('Move it: Up / down'), { target: { value: '-0.4' } })
+    fireEvent.change(screen.getByLabelText('Move it: Tilt'), { target: { value: '0.2' } })
+    fireEvent.click(screen.getByText('💾 Save'))
+    await waitFor(() => expect(calls).toHaveLength(1))
+    const recipe = calls[0][2]
+    expect(recipe.parts.body).toEqual({ id: 'robe', shape: {} })
+    expect(recipe.parts.hat.nudge).toEqual({ up: -0.4, tilt: 0.2 })
+    fireEvent.click(screen.getByText('↺ Back in place'))
+    expect(screen.getByLabelText('Move it: Up / down').value).toBe('0')
+  })
+
   it('takes a part off an optional slot, and remembers the figure on this screen', async () => {
     pi()
     const { unmount } = render(<HeroBuilder />)

@@ -54,6 +54,23 @@ const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n))
 const text = (value, max) => (typeof value === 'string' ? value.trim().slice(0, max) : '')
 
 // A recipe tidied up for saving: unknown fields dropped, numbers kept in range.
+// Nudge sliders on a part (hats, faces, backs, tails): -1 to 1 each, 0 where it was made to sit.
+export const NUDGE = [
+  { key: 'up', label: 'Up / down' },
+  { key: 'forward', label: 'Forward / back' },
+  { key: 'side', label: 'Side to side' },
+  { key: 'tilt', label: 'Tilt' },
+]
+
+export function cleanNudge(nudge) {
+  const out = {}
+  for (const { key } of NUDGE) {
+    const v = nudge?.[key]
+    if (typeof v === 'number' && Number.isFinite(v) && Math.abs(v) >= 0.005) out[key] = Math.round(clamp(v, -1, 1) * 100) / 100
+  }
+  return Object.keys(out).length ? out : null
+}
+
 export function cleanRecipe(body = {}) {
   const colors = {}
   for (const { key } of COLOR_ROLES) colors[key] = HEX.test(body.colors?.[key] ?? '') ? body.colors[key].toLowerCase() : DEFAULT_COLORS[key]
@@ -64,7 +81,8 @@ export function cleanRecipe(body = {}) {
     for (const [k, v] of Object.entries(pick.shape ?? {}).slice(0, 12)) {
       if (KEY.test(k) && typeof v === 'number' && Number.isFinite(v)) shape[k] = Math.round(clamp(v, MIN_SHAPE, MAX_SHAPE) * 100) / 100
     }
-    parts[slot] = { id: pick.id, shape }
+    const nudge = cleanNudge(pick.nudge)
+    parts[slot] = nudge ? { id: pick.id, shape, nudge } : { id: pick.id, shape }
   }
   const size = typeof body.size === 'number' && Number.isFinite(body.size) ? clamp(body.size, MIN_SIZE, MAX_SIZE) : 1
   return {
