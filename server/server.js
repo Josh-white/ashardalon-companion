@@ -13,6 +13,7 @@ import { createNarrator } from './narrator.js'
 import { cleanEmail, createAccess } from './access.js'
 import { createSignInList } from './signInList.js'
 import { createIdeaBox } from './ideas.js'
+import { createWorkshop } from './workshop.js'
 import { createFriendLog } from './friendLog.js'
 import { readBody } from './readBody.js'
 import { normalizeCardFile } from '../src/data/cards.js'
@@ -349,6 +350,8 @@ export function startServer({
   exampleCardsFile = join(ROOT, 'cards', 'cards.example.json'),
   artDir = process.env.ART_DIR ?? join(ROOT, 'cards', 'art'),
   soundsDir = process.env.SOUNDS_DIR ?? join(ROOT, 'cards', 'sounds'),
+  // The Model Workshop's requests and Claude's pictures (server/workshop.js). Only on the Pi.
+  workshopDir = process.env.WORKSHOP_DIR ?? join(ROOT, 'cards', 'workshop'),
   // Set on the test copy so every screen shows it isn't the real game.
   instance = process.env.INSTANCE_LABEL || null,
   // Spoken lines are saved next to the game, so they survive updates.
@@ -385,6 +388,8 @@ export function startServer({
   signInList ??= createSignInList()
   // The players' ideas and feedback, sent from the 💡 button (server/ideas.js).
   const ideaBox = createIdeaBox(join(dirname(saveFile), 'ideas.json'))
+  // The players' own 3D figures: what they asked for, and Claude's pictures back.
+  const workshop = createWorkshop(workshopDir)
   // How much each friend plays, for the #friends page (server/friendLog.js).
   const friendLog = createFriendLog(join(dirname(saveFile), 'friends.json'))
   let { games: otherGames, finished } = loadGameList(gameListFile)
@@ -444,13 +449,14 @@ export function startServer({
       },
     )
   })
-  // What a friend's screen may not do: change card pictures, or read and tidy the ideas box.
+  // What a friend's screen may not do: change card pictures, read and tidy the ideas box,
+  // or use the family's Model Workshop.
   const friendRefused = (req) => {
     const path = req.url.split('?')[0]
     const reading = req.method === 'GET' || req.method === 'HEAD'
     if (path.startsWith('/art/')) return !reading
     if (path === '/ideas') return req.method !== 'POST'
-    return path === '/ideas.json' || path.startsWith('/ideas/') || path === '/friends.json' || path.startsWith('/sign-in-') || path === '/robot-check.json' || path === '/auto-update.json'
+    return path === '/ideas.json' || path.startsWith('/ideas/') || path === '/friends.json' || path.startsWith('/sign-in-') || path === '/robot-check.json' || path === '/auto-update.json' || path === '/workshop.json' || path === '/workshop' || path.startsWith('/workshop/')
   }
 
   function respond(req, res, who) {
@@ -535,6 +541,7 @@ export function startServer({
       return
     }
     if (ideaBox.handle(req, res, who.family ? null : who.email)) return
+    if (workshop.handle(req, res)) return
     // Friends hear only lines already recorded, so they never spend the ElevenLabs credits.
     if (narrator.handle(req, res, { recordedOnly: !who.family })) return
     serveStatic(staticDir, req, res)

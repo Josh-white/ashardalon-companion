@@ -13,3 +13,6 @@ robot-check.json
 auto-update.json
 auto-update.json.tmp
 auto-update.checked
+
+# The Model Workshop's requests and pictures (server/workshop.js).
+workshop/

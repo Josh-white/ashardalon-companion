@@ -112,6 +112,8 @@ healthy() {
 # the log, and is kept to say why on the Admin page if it fails.
 build() {
   rc=0
+  # Made here, not by Docker, so it belongs to us and Claude can add pictures to it.
+  mkdir -p cards/workshop
   APP_VERSION=$(git rev-parse --short HEAD) docker compose up -d --build >"$build_log" 2>&1 || rc=$?
   cat "$build_log"
   return $rc
