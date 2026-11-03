@@ -328,9 +328,9 @@ function UseInGame({ request: r, on, answer }) {
               Turn it on here{on ? ' (it is on!)' : ''}.
             </li>
             <li>
-              When you pick your hero, type your name as <b>{name}</b>.
+              Type your name as <b>{name}</b> when you pick your hero (on the solo screen, in the Who's playing? box).
             </li>
-            <li>On the 3D board your hero is this figure, with your 🎨 tweaks. Any hero you pick wears it.</li>
+            <li>On the 3D board your hero is this figure, with your 🎨 tweaks. Any hero you pick wears it (in a solo game, your first hero).</li>
             <li>
               Seeing a flat board? Tap <b>🧊</b>. Seeing cards instead of figures? Tap <b>🪪 Figures</b> so it says <b>🧍 Figures: 3D</b>.
             </li>

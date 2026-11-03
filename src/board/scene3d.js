@@ -97,15 +97,33 @@ export function stairHeights(squares, side) {
   return Object.fromEntries(squares.map((sq) => [`${sq[0]},${sq[1]}`, (along(sq) - lows) * STAIR_STEPS_PER_SQUARE * rise + 2 * rise]))
 }
 
+// Whose hero each hero is, for a player's own 🧙 workshop figure (useWorkshopFigures.js):
+// the name the player typed. In a solo game every hero says "Solo", so the name typed on
+// the solo screen goes on the first hero only (or the rest would all wear it). Heroes the
+// computer plays are nobody's.
+export function figureOwners(state) {
+  const owner = {}
+  let soloTaken = false
+  for (const h of state.heroes ?? []) {
+    const name = typeof h.player === 'string' ? h.player.trim() : ''
+    if (h.ally || !name) continue
+    if (name.toLowerCase() !== 'solo') owner[h.id] = name
+    else if (!soloTaken && state.soloName) owner[h.id] = state.soloName
+    soloTaken ||= name.toLowerCase() === 'solo'
+  }
+  return owner
+}
+
 // Every figure standing on the board, in the order the flat board draws them.
 // `art` is the picture's name in the Pi's art list (null when there's none to look for).
 export function boardFigures(state) {
   const board = state.board
   if (!board) return []
+  const owner = figureOwners(state)
   const activeId = state.heroes[state.turn.heroIndex]?.id
   const acting = state.turn.acting && !(state.turn.acted ?? []).includes(state.turn.acting) ? state.turn.acting : null
   const figures = [
-    ...state.heroes.map((h) => ({ id: h.id, kind: 'hero', player: h.player ?? '', label: h.name, color: h.color, art: heroArt(h.key), model: heroModel(h), faded: h.hp <= 0, active: h.id === activeId, caged: caged(h), icons: conditionIcons(h) })),
+    ...state.heroes.map((h) => ({ id: h.id, kind: 'hero', player: owner[h.id] ?? '', label: h.name, color: h.color, art: heroArt(h.key), model: heroModel(h), faded: h.hp <= 0, active: h.id === activeId, caged: caged(h), icons: conditionIcons(h) })),
     ...state.monsters.flatMap((m) =>
       Array.from({ length: figuresLeft(m) }, (_, i) => ({
         id: figureToken(m.id, i + 1),

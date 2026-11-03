@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { withPlayerFigure } from './useWorkshopFigures.js'
-import { boardFigures } from '../board/scene3d.js'
+import { boardFigures, figureOwners } from '../board/scene3d.js'
 
 describe('player figures on the 3D board', () => {
   const own = { colton: { url: '/workshop/x/model-4.glb', tweaks: { size: 0.95, head: 0.9, body: 1, colors: { 9: '#18181b' } } } }
@@ -17,5 +17,11 @@ describe('player figures on the 3D board', () => {
   it("carries each hero's player onto the board", () => {
     const state = { board: { tokens: { h1: [0, 0] } }, heroes: [{ id: 'h1', key: 'wizard', name: 'Ari', player: 'Colton', hp: 5 }], monsters: [], villains: [], turn: { heroIndex: 0 } }
     expect(boardFigures(state)[0].player).toBe('Colton')
+  })
+  it('in a solo game, gives the solo name to the first hero only, and nothing to computer allies', () => {
+    const heroes = [{ id: 'a', player: 'Solo' }, { id: 'b', player: 'Solo' }, { id: 'c', player: 'Easton', ally: true }]
+    expect(figureOwners({ heroes, soloName: 'Colton' })).toEqual({ a: 'Colton' })
+    expect(figureOwners({ heroes, soloName: null })).toEqual({})
+    expect(figureOwners({ heroes: [{ id: 'x', player: 'Easton' }, { id: 'y', player: '' }] })).toEqual({ x: 'Easton' })
   })
 })
