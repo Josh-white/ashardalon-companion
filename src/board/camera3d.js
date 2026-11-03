@@ -47,24 +47,32 @@ export function behindShot(me, foes, { yaw = 0, dist = HERO_DIST } = {}) {
 }
 
 // Through the eyes of the figure standing at `me`, looking at the nearest of `foes` (with
-// none, the way `yaw` faces). The camera stands just in front of the figure's own face.
+// none, the way `yaw` faces). The camera stands just in front of the figure's own face and
+// looks at a point only a hair ahead of it, so turning the view (a drag, or the director)
+// turns the hero's head on the spot instead of swinging the camera round a far-off point.
 export const EYES_TILT = 1.45
 export const EYE_H = 0.7
-const LOOK = 3.2
+export const EYES_DIST = 0.12
 const FACE = 0.35
 export function eyesShot(me, foes, { yaw = 0 } = {}) {
   const foe = nearest(me, foes)
   const d = foe ? sub(foe, me) : [0, 0]
   const far = len(d)
   const u = far > 1e-3 ? [d[0] / far, d[1] / far] : [-Math.sin(yaw), -Math.cos(yaw)]
-  const ahead = FACE + LOOK * Math.sin(EYES_TILT)
+  const ahead = FACE + EYES_DIST * Math.sin(EYES_TILT)
   return {
     target: [me[0] + u[0] * ahead, me[1] + u[1] * ahead],
-    lift: EYE_H - Math.cos(EYES_TILT) * LOOK,
+    lift: EYE_H - Math.cos(EYES_TILT) * EYES_DIST,
     yaw: yawOf([-u[0], -u[1]]),
     tilt: EYES_TILT,
-    dist: LOOK,
+    dist: EYES_DIST,
   }
+}
+
+// The camera yaw that looks the way a figure walked, from `from` to `to` (null if it didn't).
+export function walkYaw(from, to) {
+  const d = sub(to, from)
+  return len(d) < 1e-3 ? null : yawOf([-d[0], -d[1]])
 }
 
 // The rest shot for `view`, on the hero `me`: 'top' and 'corner' keep the screen's own

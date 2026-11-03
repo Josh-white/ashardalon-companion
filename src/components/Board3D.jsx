@@ -12,7 +12,7 @@ import { FLOOR_LOOKS, WALL_DEPTH, dressDungeon, hideTorches, stoneMaterials } fr
 import { useWorkshopFigures, withPlayerFigure } from './useWorkshopFigures.js'
 import { attachModel, detachModel, face, setDown, setWalking, stepModels } from './figureModels.js'
 import { FIGURE_EXIT_MS, FX_DELAY_MS, FX_MS, HERO_EXIT_MS, fxLeadMs } from '../board/attackFx.js'
-import { closeUpShot, EYES_TILT, eyesCloseUp, restShot, tourShot, turnBy, VIEW_LABELS, viewAngles, VIEWS } from '../board/camera3d.js'
+import { closeUpShot, EYES_DIST, eyesCloseUp, restShot, tourShot, turnBy, VIEW_LABELS, viewAngles, VIEWS, walkYaw } from '../board/camera3d.js'
 import { IMPACT, msAt } from './attackFxDraw.js'
 import { serverNow } from '../state/useSharedGame.js'
 
@@ -1072,10 +1072,18 @@ function viewWanted() {
   }
 }
 
-// How far the camera may lean from straight down: to eye level in the Hero eyes view.
+// How far the camera may lean from straight down: to eye level (and a little up) in the
+// Hero eyes view. In Hero eyes the camera stays in the hero's head: a drag turns the head,
+// and there's no zooming or sliding it away from the hero.
 const MAX_TILT = 1.2
 function setMaxTilt(stage, view) {
-  stage.controls.maxPolarAngle = view === 'eyes' ? EYES_TILT + 0.05 : MAX_TILT
+  const eyes = view === 'eyes'
+  const c = stage.controls
+  c.maxPolarAngle = eyes ? Math.PI / 2 + 0.25 : MAX_TILT
+  c.minDistance = eyes ? EYES_DIST * 0.9 : 3
+  c.enableZoom = !eyes
+  c.enablePan = !eyes
+  setDragMode(c, stage.drag, view)
 }
 
 // Glides the camera to `shot` ({ target: [x, z], yaw, tilt, dist, lift? }) the short way round.
@@ -1113,8 +1121,9 @@ function dragWanted() {
     return 'turn'
   }
 }
-function setDragMode(controls, drag) {
-  const move = drag === 'move'
+function setDragMode(controls, drag, view) {
+  // Through the hero's eyes one finger always looks around.
+  const move = drag === 'move' && view !== 'eyes'
   controls.mouseButtons = { LEFT: move ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: move ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN }
   controls.touches = { ONE: move ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE, TWO: move ? THREE.TOUCH.DOLLY_ROTATE : THREE.TOUCH.DOLLY_PAN }
 }
@@ -1410,7 +1419,20 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
       const walking = stage.nodes.get(acting.id) && stage.tweens.find((tw) => tw.node === stage.nodes.get(acting.id))
       if (walking) slow = walking.ms
     } else if (active) {
-      shot = restShot(view, where(active), foes.map(where), keep)
+      // Through the hero's eyes with no monster about: look the way the hero just walked.
+      const here = where(active)
+      const was = stage.heroWas
+      stage.heroWas = { id: active.id, at: here }
+      const walked = was?.id === active.id ? walkYaw(was.at, here) : null
+      if (view === 'eyes' && walked !== null && !foes.length) {
+        keep.yaw = walked
+        stage.keep = { ...stage.keep, yaw: walked }
+      }
+      shot = restShot(view, here, foes.map(where), keep)
+      // It walks there: the camera goes along at its pace.
+      const node = stage.nodes.get(active.id)
+      const walking = node && stage.tweens.find((tw) => tw.node === node)
+      if (walking) slow = walking.ms
     }
     if (stage.closeUntil > performance.now()) {
       stage.closeTimer = setTimeout(() => {
@@ -1449,8 +1471,11 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
   }, [ready, healsKey])
 
   useEffect(() => {
-    if (ready && stageRef.current) setDragMode(stageRef.current.controls, drag)
-  }, [ready, drag])
+    const stage = stageRef.current
+    if (!ready || !stage) return
+    stage.drag = drag
+    setDragMode(stage.controls, drag, view)
+  }, [ready, drag, view])
 
   const switchFollow = () => {
     const on = !follow
