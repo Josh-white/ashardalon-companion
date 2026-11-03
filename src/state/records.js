@@ -191,9 +191,34 @@ export const recordsReply = (file, keep = () => true, played = true) => {
   return {
     players: playerRecords(games.filter((g) => !g.solo)),
     solo: playerRecords(games.filter((g) => g.solo)),
+    adventures: adventureRecords(games),
     played: played ? (file?.played ?? {}) : {},
   }
 }
+
+// Which adventures have been beaten, for the checkmarks in the adventure picker:
+// { [adventure key]: { games, wins, winners } }, `winners` being everyone who was in a won
+// game of it (family and solo alike), in the order they first won it. The Hero Swap
+// Warm-up never gets here (gameRecord leaves practice out).
+export const adventureKey = (title) => (typeof title === 'string' ? title.trim().toLowerCase() : '')
+export function adventureRecords(games) {
+  const out = {}
+  for (const game of games) {
+    const key = adventureKey(game.adventure)
+    if (!key) continue
+    const entry = (out[key] ??= { games: 0, wins: 0, winners: [] })
+    entry.games += 1
+    if (game.outcome !== 'won') continue
+    entry.wins += 1
+    for (const p of game.players ?? []) {
+      if (playerKey(p.name) && !entry.winners.some((w) => playerKey(w) === playerKey(p.name))) entry.winners.push(p.name)
+    }
+  }
+  return out
+}
+
+// One adventure's line from /records.json's `adventures`, or null when nobody has played it.
+export const adventureRecord = (adventures, adventure) => adventures?.[adventureKey(adventure?.title)] ?? null
 
 // Which heroes each player has taken into the dungeon, so the hero coach knows who's new
 // to a hero: { played: { [player key]: { [hero key]: when first played } } }. Counted from

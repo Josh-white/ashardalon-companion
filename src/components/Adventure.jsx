@@ -12,6 +12,8 @@ import { TileSetup, TilesLeft } from './Tiles.jsx'
 import { AreaName } from './AreaBackdrop.jsx'
 import { STARTING_TILES } from '../state/tiles.js'
 import { Button, Chip } from './ui.jsx'
+import { adventureRecord } from '../state/records.js'
+import { useRecordsFile } from '../state/useRecords.js'
 import { CampaignBoons } from './Campaign.jsx'
 import { VillagerList } from './Villagers.jsx'
 
@@ -24,6 +26,8 @@ const heading = (adventure) => (adventure.number ? `Adventure ${adventure.number
 // its goal, instead of one long scroll.
 export function AdventurePicker({ state, dispatch, board = false, compact = false }) {
   const { adventures } = useCards()
+  // Which adventures have been beaten already, from the Pi's finished games.
+  const beaten = useRecordsFile()?.adventures ?? null
   const chosen = state.lobbyAdventure
   const surges = state.lobbySurges ?? 2
   const difficulty = difficultyOf(state.lobbyDifficulty)
@@ -47,6 +51,7 @@ export function AdventurePicker({ state, dispatch, board = false, compact = fals
               number={adventure.number}
               detail={missing.length > 0 ? `Coming soon: needs ${missing.map((f) => FEATURE_LABELS[f] ?? f).join(', ')}` : adventure.goal}
               players={adventure.players}
+              record={adventure.practice ? null : adventureRecord(beaten, adventure)}
               onClick={() => dispatch({ type: 'CHOOSE_ADVENTURE', adventure })}
             />
           )
@@ -96,6 +101,7 @@ export function AdventurePicker({ state, dispatch, board = false, compact = fals
 export function QuestLine({ state, dispatch, boardChoice = null, onBoard = false, big = true }) {
   const [open, setOpen] = useState(false)
   const chosen = state.lobbyAdventure
+  const beaten = adventureRecord(useRecordsFile(open)?.adventures, chosen)?.wins > 0
   const surges = state.lobbySurges ?? 2
   const difficulty = difficultyOf(state.lobbyDifficulty)
   const facts = [
@@ -123,7 +129,9 @@ export function QuestLine({ state, dispatch, boardChoice = null, onBoard = false
           📜
         </span>
         <div className="min-w-0">
-          <p className={`font-display leading-tight font-bold text-amber-50 ${big ? 'text-[1.9vw]' : 'text-xl sm:text-2xl'}`}>{chosen ? heading(chosen) : 'Free play'}</p>
+          <p className={`font-display leading-tight font-bold text-amber-50 ${big ? 'text-[1.9vw]' : 'text-xl sm:text-2xl'}`}>{chosen ? heading(chosen) : 'Free play'}
+            {beaten && !chosen.practice && <span className="ml-2 text-emerald-400" title="Beaten before">✅</span>}
+          </p>
           <p className={`text-zinc-300 ${big ? 'text-[1.2vw]' : 'text-sm sm:text-base'}`}>
             {chosen ? chosen.goal : 'No adventure: just explore and fight.'} · {facts.join(' · ')}
           </p>
@@ -137,7 +145,17 @@ export function QuestLine({ state, dispatch, boardChoice = null, onBoard = false
   )
 }
 
-function AdventureOption({ active, disabled, title, detail, players, onClick, compact = false, number = null }) {
+// How an adventure has gone so far: won (and by whom), or tried and not beaten yet.
+function recordLine(record) {
+  if (!record) return null
+  if (record.wins === 0) return `Tried ${record.games}×, not beaten yet`
+  return `Won${record.wins > 1 ? ` ${record.wins}×` : ''}${record.winners.length > 0 ? ` by ${record.winners.join(', ')}` : ''}`
+}
+
+function AdventureOption({ active, disabled, title, detail, players, onClick, compact = false, number = null, record = null }) {
+  const won = record?.wins > 0
+  const line = recordLine(record)
+  const lineClass = won ? 'text-emerald-400' : 'text-zinc-500'
   if (compact) {
     return (
       <button
@@ -151,9 +169,15 @@ function AdventureOption({ active, disabled, title, detail, players, onClick, co
         <span className="flex items-baseline gap-2">
           {number && <span className="w-5 shrink-0 text-right font-display font-bold text-amber-500">{number}</span>}
           <span className="min-w-0 flex-1 truncate font-display font-bold text-zinc-100">{title}</span>
+          {won && (
+            <span className="shrink-0 text-emerald-400" title={line}>
+              ✅
+            </span>
+          )}
           {players && <span className="shrink-0 text-xs text-zinc-500">{players}</span>}
         </span>
         {(active || disabled) && <span className="mt-0.5 block text-sm text-zinc-400">{detail}</span>}
+        {active && line && <span className={`mt-0.5 block text-sm ${lineClass}`}>{line}</span>}
       </button>
     )
   }
@@ -166,9 +190,13 @@ function AdventureOption({ active, disabled, title, detail, players, onClick, co
         active ? 'border-amber-400 bg-amber-950/40' : 'border-zinc-800 bg-zinc-950'
       } ${disabled ? 'cursor-default opacity-50' : 'active:scale-95'}`}
     >
-      <span className="block font-display text-lg font-bold text-zinc-100">{title}</span>
+      <span className="block font-display text-lg font-bold text-zinc-100">
+        {title}
+        {won && <span className="ml-2 text-emerald-400">✅</span>}
+      </span>
       {players && <span className="block text-xs uppercase tracking-wide text-zinc-500">{players} heroes</span>}
       <span className="mt-1 block text-sm text-zinc-400">{detail}</span>
+      {line && <span className={`mt-1 block text-sm font-semibold ${lineClass}`}>{line}</span>}
     </button>
   )
 }

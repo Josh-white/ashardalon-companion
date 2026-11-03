@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { TITLES } from '../data/titles.js'
 import { createHero, gameReducer, initialState } from './game.js'
-import { findPlayer, gameRecord, playerRecords, recordGames, recordsReply, syncRecord } from './records.js'
+import { adventureRecord, findPlayer, gameRecord, playerRecords, recordGames, recordsReply, syncRecord } from './records.js'
 
 const start = (players) =>
   gameReducer(initialState, { type: 'START_GAME', heroes: players.map((player, i) => ({ ...createHero(HERO_TEMPLATES[i]), player })) })
@@ -97,5 +97,22 @@ describe("players' records", () => {
     expect(syncRecord(file, won, 9)).toBeNull()
     expect(recordGames(syncRecord(file, end(playing, 'lost'), 9))[0]).toMatchObject({ outcome: 'lost', endedAt: 5 })
     expect(recordGames(syncRecord(file, playing))).toEqual([])
+  })
+
+  it('says which adventures were beaten and by whom', () => {
+    const play = (players, title, result) => {
+      const state = start(players)
+      return gameRecord(end({ ...state, adventure: { ...state.adventure, card: { id: title, title } } }, result))
+    }
+    const games = [
+      { ...play(['Colton', 'JJ'], 'Into the Mountain', 'lost'), endedAt: 1 },
+      { ...play(['Colton', 'Easton'], 'Into the Mountain', 'won'), endedAt: 2 },
+      { ...play(['colton', 'JJ'], 'Into the Mountain', 'won'), endedAt: 3 },
+      { ...play(['Easton'], 'The Lost Crown', 'lost'), endedAt: 4 },
+    ]
+    const { adventures } = recordsReply({ games: Object.fromEntries(games.map((g) => [g.key, g])) })
+    expect(adventureRecord(adventures, { title: 'Into the Mountain' })).toEqual({ games: 3, wins: 2, winners: ['Colton', 'Easton', 'JJ'] })
+    expect(adventureRecord(adventures, { title: 'The Lost Crown' })).toEqual({ games: 1, wins: 0, winners: [] })
+    expect(adventureRecord(adventures, { title: 'Never Played' })).toBeNull()
   })
 })
