@@ -460,6 +460,9 @@ function normalizeEncounters(list, problems) {
       // Adventure cards stay out of the deck until something puts them in (a villain arriving).
       adventure: card.adventure === true,
       noCancel: card.noCancel === true,
+      // "If no Monster is in play, discard this card" (Scream of the Sentry): read from the card
+      // text too, so a cards.json without the flag still gets it.
+      needsMonster: card.needsMonster === true || /if no monsters? (is|are) in play, discard this card/i.test(typeof card.text === 'string' ? card.text : ''),
       // The villain the card is about (by id): when it isn't in play, the card is just discarded.
       villain: typeof card.villain === 'string' ? card.villain : '',
       // Shuffled back in among the top cards of the deck instead of discarded.

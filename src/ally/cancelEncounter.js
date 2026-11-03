@@ -37,7 +37,7 @@ function attackTargets(state, card, hero) {
 // `lethal` is true when its attack could knock a hero down.
 export function encounterHarm(state, card, hero) {
   if (HELPFUL.has(card.id) || card.refreshDaily) return { score: 0, lethal: false }
-  if (card.villain && !villainInPlay(state, card)) return { score: 0, lethal: false }
+  if (!villainInPlay(state, card)) return { score: 0, lethal: false }
   let score = 0
   let lethal = false
   if (card.type === 'curse' || card.type === 'trap') score += 3

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { normalizeCardFile } from '../data/cards.js'
-import { createHero, gameReducer, initialState, phaseChecks } from '../state/game.js'
+import { createHero, gameReducer, initialState, phaseChecks, villainInPlay } from '../state/game.js'
+import { encounterNotes } from '../state/encounterRules.js'
 import { boardAnswer } from './checks.js'
 import { markerOnHeroTile } from './markers.js'
 import { foesInRange, powerRange, wrathPull } from './monsters.js'
@@ -369,6 +370,25 @@ describe('Scream of the Sentry', () => {
     const grid = boardGrid(laid.board)
     const square = [...grid.values()].find((sq) => sq.tile === tile.uid && sq.floor)
     expect(tilesBetween(grid, [1, -6], [square.x, square.y])).toBe(1)
+  })
+
+  it('with no monster in play it is just discarded: no tile, no monster', () => {
+    const { state } = game()
+    const card = normalizeCardFile({
+      powers: [],
+      encounters: [{ id: 'scream-of-the-sentry', name: 'Scream of the Sentry', type: 'event', drawMonster: true, text: 'If no Monster is in play, discard this card.\nChoose a Monster.' }],
+    }).encounters[0]
+    expect(card.needsMonster).toBe(true)
+    const empty = { ...state, monsters: [], villains: [] }
+    expect(villainInPlay(empty, card)).toBe(false)
+    expect(encounterNotes({ ...empty, encounter: { card } }, card, false)).toContain('No monster is in play, so it’s just discarded.')
+    const tiles = empty.board.tiles.length
+    const after = gameReducer({ ...empty, encounter: { id: 'e1', card, heroId: empty.heroes[0].id } }, { type: 'RESOLVE_ENCOUNTER', random: [] })
+    expect(after.encounter).toBeNull()
+    expect(after.monsters).toEqual([])
+    expect(after.board.tiles.length).toBe(tiles)
+    // A monster out: the card does its thing.
+    expect(villainInPlay(rat(state, [1, -2]), card)).toBe(true)
   })
 })
 

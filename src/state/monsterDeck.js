@@ -139,9 +139,19 @@ export function filterMonsterDeck(state, type, random, cards = []) {
 }
 
 // A card about a villain (Ashardalon Breathes!) or an objective (the Vast Gate) only does
-// anything while it is in play; otherwise the card is just discarded.
+// anything while it is in play; otherwise the card is just discarded. So does a card that
+// needs a monster in play (Scream of the Sentry), when the app knows none is.
 export const villainInPlay = (state, card) =>
-  (!card.villain || activeVillains(state).some((v) => v.cardId === card.villain)) && (!card.objective || objectiveInPlay(state, card.objective))
+  (!card.villain || activeVillains(state).some((v) => v.cardId === card.villain)) &&
+  (!card.objective || objectiveInPlay(state, card.objective)) &&
+  !(card.needsMonster && knowsNoMonster(state))
+
+// The app knows the table has no monster out: it runs the monster deck or the virtual board
+// (every monster comes through it), and none is in play. A villain counts as a monster here.
+export const knowsNoMonster = (state) =>
+  Boolean(state.board || state.monsterDeck) &&
+  !state.monsters.some((m) => !m.objective) &&
+  activeVillains(state).length === 0
 
 // Draws monster cards until one of a type turns up (The Vast Gate Flares!: an Aberrant) and
 // gives it to the hero. The others are discarded, and so is one the hero already has.
