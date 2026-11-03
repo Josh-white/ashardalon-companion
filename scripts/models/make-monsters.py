@@ -944,22 +944,22 @@ def build_doom_knight():
     sphere("HoodCowlEdge", "doom_green_dark", "head", (0, -0.30, 1.98), 0.28, scale=(0.98, 0.62, 0.22), segments=16, rings=8)
     for side in (1, -1):
         box(f"HoodSide{side}", "doom_green", "head", (0.28 * side, -0.24, 1.78), (0.07, 0.30, 0.52), bevel=0.03)
-    # An iron warlord's faceplate: flat and square-jawed, riveted, with narrow glowing eye
+    # An iron warlord's faceplate (set back into the hood: Easton said it stuck out): flat and square-jawed, riveted, with narrow glowing eye
     # slits, a straight nose ridge and a thin mouth slot over a grille.
-    box("Mask", "iron", "head", (0, -0.30, 1.80), (0.50, 0.30, 0.58), bevel=0.11, segments=3)
-    box("MaskFace", "iron", "head", (0, -0.44, 1.80), (0.42, 0.04, 0.50), bevel=0.04)
-    box("MaskBrow", "iron_dark", "head", (0, -0.465, 1.92), (0.44, 0.05, 0.05), bevel=0.015)
-    box("MaskNose", "iron", "head", (0, -0.475, 1.80), (0.06, 0.05, 0.22), bevel=0.015)
-    box("MaskMouth", "black", "head", (0, -0.465, 1.63), (0.24, 0.03, 0.025), bevel=0.008)
-    for i, x in enumerate((-0.09, -0.03, 0.03, 0.09)):
+    box("Mask", "iron", "head", (0, -0.25, 1.80), (0.50, 0.30, 0.58), bevel=0.11, segments=3)
+    box("MaskFace", "iron", "head", (0, -0.39, 1.80), (0.42, 0.04, 0.50), bevel=0.04)
+    box("MaskBrow", "iron_dark", "head", (0, -0.415, 1.92), (0.44, 0.05, 0.05), bevel=0.015)
+    box("MaskNose", "iron", "head", (0, -0.425, 1.80), (0.06, 0.05, 0.22), bevel=0.015)
+    box("MaskMouth", "black", "head", (0, -0.415, 1.63), (0.24, 0.03, 0.025), bevel=0.008)
+    for i, x in enumerate((-0.09, 0.02, 0.03, 0.09)):
         box(f"MaskGrille{i}", "iron_dark", "head", (x, -0.465, 1.585), (0.018, 0.03, 0.06), bevel=0.004)
-    box("MaskChin", "iron_dark", "head", (0, -0.43, 1.53), (0.30, 0.06, 0.05), bevel=0.02)
+    box("MaskChin", "iron_dark", "head", (0, -0.38, 1.53), (0.30, 0.06, 0.05), bevel=0.02)
     for side in (1, -1):
-        box(f"EyeSlit{side}", "black", "head", (0.11 * side, -0.465, 1.85), (0.14, 0.03, 0.045), bevel=0.01)
-        box(f"Eye{side}", "fel", "head", (0.11 * side, -0.475, 1.85), (0.11, 0.03, 0.025), bevel=0.008)
-        box(f"Cheek{side}", "iron_dark", "head", (0.19 * side, -0.455, 1.70), (0.03, 0.04, 0.22), bevel=0.01)
+        box(f"EyeSlit{side}", "black", "head", (0.11 * side, -0.415, 1.85), (0.14, 0.03, 0.045), bevel=0.01)
+        box(f"Eye{side}", "fel", "head", (0.11 * side, -0.425, 1.85), (0.11, 0.03, 0.025), bevel=0.008)
+        box(f"Cheek{side}", "iron_dark", "head", (0.19 * side, -0.405, 1.70), (0.03, 0.04, 0.22), bevel=0.01)
         for j, z in enumerate((1.96, 1.80, 1.64)):
-            sphere(f"Rivet{side}{j}", "iron_dark", "head", (0.225 * side, -0.465, z), 0.022, segments=6, rings=4)
+            sphere(f"Rivet{side}{j}", "iron_dark", "head", (0.225 * side, -0.415, z), 0.022, segments=6, rings=4)
         # Big black horns curling out of the hood, then up.
         cone(f"HornBase{side}", "armour", "head", (0.40 * side, -0.02, 2.04), 0.10, 0.26, rot=(0, 70 * side, 0),
              sides=8, tip=0.075)
@@ -1054,17 +1054,19 @@ def build_lizard_mage():
 
     # The hood: a proper cowl, close round the head, coming to a point at the back and
     # falling over the shoulders as a short cape.
-    sphere("Hood", "mage_robe", "head", (0, 0.14, 1.86 + dz), 0.35, scale=(1.05, 1.08, 1.12), segments=16, rings=10)
-    cone("HoodTip", "mage_robe", "head", (0, 0.38, 2.10 + dz), 0.15, 0.36, rot=(-115, 0, 0), sides=8)
+    sphere("Hood", "mage_robe", "head", (0, 0.24, 1.86 + dz), 0.35, scale=(1.05, 1.08, 1.12), segments=16, rings=10)
+    cone("HoodTip", "mage_robe", "head", (0, 0.48, 2.10 + dz), 0.15, 0.36, rot=(-115, 0, 0), sides=8)
+    # Black inside, the hood's shadow round his face (Colton's idea); set back so his eyes show.
+    sphere("HoodShadow", "black", "head", (0, 0.16, 1.84 + dz), 0.33, scale=(1.0, 1.0, 1.08), segments=16, rings=10)
     cone("HoodCape", "mage_robe", "head", (0, 0.06, 1.50), 0.46, 0.26, sides=12, tip=0.30)
     cone("HoodCapeHem", "silver", "head", (0, 0.06, 1.37), 0.465, 0.03, sides=12, tip=0.46)
     for i in range(9):
         a = 10 + i * 20
         x, z = math.cos(DEG(a)) * 0.33, math.sin(DEG(a)) * 0.36
-        box(f"HoodRim{i}", "mage_robe_dark", "head", (x, -0.04, 1.80 + dz + z), (0.12, 0.10, 0.07), bevel=0.03,
+        box(f"HoodRim{i}", "mage_robe_dark", "head", (x, 0.04, 1.80 + dz + z), (0.12, 0.10, 0.07), bevel=0.03,
             rot=(0, -(90 + a), 0))
     for side in (1, -1):
-        box(f"HoodSide{side}", "mage_robe_dark", "head", (0.33 * side, -0.04, 1.66 + dz), (0.08, 0.10, 0.28), bevel=0.03)
+        box(f"HoodSide{side}", "mage_robe_dark", "head", (0.33 * side, 0.04, 1.66 + dz), (0.08, 0.10, 0.28), bevel=0.03)
     for i, (y, z, h) in enumerate(((0.44, 1.98, 0.13), (0.52, 1.84, 0.11))):
         cone(f"Crest{i}", "mage_robe_dark", "head", (0, y, z + dz), 0.06, h, rot=(-40, 0, 0), scale=(0.3, 1, 1), sides=4)
 
