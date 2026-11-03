@@ -28,10 +28,11 @@ import { itemAc } from './items.js'
 //   selfDamage  the hero takes this much damage after the attack (a fan Druid's Wolf Fangs).
 //   reusable    the card stays in play and isn't flipped (Improvise, Fleetfooted).
 //   range       which monsters it reaches on the virtual board ('adjacent', 'sameTile', 'within1'..'within3'),
-//               when the card text doesn't say it in words the app reads.
+//               when the card text doesn't say it in words the app reads. For a power that moves first
+//               (board.before: Charge, King's Castle) it's the reach once that move is done.
 //   targetOnly  'villain' (villains only), 'notOwnTile' (not a monster on your tile: Longbows),
 //               'nextToHero' (a monster next to another hero: Guiding Strike).
-//   oneTile     every monster it attacks has to be on the same tile (Trapping Shot).
+//   oneTile     every monster it attacks has to be on the same tile (Trapping Shot, Hurled Breath, Shock Sphere).
 //   follower    on a hit another hero (asked in the attack box) moves their speed and makes an at-will attack.
 //   dodgeAttack 'shadow': after the dodge, a hero in the shadows makes an at-will attack (Swift Evasion).
 //   costsAttack a utility used in the Hero Phase "instead of attacking" (Chorus of Recovery).
@@ -74,13 +75,14 @@ const EFFECTS = {
 
   // Vistra, the fighter
   'Dwarven Resilience': { use: { healSelf: 4, move: true, note: "That's instead of moving this turn." } },
-  Charge: { before: 'First move up to your speed.', board: { before: [{ pick: 'self', to: 'squares', n: 'speed' }] } },
+  Charge: { before: 'First move up to your speed.', range: 'adjacent', board: { before: [{ pick: 'self', to: 'squares', n: 'speed' }] } },
   'Reaping Strike': { attacks: 2, sameTarget: true },
   'Sure Strike': {},
   'Comeback Strike': { onHit: { healSelf: 2 }, keepOnMiss: true },
-  'Into the Fray': { before: 'First put your hero next to a hero within 2 tiles.', board: { before: [{ pick: 'self', to: 'nextToHeroWithin2' }] } },
+  'Into the Fray': { before: 'First put your hero next to a hero within 2 tiles.', range: 'adjacent', board: { before: [{ pick: 'self', to: 'nextToHeroWithin2' }] } },
   'Taunting Advance': {
     before: 'First move your speed, then pull a monster within 2 tiles next to you.',
+    range: 'adjacent',
     board: { before: [{ pick: 'self', to: 'squares', n: 'speed' }, { pick: 'monsterWithin2', to: 'nextToSelf' }] },
   },
   'Inspiring Advice': { reaction: 'reroll' },
@@ -94,11 +96,11 @@ const EFFECTS = {
 
   // Keyleth, the paladin
   'Lay On Hands': { use: { heal: 2, pick: 'other', reach: 'adjacent', prompt: 'Who is next to you?' } },
-  'Divine Challenge': { before: 'First pull a monster within 1 tile next to you.', board: { before: [{ pick: 'monsterWithin1', to: 'nextToSelf' }] } },
+  'Divine Challenge': { before: 'First pull a monster within 1 tile next to you.', range: 'adjacent', board: { before: [{ pick: 'monsterWithin1', to: 'nextToSelf' }] } },
   'Holy Strike': { ask: 'started-adjacent' },
   'Valiant Strike': { ask: 'adjacent-count' },
   'Arcing Smite': { targets: 2 },
-  'Benign Transposition': { before: 'First swap places with a hero within 2 tiles.', board: { before: [{ pick: 'heroWithin2', to: 'swap' }] } },
+  'Benign Transposition': { before: 'First swap places with a hero within 2 tiles.', range: 'adjacent', board: { before: [{ pick: 'heroWithin2', to: 'swap' }] } },
   'Righteous Smite': { after: 'heal-tile' },
   Bravery: { use: { healSelf: 1, note: 'Put your hero next to the monster.', board: [{ pick: 'self', to: 'nextToFoe' }] }, reaction: 'bravery' },
   'Noble Shield': { reaction: 'noble-shield' },
@@ -121,14 +123,14 @@ const EFFECTS = {
     note: 'Put your hero on a tile within 2 tiles of where you started.',
     board: { after: [{ pick: 'self', to: 'tileWithin', n: 2 }] },
   },
-  "King's Castle": { before: 'First swap places with a hero within 1 tile.', board: { before: [{ pick: 'heroWithin1', to: 'swap' }] } },
+  "King's Castle": { before: 'First swap places with a hero within 1 tile.', range: 'within2', board: { before: [{ pick: 'heroWithin1', to: 'swap' }] } },
   'Tornado Strike': { attacks: 4, targets: 4, note: 'Then put your hero on any square of your tile.', board: { after: [{ pick: 'self', to: 'ownTile' }] } },
   'Distant Diversion': { use: { note: 'Move a monster within 3 tiles onto a tile next to it.', board: [{ pick: 'monsterWithin3', to: 'adjacentTile' }] } },
   'Practiced Evasion': { reaction: 'evade' },
   'Tumbling Escape': { reaction: 'dodge', board: { dodge: [{ pick: 'self', to: 'tileWithin', n: 1 }] } },
 
   // Heskan, the wizard
-  'Hurled Breath': { targets: 'any', free: true, note: "This doesn't count as your attack this turn." },
+  'Hurled Breath': { targets: 'any', oneTile: true, free: true, note: "This doesn't count as your attack this turn." },
   'Arc Lightning': { targets: 2 },
   // The monster Heskan moves isn't hurt: the attack is against a monster it ends up next to.
   Hypnotism: {
@@ -140,7 +142,7 @@ const EFFECTS = {
   'Flaming Sphere': {
     use: { tokens: { flamingSphere: 3 }, note: 'Put the 3 Flaming Sphere tokens on a square within 1 tile of you.' },
   },
-  'Shock Sphere': { targets: 'any' },
+  'Shock Sphere': { targets: 'any', oneTile: true },
   'Spectral Ram': {
     note: 'Hit or miss: put the monster on any tile within 2 tiles of where it was.',
     board: { after: [{ pick: 'attacked', to: 'tileWithin', n: 2, ref: 'piece' }] },

@@ -402,7 +402,8 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
               ↩ Back a step
             </Button>
           )}
-          {walking && (
+          {/* A power's move before its attack (Charge, Divine Challenge, a walk) can be called off: everything goes back. */}
+          {(walking || powerMove.before) && (
             <Button className="!py-1 text-sm" onClick={() => { setPicked(null); dispatch({ type: 'CANCEL_BOARD_MOVE' }) }}>
               ✕ Cancel
             </Button>

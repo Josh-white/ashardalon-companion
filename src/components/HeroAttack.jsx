@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useShareAim } from './useAimed.js'
 import { stayedOnBoard } from '../board/play.js'
 import { figuresInRange, foesInRange, powerRange } from '../board/monsters.js'
-import { attackDistances } from '../board/attackDistances.js'
+import { attackDistances, attackRange, boardAnswers } from '../board/attackDistances.js'
 import { hypnotized } from '../board/powerMoves.js'
 import { difficultyOf, hasSecondChance } from '../data/difficulty.js'
 import { asksIfStayed, attackItems, distanceChoices, heroItems, itemsWithUse } from '../data/items.js'
@@ -249,7 +249,8 @@ export function AttackAftermath({ state, last, dispatch }) {
 }
 
 // The question some powers ask before the roll.
-function BeforeQuestion({ hero, effects, answers, setAnswers }) {
+function BeforeQuestion({ hero, effects, answers, setAnswers, fromBoard = [] }) {
+  const boardNote = (k) => fromBoard.includes(k) && <span className="text-sm text-zinc-400"> (from the board, tap to change)</span>
   if (effects.wolf) {
     return (
       <div>
@@ -267,7 +268,7 @@ function BeforeQuestion({ hero, effects, answers, setAnswers }) {
   if (effects.ask === 'started-adjacent') {
     return (
       <div>
-        <p className="text-zinc-200">Did {hero.name} start this Hero Phase next to that monster? (+1 damage if you hit)</p>
+        <p className="text-zinc-200">Did {hero.name} start this Hero Phase next to that monster? (+1 damage if you hit){boardNote('startedAdjacent')}</p>
         <div className="mt-2 grid grid-cols-2 gap-2">
           {[true, false].map((yes) => (
             <Button key={String(yes)} variant={answers.startedAdjacent === yes ? 'gold' : 'default'} onClick={() => setAnswers({ startedAdjacent: yes })}>
@@ -281,9 +282,9 @@ function BeforeQuestion({ hero, effects, answers, setAnswers }) {
   if (effects.ask === 'adjacent-count') {
     return (
       <div>
-        <p className="text-zinc-200">How many monsters are next to {hero.name}? (+1 to the attack for each)</p>
+        <p className="text-zinc-200">How many monsters are next to {hero.name}? (+1 to the attack for each){boardNote('adjacentCount')}</p>
         <div className="mt-2 grid grid-cols-4 gap-2">
-          {[1, 2, 3, 4].map((n) => (
+          {Array.from({ length: Math.max(4, answers.adjacentCount ?? 0) }, (_, i) => i + 1).map((n) => (
             <Button key={n} variant={answers.adjacentCount === n ? 'gold' : 'default'} onClick={() => setAnswers({ adjacentCount: n })}>
               {n}
             </Button>
@@ -405,10 +406,12 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   const moving = effects.ask === 'moved-monster'
   // On the virtual board only the monsters the power can reach are offered.
   const [showAll, setShowAll] = useState(false)
-  const range = state.board && !moving ? (effects.range ?? powerRange(item ? item.card.text : power?.card?.text)) : null
+  const range = state.board && !moving ? (item ? powerRange(item.card.text) : attackRange(state, power)) : null
   // On the virtual board Hypnotism's move is done there, and the board knows who it's next to.
   const trance = moving && power ? hypnotized(state, power.name) : null
-  const asked = trance ? { movedId: trance.id } : answers
+  // Holy Strike's and Valiant Strike's questions: the virtual board answers what it knows; a tap beats it.
+  const fromBoardAnswers = trance ? {} : boardAnswers(state, hero, item ? null : power, chosen)
+  const asked = trance ? { movedId: trance.id } : { ...fromBoardAnswers, ...answers }
   const everyTarget = foes(state).filter((m) => !moving || (m.id !== asked.movedId && (!trance || trance.nextTo.includes(m.id))))
   const reachable = foesInRange(state, hero.id, range, everyTarget)
   // Fan powers: villains only, not your own tile, next to another hero, all on one tile.
@@ -439,6 +442,11 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   }
 
   const pickPower = (id) => {
+    // Picking another power calls off the move the last one started on the board (Charge's
+    // walk, Divine Challenge's pull): that figure goes back, and the board's taps are free again.
+    const waiting = state.turn.boardMove
+    const next = id && powers.find((p) => p.id === id)
+    if (waiting?.before && waiting.heroId === hero.id && next && waiting.source !== next.name) dispatch({ type: 'CANCEL_BOARD_MOVE' })
     setPowerId(id)
     setChosen([])
     setAnswers({})
@@ -645,7 +653,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
               )}
               </>
               )}
-              <BeforeQuestion hero={hero} effects={effects} answers={answers} setAnswers={setAnswers} />
+              <BeforeQuestion hero={hero} effects={effects} answers={asked} setAnswers={setAnswers} fromBoard={Object.keys(fromBoardAnswers).filter((k) => answers[k] === undefined)} />
               {effects.follower && (
                 <div>
                   <p className="text-zinc-200">If it hits, which hero on {hero.name}'s tile follows the lead (moves next to a monster and makes an at-will attack)?</p>
@@ -684,8 +692,8 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
                         item,
                         power: item ? null : power,
                         extraAttack: extra,
-                        adjacentCount: answers.adjacentCount,
-                        startedAdjacent: answers.startedAdjacent,
+                        adjacentCount: asked.adjacentCount,
+                        startedAdjacent: asked.startedAdjacent,
                         distance: allDistances[monster.id],
                         stayed,
                         fearless: isFearlessTarget(state, hero, monster.id),
