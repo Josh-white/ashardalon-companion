@@ -106,3 +106,33 @@ describe("Whirling Mantis Step and magic weapons' distance", () => {
     expect(attackDistances(offBoard, { ...hero, items: [SWORD] }, ['m0', 'm1'], old)).toEqual({ m0: 'adjacent', m1: 'adjacent' })
   })
 })
+
+describe("Cancelling Whirling Mantis Step's walk", () => {
+  it('puts the hero back, forgets the monsters passed, and lets the power walk again', () => {
+    let { s, hero, power } = setup()
+    s = gameReducer(s, { type: 'START_BOARD_MOVE', heroId: hero.id, powerId: power.id })
+    s = walk(s, hero, [2, 0])
+    expect(s.turn.powerPassed.ids).toEqual(['m0'])
+    s = gameReducer(s, { type: 'CANCEL_BOARD_MOVE' })
+    expect(s.board.tokens[hero.id]).toEqual([0, 0])
+    expect(s.turn.boardMove).toBeNull()
+    expect(s.turn.powerPassed).toBeNull()
+    expect(s.turn.beforeMoved).toBeNull()
+    // Walking it again starts fresh.
+    s = gameReducer(s, { type: 'START_BOARD_MOVE', heroId: hero.id, powerId: power.id })
+    expect(pathOf(s).left).toBe(hero.speed)
+    expect(s.turn.powerPassed.ids).toEqual([])
+  })
+
+  it("a normal move after a finished walk drops the walk's monsters", () => {
+    let { s, hero, power } = setup()
+    s = gameReducer(s, { type: 'START_BOARD_MOVE', heroId: hero.id, powerId: power.id })
+    s = walk(s, hero, [2, 0])
+    s = gameReducer(s, { type: 'SKIP_BOARD_MOVE' })
+    expect(s.turn.powerPassed.ids).toEqual(['m0'])
+    s = gameReducer(s, { type: 'MOVE_HERO', heroId: hero.id, to: [1, 2] })
+    expect(s.board.tokens[hero.id]).toEqual([1, 2])
+    expect(s.turn.powerPassed).toBeNull()
+    expect(s.turn.beforeMoved).toBeNull()
+  })
+})

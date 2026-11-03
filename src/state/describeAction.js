@@ -185,6 +185,7 @@ export function describeAction(state, action) {
     case 'START_BOARD_MOVE':
     case 'SKIP_BOARD_MOVE':
     case 'PATH_BACK':
+    case 'CANCEL_BOARD_MOVE':
       return hero ? `${hero.name}'s move` : 'A move on the board'
     case 'MOVE_TOKEN':
     case 'CONTROL_MOVE':

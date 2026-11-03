@@ -402,6 +402,11 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
               ↩ Back a step
             </Button>
           )}
+          {walking && (
+            <Button className="!py-1 text-sm" onClick={() => { setPicked(null); dispatch({ type: 'CANCEL_BOARD_MOVE' }) }}>
+              ✕ Cancel
+            </Button>
+          )}
           <Button className="!py-1 text-sm" onClick={() => { setPicked(null); dispatch({ type: 'SKIP_BOARD_MOVE' }) }}>
             {walking ? 'Done moving' : 'Skip'}
           </Button>
