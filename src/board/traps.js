@@ -90,6 +90,14 @@ export function heroesOnTrap(state, trap) {
 // Has the trap already moved or spread this Villain Phase?
 export const trapStepped = (state, trap) => (state.turn.trapSteps ?? []).includes(trap.id)
 
+// True when the virtual board knows nobody is on the trap's tile, so its Villain Phase turn
+// has nothing to do. A trap that moves or spreads first only counts once it has moved.
+export function trapFindsNobody(state, trap) {
+  if ((isMovingTrap(trap) || isLava(trap)) && !trapStepped(state, trap)) return false
+  const ids = heroesOnTrap(state, trap)
+  return Array.isArray(ids) && ids.length === 0
+}
+
 // TRAP_STEP: move or spread the trap. With `tile`, to that tile (one of the choices); without,
 // the board does it when there's only one way to go, or asks the players to tap a tile.
 export function trapStep(state, action, withLog) {
