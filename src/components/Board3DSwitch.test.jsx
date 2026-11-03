@@ -67,7 +67,7 @@ describe('🧊 on an iPad board', () => {
     expect(c.queryByText(/can't draw the 3D board/)).toBeNull()
     warn.mockRestore()
     error.mockRestore()
-  }, 20000)
+  })
 
   it("quietly shows the flat board where 3D can't be drawn and nobody asked for it", async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
@@ -78,7 +78,7 @@ describe('🧊 on an iPad board', () => {
     expect(c.container.querySelector('svg[aria-label="The dungeon board"]')).toBeTruthy()
     warn.mockRestore()
     error.mockRestore()
-  }, 20000)
+  })
 
   it('is not on the read-only boards with nothing to tap', () => {
     const c = render(<Board state={game()} readOnly fill />)

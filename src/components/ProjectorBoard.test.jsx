@@ -79,7 +79,7 @@ describe("the projector 3D switch", () => {
     );
     warn.mockRestore();
     error.mockRestore();
-  }, 20000);
+  });
 
   it("remembers being turned off", () => {
     const c = render(<Switchable state={game()} />);

@@ -162,6 +162,34 @@ describe('Model Workshop', () => {
     expect(builderFigures(await forge())).toEqual({})
   })
 
+  it('takes a model out of the game when it comes off the list', async () => {
+    const sent = await (await post('/workshop', { idea: 'Lizard mage', from: 'Colton' })).json()
+    reply(sent.id, [{ note: 'Hi', pictures: ['front.png'], model: 'model-1.glb' }])
+    writeFileSync(join(workshopDir, sent.id, 'model-1.glb'), 'glTF!')
+    await post(`/workshop/${sent.id}`, { love: true })
+    await post(`/workshop/${sent.id}`, { useInGame: true })
+    expect((await fetch(`${url}/workshop/${sent.id}`, { method: 'DELETE' })).status).toBe(200)
+    // Brought back while a Hero Builder figure is on: still only one figure for Colton.
+    const built = await (await post('/forge', { name: 'Grim', from: 'Colton' })).json()
+    await post(`/forge/${built.id}`, { useInGame: true })
+    await post(`/workshop/${sent.id}`, { hidden: false })
+    const [r] = await list()
+    expect(r.useInGame).toBe(false)
+    expect(workshopStatus(r)).toBe('loved')
+    expect(playerFigures(await list())).toEqual({})
+  })
+
+  it('says the Pi could not save, and keeps the list as it is on the Pi', async () => {
+    const sent = await (await post('/workshop', { idea: 'Lizard mage', from: 'Colton' })).json()
+    // requests.json can't be replaced: a folder sits where the new file is written.
+    mkdirSync(join(workshopDir, 'requests.json.tmp'))
+    const res = await post(`/workshop/${sent.id}`, { tweaks: { size: 1.2 } })
+    expect(res.status).toBe(500)
+    expect((await res.json()).error).toMatch(/Ask Dad/)
+    const [r] = await list()
+    expect(r.tweaks).toBeUndefined()
+  })
+
   it('turns away an empty idea and unknown ids', async () => {
     expect((await post('/workshop', { idea: '  ', from: 'Easton' })).status).toBe(400)
     expect((await post('/workshop/nope', { love: true })).status).toBe(404)
