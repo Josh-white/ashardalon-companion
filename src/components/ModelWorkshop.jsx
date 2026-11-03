@@ -43,8 +43,10 @@ function useWorkshop(every) {
     () =>
       loadWorkshop().then(
         (r) => {
-          setRequests(r.filter((x) => !x.hidden))
-          setRemoved(r.filter((x) => x.hidden))
+          // Some other screen's pretend Pi (the tests) may answer with no list at all.
+          const all = Array.isArray(r) ? r : []
+          setRequests(all.filter((x) => !x.hidden))
+          setRemoved(all.filter((x) => x.hidden))
           setError(null)
         },
         (e) => setError(e.message),
