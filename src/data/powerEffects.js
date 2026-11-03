@@ -152,8 +152,18 @@ const EFFECTS = {
   'Wizard Eye': { use: { tokens: { wizardEye: true }, note: 'Put the Wizard Eye on a tile within 1 tile of you.' } },
 }
 
+// Fan heroes (cards.json on the Pi), kept apart from the 50 box powers. Listed by name so the
+// app applies and ends the bonus even when a card (or an old save's copy of it) only has a note.
+const FAN_EFFECTS = {
+  // Berryloaf, the bard: start of Hero Phase, every hero, until the end of his next Hero Phase.
+  'Song of Courage': { use: { buff: { attack: 2, who: 'all', lasts: 'heroPhaseEnd' } } },
+  'Melody of Defense': { use: { buff: { ac: 2, who: 'all', lasts: 'heroPhaseEnd' } } },
+  // Darna, the monk: +3 AC for herself until the start of her next turn.
+  'Centered Defense': { use: { buff: { ac: 3, who: 'self', lasts: 'turnStart' } } },
+}
+
 const key = (name) => String(name ?? '').toLowerCase().replace(/[^a-z]/g, '')
-const BY_KEY = Object.fromEntries(Object.entries(EFFECTS).map(([name, effect]) => [key(name), effect]))
+const BY_KEY = Object.fromEntries(Object.entries({ ...FAN_EFFECTS, ...EFFECTS }).map(([name, effect]) => [key(name), effect]))
 // The old card list calls Arcing Smite "Arcing Strike".
 BY_KEY.arcingstrike = BY_KEY.arcingsmite
 

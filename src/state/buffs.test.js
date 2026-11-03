@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
 import { heroAc } from '../data/powerEffects.js'
-import { acParts, attackParts } from '../data/statParts.js'
+import { acParts, attackParts, heroBadges } from '../data/statParts.js'
 import { attackNumbers } from './heroAttacks.js'
 import { createHero, gameReducer, initialState } from './game.js'
 
@@ -55,5 +55,30 @@ describe('party and self bonuses from powers', () => {
     expect(heroAc(state.heroes[0])).toBe(ac + 3)
     for (let i = 0; i < 40 && state.turn.heroIndex !== 0; i++) state = gameReducer(state, { type: 'NEXT_PHASE', roll: 15, rolls: [] })
     expect(heroAc(state.heroes[0])).toBe(ac)
+  })
+
+  // Older cards (and saves holding a copy of them) said "Add it yourself for now" with only a note.
+  it('a note-only Melody of Defense card still gives every hero +2 AC and shows the badge', () => {
+    const melody = { name: 'Melody of Defense', text: 'All Heroes +2 AC.', effect: { use: { note: 'All heroes get +2 AC. Add it yourself for now.' } } }
+    let { state, id } = give(start(), melody)
+    const before = state.heroes.map(heroAc)
+    state = use(state, id)
+    state.heroes.forEach((hero, i) => {
+      expect(heroAc(hero)).toBe(before[i] + 2)
+      expect(heroBadges(hero).some((b) => b.text === '+2 AC Melody of Defense' && b.good)).toBe(true)
+    })
+    state = endHeroPhases(state, 2)
+    expect(state.heroes.every((h) => (h.buffs ?? []).length === 0)).toBe(true)
+  })
+
+  it('note-only Song of Courage and Centered Defense cards are automated too', () => {
+    const note = (name) => ({ name, text: '', effect: { use: { note: 'Add it yourself for now.' } } })
+    let { state, id } = give(start(), note('Song of Courage'))
+    state = use(state, id)
+    expect(state.heroes.every((h) => heroBadges(h).some((b) => b.text === '+2 hit Song of Courage'))).toBe(true)
+    ;({ state, id } = give(start(), note('Centered Defense')))
+    state = use(state, id)
+    expect(heroBadges(state.heroes[0]).some((b) => b.text === '+3 AC Centered Defense')).toBe(true)
+    expect(state.heroes[1].buffs ?? []).toHaveLength(0)
   })
 })
