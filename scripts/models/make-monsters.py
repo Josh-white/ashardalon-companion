@@ -115,6 +115,18 @@ PALETTE = {
     "hair_red": "b0522a",
     "hair_blonde": "e3c46e",
     "cheek": "e59a8a",
+    "doom_green": "2f7d32",  # Model Workshop: Easton's Doom Knight
+    "doom_green_dark": "1b4a1e",
+    "fel": "4dff3a",         # green flames and eyes
+    "fel_light": "d4ff9e",
+    "lizard": "4f8a3c",      # Colton's Lizard Mage
+    "lizard_dark": "2f5a26",
+    "lizard_belly": "c9c27a",
+    "mage_robe": "5b2a86",
+    "mage_robe_dark": "33184d",
+    "silver": "d2d5dc",
+    "arcane": "c77dff",
+    "arcane_light": "f0dcff",
 }
 
 argv = sys.argv
@@ -818,7 +830,7 @@ def build_duergar_hammer_and_shield(fist, d, tilt):
                0.03, segments=6, rings=4)
 
 
-def build_great_axe(fist):
+def build_great_axe(fist, gem="glow"):
     """A long-hafted double axe held upright in the right fist, the blades above the head."""
     up = Vector((0, -0.2, 1)).normalized()
     tilt = (-math.degrees(math.atan2(0.2, 1)), 0, 0)  # turns +Z to point along `up`
@@ -834,7 +846,7 @@ def build_great_axe(fist):
                scale=(0.75, 0.12, 1.15), rot=tilt, segments=16, rings=10)
         sphere(f"AxeEdge{side}", "iron", "arm.R", head + Vector((0.36 * side, 0, 0)), 0.30,
                scale=(0.42, 0.09, 1.08), rot=tilt, segments=16, rings=10)
-    sphere("AxeGem", "glow", "arm.R", head + Vector((0, -0.09, 0)), 0.045, scale=(1, 0.5, 1), segments=8, rings=6)
+    sphere("AxeGem", gem, "arm.R", head + Vector((0, -0.09, 0)), 0.045, scale=(1, 0.5, 1), segments=8, rings=6)
 
 
 def build_duergar_head(captain):
@@ -869,6 +881,167 @@ def build_duergar_head(captain):
                segments=8, rings=5)
     box("Nose", "skin_grey", "head", (0, -0.36, 1.55), (0.12, 0.10, 0.12), bevel=0.045)
     sphere("Beard", "beard", "head", (0, -0.18, 1.28), 0.30, scale=(1.05, 0.62, 1.3), segments=12, rings=8)
+
+
+# ---- Model Workshop figures (the boys' own designs, scripts/models/WORKSHOP.md) -------------
+
+def build_doom_knight():
+    """Easton's hero: a big iron warlord in black and silver armour with a green hood and cape,
+    black horns, glowing green eyes behind a silver mask, green flames rising from his head, and
+    a huge double axe with a green gem."""
+    for side, tag in ((1, "L"), (-1, "R")):
+        x = 0.26 * side
+        leg = f"leg.{tag}"
+        box(f"Boot.{tag}", "armour", leg, (x, -0.05, 0.13), (0.38, 0.50, 0.26), bevel=0.08)
+        box(f"BootToe.{tag}", "iron", leg, (x, -0.26, 0.10), (0.30, 0.14, 0.16), bevel=0.06)
+        box(f"Greave.{tag}", "iron", leg, (x, -0.02, 0.43), (0.32, 0.34, 0.34), bevel=0.09)
+        box(f"Knee.{tag}", "iron_dark", leg, (x, -0.17, 0.55), (0.20, 0.08, 0.14), bevel=0.04)
+
+    # Hips: a black plated skirt, a green belt and a green front flap.
+    cone("Skirt", "armour", "hips", (0, 0, 0.70), 0.50, 0.34, sides=12, tip=0.44)
+    box("Belt", "doom_green_dark", "hips", (0, 0, 0.86), (0.92, 0.62, 0.12), bevel=0.04)
+    box("Buckle", "iron", "hips", (0, -0.32, 0.86), (0.22, 0.06, 0.16), bevel=0.02)
+    box("Flap", "doom_green", "hips", (0, -0.30, 0.62), (0.34, 0.05, 0.40), bevel=0.02, rot=(-6, 0, 0))
+
+    # A broad silver breastplate with a green tunic under it and a long green cape.
+    box("Tunic", "doom_green", "body", (0, 0.04, 1.06), (0.88, 0.56, 0.52), bevel=0.20, segments=3)
+    box("Breastplate", "iron", "body", (0, -0.04, 1.10), (0.96, 0.62, 0.62), bevel=0.22, segments=3)
+    box("PlateRidge", "iron_dark", "body", (0, -0.32, 1.18), (0.08, 0.04, 0.42), bevel=0.015)
+    sphere("ChestGem", "fel", "body", (0, -0.33, 1.30), 0.06, scale=(1, 0.5, 1), segments=8, rings=6)
+    box("Cape", "doom_green", "body", (0, 0.40, 0.88), (0.98, 0.06, 1.10), bevel=0.03, rot=(-7, 0, 0))
+    box("CapeLining", "doom_green_dark", "body", (0, 0.36, 0.92), (0.90, 0.03, 1.00), bevel=0.01, rot=(-7, 0, 0))
+    for side in (1, -1):
+        sphere(f"Pauldron{side}", "armour", "body", (0.54 * side, 0, 1.40), 0.27, scale=(1.15, 1.05, 0.72))
+        sphere(f"PauldronRim{side}", "iron", "body", (0.56 * side, 0, 1.34), 0.25, scale=(1.2, 1.1, 0.35))
+        cone(f"PauldronSpike{side}", "iron", "body", (0.66 * side, 0, 1.56), 0.07, 0.24, rot=(0, 28 * side, 0), sides=5)
+        sphere(f"CapeClasp{side}", "fel", "body", (0.34 * side, 0.30, 1.40), 0.06, segments=8, rings=6)
+
+    # Arms: green sleeves, silver gauntlets, black fists.
+    for side, tag in ((1, "L"), (-1, "R")):
+        arm = f"arm.{tag}"
+        sphere(f"UpperArm.{tag}", "doom_green", arm, (0.62 * side, 0, 1.12), 0.15, scale=(1, 1, 1.25))
+        box(f"Gauntlet.{tag}", "iron", arm, (0.65 * side, -0.02, 0.90), (0.28, 0.28, 0.30), bevel=0.07)
+        cone(f"GauntletFlare.{tag}", "iron_dark", arm, (0.65 * side, -0.02, 1.04), 0.18, 0.06, sides=8, tip=0.16)
+        sphere(f"Fist.{tag}", "armour", arm, (0.66 * side, -0.05, 0.70), 0.15)
+
+    build_great_axe(Vector((-0.80, -0.05, 0.70)), gem="fel")
+
+    # Head: a green hood round a silver mask, green eye slits, black horns, green flames on top.
+    sphere("Hood", "doom_green", "head", (0, 0.06, 1.88), 0.44, scale=(1.08, 1.0, 1.02), segments=16, rings=10)
+    sphere("HoodShadow", "doom_green_dark", "head", (0, -0.06, 1.84), 0.38, scale=(1.0, 0.9, 1.0), segments=16, rings=10)
+    sphere("Mask", "iron", "head", (0, -0.22, 1.80), 0.33, scale=(0.92, 0.85, 1.05), segments=16, rings=10)
+    box("MaskBrow", "iron_dark", "head", (0, -0.49, 1.92), (0.46, 0.06, 0.07), bevel=0.02)
+    box("MaskNose", "iron", "head", (0, -0.53, 1.78), (0.07, 0.06, 0.16), bevel=0.02)
+    box("MaskMouth", "armour", "head", (0, -0.49, 1.62), (0.20, 0.04, 0.03), bevel=0.01)
+    for i, x in enumerate((-0.10, -0.035, 0.035, 0.10)):
+        box(f"MaskGrille{i}", "iron_dark", "head", (x, -0.48, 1.58), (0.02, 0.03, 0.10), bevel=0.005)
+    for side in (1, -1):
+        box(f"Eye{side}", "fel", "head", (0.12 * side, -0.50, 1.85), (0.13, 0.04, 0.05), bevel=0.015,
+            rot=(0, -10 * side, 0))
+        sphere(f"EyeGlow{side}", "fel_light", "head", (0.12 * side, -0.525, 1.85), 0.025, scale=(1.6, 0.4, 0.8),
+               segments=8, rings=5)
+        # Big black horns curling out of the hood, then up.
+        cone(f"HornBase{side}", "armour", "head", (0.40 * side, -0.02, 2.04), 0.10, 0.26, rot=(0, 70 * side, 0),
+             sides=8, tip=0.075)
+        cone(f"HornMid{side}", "armour", "head", (0.56 * side, -0.02, 2.17), 0.075, 0.22, rot=(0, 30 * side, 0),
+             sides=8, tip=0.05)
+        cone(f"HornTip{side}", "iron", "head", (0.61 * side, -0.02, 2.34), 0.05, 0.20, rot=(0, -5 * side, 0), sides=8)
+    # Green flames: tall bright tongues in the middle, shorter ones round them, pale cores.
+    flames = [(0.0, 0.02, 0.14, 0.62, 0), (0.15, 0.06, 0.10, 0.44, -14), (-0.15, 0.06, 0.10, 0.46, 14),
+              (0.07, 0.18, 0.09, 0.40, -8), (-0.08, 0.18, 0.09, 0.36, 10), (0.24, -0.04, 0.07, 0.30, -24),
+              (-0.24, -0.04, 0.07, 0.32, 24)]
+    for i, (x, y, r, h, lean) in enumerate(flames):
+        cone(f"Flame{i}", "fel", "head", (x, y, 2.20 + h / 2), r, h, rot=(0, lean, 0), sides=6)
+        cone(f"FlameCore{i}", "fel_light", "head", (x * 0.9, y - 0.03, 2.18 + h * 0.35), r * 0.5, h * 0.6,
+             rot=(0, lean, 0), sides=5)
+
+
+def build_lizard_mage():
+    """Colton's hero: a lizard wizard in a purple robe with silver trim, a black mask over his
+    mouth (only his mouth), yellow slit eyes, a spiky crest, a tail poking out under the robe,
+    and a tall black staff with a glowing purple orb in a silver cage."""
+    for side, tag in ((1, "L"), (-1, "R")):
+        leg = f"leg.{tag}"
+        box(f"Foot.{tag}", "lizard", leg, (0.17 * side, -0.10, 0.07), (0.22, 0.32, 0.13), bevel=0.05)
+        for i, dx in enumerate((-0.07, 0.0, 0.07)):
+            cone(f"Claw.{tag}{i}", "bone", leg, (0.17 * side + dx, -0.28, 0.05), 0.025, 0.08, rot=(90, 0, 0), sides=4)
+        cone(f"Shin.{tag}", "lizard_dark", leg, (0.16 * side, 0, 0.25), 0.09, 0.30, sides=8, tip=0.09)
+
+    # A tail curling out from under the back of the robe.
+    tail = [((0, 0.36, 0.40), 0.12), ((0, 0.52, 0.30), 0.10), ((0.04, 0.66, 0.20), 0.08), ((0.10, 0.78, 0.13), 0.06)]
+    for i, (at, r) in enumerate(tail):
+        sphere(f"Tail{i}", "lizard", "tail", at, r, scale=(1, 1.3, 0.9))
+    cone("TailTip", "lizard_dark", "tail", (0.15, 0.88, 0.10), 0.05, 0.14, rot=(-80, 0, -20), sides=6)
+
+    # The long purple robe: silver hem, black sash, a dark front panel with a silver rune.
+    cone("Robe", "mage_robe", "hips", (0, 0, 0.55), 0.46, 0.80, sides=12, tip=0.31)
+    cone("Hem", "silver", "hips", (0, 0, 0.17), 0.47, 0.05, sides=12, tip=0.465)
+    box("Panel", "mage_robe_dark", "hips", (0, -0.30, 0.52), (0.22, 0.06, 0.72), bevel=0.02, rot=(-12, 0, 0))
+    box("PanelRune", "silver", "hips", (0, -0.355, 0.62), (0.10, 0.02, 0.10), bevel=0.01, rot=(-12, 0, 45))
+    sphere("PanelGem", "arcane", "hips", (0, -0.37, 0.62), 0.03, scale=(1, 0.5, 1), segments=8, rings=6)
+    box("Sash", "black", "hips", (0, 0, 0.94), (0.66, 0.50, 0.08), bevel=0.03)
+    box("SashKnot", "black", "hips", (0.18, -0.24, 0.86), (0.10, 0.05, 0.16), bevel=0.02, rot=(0, 0, 12))
+
+    # Upper body: robe, a black mantle with silver trim and a silver amulet.
+    box("Torso", "mage_robe", "body", (0, 0, 1.14), (0.60, 0.44, 0.44), bevel=0.15, segments=3)
+    sphere("Mantle", "black", "body", (0, 0.02, 1.34), 0.36, scale=(1.12, 0.92, 0.42))
+    cone("MantleTrim", "silver", "body", (0, 0.02, 1.27), 0.37, 0.03, sides=16, tip=0.37)
+    sphere("Amulet", "silver", "body", (0, -0.25, 1.16), 0.06, scale=(1, 0.5, 1))
+    sphere("AmuletGem", "arcane", "body", (0, -0.28, 1.16), 0.03, scale=(1, 0.5, 1), segments=8, rings=6)
+
+    # Bell sleeves with silver cuffs, green scaly hands with claws.
+    for side, tag in ((1, "L"), (-1, "R")):
+        arm = f"arm.{tag}"
+        cone(f"Sleeve.{tag}", "mage_robe", arm, (0.43 * side, -0.02, 1.03), 0.15, 0.46, rot=(180, 0, 0), sides=10,
+             tip=0.10)
+        cone(f"Cuff.{tag}", "silver", arm, (0.45 * side, -0.03, 0.82), 0.155, 0.04, sides=10, tip=0.15)
+        sphere(f"Hand.{tag}", "lizard", arm, (0.46 * side, -0.05, 0.74), 0.09)
+    for i, dx in enumerate((-0.04, 0.02)):
+        cone(f"HandClaw{i}", "bone", "arm.L", (0.46 + dx, -0.13, 0.70), 0.02, 0.07, rot=(110, 0, 0), sides=4)
+
+    # A tall black staff in the right hand, a purple orb in a silver cage on top.
+    hand = Vector((-0.46, -0.05, 0.74))
+    cone("Staff", "black", "arm.R", Vector((hand.x, hand.y, 1.06)), 0.04, 2.0, sides=6, tip=0.035)
+    cone("StaffFoot", "silver", "arm.R", Vector((hand.x, hand.y, 0.08)), 0.05, 0.08, sides=6, tip=0.03)
+    box("StaffWrap", "silver", "arm.R", hand, (0.10, 0.10, 0.06), bevel=0.02)
+    top = Vector((hand.x, hand.y, 2.18))
+    cone("StaffCup", "silver", "arm.R", top - Vector((0, 0, 0.13)), 0.04, 0.10, sides=8, tip=0.10)
+    sphere("StaffOrb", "arcane", "arm.R", top, 0.12, segments=12, rings=8)
+    sphere("StaffOrbCore", "arcane_light", "arm.R", top + Vector((0, -0.07, 0.02)), 0.05, scale=(1, 0.6, 1),
+           segments=8, rings=6)
+    for i in range(4):
+        a = i * 90 + 45
+        d = Vector((math.cos(DEG(a)), math.sin(DEG(a)), 0))
+        cone(f"CageBar{i}", "silver", "arm.R", top + d * 0.12 + Vector((0, 0, 0.02)), 0.018, 0.26,
+             rot=(0, 0, 0), sides=4)
+    cone("CageTip", "silver", "arm.R", top + Vector((0, 0, 0.17)), 0.04, 0.12, sides=6)
+
+    # Head: a round lizard skull, a long snout, a spiky purple crest, yellow slit eyes.
+    sphere("Skull", "lizard", "head", (0, 0.04, 1.84), 0.29, scale=(0.95, 1.05, 0.92), segments=16, rings=10)
+    box("Snout", "lizard", "head", (0, -0.28, 1.76), (0.26, 0.42, 0.20), bevel=0.08, segments=3)
+    box("SnoutTop", "lizard_dark", "head", (0, -0.26, 1.87), (0.18, 0.34, 0.03), bevel=0.012)
+    cone("Neck", "lizard", "head", (0, 0.0, 1.50), 0.17, 0.30, sides=10, tip=0.15)
+    box("Throat", "lizard_belly", "head", (0, -0.10, 1.56), (0.22, 0.18, 0.16), bevel=0.05)
+    for side, tag in ((1, "L"), (-1, "R")):
+        x = side
+        box(f"Nostril.{tag}", "black", "head", (0.05 * x, -0.49, 1.83), (0.03, 0.03, 0.02), bevel=0.008)
+        sphere(f"Eye.{tag}", "eye", "head", (0.15 * x, -0.13, 1.92), 0.07, scale=(0.9, 0.7, 0.85))
+        box(f"Pupil.{tag}", "black", "head", (0.155 * x, -0.18, 1.92), (0.016, 0.02, 0.08), bevel=0.006)
+        box(f"Brow.{tag}", "lizard_dark", "head", (0.15 * x, -0.15, 2.00), (0.15, 0.10, 0.05), bevel=0.02,
+            rot=(0, -14 * x, 0))
+        cone(f"Frill.{tag}", "mage_robe", "head", (0.25 * x, 0.12, 1.86), 0.09, 0.24, rot=(0, 70 * x, 25 * x),
+             scale=(1, 0.3, 1), sides=5)
+    for i, (y, z, h) in enumerate(((-0.08, 2.08, 0.14), (0.06, 2.10, 0.18), (0.20, 2.04, 0.15), (0.32, 1.92, 0.11))):
+        cone(f"Crest{i}", "mage_robe", "head", (0, y, z), 0.07, h, rot=(-20, 0, 0), scale=(0.3, 1, 1), sides=4)
+
+    # The black mask: it wraps only the mouth and jaw, with a silver strap round the head.
+    box("Mask", "black", "head", (0, -0.30, 1.70), (0.30, 0.42, 0.14), bevel=0.05, segments=3)
+    box("MaskFront", "black", "head", (0, -0.50, 1.71), (0.22, 0.05, 0.13), bevel=0.03)
+    for i, x in enumerate((-0.06, 0.0, 0.06)):
+        box(f"MaskSeam{i}", "iron_dark", "head", (x, -0.53, 1.71), (0.012, 0.01, 0.09), bevel=0.003)
+    for side in (1, -1):
+        box(f"MaskStrap{side}", "silver", "head", (0.17 * side, -0.02, 1.74), (0.03, 0.40, 0.04), bevel=0.01)
+        sphere(f"MaskStud{side}", "silver", "head", (0.165 * side, -0.24, 1.72), 0.03, segments=8, rings=5)
 
 
 def bezier(p0, p1, p2, p3, t):
@@ -1470,6 +1643,7 @@ CULTIST_BONES = [
     ("leg.L", (0.16, 0, 0.45), (0.16, 0, 0.05), "hips"),
     ("leg.R", (-0.16, 0, 0.45), (-0.16, 0, 0.05), "hips"),
 ]
+LIZARD_BONES = CULTIST_BONES + [("tail", (0, 0.25, 0.45), (0, 0.85, 0.12), "hips")]
 DUERGAR_BONES = [
     ("root", (0, 0, 0), (0, 0, 0.2), None),
     ("hips", (0, 0, 0.45), (0, 0, 0.74), "root"),
@@ -2045,6 +2219,9 @@ MONSTERS = [
     ("legion-devil", "legion-devil.glb", build_devil, 2.5, DEVIL_BONES, []),
     ("grell", "grell.glb", build_grell, 2.2, GRELL_BONES, [], GRELL_MOVES),
     ("gibbering-mouther", "gibbering-mouther.glb", build_mouther, 1.75, MOUTHER_BONES, [], MOUTHER_MOVES),
+    # Model Workshop figures.
+    ("easton-doom-knight", "easton-doom-knight.glb", build_doom_knight, 2.8, ORC_BONES, []),
+    ("colton-lizard-mage", "colton-lizard-mage.glb", build_lizard_mage, 2.5, LIZARD_BONES, ["Spellcast_Shoot"]),
 ]
 # Moves only some figures have.
 EXTRA_MOVES = {"1H_Ranged_Shoot", "Spellcast_Shoot"}
