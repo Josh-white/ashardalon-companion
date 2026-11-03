@@ -11,7 +11,7 @@ import { canvasTexture, playAttack3D, playExit3D, playHeal3D } from './board3dFx
 import { FLOOR_LOOKS, dressDungeon, hideTorches, stoneMaterials } from './dungeonLook3d.js'
 import { attachModel, detachModel, face, setDown, setWalking, stepModels } from './figureModels.js'
 import { FX_DELAY_MS, FX_MS, fxLeadMs } from '../board/attackFx.js'
-import { closeUpShot, restShot, tourShot, turnBy, VIEW_LABELS, viewAngles, VIEWS } from '../board/camera3d.js'
+import { closeUpShot, EYES_TILT, eyesCloseUp, restShot, tourShot, turnBy, VIEW_LABELS, viewAngles, VIEWS } from '../board/camera3d.js'
 import { IMPACT, msAt } from './attackFxDraw.js'
 import { serverNow } from '../state/useSharedGame.js'
 
@@ -108,7 +108,7 @@ function makeStage(mount, calm) {
   scene.background = new THREE.Color('#0c0a09')
   const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 200)
   const controls = new OrbitControls(camera, renderer.domElement)
-  controls.maxPolarAngle = 1.2
+  controls.maxPolarAngle = 1.2 // MAX_TILT
   controls.minDistance = 3
   controls.maxDistance = 60
   controls.screenSpacePanning = false
@@ -1027,12 +1027,18 @@ function viewWanted() {
   }
 }
 
-// Glides the camera to `shot` ({ target: [x, z], yaw, tilt, dist }) the short way round.
+// How far the camera may lean from straight down: to eye level in the Hero eyes view.
+const MAX_TILT = 1.2
+function setMaxTilt(stage, view) {
+  stage.controls.maxPolarAngle = view === 'eyes' ? EYES_TILT + 0.05 : MAX_TILT
+}
+
+// Glides the camera to `shot` ({ target: [x, z], yaw, tilt, dist, lift? }) the short way round.
 function aimCamera(stage, shot, ms = 700) {
   const t = stage.controls.target
-  const from = { x: t.x, z: t.z, ...cameraAngles(stage) }
-  const to = { x: shot.target[0], z: shot.target[1], yaw: from.yaw + turnBy(from.yaw, shot.yaw), tilt: Math.min(shot.tilt, stage.controls.maxPolarAngle), dist: shot.dist }
-  const near = Math.hypot(to.x - from.x, to.z - from.z) < 0.03 && Math.abs(to.yaw - from.yaw) < 0.01 && Math.abs(to.tilt - from.tilt) < 0.01 && Math.abs(to.dist - from.dist) < 0.03
+  const from = { x: t.x, y: t.y, z: t.z, ...cameraAngles(stage) }
+  const to = { x: shot.target[0], y: shot.lift ?? 0, z: shot.target[1], yaw: from.yaw + turnBy(from.yaw, shot.yaw), tilt: Math.min(shot.tilt, stage.controls.maxPolarAngle), dist: shot.dist }
+  const near = Math.hypot(to.x - from.x, to.y - from.y, to.z - from.z) < 0.03 && Math.abs(to.yaw - from.yaw) < 0.01 && Math.abs(to.tilt - from.tilt) < 0.01 && Math.abs(to.dist - from.dist) < 0.03
   stage.tweens = stage.tweens.filter((tw) => !tw.camera)
   if (near) return
   const put = (k) => {
@@ -1041,8 +1047,8 @@ function aimCamera(stage, shot, ms = 700) {
     const yaw = mix(from.yaw, to.yaw)
     const tilt = mix(from.tilt, to.tilt)
     const dist = mix(from.dist, to.dist)
-    t.set(mix(from.x, to.x), 0, mix(from.z, to.z))
-    stage.camera.position.set(t.x + Math.sin(yaw) * Math.sin(tilt) * dist, Math.cos(tilt) * dist, t.z + Math.cos(yaw) * Math.sin(tilt) * dist)
+    t.set(mix(from.x, to.x), mix(from.y, to.y), mix(from.z, to.z))
+    stage.camera.position.set(t.x + Math.sin(yaw) * Math.sin(tilt) * dist, t.y + Math.cos(tilt) * dist, t.z + Math.cos(yaw) * Math.sin(tilt) * dist)
     stage.controls.update()
   }
   if (stage.still || ms <= 0) {
@@ -1076,11 +1082,13 @@ function keepOnBoard(stage) {
   const t = stage.controls.target
   const x = Math.max(-b.w / 2 - 1, Math.min(b.w / 2 + 1, t.x))
   const z = Math.max(-b.h / 2 - 1, Math.min(b.h / 2 + 1, t.z))
-  if (x === t.x && z === t.z && t.y === 0) return
+  // Off the floor only as high as a Hero eyes look (camera3d.js lift).
+  const y = Math.max(0, Math.min(1, t.y))
+  if (x === t.x && z === t.z && y === t.y) return
   stage.camera.position.x += x - t.x
+  stage.camera.position.y += y - t.y
   stage.camera.position.z += z - t.z
-  stage.camera.position.y -= t.y
-  t.set(x, 0, z)
+  t.set(x, y, z)
 }
 
 // Whether the attack about to play (or playing) defeats the figure on square `at`.
@@ -1323,6 +1331,9 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
   const where = (f) => stageRef.current.at(f.at[0], f.at[1])
   const directKey = [active?.id, active?.at, acting?.id, acting?.at, foes.map((f) => f.at).join(';'), playing?.id].join('|')
   useEffect(() => {
+    if (ready && stageRef.current) setMaxTilt(stageRef.current, view)
+  }, [ready, view])
+  useEffect(() => {
     const stage = stageRef.current
     if (!ready || !stage?.at || !follow) return
     stage.keep ??= cameraAngles(stage)
@@ -1337,7 +1348,13 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
       const to = stage.at(fx.shots[0].to[0], fx.shots[0].to[1])
       stage.closeUpOf = playing.id
       stage.closeUntil = performance.now() + FX_MS + 400
-      shot = closeUpShot(from, to, cameraAngles(stage).yaw)
+      if (view === 'eyes') {
+        // Through the hero's eyes: the attacker's, or the one being attacked.
+        const heroAt = (sq) => heroes.some((h) => h.at[0] === sq[0] && h.at[1] === sq[1])
+        shot = heroAt(fx.from) ? eyesCloseUp(from, to) : eyesCloseUp(to, from)
+      } else {
+        shot = closeUpShot(from, to, cameraAngles(stage).yaw)
+      }
       quick = true
     } else if (stage.closeUntil > performance.now()) {
       // An attack still playing: stay close, and look again once it's over.
@@ -1438,10 +1455,16 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
     }
     const stage = stageRef.current
     if (!stage?.at) return
+    // Hero eyes is right up close: coming out of it goes back to the zoom from before.
+    if (next === 'eyes') stage.keepBeforeEyes = stage.keep
+    if (view === 'eyes' && stage.keepBeforeEyes) stage.keep = stage.keepBeforeEyes
+    setMaxTilt(stage, next)
     const now = { ...(stage.keep ?? cameraAngles(stage)), fitTilt: stage.fitTilt }
     const { fitTilt: _fit, ...keep } = viewAngles(next, stage.fitYaw ?? 0, now)
     stage.keep = keep
-    if (!follow || !active) aimCamera(stage, { ...keep, target: [stage.controls.target.x, stage.controls.target.z] })
+    if (next === 'eyes' && active) {
+      if (!follow) aimCamera(stage, restShot('eyes', where(active), foes.map(where), keep))
+    } else if (!follow || !active) aimCamera(stage, { ...keep, target: [stage.controls.target.x, stage.controls.target.z] })
   }
 
   if (!board) return null
@@ -1452,7 +1475,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
         <button type="button" onClick={switchFigures} aria-pressed={heroModels} className={cornerButton(calm)}>
           {heroModels ? '🧍 Figures: 3D' : '🪪 Figures: tokens'}
         </button>
-        <button type="button" onClick={switchView} title="Camera angle: from the top, from a corner, or from behind the hero" className={cornerButton(calm)}>
+        <button type="button" onClick={switchView} title="Camera angle: from the top, from a corner, from behind the hero, or through the hero's eyes" className={cornerButton(calm)}>
           🎥 {VIEW_LABELS[view]}
         </button>
         <button type="button" onClick={switchFollow} aria-pressed={follow} title="The map slides to the hero whose turn it is" className={cornerButton(calm)}>
