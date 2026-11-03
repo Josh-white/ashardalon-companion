@@ -8,7 +8,7 @@ import { Doors, EscapeNote, RevealButtons } from './Adventure.jsx'
 import MonsterTurns, { DrawMonsterButton, VillainTurns } from './MonsterTurns.jsx'
 import { rollD20 } from '../state/random.js'
 import SongRollOffer from './BardicSong.jsx'
-import { checksFor, phaseChecks, phaseTodo, poisonBonus, villagerRollDue } from '../state/game.js'
+import { checksFor, leapingBack, phaseChecks, phaseTodo, poisonBonus, villagerRollDue } from '../state/game.js'
 import { VillagerTurn } from './Villagers.jsx'
 import { useCards } from '../state/useCards.js'
 import { treasurePending } from './Treasure.jsx'
@@ -127,6 +127,19 @@ function HeroPhase({ state, hero, dispatch }) {
         </Note>
       )}
 
+      {state.turn.leapBack === hero.id && (
+        <Note tone={leapingBack(state, hero) ? 'warn' : 'good'}>
+          {!state.board ? (
+            <p>🌀 {hero.name} is back from the Time Leap! First, put {hero.name}'s figure on any tile. Then take your turn.</p>
+          ) : leapingBack(state, hero) ? (
+            <p className="text-xl font-bold">
+              🌀 {hero.name} is back from the Time Leap! First, tap any lit square on the map to put {hero.name} there.
+            </p>
+          ) : (
+            <p>✓ {hero.name} is back on the board. Now take your turn.</p>
+          )}
+        </Note>
+      )}
       <CurseNotes state={state} hero={hero} dispatch={dispatch} />
 
       <HeroAttack state={state} hero={hero} dispatch={dispatch} />

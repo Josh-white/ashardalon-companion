@@ -9,7 +9,7 @@ import { boardMarkers } from '../board/markers.js'
 import { exitSquares } from '../board/exits.js'
 import { tapTargets } from '../board/taps.js'
 import { escapeBlockers } from '../state/adventure.js'
-import { activeVillains } from '../state/game.js'
+import { activeVillains, leapingBack } from '../state/game.js'
 import { artUrl, useArt } from '../state/useArt.js'
 import { Carpet, Coin, ExitSquares, figureBadges, HeroTokenMark, heroTokenGroups, MarkerBadges, MarkerTiles, NewTileGlow, OpenEdges, PlacedTile, QuestToken, TileShadows, tileRects, Token } from './BoardPieces.jsx'
 import { dropStyle, useFreshTiles } from './useFreshTiles.js'
@@ -87,6 +87,14 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
     if (calm) svgRef.current?.pauseAnimations?.()
     else svgRef.current?.unpauseAnimations?.()
   })
+  // Back from a Time Leap: the hero is picked up ready, so any tap on a lit square puts them back.
+  const leapHero = board && !readOnly ? state.heroes.find((h) => h.id === activeId && leapingBack(state, h)) : null
+  const leapId = leapHero?.id ?? null
+  useEffect(() => {
+    if (!leapId) return
+    setByHand(true)
+    setPicked(leapId)
+  }, [leapId])
   if (!board) return null
 
   const grid = boardGrid(board)
@@ -159,6 +167,8 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
     }
     dispatch(powerMove ? { type: 'BOARD_MOVE', id: picked, to: sq } : byHand ? { type: 'MOVE_TOKEN', id: picked, to: sq } : { type: 'MOVE_HERO', heroId: picked, to: sq })
     setPicked(null)
+    // The hero is back from the Time Leap: the turn goes on with the usual taps.
+    if (picked === leapId) setByHand(false)
   }
   // A tap on a monster or villain that does nothing else shows which one it is.
   const peekAt = (id) => {
@@ -361,6 +371,25 @@ export default function Board({ state, dispatch, readOnly = false, fill = false,
           <Button className="!px-3 !py-1 text-sm" onClick={clearNote3D} aria-label="Close">
             ✕
           </Button>
+        </div>
+      )}
+      {leapHero && (
+        <div data-leap-back className="mb-2 rounded-xl border-2 border-purple-400 bg-purple-900/90 p-3 text-center text-purple-50 motion-safe:animate-pulse">
+          <p className="text-xl font-bold">🌀 {leapHero.name} is back from the Time Leap!</p>
+          {picked === leapHero.id ? (
+            <p className="text-lg">👇 Tap any lit square on the map to put {leapHero.name} there.</p>
+          ) : (
+            <Button
+              variant="gold"
+              className="mt-2 w-full py-2 text-lg"
+              onClick={() => {
+                setByHand(true)
+                setPicked(leapHero.id)
+              }}
+            >
+              Put {leapHero.name} back on the map
+            </Button>
+          )}
         </div>
       )}
       {powerMove && (

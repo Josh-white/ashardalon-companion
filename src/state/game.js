@@ -48,7 +48,7 @@ export { createHero, levelSlots, powerSlotsFor, STARTING_POWER_SLOTS } from './h
 export { SAVE_VERSION, initialState } from './initialState.js'
 export { powerNumber, poisonBonus } from './combat.js'
 export { attackNumbers } from './heroAttacks.js'
-export { villagerRollDue, checksFor, phaseChecks, encounterCardsOutdated, isWrathCheck, phaseTodo, encounterCount, attackGone, powerUsesAttack, canSpendAttack } from './heroTurn.js'
+export { villagerRollDue, checksFor, phaseChecks, encounterCardsOutdated, isWrathCheck, phaseTodo, leapingBack, encounterCount, attackGone, powerUsesAttack, canSpendAttack } from './heroTurn.js'
 export { turnKey } from './campaignPlay.js'
 
 // Practiced Evasion: an encounter card's or trap's hit becomes a miss. The damage and

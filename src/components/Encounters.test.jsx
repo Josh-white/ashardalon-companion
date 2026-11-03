@@ -128,3 +128,28 @@ describe('skipping a card (house rule)', () => {
     expect(next.encounterDeck.discard).toEqual(['hidden-snipers'])
   })
 })
+
+describe('Time Leap', () => {
+  const TIME_LEAP = { id: 'time-leap', name: 'Time Leap', type: 'curse', text: 'Remove your Hero from play.', drawMonster: true, curse: { removeAtTurnStart: true } }
+  const withDeck = (state, drawn) => ({
+    ...state,
+    monsterDeck: { cards: { rat: { id: 'rat', name: 'Rat' } }, draw: ['rat'], discard: [] },
+    encounter: { ...state.encounter, monsterDrawn: drawn },
+  })
+
+  it('shows numbered steps and only the monster draw until the monster is drawn', () => {
+    const state = withDeck(game({ card: TIME_LEAP }), false)
+    const dispatch = show(state)
+    expect(screen.getByText(/falls through a rift in time/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /vanishes until/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Draw the Time Leap monster/ }))
+    expect(lastAction(dispatch)).toMatchObject({ type: 'DRAW_MONSTER', heroId: state.heroes[0].id })
+  })
+
+  it('offers the finish button once the monster is drawn', () => {
+    const dispatch = show(withDeck(game({ card: TIME_LEAP }), true))
+    expect(screen.queryByRole('button', { name: /Draw the Time Leap monster/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /vanishes until their next turn/ }))
+    expect(lastAction(dispatch)).toMatchObject({ type: 'RESOLVE_ENCOUNTER' })
+  })
+})
