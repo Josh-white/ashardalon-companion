@@ -11,6 +11,7 @@ import CardReading from './components/CardReading.jsx'
 import OpeningStory from './components/OpeningStory.jsx'
 import GamePicker, { GameBar } from './components/GamePicker.jsx'
 import { IdeaButton } from './components/IdeaBox.jsx'
+import { WorkshopButton } from './components/ModelWorkshop.jsx'
 import MomentOverlay, { useMomentsDone } from './components/MomentOverlay.jsx'
 import MonsterList, { VillainList } from './components/MonsterList.jsx'
 import ProjectorView from './components/ProjectorView.jsx'
@@ -275,7 +276,14 @@ export default function App() {
 
   // The 💡 button sits on the game bar of every screen but the big one, which nobody taps.
   const myName = (state?.heroes.find((h) => h.key === seat)?.player || state?.lobby?.find((c) => c.deviceId === deviceId)?.player || '').trim()
-  const ideaButton = seat === PROJECTOR_SEAT ? null : <IdeaButton state={state} me={myName} className="my-1 rounded-full bg-amber-500/15 px-3 !py-0.5 font-semibold" />
+  // Next to it, the 🧙 Model Workshop for the family's own 3D figures (not for friends).
+  const ideaButton =
+    seat === PROJECTOR_SEAT ? null : (
+      <>
+        <IdeaButton state={state} me={myName} className="my-1 rounded-full bg-amber-500/15 px-3 !py-0.5 font-semibold" />
+        {!me.friend && <WorkshopButton state={state} me={myName} className="my-1 rounded-full px-3 !py-0.5 font-semibold" />}
+      </>
+    )
   const gameBar = <GameBar name={game?.name} onSwitch={() => setPicking(true)} idea={ideaButton} />
   if (!chosenGame || picking) {
     return (

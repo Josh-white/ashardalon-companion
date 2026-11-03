@@ -30,7 +30,7 @@ if [ -f "$CARDS_DIR/cards.json" ]; then
   ls -1 "$BACKUP_DIR"/cards/cards-*.json | head -n "-$KEEP" | while read -r old; do
     rm -f "$old"
   done
-  for folder in art sounds; do
+  for folder in art sounds workshop; do
     if [ -d "$CARDS_DIR/$folder" ]; then
       cp -R "$CARDS_DIR/$folder" "$BACKUP_DIR/cards/"
     fi

@@ -9,6 +9,7 @@ export const ADMIN_PAGES = [
   { hash: '#ideas', title: '💡 Ideas box', about: 'Ideas the boys sent from the 💡 button. Mark them done or delete them.' },
   { hash: '#friends', title: '👋 Friends', about: 'Who is on the sign-in list, and how much each friend plays.' },
   { hash: '#cards', title: '🃏 Card check', about: "Problems in cards.json and cards the app can't find by name. Look after changing cards." },
+  { hash: '#workshop', title: '🧙 Model Workshop', about: "The boys' own 3D figures: what they asked for, Claude's pictures, and whether they love them." },
   { hash: '#models', title: '🧊 3D figures', about: 'Every 3D figure on a turntable: turn it, zoom, and play each move. Lists the monsters still on standees.' },
   { hash: '#screens', title: '🖥 All screens', about: 'The big screen, iPads and a phone side by side, for testing turns.' },
   { href: '/?intro', title: '🐉 Replay the intro', about: 'Plays the opening intro again on this screen.' },

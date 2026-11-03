@@ -149,6 +149,8 @@ fi
 # games live in the volume, so removing the container loses nothing.
 deploy() {
   out=.git/auto-test-compose.log
+  # Made here, not by Docker, so it belongs to us and Claude can add pictures to it.
+  mkdir -p cards/workshop
   if APP_VERSION=$1 docker compose up -d --build >"$out" 2>&1; then
     cat "$out"
     return 0
