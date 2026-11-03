@@ -5,7 +5,7 @@
 
 import { boardSquares, key, OPPOSITE, STEP } from './grid.js'
 import { heroModel, monsterModel } from './heroModels.js'
-import { boardGrid, figureToken, figuresLeft } from './play.js'
+import { boardGrid, caged, figureToken, figuresLeft } from './play.js'
 import { activeVillains } from '../state/game.js'
 import { escapeBlockers } from '../state/adventure.js'
 import { heroArt, monsterArt } from '../data/art.js'
@@ -105,7 +105,7 @@ export function boardFigures(state) {
   const activeId = state.heroes[state.turn.heroIndex]?.id
   const acting = state.turn.acting && !(state.turn.acted ?? []).includes(state.turn.acting) ? state.turn.acting : null
   const figures = [
-    ...state.heroes.map((h) => ({ id: h.id, kind: 'hero', label: h.name, color: h.color, art: heroArt(h.key), model: heroModel(h), faded: h.hp <= 0, active: h.id === activeId, icons: conditionIcons(h) })),
+    ...state.heroes.map((h) => ({ id: h.id, kind: 'hero', label: h.name, color: h.color, art: heroArt(h.key), model: heroModel(h), faded: h.hp <= 0, active: h.id === activeId, caged: caged(h), icons: conditionIcons(h) })),
     ...state.monsters.flatMap((m) =>
       Array.from({ length: figuresLeft(m) }, (_, i) => ({
         id: figureToken(m.id, i + 1),

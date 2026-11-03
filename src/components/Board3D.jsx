@@ -594,6 +594,64 @@ function setIcons(stage, node, icons) {
   })
 }
 
+// The Cage curse: iron bars round the hero's square. It drops in from above when the hero is
+// caged and lifts away when they get out.
+const CAGE_H = 1.3
+function makeCage() {
+  const cage = new THREE.Group()
+  const iron = new THREE.MeshStandardMaterial({ color: '#3f3f46', metalness: 0.7, roughness: 0.45 })
+  const rust = new THREE.MeshStandardMaterial({ color: '#7c2d12', metalness: 0.4, roughness: 0.7 })
+  const R = 0.44
+  const BARS = 12
+  const bar = new THREE.CylinderGeometry(0.022, 0.022, CAGE_H, 8)
+  for (let i = 0; i < BARS; i++) {
+    const a = (i / BARS) * Math.PI * 2
+    const m = new THREE.Mesh(bar, iron)
+    m.position.set(Math.cos(a) * R, CAGE_H / 2, Math.sin(a) * R)
+    m.castShadow = true
+    cage.add(m)
+  }
+  for (const [y, mat] of [[0.03, rust], [CAGE_H * 0.55, iron], [CAGE_H, rust]]) {
+    const hoop = new THREE.Mesh(new THREE.TorusGeometry(R, 0.035, 8, 36), mat)
+    hoop.rotation.x = Math.PI / 2
+    hoop.position.y = y
+    cage.add(hoop)
+  }
+  // A domed top with a ring to hang it by.
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(R, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#27272a', metalness: 0.6, roughness: 0.5, wireframe: true }))
+  dome.position.y = CAGE_H
+  const hook = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.025, 8, 20), rust)
+  hook.position.y = CAGE_H + R + 0.06
+  cage.add(dome, hook)
+  return cage
+}
+
+function setCaged(stage, node, on) {
+  if (Boolean(node.userData.cage) === on) return
+  const icons = node.userData.icons
+  stage.tweens = stage.tweens.filter((t) => t.cageOf !== node)
+  if (on) {
+    const cage = makeCage()
+    node.userData.cage = cage
+    node.add(cage)
+    icons.position.y = CAGE_H + 0.75
+    const drop = 2.2
+    cage.position.y = stage.still ? 0 : drop
+    if (!stage.still) {
+      // Falls with a little bounce when it lands.
+      stage.tweens.push({ cageOf: node, ms: 650, step: (k) => (cage.position.y = k < 0.8 ? drop * (1 - (k / 0.8) ** 2) : Math.sin(((k - 0.8) / 0.2) * Math.PI) * 0.08) })
+    }
+  } else {
+    const cage = node.userData.cage
+    node.userData.cage = null
+    icons.position.y = node.userData.kind === 'villain' ? 1.45 : 1.12
+    const gone = () => (node.remove(cage), disposeTree(cage))
+    if (stage.still) gone()
+    else stage.tweens.push({ cageOf: node, ms: 600, step: (k) => (cage.position.y = k * k * 2.4, k >= 1 && gone()) })
+  }
+  stage.render()
+}
+
 // A standee: the round token standing up on a coloured base, with a soft shadow and a ring
 // that lights for the hero whose turn it is (gold) or the monster acting (orange).
 function makeStandee(stage, figure, url) {
@@ -703,6 +761,7 @@ function syncFigures(stage, figures, art, fallAt, killedAt = () => false) {
       else setDown(node, f.faded)
     }
     setIcons(stage, node, f.icons ?? [])
+    if (f.kind === 'hero') setCaged(stage, node, Boolean(f.caged))
   }
   for (const [id, node] of stage.nodes) {
     if (seen.has(id)) continue
