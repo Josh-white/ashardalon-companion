@@ -160,6 +160,9 @@ export function answerCheck(state, action) {
   return next
 }
 
+// Back from a Time Leap this turn, and still not on the virtual board.
+export const leapingBack = (state, hero) => Boolean(state.board && state.turn.leapBack === hero.id && !state.board.tokens[hero.id] && !hero.escaped)
+
 // What the phase still needs before the turn moves on, as short labels for the screen.
 // `cards` says which virtual decks are in use (the table may draw from the real ones).
 export function phaseTodo(state, cards = {}) {
@@ -169,6 +172,7 @@ export function phaseTodo(state, cards = {}) {
   const todo = []
   if (state.turn.startDamageDue) todo.push(`${hero.name}'s healing surge`)
   const key = PHASES[phase]?.key
+  if (key === 'hero' && leapingBack(state, hero)) todo.push(`putting ${hero.name} back on the board`)
   if (key === 'exploration') {
     if (explored === undefined) todo.push('the unexplored edge question')
     else if (explored === true && cards.monsters && !monsterDrawn) todo.push('the new monster')
@@ -311,6 +315,8 @@ export function startTurn(state) {
     const put = state.board ? `Tap ${hero.name} under "Not on the board yet", then any square.` : `Put ${hero.name} on any tile.`
     state = removeCurse(state, hero.id, curse.id, `${hero.name} is back from the ${curse.name}. ${put}`)
     state = withMoment(state, { kind: 'encounter', heroId: hero.id, title: `${hero.name} is back!`, detail: `${curse.name} is over. ${put}` })
+    // The Hero Phase shows how to put the hero back, and won't move on quietly until they are.
+    state = { ...state, turn: { ...state.turn, leapBack: hero.id } }
   }
   if (!hero) return state
   // A hero who starts the turn at 0 HP spends a healing surge first (USE_SURGE). The surge

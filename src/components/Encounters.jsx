@@ -359,6 +359,10 @@ function EncounterCard({ state, hero, dispatch }) {
   const villainHere = villainInPlay(state, card)
   const needsAttack = card.attack && !attacked && villainHere
 
+  // Time Leap walks through its steps one at a time (a kid missed the monster draw once).
+  const leap = Boolean(card.curse?.removeAtTurnStart && card.drawMonster && villainHere)
+  const leapWaiting = leap && !state.encounter.monsterDrawn && canDrawMonster(state, monsterCards)
+
   const autoNotes = encounterNotes(state, card, villainHere)
   const reading = isReading(state)
 
@@ -497,6 +501,8 @@ function EncounterCard({ state, hero, dispatch }) {
                 >
                   First, stack the monster deck with {card.filterMonsters}s
                 </Button>
+              ) : leap ? (
+                <TimeLeapSteps state={state} hero={hero} dispatch={dispatch} />
               ) : card.drawMonster &&
                 (state.encounter.monsterDrawn ? (
                   <p className="text-emerald-300">✓ Monster drawn. Put its figure where the card says.</p>
@@ -507,13 +513,16 @@ function EncounterCard({ state, hero, dispatch }) {
               {card.refreshDaily && <RefreshDaily state={state} dispatch={dispatch} />}
               {card.passMonsters && <PassMonsters state={state} dispatch={dispatch} />}
               {autoNotes.length > 0 && <p className="text-zinc-300">{autoNotes.join(' ')}</p>}
-              <Button
-                variant="gold"
-                className="w-full py-3 text-lg"
-                onClick={() => resolve()}
-              >
-                {resolveLabel(card, hero, villainHere)}
-              </Button>
+              {/* Time Leap: the monster comes first, so its finish button waits until it's drawn. */}
+              {!leapWaiting && (
+                <Button
+                  variant="gold"
+                  className="w-full py-3 text-lg"
+                  onClick={() => resolve()}
+                >
+                  {leap ? `Done: ${hero.name} vanishes until their next turn` : resolveLabel(card, hero, villainHere)}
+                </Button>
+              )}
             </>
           )}
         </>
@@ -526,6 +535,38 @@ function EncounterCard({ state, hero, dispatch }) {
         sure={`Skip ${card.name}? It goes to the discards and does nothing.`}
         onSkip={() => dispatch({ type: 'SKIP_ENCOUNTER' })}
       />
+    </div>
+  )
+}
+
+// The app can draw from a virtual monster deck (otherwise the table draws a real card).
+const canDrawMonster = (state, monsterCards) => Boolean(state.monsterDeck) || monsterCards.length > 0
+
+// Time Leap, as numbered steps on the cursed hero's screen: draw the monster first, then finish.
+function TimeLeapSteps({ state, hero, dispatch }) {
+  const { monsters: monsterCards } = useCards()
+  const drawn = state.encounter.monsterDrawn
+  const virtual = canDrawMonster(state, monsterCards)
+  const step = (n, done, text) => (
+    <li className={`flex gap-2 ${done ? 'text-emerald-300' : 'text-purple-100'}`}>
+      <span className="font-bold">{done ? '✓' : `${n}.`}</span>
+      <span>{text}</span>
+    </li>
+  )
+  return (
+    <div data-time-leap className="space-y-3 rounded-xl bg-purple-950/70 p-3 text-lg">
+      <p className="text-xl font-bold text-purple-100">🌀 {hero.name} falls through a rift in time!</p>
+      <ol className="space-y-1">
+        {step(1, drawn, virtual ? `Draw a monster. It appears right where ${hero.name} was standing.` : `Draw a real monster card and put its figure on ${hero.name}'s square.`)}
+        {step(2, false, state.board ? `${hero.name} disappears from the board. The app takes the figure off.` : `Take ${hero.name}'s figure off the board.`)}
+        {step(3, false, `At the start of ${hero.name}'s next turn, ${hero.name} comes back on any tile.`)}
+      </ol>
+      {virtual && !drawn && (
+        <>
+          <p className="font-semibold text-amber-200">👇 Step 1 first: tap the red button.</p>
+          <DrawMonsterButton state={state} heroId={hero.id} dispatch={dispatch} className="w-full" label="🐉 Draw the Time Leap monster" />
+        </>
+      )}
     </div>
   )
 }

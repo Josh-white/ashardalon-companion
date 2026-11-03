@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { HERO_TEMPLATES } from '../data/heroes.js'
-import { createHero, gameReducer, initialState } from '../state/game.js'
+import { createHero, gameReducer, initialState, phaseTodo } from '../state/game.js'
 import { PHASES } from '../data/phases.js'
 import { normalizeCardFile } from '../data/cards.js'
 import * as play from './play.js'
@@ -152,6 +152,26 @@ describe('solo game on the virtual board', () => {
     expect(hero(state).curses).toHaveLength(0)
     state = gameReducer(state, { type: 'MOVE_TOKEN', id: h.id, to: [2, 7] })
     expect(at(state, h.id)).toEqual([2, 7])
+  })
+
+  it('draws the Time Leap monster itself when the card is finished without drawing it, and asks for the hero back', () => {
+    let state = start()
+    const h = hero(state)
+    const was = at(state, h.id)
+    state = { ...state, turn: { ...state.turn, phase: PHASES.findIndex((p) => p.key === 'villain') } }
+    state = gameReducer(state, { type: 'DRAW_ENCOUNTER', heroId: h.id, cards: encounters, random: [] })
+    state = gameReducer(state, { type: 'RESOLVE_ENCOUNTER', random: [], monsterCards: monsters })
+    expect(state.monsters).toHaveLength(1)
+    expect(at(state, state.monsters[0].id)).toEqual(was)
+    expect(at(state, h.id)).toBeUndefined()
+    expect(hero(state).curses).toHaveLength(1)
+    while (state.turn.heroIndex === 0) state = gameReducer(state, { type: 'NEXT_PHASE' })
+    while (state.turn.heroIndex !== 0) state = gameReducer(state, { type: 'NEXT_PHASE' })
+    // Back at the start of the turn: the Hero Phase says to put the hero on the board first.
+    expect(state.turn.leapBack).toBe(h.id)
+    expect(phaseTodo(state)).toContain(`putting ${h.name} back on the board`)
+    state = gameReducer(state, { type: 'MOVE_TOKEN', id: h.id, to: [2, 7] })
+    expect(phaseTodo(state)).not.toContain(`putting ${h.name} back on the board`)
   })
 
   it('turns a tile laid on a west edge so its triangle faces the hero', () => {

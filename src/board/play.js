@@ -332,7 +332,9 @@ function placeDrawnMonsters(state) {
   if (fresh.length === 0) return state
   // Time Leap: the hero vanishes and the monster takes the very square the hero stood on.
   const hero = state.heroes[state.turn.heroIndex]
-  if (monsters.length > 0 && state.encounter?.card?.curse?.removeAtTurnStart && activeAt(state)) {
+  // (Still the hero's square right after the card is finished, until pruneTokens takes the hero off.)
+  const leaping = state.encounter?.card?.curse?.removeAtTurnStart || (hero && timeLeapt(hero))
+  if (monsters.length > 0 && leaping && activeAt(state)) {
     const { [hero.id]: at, ...tokens } = board.tokens
     return placeDrawnMonsters({ ...state, board: { ...board, tokens: { ...tokens, [fresh[0]]: at } } })
   }

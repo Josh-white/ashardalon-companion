@@ -16,8 +16,8 @@ import { heroTile } from '../board/encounters.js'
 import { tileShieldNow } from '../board/checks.js'
 import { addTreasureToken } from '../board/items.js'
 import { isLava, isMovingTrap } from '../board/traps.js'
-import { activeVillains, clamp, findFoe, lose, markUsed, newId, shuffle, updateHero, updateMonster, validRoll, withLog, withMoment, withVillainCall } from './gameHelpers.js'
-import { drawMonsterOfType, filterMonsterDeck, villainInPlay } from './monsterDeck.js'
+import { activeVillains, buildDeck, clamp, findFoe, lose, markUsed, newId, shuffle, updateHero, updateMonster, validRoll, withLog, withMoment, withVillainCall } from './gameHelpers.js'
+import { drawMonster, drawMonsterOfType, filterMonsterDeck, villainInPlay } from './monsterDeck.js'
 import { discardEncounterCard, intoTopThree, oweEncounter } from './encounterDeck.js'
 import { oweTreasure, treasureWords } from './treasureDeck.js'
 import { applyPasses, warpPasses } from './passMonsters.js'
@@ -247,6 +247,13 @@ export function resolveEncounter(state, action) {
   let downed = []
   // Its villain or objective isn't in play: the card is just discarded.
   if (!villainInPlay(state, card)) return withLog(discardEncounterCard(next, card.id), `${card.name} was discarded: it has nothing to do.`)
+  // Time Leap's monster isn't optional: finishing the card without drawing it draws it now,
+  // while the card is still out, so the monster still takes the hero's square.
+  if (card.curse?.removeAtTurnStart && card.drawMonster && !encounter.monsterDrawn && hero) {
+    const cards = Array.isArray(action.monsterCards) ? action.monsterCards : []
+    const withDeck = state.monsterDeck || cards.length === 0 ? state : { ...state, monsterDeck: buildDeck(cards, action.random) }
+    if (withDeck.monsterDeck) next = { ...drawMonster(withDeck, hero.id, action.random), encounter: null }
+  }
 
   if (card.damageEach > 0) {
     ;({ next, downed } = damageHeroes(next, next.heroes.map((h) => h.id), card.damageEach, card.name))
