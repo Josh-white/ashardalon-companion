@@ -48,3 +48,24 @@ describe('useMomentsDone on the first render', () => {
     expect(seen[0]).toBe(false)
   })
 })
+
+describe('AnklesBroken (Easton\'s rare miss)', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('slams ANKLES BROKEN! on screen when the bone cracks, then clears', async () => {
+    const { render, screen } = await import('@testing-library/react')
+    const { anklesBroken } = await import('../audio/anklesBroken.js')
+    const { AnklesBroken, ANKLES_SHOW_MS, anklesAtMs } = await import('./MomentOverlay.jsx')
+    vi.useFakeTimers()
+    const make = (i) => ({ id: `m-${i}`, at: Date.now(), kind: 'roll', title: 'Keyleth: Sure Strike!', rolls: [{ monsterId: 'x', label: 'Snake', value: 3, hit: false }] })
+    let i = 0
+    while (!anklesBroken(make(i))) i++
+    const moment = make(i)
+    render(<AnklesBroken moment={moment} />)
+    expect(screen.queryByText('BROKEN!')).toBeNull()
+    act(() => vi.advanceTimersByTime(anklesAtMs(moment) + 10))
+    expect(screen.getByText('BROKEN!')).toBeTruthy()
+    act(() => vi.advanceTimersByTime(ANKLES_SHOW_MS))
+    expect(screen.queryByText('BROKEN!')).toBeNull()
+  })
+})

@@ -8,6 +8,7 @@ import { effectsOf } from '../data/powerEffects.js'
 import { newArrivals } from './narration.js'
 import { POWER_SPELLS, powerKey, spellKind } from './spellKind.js'
 import { FX_DELAY_MS, FX_IMPACT_MS, fxLeadMs } from '../board/attackFx.js'
+import { anklesBroken } from './anklesBroken.js'
 
 export { spellKind }
 
@@ -81,6 +82,8 @@ const LENGTH_MS = {
   laugh: 1350,
   swords: 1500,
   drumroll: 1700,
+  yawn: 1900,
+  bonecrack: 900,
 }
 
 // The recording that plays for a sound, where the file on the Pi has another name:
@@ -188,6 +191,9 @@ export function momentSounds(moment) {
   // sound after another (each starts once the last one's main hit is over).
   const sounds = [['dice', 0]]
   let next = DIE_LANDS_MS
+  // A rare complete miss breaks the attacker's ankles (anklesBroken.js): a bone crack
+  // in place of the usual miss sound.
+  const ankles = anklesBroken(moment)
   const then = (sound) => {
     sounds.push([sound, next])
     next += Math.min(LENGTH_MS[sound], STEP_MS)
@@ -202,7 +208,7 @@ export function momentSounds(moment) {
     if (moment.trap) then('trap')
     // On the virtual board the hit lands when the animation reaches the hero.
     if (moment.fx) next = Math.max(next, FX_DELAY_MS + FX_IMPACT_MS)
-    then(rolls.some((r) => r.hit) ? 'thud' : 'whoosh')
+    then(rolls.some((r) => r.hit) ? 'thud' : ankles ? 'bonecrack' : 'whoosh')
     if (moment.kind === 'monster-down') then('down')
     return sounds
   }
@@ -218,7 +224,8 @@ export function momentSounds(moment) {
     // A power cast at a monster makes its own sound once the die has landed.
     if (spell) then(spell)
     if (moment.fx && spell) next = Math.max(next, FX_DELAY_MS + FX_IMPACT_MS)
-    if (!values.includes(20)) {
+    if (ankles) then('bonecrack')
+    else if (!values.includes(20)) {
       if (attack && anyHit) {
         if (!spell) then('weapon')
       } else if (values.includes(1)) then('trombone')
@@ -316,6 +323,8 @@ const LEVEL_DB = {
   laugh: 6,
   swords: 9,
   drumroll: -4,
+  yawn: 2,
+  bonecrack: 8,
 }
 
 // Each play is up to 2% higher or lower, so the tenth roll doesn't sound exactly like
@@ -892,6 +901,22 @@ export const SOUNDS = {
   // sound is the single clang.)
   swords(ctx, at, out) {
     for (const when of [0, 0.32, 0.55, 1.0]) SOUNDS.clang(ctx, at + when, out)
+  },
+
+  // A big sleepy yawn: a breath in, then a long "aaah" that slides down and fades.
+  yawn(ctx, at, out) {
+    burst(ctx, out, { at, freq: 900, q: 0.7, peak: 0.12, attack: 0.25, decay: 0.3 })
+    voice(ctx, out, { at: at + 0.35, freq: 260, length: 0.5, peak: 0.35 })
+    voice(ctx, out, { at: at + 0.8, freq: 230, length: 0.95, peak: 0.3 })
+    burst(ctx, out, { at: at + 0.8, freq: 700, q: 0.8, peak: 0.08, attack: 0.1, decay: 0.9 })
+  },
+
+  // Ankles broken: a sharp snap with a woody crunch after it.
+  bonecrack(ctx, at, out) {
+    burst(ctx, out, { at, type: 'highpass', freq: 2500, peak: 0.9, attack: 0.001, decay: 0.03 })
+    burst(ctx, out, { at, freq: 1100, q: 4, peak: 0.7, attack: 0.001, decay: 0.06 })
+    tone(ctx, out, { at, freq: 180, slideTo: 60, peak: 0.5, decay: 0.12 })
+    for (const when of [0.05, 0.09, 0.14, 0.2]) burst(ctx, out, { at: at + when, freq: 1600 + Math.random() * 1500, q: 5, peak: 0.35, decay: 0.03 })
   },
 
   // A short snare roll that builds to a cymbal crash.
