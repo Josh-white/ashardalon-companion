@@ -36,8 +36,9 @@ jobs:
       # way and fails on any that would come too close to the Pi's limit.
       - name: No test too slow for the Pi
         run: node scripts/check-slow-tests.mjs test-times.json
-      # The robot plays a dozen whole solo games by itself, tapping the real screens at
-      # random, to catch a screen that crashes. A failure names the seed to play it again.
+      # The robot plays a dozen whole games by itself, tapping the real screens at random
+      # (the 3D board in half of them), and builds and saves figures in the Hero Builder and
+      # My models, to catch a screen that crashes. A failure names the seed to play it again.
       - name: Robot plays whole games
         run: npm run robot
       - run: npm run build

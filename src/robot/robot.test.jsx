@@ -7,7 +7,9 @@ import { normalizeCardFile } from '../data/cards.js'
 import { powerSlotsFor } from '../state/heroSetup.js'
 import { campaignOutcome } from '../state/campaign.js'
 import { TOWN_EVENTS } from '../data/townEvents.js'
+import { STARTERS } from '../forge/recipes.js'
 import { easyCards, ROBOT_CARD_FILE } from './robotCards.js'
+import { boardTargets, FakeWebGLRenderer, fileResponse, installFake3D, renderers } from './fake3d.js'
 
 // The robot: plays whole games by itself, tapping a random button on the real screens again
 // and again, with every tap going through the real game rules. Most games are solo games on
@@ -15,6 +17,11 @@ import { easyCards, ROBOT_CARD_FILE } from './robotCards.js'
 // those on the party's virtual board, the rest with real tiles on the table), and every 4th
 // after seed 2 is a solo game of a made-up campaign (robotCards.js).
 // Every 3rd solo game starts from the empty solo lobby and picks its heroes and powers there.
+// Every other solo game and every party game on the virtual board is played on the 🧊 3D board
+// (fake3d.js stands in for WebGL), tapping its figures and lit squares; a party game in 3D has
+// the projector's 3D board watching too. Two of the players have their own figure on there
+// (one from the 🛠️ Hero Builder, one from the 🧙 Model Workshop). The Hero Builder and
+// 🎮 My models get a robot of their own: builder.test.jsx.
 // It doesn't try to win; it looks for a screen that goes blank, a tap the rules can't take
 // (like the monster-move crash in PR 131), or a game that stops moving on (the turn stays put
 // for 600 taps), so those are caught before a merge goes live.
@@ -72,12 +79,29 @@ const CHECKUP = process.env.ROBOT_ADVENTURES
   : null
 
 // Taps the robot never makes: ones that end or leave the game, and sound switches.
-const SKIP = [/New game/i, /End the campaign/i, /Free this hero/i, /We won/i, /We lost/i, /switch$/i, /Sound/i, /Music/i, /🔊|🔇|🎵|☀️|🌙/, /Finish and archive/i, /Back to the normal lobby/i, /Which game/i, /Switch game/i, /Card pictures/i, /^🔥$/, /^🧊$/, /🧙/]
+const SKIP = [/3D board (on|off)/, /Send an idea/, /Heroes read cards|Cards not read aloud/, /New game/i, /End the campaign/i, /Free this hero/i, /We won/i, /We lost/i, /switch$/i, /Sound/i, /Music/i, /🔊|🔇|🎵|☀️|🌙/, /Finish and archive/i, /Back to the normal lobby/i, /Which game/i, /Switch game/i, /Card pictures/i, /^🔥$/, /^🧊$/, /🧙/]
 
 // Taps a play-to-win game leaves alone too: taking HP off a hero by hand, the − and +
 // buttons (XP, healing surges, tiles left), and Undo, which takes back the win it's after.
 const WIN_SKIP = [/[LG]oses 1 HP/i, /^[−+]$/, /Undo/]
 let playingToWin = false
+// The play screen's own part of the page, when another screen is showing too.
+let playRoot = null
+
+// The 3D screens draw with fake3d.js's stand-in for WebGL.
+vi.mock('three', async (importOriginal) => ({ ...(await importOriginal()), WebGLRenderer: FakeWebGLRenderer }))
+
+// Player 1 wears a 🛠️ Hero Builder figure on the 3D board, and Player 2 a 🧙 Model Workshop one
+// (its 3D model is played by one of the repo's).
+const OWN_FIGURES = [
+  {
+    id: 'robot-figure',
+    useInGame: true,
+    savedAt: '2026-11-03T12:00:00Z',
+    recipe: { ...STARTERS[1], from: 'Player 1' },
+  },
+]
+const OWN_MODELS = [{ id: 'robot-model', from: 'Player 2', idea: 'A robot', useInGame: true, tweaks: { size: 1.1, head: 1.3, body: 0.9, colors: {} }, rounds: [{ note: '', pictures: [], model: 'model-1.glb' }], answers: [{ round: 1, love: true }] }]
 
 // --- Seeded dice ---------------------------------------------------------------------------
 
@@ -196,8 +220,12 @@ class CrashCatcher extends Component {
 }
 
 beforeAll(() => {
+  installFake3D()
   vi.stubGlobal('fetch', async (url) => {
-    const body = String(url).includes('cards.json') ? CARDS : {}
+    const file = fileResponse(url)
+    if (file) return file
+    const path = String(url)
+    const body = path.includes('cards.json') ? CARDS : path.includes('/forge.json') ? { figures: OWN_FIGURES } : path.includes('/workshop.json') ? { requests: OWN_MODELS } : {}
     return { ok: true, status: 200, json: async () => body }
   })
   // Every die and shuffle comes from the seed.
@@ -216,6 +244,13 @@ beforeAll(() => {
   window.HTMLElement.prototype.scrollTo = () => {}
   // "Move on anyway?" and the like: the robot says yes or no at random.
   vi.spyOn(window, 'confirm').mockImplementation(() => random() < 0.5)
+  // The 3D board hides its own crashes: it goes back to the flat board (Board3DLazy.jsx), or a
+  // figure stays a standee, and says so only here.
+  const warn = console.warn
+  vi.spyOn(console, 'warn').mockImplementation((...args) => {
+    if (/3D board failed|did not load|did not build/.test(String(args[0]))) store.crash ??= { where: `the 3D board ("${args[0]}")`, error: args[1] }
+    else warn(...args)
+  })
   window.addEventListener('error', (event) => {
     store.crash ??= { where: 'a tap', error: event.error ?? new Error(event.message) }
   })
@@ -232,7 +267,7 @@ const label = (el) => (el.getAttribute('aria-label') || el.textContent || '').re
 
 // Taps a player makes now and then, not every turn: fixing numbers by hand, looking at
 // things, tabs. The robot makes them less often, so its games get somewhere.
-const NOW_AND_THEN = [/^[−+]$/, /Zoom/i, /board$/i, /[LG][oa][si][en] 1 HP/i, /Tap to see why/i, /Menu/i, /^\W*(Log|Monsters|Party|Quest)/, /✋/, /(gains|loses) 1 HP/, /Read the card/i, /Hide the card/i, /conditions/i, /^(Weakened|Dazed|Poisoned|Immobilized|Slowed)$/, /Treasure token/i, /Put a villain/i, /^← Back$/, /^Close$/, /^Close .*'s card$/, /^Cancel$/, /^🪨 /, /^(Attack bonus|AC|Speed) ?[+−\d]/, /^↓ /, /[▾▴]$/, /HP · AC \d/, /Pick a different hero/, /Change powers/, /^Change$/, /tips/, /We escaped/, /^\W*How .* works/, /^Got it!$/, /^What is the /, /How to play/, /🔊 (Again|Hear it)/, /Tips every phase/]
+const NOW_AND_THEN = [/^[−+]$/, /Zoom/i, /board$/i, /[LG][oa][si][en] 1 HP/i, /Tap to see why/i, /Menu/i, /^\W*(Log|Monsters|Party|Quest)/, /✋/, /(gains|loses) 1 HP/, /Read the card/i, /Hide the card/i, /conditions/i, /^(Weakened|Dazed|Poisoned|Immobilized|Slowed)$/, /Treasure token/i, /Put a villain/i, /^← Back$/, /^Close$/, /^Close .*'s card$/, /^Cancel$/, /^🪨 /, /^(Attack bonus|AC|Speed) ?[+−\d]/, /^↓ /, /[▾▴]$/, /HP · AC \d/, /Pick a different hero/, /Change powers/, /^Change$/, /tips/, /We escaped/, /^\W*How .* works/, /^Got it!$/, /^What is the /, /How to play/, /🔊 (Again|Hear it)/, /Tips every phase/, /^(🧍|🪪) Figures/, /^🎥 /, /^🎯 Follow/, /Drag: (move|turn)/, /^🧱 Walls/, /^Fit$/, /· change$/, /Let the computer play/, /I'll play .* again/]
 // In the lobby the robot leans toward getting in, or it would pick and unpick powers all night.
 const LEANS = [/Enter the dungeon/, /Done choosing powers/, /^Tap to pick/, /On to the next adventure/]
 // Playing to win, the robot also goes after the villain, rolls its attacks, and doesn't
@@ -255,13 +290,26 @@ const weightOf = (text) => {
 // the robot is to pick it.
 function choices(also = []) {
   const skip = [...SKIP, ...(playingToWin ? WIN_SKIP : []), ...also]
-  const buttons = [...document.querySelectorAll('button')].filter((b) => !b.disabled && !skip.some((re) => re.test(label(b))))
-  const selects = [...document.querySelectorAll('select')].filter((s) => !s.disabled && s.options.length > 1)
+  // The screen the robot plays on (the projector, when it's there too, only watches).
+  const screen = playRoot ?? document
+  const buttons = [...screen.querySelectorAll('button')].filter((b) => !b.disabled && !skip.some((re) => re.test(label(b))))
+  const selects = [...screen.querySelectorAll('select')].filter((s) => !s.disabled && s.options.length > 1)
   // On the virtual board: the lit squares a figure can go to, and the figures themselves.
-  const squares = [...document.querySelectorAll('svg rect.cursor-pointer')]
-  const figures = [...document.querySelectorAll('svg g.cursor-pointer')]
+  const squares = [...screen.querySelectorAll('svg rect.cursor-pointer')]
+  const figures = [...screen.querySelectorAll('svg g.cursor-pointer')]
+  // The same on the 3D board, as spots on its canvas, and now and then a tap on nothing much.
+  const spots = [...screen.querySelectorAll('[data-board3d] canvas[data-fake3d]')].flatMap((canvas) => {
+    const renderer = renderers.find((r) => r.domElement === canvas)
+    return renderer ? [...boardTargets(renderer).map((t) => ({ ...t, canvas })), { what: 'the floor', kind: 'floor', canvas, x: random() * 1000, y: random() * 1000 }] : []
+  })
+  const litSpots = spots.filter((t) => t.kind === 'square')
   const taps = buttons.map((el) => ({ el, kind: 'tap', weight: weightOf(label(el)) }))
+  // The board made big (or another tab) can hide the turn's own buttons: with none of them on
+  // the screen, the way back to the turn comes first, or the robot walks the board all night.
+  if (!taps.some((o) => o.weight >= 1)) for (const o of taps) if (/^\W*Turn$|Smaller board/.test(label(o.el))) o.weight = 3
   return [
+    ...litSpots.map((spot) => ({ spot, kind: '3d', weight: 4 / litSpots.length })),
+    ...shareOf(spots.filter((t) => t.kind !== 'square').map((spot) => ({ spot, kind: '3d', weight: spot.kind === 'figure' ? 1 : 0.1 })), 1.5),
     ...taps.filter((o) => o.weight >= 1),
     // However many of them a screen shows (a power card each has Read the card), the
     // now-and-then taps and the figures together only get a share, so the game moves on.
@@ -305,6 +353,9 @@ const kindOf = (seed) =>
   CHECKUP ? checkupKind(seed)
   : seed % 8 === 6 ? (seed % 16 === 6 ? 'party-board' : 'party-tiles')
   : seed % 4 === 2 ? 'campaign' : seed % 4 !== 0 ? 'solo' : seed % 8 === 0 ? 'party-board' : 'party-tiles'
+// Games played on the 🧊 3D board: every other solo game and every party game on the virtual
+// board (the play-to-win clan campaign too); in a checkup, every other pair of games.
+const threeDOf = (seed) => (CHECKUP ? Math.floor((seed - 1) / 2) % 2 === 0 : seed % 4 === 1 || kindOf(seed) === 'party-board')
 // Games played to win: every checkup game with ROBOT_WIN, and the made-up clan campaign in CI.
 const winsOf = (seed) => (CHECKUP ? WIN : seed % 8 === 6)
 
@@ -367,8 +418,14 @@ const wait = () => act(async () => vi.advanceTimersByTimeAsync(4000))
 async function tapSomething(game, skip = []) {
   const options = choices(skip)
   if (options.length === 0) return false
-  const { el, kind } = pickWeighted(options)
-  if (kind === 'square' || kind === 'figure') {
+  const { el, kind, spot } = pickWeighted(options)
+  if (kind === '3d') {
+    // A finger down and up on the same spot of the 3D board: a tap, not a drag.
+    game.taps.push(`tap the 3D board: ${spot.what}`)
+    const at = { clientX: spot.x, clientY: spot.y, isPrimary: true, pointerId: 1, button: 0, pointerType: 'mouse' }
+    fireEvent.pointerDown(spot.canvas, at)
+    fireEvent.pointerUp(spot.canvas, at)
+  } else if (kind === 'square' || kind === 'figure') {
     const what = el.dataset.token ?? el.dataset.item ?? el.dataset.marker ?? `square ${el.getAttribute('x')},${el.getAttribute('y')}`
     game.taps.push(`tap the board: ${what}`)
     fireEvent.click(el)
@@ -389,12 +446,14 @@ async function playGame(seed) {
   // Fresh modules, so nothing (a counter for new ids, the loaded cards) carries over from
   // the game before: a seed plays the same game whether it's played alone or after others.
   vi.resetModules()
-  const [{ default: App }, { gameReducer, initialState }, { setHeroTemplates }] = await Promise.all([import('../App.jsx'), import('../state/game.js'), import('../data/heroes.js')])
+  const [{ default: App }, { gameReducer, initialState }, { setHeroTemplates }, { reloadBoard3D }] = await Promise.all([import('../App.jsx'), import('../state/game.js'), import('../data/heroes.js'), import('../components/board3dSwitch.js'), import('../components/Board3D.jsx')])
+  // (The 3D board loaded ahead too: a screen loads it when it first shows it, and that takes
+  // real time, not the robot's pretend time, so the flat board would show for a varying while.)
   app = { gameReducer, initialState }
   random = seeded(seed)
   dice = seeded(seed + 1_000_003)
   other = seeded(seed + 2_000_003)
-  const game = { seed, kind: kindOf(seed), win: winsOf(seed), taps: [], adventures: [] }
+  const game = { seed, kind: kindOf(seed), win: winsOf(seed), threeD: threeDOf(seed), taps: [], adventures: [] }
   CARDS = game.win ? EASY_CARDS : PLAIN_CARDS
   // The card file's heroes (the made-up fan heroes too), as the Pi and the screens set them.
   setHeroTemplates(CARDS.heroes)
@@ -415,15 +474,28 @@ async function playGame(seed) {
   localStorage.setItem('ashardalon-companion/screen', game.kind.startsWith('party') ? 'hero' : 'solo')
   // The party plays on the shared table screen, with every hero's turn on it.
   if (game.kind.startsWith('party')) localStorage.setItem('ashardalon-companion/seat', 'table')
+  localStorage.setItem('ashardalon-board3d', game.threeD ? 'on' : 'off')
+  reloadBoard3D()
+  renderers.length = 0
 
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'cancelAnimationFrame', 'Date'] })
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'cancelAnimationFrame', 'Date', 'performance'] })
   vi.setSystemTime(new Date('2026-10-30T19:00:00'))
-  const show = () =>
-    render(
+  const show = () => {
+    const screen = (
       <CrashCatcher>
         <App />
-      </CrashCatcher>,
+      </CrashCatcher>
     )
+    // A party game in 3D has the projector watching, its 3D board following the game (not in
+    // a long play-to-win game: the big screen's torches keep it drawing every frame, slow here).
+    const seat = localStorage.getItem('ashardalon-companion/seat')
+    if (game.threeD && !game.win && seat === 'table' && store.state.status === 'playing') {
+      localStorage.setItem('ashardalon-companion/seat', 'projector')
+      render(screen)
+      localStorage.setItem('ashardalon-companion/seat', seat)
+    }
+    playRoot = render(screen).container
+  }
   show()
   await wait()
 
@@ -484,10 +556,23 @@ async function playGame(seed) {
       lastMove = { where: where(), tap: n }
       continue
     }
+    // The table screen asked who's playing on it (its seat was let go): back to the table.
+    const table = /Who's playing on this device/.test(playRoot?.textContent ?? '') && [...playRoot.querySelectorAll('button')].find((b) => /^Table view/.test(label(b)))
+    if (table) {
+      game.taps.push('tap "Table view" (the robot got onto the seat picker)')
+      fireEvent.click(table)
+      await wait()
+      continue
+    }
     if (!(await tapSomething(game))) return { ...game, problem: 'nothing left on the screen to tap' }
+    // A screen that couldn't draw its 3D board (or found it too slow) turns it off by itself.
+    if (game.threeD && !store.crash && localStorage.getItem('ashardalon-board3d') === 'off') {
+      game.problem = 'the 3D board gave up and went back to the flat board'
+      break
+    }
     if (where() !== lastMove.where) lastMove = { where: where(), tap: n }
     else if (n - lastMove.tap >= STUCK_TAPS) {
-      const onScreen = [...new Set([...document.querySelectorAll('button')].filter((b) => !b.disabled).map(label))].join(' | ')
+      const onScreen = [...new Set([...(playRoot ?? document).querySelectorAll('button')].filter((b) => !b.disabled).map(label))].join(' | ')
       game.problem = `got stuck: ${STUCK_TAPS} taps without the turn moving on (round/hero/phase ${lastMove.where}). Buttons on the screen: ${onScreen}`
       break
     }
@@ -603,7 +688,7 @@ describe('the robot', () => {
     it(`plays a whole game without crashing (seed ${seed})`, async () => {
       const game = await playGame(seed)
       const played = game.adventures.length > 0 ? `; adventures: ${game.adventures.join(', ')}${game.campaign ? `; campaign ${game.campaign}` : ''}` : ''
-      process.stderr.write(`Robot ${game.kind}${game.win ? ' play-to-win' : ''} game ${seed}: ${game.adventure} with ${game.heroes?.join(', ')}, ${game.taps.length} taps, reached round ${game.round} with ${game.tiles} tiles out${game.status === 'playing' ? '' : `, ${game.status}`}${played}\n`)
+      process.stderr.write(`Robot ${game.kind}${game.win ? ' play-to-win' : ''}${game.threeD ? ` 3D (${renderers.length} 3D screens, ${renderers.reduce((n, r) => n + r.info.render.frame, 0)} frames, ${game.taps.filter((t) => t.startsWith('tap the 3D')).length} 3D taps)` : ''} game ${seed}: ${game.adventure} with ${game.heroes?.join(', ')}, ${game.taps.length} taps, reached round ${game.round} with ${game.tiles} tiles out${game.status === 'playing' ? '' : `, ${game.status}`}${played}\n`)
       // The game's own log, every line of it, to see what happened in it.
       if (process.env.ROBOT_GAMELOG) appendFileSync(process.env.ROBOT_GAMELOG, `\n# game ${seed}\n${store.log.map((l) => `${l.round}/${l.heroIndex} ${l.text}`).join('\n')}\n`)
       if (process.env.ROBOT_TAPLOG) appendFileSync(process.env.ROBOT_TAPLOG, `\n# game ${seed} ${game.kind} ${game.adventure} -> ${game.status}\n${game.taps.join('\n')}\n`)
