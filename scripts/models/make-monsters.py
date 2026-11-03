@@ -859,6 +859,44 @@ def build_great_axe(fist, gem="glow", flames=False):
             cone(f"AxeTopFlame{i}", "fel", "arm.R", head + up * 0.36 + Vector((dx, 0, h / 2)), 0.06, h, rot=tilt, sides=6)
 
 
+def build_doom_axe(fist, gem="fel", flames=True):
+    """Easton's axe: a long-hafted double axe held upright in the right fist, its blades front and back."""
+    up = Vector((0, -0.2, 1)).normalized()
+    tilt = (math.degrees(math.atan2(0.2, 1)), 0, 0)  # turns +Z to point along `up`
+    # The blades stick out front and back (Easton: sideways they swung through his head).
+    out = Vector((0, 1, 0.2)).normalized()
+    # One haft from the butt cap right up through the socket, so every piece touches the next.
+    cone("AxeHaft", "wood", "arm.R", fist + up * 0.45, 0.05, 1.50, rot=tilt, sides=6, tip=0.045)
+    cone("AxeButt", "iron_dark", "arm.R", fist - up * 0.31, 0.07, 0.10, rot=tilt, sides=6, tip=0.045)
+    box("AxeGrip", "leather_dark", "arm.R", fist, (0.12, 0.12, 0.24), bevel=0.04, rot=tilt)
+    for i, along in enumerate((0.40, 0.70)):
+        cone(f"AxeBand{i}", "iron_dark", "arm.R", fist + up * along, 0.065, 0.05, rot=tilt, sides=6, tip=0.065)
+    head = fist + up * 1.05
+    box("AxeSocket", "iron_dark", "arm.R", head, (0.16, 0.20, 0.34), bevel=0.04, rot=tilt)
+    cone("AxeTop", "iron", "arm.R", head + up * 0.25, 0.06, 0.20, rot=tilt, sides=4)
+    for side in (1, -1):
+        # A half-moon blade front and back, joined to the socket by a thick neck: a flat oval,
+        # a bright cutting edge.
+        box(f"AxeNeck{side}", "iron_dark", "arm.R", head + out * 0.13 * side, (0.10, 0.14, 0.22), bevel=0.03, rot=tilt)
+        sphere(f"AxeBlade{side}", "iron_dark", "arm.R", head + out * 0.26 * side, 0.30,
+               scale=(0.12, 0.70, 1.12), rot=tilt, segments=16, rings=10)
+        sphere(f"AxeEdge{side}", "iron", "arm.R", head + out * 0.37 * side, 0.30,
+               scale=(0.09, 0.40, 1.06), rot=tilt, segments=16, rings=10)
+    for side in (1, -1):
+        sphere(f"AxeGem{side}", gem, "arm.R", head + Vector((0.09 * side, 0, 0)), 0.045, scale=(0.5, 1, 1), segments=8, rings=6)
+    if flames:
+        # Green fire licking up off both blades.
+        for side in (1, -1):
+            lean = (tilt[0] - 20 * side, 0, 0)
+            for i, (dz, h, r) in enumerate(((-0.20, 0.26, 0.07), (0.0, 0.34, 0.08), (0.20, 0.30, 0.07))):
+                at = head + out * 0.46 * side + Vector((0, 0, dz + h / 2))
+                cone(f"AxeFlame{side}{i}", "fel", "arm.R", at, r, h, rot=lean, sides=6)
+                cone(f"AxeFlameCore{side}{i}", "fel_light", "arm.R", at + out * -0.02 * side + Vector((0, 0, -h * 0.15)),
+                     r * 0.5, h * 0.6, rot=lean, sides=5)
+        for i, (dy, h) in enumerate(((-0.08, 0.22), (0.08, 0.26))):
+            cone(f"AxeTopFlame{i}", "fel", "arm.R", head + up * 0.38 + Vector((0, dy, h / 2)), 0.06, h, rot=tilt, sides=6)
+
+
 def build_duergar_head(captain):
     # Head: grey face under a spiked nose-guard helm, red eyes, a big braided beard.
     sphere("Face", "skin_grey", "head", (0, -0.04, 1.62), 0.33, scale=(1.05, 0.95, 1.0), segments=16, rings=10)
@@ -918,8 +956,18 @@ def build_doom_knight():
     box("Breastplate", "iron", "body", (0, -0.03, 1.10), (0.76, 0.50, 0.62), bevel=0.18, segments=3)
     box("PlateRidge", "iron_dark", "body", (0, -0.27, 1.18), (0.08, 0.04, 0.42), bevel=0.015)
     sphere("ChestGem", "fel", "body", (0, -0.28, 1.30), 0.06, scale=(1, 0.5, 1), segments=8, rings=6)
-    box("Cape", "doom_green", "body", (0, 0.32, 0.88), (0.82, 0.06, 1.10), bevel=0.03, rot=(-7, 0, 0))
-    box("CapeLining", "doom_green_dark", "body", (0, 0.28, 0.92), (0.76, 0.03, 1.00), bevel=0.01, rot=(-7, 0, 0))
+    # The cape: a mantle over the shoulders, then heavy cloth falling in folds that flare out
+    # toward a pointed hem, with a dark lining showing between them.
+    sphere("CapeMantle", "doom_green", "body", (0, 0.12, 1.38), 0.44, scale=(1.08, 0.78, 0.36), segments=16, rings=8)
+    box("CapeLining", "doom_green_dark", "body", (0, 0.29, 0.92), (0.78, 0.03, 0.98), bevel=0.01, rot=(5, 0, 0))
+    for i in range(6):
+        x = -0.375 + i * 0.15
+        back = 0.33 + (0.035 if i % 2 else 0)
+        flare = (6, -x * 28, 0)
+        cone(f"CapeFold{i}", "doom_green", "body", (x * 1.05, back, 0.88), 0.10, 1.10, rot=flare,
+             scale=(1, 0.45, 1), sides=8, tip=0.075)
+        cone(f"CapeHem{i}", "doom_green_dark", "body", (x * 1.18, back + 0.06, 0.30), 0.075, 0.16,
+             rot=(186, x * 28, 0), scale=(1, 0.4, 1), sides=6)
     for side in (1, -1):
         sphere(f"Pauldron{side}", "armour", "body", (0.46 * side, 0, 1.40), 0.23, scale=(1.15, 1.05, 0.72))
         sphere(f"PauldronRim{side}", "iron", "body", (0.48 * side, 0, 1.34), 0.21, scale=(1.2, 1.1, 0.35))
@@ -934,7 +982,7 @@ def build_doom_knight():
         cone(f"GauntletFlare.{tag}", "iron_dark", arm, (0.57 * side, -0.02, 1.04), 0.16, 0.06, sides=8, tip=0.16)
         sphere(f"Fist.{tag}", "armour", arm, (0.58 * side, -0.05, 0.70), 0.14)
 
-    build_great_axe(Vector((-0.72, -0.05, 0.70)), gem="fel", flames=True)
+    build_doom_axe(Vector((-0.72, -0.05, 0.70)))
 
     # Head: a green hood round a silver mask, green eye slits, black horns, green flames on top.
     sphere("Hood", "doom_green", "head", (0, 0.06, 1.88), 0.44, scale=(1.08, 1.0, 1.02), segments=16, rings=10)
