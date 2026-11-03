@@ -41,6 +41,18 @@
    ],
    "model": "model-4.glb",
    "at": "2026-11-03T02:55:00Z"
+  },
+  {
+   "note": "Round 5: the axe is one solid piece now, and the blades point front and back so it never swings through your head. The cape hangs in real folds with a pointed hem (look at the back picture!). Your saved size tweak still works.",
+   "pictures": [
+    "front-5.png",
+    "side-5.png",
+    "back-5.png",
+    "attack-5.png",
+    "with-knight-5.png"
+   ],
+   "model": "model-5.glb",
+   "at": "2026-11-03T03:10:00Z"
   }
  ]
 }
