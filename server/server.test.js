@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import { HERO_TEMPLATES } from '../src/data/heroes.js'
 import { createHero, initialState } from '../src/state/game.js'
-import { byteRange, gameIdFor, listSounds, loadCards, loadGameList, loadSavedGame, FINISHED_DAYS, MAX_GAMES, startServer } from './server.js'
+import { byteRange, gameIdFor, keepWhoPlays, listSounds, loadCards, loadGameList, loadSavedGame, FINISHED_DAYS, MAX_GAMES, startServer } from './server.js'
 
 // Opens a socket and collects every state the server sends.
 function connect(port, game) {
@@ -56,6 +56,21 @@ const until = async (check) => {
   for (let i = 0; i < 100 && !check(); i++) await new Promise((r) => setTimeout(r, 10))
   return check()
 }
+
+describe('Undo and who plays each hero', () => {
+  const hero = (id, ally) => ({ id, ally })
+  it('a hero taken back from the computer stays with its player after an Undo', () => {
+    const before = { heroes: [hero('e', true), hero('c', false)], allyPaused: true, turn: { allyHelp: 'Which one?' } }
+    const now = { heroes: [hero('e', false), hero('c', false)], allyPaused: false, turn: { allyHelp: null } }
+    expect(keepWhoPlays(before, now)).toMatchObject({ heroes: [{ id: 'e', ally: false }, { id: 'c', ally: false }], allyPaused: false, turn: { allyHelp: null } })
+  })
+
+  it('a hero handed to the computer stays with it, and nothing else changes', () => {
+    const before = { heroes: [hero('e', false)], xp: 3 }
+    expect(keepWhoPlays(before, { heroes: [hero('e', true)], xp: 9 })).toEqual({ heroes: [{ id: 'e', ally: true }], xp: 3 })
+    expect(keepWhoPlays(before, { heroes: [hero('e', false)] })).toBe(before)
+  })
+})
 
 describe('sync server', () => {
   let dir
