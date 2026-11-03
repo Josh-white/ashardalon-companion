@@ -33,6 +33,7 @@ export function boardLayout(board) {
   const grid = boardGrid(board)
   const squares = []
   const walls = []
+  const seams = []
   const openEdges = []
   let minX = Infinity
   let maxX = -Infinity
@@ -53,10 +54,13 @@ export function boardLayout(board) {
         else openEdges.push({ x: sq.x, y: sq.y, side })
       } else if (next.floor && (side === 'E' || side === 'S') && (shut || next.blocked.has(OPPOSITE[side]))) {
         walls.push({ x: sq.x, y: sq.y, side })
+      } else if (next.floor && (side === 'E' || side === 'S') && next.tile !== sq.tile) {
+        // Open floor running from one tile onto the next: the seam between the tiles.
+        seams.push({ x: sq.x, y: sq.y, side })
       }
     }
   }
-  if (squares.length === 0) return { squares, walls, openEdges, exits: [], bounds: { x: 0, y: 0, w: 1, h: 1 } }
+  if (squares.length === 0) return { squares, walls, seams, openEdges, exits: [], bounds: { x: 0, y: 0, w: 1, h: 1 } }
   const exits = []
   for (const placed of board.tiles ?? []) {
     const def = board.defs?.[placed.tileId]
@@ -64,7 +68,7 @@ export function boardLayout(board) {
       if (EXIT_FEATURES.includes(feature.type)) exits.push({ type: feature.type, squares: boardSquares(placed, def, feature.at), entrance: def.kind === 'start' })
     }
   }
-  return { squares, walls, openEdges, exits, bounds: { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 } }
+  return { squares, walls, seams, openEdges, exits, bounds: { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 } }
 }
 
 // Stairs stand up out of the floor in 3D (JJ's ask): the Start tile's come down from where

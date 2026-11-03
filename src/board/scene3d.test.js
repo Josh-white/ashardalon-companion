@@ -148,3 +148,16 @@ describe('stairs in 3D', () => {
     expect(h['1,4']).toBeGreaterThan(0)
   })
 })
+
+describe('tile seams in 3D', () => {
+  it('mark open floor running from one tile onto the next, never inside one tile', () => {
+    const state = game()
+    const one = boardLayout(state.board)
+    expect(one.seams).toEqual([])
+    // An open 4x4 tile laid on the Start tile's north edge, where its one open square is.
+    const [open] = normalizeTiles([{ id: 'open', kind: 'regular', rows: ['....', '....', '....', '....'], exits: { N: 'oooo', S: 'oooo', W: 'oooo', E: 'oooo' } }], [])
+    const board = { ...state.board, defs: { ...state.board.defs, open }, tiles: [...state.board.tiles, { uid: 't1', tileId: 'open', at: [0, -4], turn: 0 }] }
+    const two = boardLayout(board)
+    expect(two.seams).toEqual([{ x: 1, y: -1, side: 'S' }])
+  })
+})
