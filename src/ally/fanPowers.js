@@ -14,6 +14,7 @@ import { hasAbility } from '../data/heroes.js'
 import { powerNumber } from '../state/combat.js'
 import { foes } from '../state/gameHelpers.js'
 import { bardicSongsLeft } from '../state/heroAttacks.js'
+import { singers, songRollLabel } from '../state/bardicSong.js'
 import { attackGone, canSpendAttack, mindOverBodyChoices } from '../state/heroTurn.js'
 import { fanUseBlocked, foesInReach, isCharmable, newestMonster, tilesWithin1, trapsOnTile } from '../state/fanPowers.js'
 import { heroesInReach } from '../board/encounters.js'
@@ -102,6 +103,9 @@ export function fanReaction(state, roll = d20) {
     if (condition) return { action: { type: 'MIND_OVER_BODY', heroId: hero.id, condition, roll: roll() }, say: `${hero.name} tries to shrug off being ${condition} (Mind Over Body).` }
   }
 
+  const sung = songForFailedRoll(state, roll)
+  if (sung) return sung
+
   const tracked = trackersInstinct(state) ?? charmBeast(state, roll)
   if (tracked) return tracked
   const come = comeAndGetIt(state)
@@ -114,7 +118,7 @@ export function fanReaction(state, roll = d20) {
   const damage = powerNumber(power?.card?.damage) ?? 1
   const alive = (id) => foes(state).find((m) => m.id === id && m.hp > 0)
   const rows = last.rolls.filter((r) => !r.hit && !r.rerolled && alive(r.monsterId))
-  for (const bard of state.heroes.filter((h) => h.ally && bardicSongsLeft(h) > 0)) {
+  for (const bard of singers(state).filter((h) => h.ally)) {
     const left = bardicSongsLeft(bard)
     const row = rows.find((r) => alive(r.monsterId).villain || (left > 1 && damage >= figureHp(alive(r.monsterId))))
     if (row) {
@@ -125,6 +129,22 @@ export function fanReaction(state, roll = d20) {
     }
   }
   return null
+}
+
+// Bardic Song for a computer hero's failed roll (state.songRoll). Breaking free of a curse,
+// shrugging off a condition and disabling a trap are worth a song; a locked door can be tried
+// again next turn, so it isn't. The last song is kept for a villain, like a miss.
+const SONG_WORTHY = new Set(['CURSE_ROLL', 'MIND_OVER_BODY', 'DISABLE_TRAP'])
+function songForFailedRoll(state, roll) {
+  const failed = state.songRoll
+  const roller = failed && state.heroes.find((h) => h.id === failed.heroId)
+  if (!roller?.ally || !SONG_WORTHY.has(failed.action.type)) return null
+  const bard = singers(state).find((h) => h.ally && bardicSongsLeft(h) > 1)
+  if (!bard) return null
+  return {
+    action: { type: 'BARDIC_SONG', bardId: bard.id, roll: roll() },
+    say: `${bard.name}'s Bardic Song: ${roller.name} rolls again to ${songRollLabel(state)}!`,
+  }
 }
 
 // Tracker's Instinct (a fan Ranger's, 2 uses, no XP): cancels an encounter drawn for a tile

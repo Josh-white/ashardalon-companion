@@ -8,6 +8,8 @@ import { attackOptions, allyStep } from './brain.js'
 import { fanReaction } from './fanPowers.js'
 import { offTurnMove } from './brain.js'
 import { allyReaction } from './powers.js'
+import { bardicSongsLeft } from '../state/heroAttacks.js'
+import { singers, songTokens } from '../state/bardicSong.js'
 
 // A made-up Start tile (its two halves count as two tiles), open to the north.
 const TILES = normalizeTiles(
@@ -325,6 +327,48 @@ describe('on anyone\'s turn', () => {
       state = run(state, step)
       expect(state.monsters).toEqual([])
     }
+  })
+})
+
+describe('Bardic Song for a failed roll', () => {
+  const BARD = fan(0, 'bard', ['bardic-song'])
+  const MONK = fan(1, 'monk', ['mind-over-body'])
+  const failMob = (state) => {
+    state = gameReducer(state, { type: 'TOGGLE_HERO_CONDITION', heroId: hero(state, 1).id, condition: 'Dazed' })
+    return gameReducer(state, { type: 'MIND_OVER_BODY', heroId: hero(state, 1).id, condition: 'Dazed', roll: 3 })
+  }
+
+  it("a computer bard sings when a computer hero fails to shrug off a condition, and keeps the last song", () => {
+    let state = failMob(start([[BARD, [jab]], [MONK, [jab]]]))
+    expect(hero(state, 1).conditions).toEqual(['Dazed'])
+    expect(state.songRoll).toBeTruthy()
+    const step = fanReaction(state, () => 15)
+    expect(step.action).toEqual({ type: 'BARDIC_SONG', bardId: hero(state, 0).id, roll: 15 })
+    state = run(state, step)
+    expect(hero(state, 1).conditions).toEqual([])
+    expect(bardicSongsLeft(hero(state, 0))).toBe(2)
+
+    // With one song left the bard saves it.
+    let last = start([[BARD, [jab]], [MONK, [jab]]])
+    last = { ...last, heroes: last.heroes.map((h, i) => (i === 0 ? { ...h, tokens: { ...h.tokens, bardicSongsUsed: 2 } } : h)) }
+    last = failMob(last)
+    expect(last.songRoll).toBeTruthy()
+    expect(fanReaction(last, () => 15)).toBeNull()
+  })
+
+  it("leaves a player's failed roll to the player", () => {
+    const state = failMob(start([[BARD, [jab]], [MONK, [jab], false]]))
+    expect(state.songRoll).toBeTruthy()
+    expect(fanReaction(state, () => 15)).toBeNull()
+  })
+
+  it('an escaped bard has no songs to offer', () => {
+    const state = start([[BARD, [jab]], [MONK, [jab]]])
+    expect(singers(state).map((h) => h.id)).toEqual([hero(state, 0).id])
+    expect(songTokens(state)).toEqual([{ id: hero(state, 0).id, name: 'bard', left: 3, total: 3 }])
+    const gone = { ...state, heroes: state.heroes.map((h, i) => (i === 0 ? { ...h, escaped: true } : h)) }
+    expect(singers(gone)).toEqual([])
+    expect(songTokens(gone)).toEqual([])
   })
 })
 

@@ -1,4 +1,5 @@
 import { heroArt, monsterArt } from '../data/art.js'
+import { SongTokens } from './BardicSong.jsx'
 import { heroLabel } from '../state/gameHelpers.js'
 import { HERO_COLORS } from '../data/heroes.js'
 import { PHASES } from '../data/phases.js'
@@ -67,6 +68,7 @@ function ProjectorScreen({ state, dispatch, onSwitchSeat, sound }) {
           <span className={state.surges === 0 ? 'text-red-400' : 'text-emerald-400'}>
             {state.surges === 0 ? 'No healing surges!' : `${'❤'.repeat(state.surges)} surges`}
           </span>
+          <SongTokens state={state} names />
         </div>
       </div>
       <div className="flex items-center gap-[1.5vw]">
