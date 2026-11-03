@@ -16,7 +16,7 @@ import { boardGrid, caged, heroEdges, heroReach, movesLeft, occupied, stayedOnBo
 import { foeDistance, foesInRange, powerRange } from '../board/monsters.js'
 import { heroesInReach } from '../board/encounters.js'
 import { moveChoices, moveTargets } from '../board/powerMoves.js'
-import { distanceChoices } from '../data/items.js'
+import { attackDistances } from '../board/attackDistances.js'
 import { effectsOf, maxRolls, onHitHeals, wolfBlocked } from '../data/powerEffects.js'
 import { targetAllowed } from '../state/fanPowers.js'
 import { statusesOf } from '../state/monsterStatus.js'
@@ -252,13 +252,7 @@ export function attackOptions(state, hero, { atWill = false, all: every = false 
 }
 
 function attackAction(state, hero, option, roll) {
-  const choices = distanceChoices(hero)
-  const dist = Object.fromEntries(
-    [...new Set(option.targets)]
-      .map((id) => [id, foeDistance(state, hero.id, id)])
-      .filter(([, d]) => d)
-      .map(([id, d]) => [id, choices && !choices.includes(d) ? 'far' : d]),
-  )
+  const dist = attackDistances(state, hero, option.targets, option.power)
   return {
     type: 'HERO_ATTACK',
     heroId: hero.id,
