@@ -5,6 +5,7 @@ import { canvasTexture, playExit3D } from './board3dFx.js'
 import { attachModel, detachModel, face, setDown, setWalking } from './figureModels.js'
 import { FIGURE_EXIT_MS, FX_DELAY_MS, HERO_EXIT_MS } from '../board/attackFx.js'
 import { disposeTree, seeded } from './board3dDungeon.js'
+import { baseId } from '../board/grid.js'
 
 // The 3D board's figures and markers (Board3D.jsx): standees and their icons, the cage,
 // figures walking to new squares, and the floor markers, items and lit squares.
@@ -399,6 +400,7 @@ function forget(node) {
 // (MomentOverlay.jsx boardHoldMs): a hero downed by poison falls, a monster defeated by a
 // trap goes through its portal, a new monster pops up, a cage lifts, once it's out of the way.
 export function syncFigures(stage, figures, art, fallAt, killedAt = () => false, hold = 0) {
+  stage.nodes = regroupNodes(stage.nodes, figures)
   const seen = new Set()
   // Squares a figure is about to leave (or is leaving) by portal or beam of light, and how
   // long that takes. A figure arriving on one waits for it (a Time Leap's monster takes the
@@ -499,6 +501,57 @@ export function syncFigures(stage, figures, art, fallAt, killedAt = () => false,
     stage.figures.remove(node)
     forget(node)
   }
+}
+
+// A group card's figures (the Legion Devil's 3) are numbered id, id#2, id#3 by what's left:
+// when one falls, the game renumbers the rest (pruneTokens in board/play.js), so devil 1
+// dying makes devil 2 "id" and devil 3 "id#2". Matched by id the figures would shuffle up a
+// square and the last one would leave from the wrong square, so the blow found no 3D figure
+// where the devil fell and showed its flat token instead. Each of the group's figures keeps
+// the node already standing on its square; the one left over is the one that fell.
+// `nodes`: Map of figure id -> node (each node's userData.at its square). Returns a new Map.
+export function regroupNodes(nodes, figures) {
+  const groups = new Map()
+  for (const f of figures) {
+    if (f.kind !== 'monster') continue
+    const base = baseId(f.id)
+    if (!groups.has(base)) groups.set(base, [])
+    groups.get(base).push(f)
+  }
+  const old = new Map()
+  for (const [id, node] of nodes) {
+    const base = baseId(id)
+    if (!old.has(base)) old.set(base, [])
+    old.get(base).push([id, node])
+  }
+  const out = new Map(nodes)
+  for (const [base, mine] of old) {
+    const now = groups.get(base)
+    if (!now || mine.length < 2 || mine.every(([id]) => now.some((f) => f.id === id))) continue
+    for (const [id] of mine) out.delete(id)
+    const free = [...mine]
+    const take = (pick) => {
+      const i = free.findIndex(pick)
+      return i < 0 ? null : free.splice(i, 1)[0]
+    }
+    const unmatched = []
+    // A figure that didn't move keeps the node on its square.
+    for (const f of now) {
+      const hit = take(([, n]) => n.userData.at && n.userData.at[0] === f.at[0] && n.userData.at[1] === f.at[1])
+      if (hit) out.set(f.id, hit[1])
+      else unmatched.push(f)
+    }
+    // One that moved takes the nearest node left; the nodes still left over leave the board.
+    for (const f of unmatched) {
+      const dist = ([, n]) => (n.userData.at ? Math.abs(n.userData.at[0] - f.at[0]) + Math.abs(n.userData.at[1] - f.at[1]) : Infinity)
+      const best = [...free].sort((a, b) => dist(a) - dist(b))[0]
+      if (!best) continue
+      take((e) => e === best)
+      out.set(f.id, best[1])
+    }
+    free.forEach(([id, node], i) => out.set(`${base}#gone-${i}-${id}`, node))
+  }
+  return out
 }
 
 // A figure that waits off the board, then pops up onto its square.
