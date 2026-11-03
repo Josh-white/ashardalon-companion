@@ -4,6 +4,8 @@ import { HERO_COLORS } from '../data/heroes.js'
 import { artUrl, useArt } from '../state/useArt.js'
 import Die from './Die3D.jsx'
 import { FX_DELAY_MS, FX_IMPACT_MS, FX_MS, fxLeadMs } from '../board/attackFx.js'
+import { anklesBroken } from '../audio/anklesBroken.js'
+import { momentSounds } from '../audio/sfx.js'
 
 const SHOW_MS = { roll: 2200, crit: 3500, fumble: 3000, defeat: 3000, level: 3500, down: 3500, poison: 3500, spawn: 3000, monster: 4500, 'monster-down': 5000, encounter: 4500, treasure: 4000, join: 4000 }
 // A device that reconnects shouldn't replay a moment that is long over.
@@ -63,7 +65,51 @@ const STYLES = {
 
 // Shows the latest big moment (a roll, a defeated monster, a hero going down)
 // on top of whatever screen this device is showing, then gets out of the way.
-export default function MomentOverlay({ moment, heroes, big = false }) {
+export default function MomentOverlay(props) {
+  return (
+    <>
+      <MomentCard {...props} />
+      <AnklesBroken moment={props.moment} big={props.big} />
+    </>
+  )
+}
+
+// How long ANKLES BROKEN! stays up.
+export const ANKLES_SHOW_MS = 2600
+
+// When the bone crack plays, the miss is shown: ms from the moment starting.
+export function anklesAtMs(moment) {
+  const crack = momentSounds(moment).find(([sound]) => sound === 'bonecrack')
+  return crack ? crack[1] : 0
+}
+
+// Easton's rare miss: ANKLES BROKEN! slams onto the screen as the bone cracks.
+export function AnklesBroken({ moment, big = false }) {
+  const [shown, setShown] = useState(null)
+  useEffect(() => {
+    if (!anklesBroken(moment) || Date.now() - moment.at > STALE_MS) return
+    const at = anklesAtMs(moment)
+    const show = setTimeout(() => setShown(moment.id), at)
+    const hide = setTimeout(() => setShown(null), at + ANKLES_SHOW_MS)
+    return () => {
+      clearTimeout(show)
+      clearTimeout(hide)
+    }
+  }, [moment?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!shown || shown !== moment?.id) return null
+  return (
+    <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-4" role="status">
+      <div className={`ankles-slam text-center font-display font-black leading-none ${big ? 'text-[9vw]' : 'text-6xl'}`}>
+        <div className="text-[0.6em]">🦴💥🦴</div>
+        <div className="text-orange-400 [text-shadow:0_0.06em_0_#7f1d1d,0_0_0.4em_rgb(0_0_0/0.9)]">ANKLES</div>
+        <div className="text-orange-400 [text-shadow:0_0.06em_0_#7f1d1d,0_0_0.4em_rgb(0_0_0/0.9)]">BROKEN!</div>
+      </div>
+    </div>
+  )
+}
+
+function MomentCard({ moment, heroes, big = false }) {
   const [visible, setVisible] = useState(null)
   const art = useArt()
 

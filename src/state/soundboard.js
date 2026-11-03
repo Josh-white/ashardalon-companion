@@ -10,6 +10,7 @@ export const BOARD_SOUNDS = [
   { key: 'laugh', emoji: '😈', label: 'Evil laugh' },
   { key: 'swords', emoji: '⚔️', label: 'Sword fight' },
   { key: 'drumroll', emoji: '🪘', label: 'Drumroll' },
+  { key: 'yawn', emoji: '🥱', label: 'Big yawn' },
 ]
 
 // Each player's taps per hero turn; everyone's count starts over when the turn passes.

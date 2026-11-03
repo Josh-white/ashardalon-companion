@@ -31,6 +31,16 @@ body {
   20%, 60% { transform: translateX(-0.6rem); }
   40%, 80% { transform: translateX(0.6rem); }
 }
+/* Easton's ANKLES BROKEN! miss: slams down tilted, wobbles, then fades away. */
+@keyframes ankles-slam {
+  0% { transform: scale(2.4) rotate(-14deg); opacity: 0; }
+  12% { transform: scale(0.92) rotate(-6deg); opacity: 1; }
+  18% { transform: scale(1.05) rotate(-9deg) translateX(-0.05em); }
+  24% { transform: scale(1) rotate(-7deg) translateX(0.05em); }
+  30%, 85% { transform: scale(1) rotate(-8deg); opacity: 1; }
+  100% { transform: scale(1.1) rotate(-8deg); opacity: 0; }
+}
+.ankles-slam { animation: ankles-slam 2.6s ease-out both; }
 .moment-pop { animation: moment-pop 0.35s ease-out both; }
 .moment-reveal { animation: moment-reveal 1.5s ease-out both; }
 .moment-glow { animation: moment-pop 0.35s ease-out both, moment-glow 1.2s ease-in-out 0.35s infinite; }
@@ -45,7 +55,7 @@ body {
 .defeat-skull { animation: defeat-skull 1.6s ease-out both; }
 
 @media (prefers-reduced-motion: reduce) {
-  .moment-pop, .moment-reveal, .moment-glow, .moment-shake, .defeat-skull { animation: none; }
+  .moment-pop, .moment-reveal, .moment-glow, .moment-shake, .defeat-skull, .ankles-slam { animation: none; }
 }
 
 /* The 3D d20 pops as it lands on its number; a natural 20 then glows. */
