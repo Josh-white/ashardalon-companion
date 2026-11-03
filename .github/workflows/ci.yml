@@ -29,7 +29,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
-      - run: npm test
+      - name: Tests
+        run: npm test -- --reporter=default --reporter=json --outputFile=test-times.json
+      # The Pi runs these same tests 5-7 times slower in its own build, and a test that runs
+      # out of time there rolls the update back. Warns (yellow) about tests heading that
+      # way and fails on any that would come too close to the Pi's limit.
+      - name: No test too slow for the Pi
+        run: node scripts/check-slow-tests.mjs test-times.json
       # The robot plays a dozen whole solo games by itself, tapping the real screens at
       # random, to catch a screen that crashes. A failure names the seed to play it again.
       - name: Robot plays whole games

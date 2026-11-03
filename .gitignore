@@ -4,3 +4,4 @@ dist
 .env.*
 /data
 coverage
+test-times.json
