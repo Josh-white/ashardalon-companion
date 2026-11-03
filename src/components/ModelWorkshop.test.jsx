@@ -43,8 +43,22 @@ describe('Model Workshop', () => {
     fireEvent.click(screen.getByText('Axe'))
     fireEvent.click(screen.getByText('🔥 Breathes fire'))
     fireEvent.click(send)
-    await waitFor(() => screen.getByText('Sent to the workshop!'))
+    await waitFor(() => screen.getByText('Your model was sent!'))
+    screen.getByText(/takes time/)
     expect(posts).toEqual([['/workshop', { idea: 'A lava knight', kind: 'monster', colors: ['red'], size: 'big', holds: 'Axe', attack: 'breath', from: 'Colton' }]])
+  })
+
+  it("keeps the Sent note up after the very first model, though the list isn't empty any more", async () => {
+    const requests = []
+    pi(requests)
+    render(<WorkshopButton state={state} me="Colton" />)
+    fireEvent.click(screen.getByText('🧙 My model'))
+    fireEvent.change(await screen.findByLabelText('Describe it'), { target: { value: 'A lava knight' } })
+    requests.push({ ...knight, rounds: [] })
+    fireEvent.click(screen.getByText('🧙 Send to Claude'))
+    await waitFor(() => screen.getByText('Your model was sent!'))
+    await waitFor(() => screen.getByText('📦 Models (1)'))
+    screen.getByText('Your model was sent!')
   })
 
   it('shows new pictures on the button, then Love it answers them', async () => {

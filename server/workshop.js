@@ -97,8 +97,15 @@ export function createWorkshop(dir) {
       if (!request) return send(res, 400, { error: 'Tell Claude what to make first.' })
       if (requests.length >= MAX_REQUESTS) return send(res, 507, { error: 'The workshop is full.' })
       const saved = { id: requestId(request), ...request, sentAt: new Date().toISOString(), answers: [] }
-      requests = [...requests, saved]
-      save()
+      try {
+        requests = [...requests, saved]
+        save()
+      } catch (error) {
+        // Most likely cards/workshop on the Pi belongs to root (made by Docker, not by auto-update.sh).
+        console.error('Model Workshop: could not save a request:', error.message)
+        requests = requests.filter((r) => r.id !== saved.id)
+        return send(res, 500, { error: "The workshop couldn't save it on the Pi. Ask Dad to check it." })
+      }
       return send(res, 201, withReply(saved))
     }
     const [id, name, extra] = path.slice('/workshop/'.length).split('/')

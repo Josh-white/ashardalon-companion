@@ -107,6 +107,8 @@ export function Workshop({ names = [], me = '', onClose = null }) {
           names={names}
           me={me}
           onSent={() => {
+            // Stay on the "Sent!" note: the first model would otherwise flip the workshop to the list.
+            setTab('new')
             reload()
           }}
           onSeeList={() => setTab('mine')}
@@ -154,9 +156,12 @@ export function RequestForm({ names, me, onSent, onSeeList }) {
   if (status === 'sent') {
     return (
       <div className="mt-6 rounded-2xl border border-violet-700/60 bg-zinc-900 p-6 text-center">
-        <p className="text-6xl">🧙</p>
-        <h2 className="mt-2 font-display text-3xl font-bold text-violet-300">Sent to the workshop!</h2>
-        <p className="mt-2 text-lg text-zinc-300">Claude will build it and send pictures here. The 🧙 button says 📸 Pictures! when they're ready.</p>
+        <p className="text-6xl">✅</p>
+        <h2 className="mt-2 font-display text-3xl font-bold text-violet-300">Your model was sent!</h2>
+        <p className="mt-3 text-lg text-zinc-200">Building a 3D model takes time, so it won't be ready right away. It can take a day or two.</p>
+        <p className="mt-2 text-lg text-zinc-300">
+          You can keep playing. When the pictures are ready, the 🧙 button at the top turns into <span className="font-semibold text-violet-200">📸 Pictures!</span>
+        </p>
         <div className="mt-5 flex justify-center gap-2">
           <Button
             onClick={() => {
