@@ -25,6 +25,9 @@ export const BASE_FRAME = {
   HC: 0.29, // head centre, above the neck
 }
 
+const GRIP = [55, 0, 14]
+const mirrored = ([x, y, z]) => [x, y, -z]
+
 // The joints the moves turn. grip.*, back, hat and fx are fixed to them.
 const POSED = ['hips', 'body', 'head', 'arm.L', 'arm.R', 'hand.L', 'hand.R', 'leg.L', 'leg.R', 'tail']
 
@@ -41,9 +44,11 @@ function skeleton(f) {
     ['leg.L', 'hips', [f.BW * 0.24, 0, 0]],
     ['leg.R', 'hips', [-f.BW * 0.24, 0, 0]],
     ['tail', 'hips', [0, 0.08, -f.BD / 2 + 0.02]],
-    // A held weapon points along +Y of its grip: up, a little forward and away from the body.
-    ['grip.R', 'hand.R', [0, 0, 0], [20, 0, 18]],
-    ['grip.L', 'hand.L', [0, 0, 0], [20, 0, -18]],
+    // A held weapon points along +Y of its grip, its handle through the fist: forward and up,
+    // a little away from the body, so it doesn't lie along the arm. A part can hold it its own
+    // way (a staff or a spear stands up: its `grip`).
+    ['grip.R', 'hand.R', [0, 0, 0], GRIP],
+    ['grip.L', 'hand.L', [0, 0, 0], mirrored(GRIP)],
     ['back', 'body', [0, f.BH * 0.78, -f.BD / 2]],
     ['hat', 'head', [0, f.HS, 0]],
     // Magic effects around the whole figure, from the floor up; it turns slowly in the builder.
@@ -165,6 +170,11 @@ export function buildFigure(recipe) {
     joints[name] = j
     rest[name] = j.position.clone()
   }
+  // Something in a hand: that hand closes into a fist round its handle (the arm parts' hand()).
+  const held = { R: picked(recipe, { key: 'hand' })?.part, L: picked(recipe, { key: 'offhand' })?.part }
+  f.fist = { R: Boolean(held.R && held.R.fist !== false), L: Boolean(held.L && held.L.fist !== false) }
+  if (held.R?.grip) joints['grip.R'].rotation.set(...rad(held.R.grip), 'YXZ')
+  if (held.L?.grip) joints['grip.L'].rotation.set(...rad(mirrored(held.L.grip)), 'YXZ')
   const palette = { ...DEFAULT_COLORS, ...recipe.colors }
   const k = kit(joints, palette)
   for (const slot of SLOTS) {

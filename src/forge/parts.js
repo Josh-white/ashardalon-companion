@@ -538,6 +538,22 @@ const HATS = [
 
 // ── Arms ──────────────────────────────────────────────────────────────────────────────
 
+// A hand at the end of an arm: round and open when it's empty, and a fist closed round the
+// handle when it holds something (f.fist, from figure.js). The fist sits on the grip, so its
+// fingers line up with the handle, which pokes out above and below it.
+function hand(k, side, colour, r, f) {
+  if (!f.fist?.[side]) return k.ball(colour, `hand.${side}`, [0, 0, 0], r)
+  const grip = `grip.${side}`
+  const x = side === 'L' ? 1 : -1
+  const w = r * 1.2
+  const h = Math.min(r * 1.35, 0.17)
+  k.ball(colour, `hand.${side}`, [0, 0.02, 0], r * 0.75)
+  k.box(colour, grip, [x * r * 0.08, 0, 0], [w, h, w], { round: r * 0.4 })
+  // Knuckles round the front of the handle, and the thumb over the top.
+  for (const n of [0, 1, 2, 3]) k.ball(colour, grip, [x * r * 0.05, -h * 0.36 + n * h * 0.24, w * 0.47], r * 0.2)
+  k.ball(colour, grip, [-x * w * 0.3, h * 0.42, w * 0.22], r * 0.24, { scale: [1, 0.8, 1.2] })
+}
+
 const armFrame =
   (w = 0.1) =>
   (s, f) => {
@@ -557,7 +573,7 @@ const ARMS = [
         const arm = `arm.${side}`
         k.limb('outfit', arm, [0, 0, 0], [0, -f.AL * 0.5, 0], f.armW * 1.1, { ends: true })
         k.limb('skin', arm, [0, -f.AL * 0.5, 0], [0, -f.AL, 0.02], f.armW * 0.95)
-        k.ball('skin', `hand.${side}`, [0, 0, 0], f.armW * 1.3)
+        hand(k, side, 'skin', f.armW * 1.3, f)
       }
     },
   },
@@ -572,7 +588,7 @@ const ARMS = [
         const arm = `arm.${side}`
         k.limb('metal', arm, [0, 0, 0], [0, -f.AL * 0.5, 0], f.armW * 1.05, { ends: true })
         k.limb('metal', arm, [0, -f.AL * 0.5, 0], [0, -f.AL, 0.02], f.armW * 1.25, { tip: f.armW * 0.95 })
-        k.ball('metal', `hand.${side}`, [0, 0, 0], f.armW * 1.35)
+        hand(k, side, 'metal', f.armW * 1.35, f)
         if (s.pads > 0.05) k.ball('metal', arm, [x * 0.02, 0.02, 0], f.armW * 2 * s.pads, { half: true, scale: [1, 0.85, 1] })
       }
     },
@@ -590,7 +606,7 @@ const ARMS = [
         k.ball('skin', arm, [0, -f.AL * 0.25, 0.03], f.armW * 1.3 * s.muscles, { scale: [1, 1.2, 1] })
         k.limb('skin', arm, [0, -f.AL * 0.5, 0], [0, -f.AL, 0.02], f.armW * 1.05)
         k.tube('trim', arm, [0, -f.AL * 0.85, 0.02], f.armW * 1.15, 0.08)
-        k.ball('skin', `hand.${side}`, [0, 0, 0], f.armW * 1.35)
+        hand(k, side, 'skin', f.armW * 1.35, f)
       }
     },
   },
@@ -603,10 +619,9 @@ const ARMS = [
     build(k, s, f) {
       for (const [side] of SIDES) {
         const arm = `arm.${side}`
-        const hand = `hand.${side}`
         k.limb('skin', arm, [0, 0, 0], [0, -f.AL, 0.02], f.armW, { ends: true })
-        k.ball('skin', hand, [0, 0, 0], f.armW * 1.3)
-        for (const dx of [-1, 0, 1]) k.limb(IVORY, hand, [dx * f.armW * 0.6, -f.armW * 0.5, f.armW * 0.5], [dx * f.armW * 0.8, -f.armW - 0.1 * s.claws, f.armW + 0.06 * s.claws], 0.025, { tip: 0.002, sides: 6 })
+        hand(k, side, 'skin', f.armW * 1.3, f)
+        for (const dx of [-1, 0, 1]) k.limb(IVORY, `hand.${side}`, [dx * f.armW * 0.6, -f.armW * 0.5, f.armW * 0.5], [dx * f.armW * 0.8, -f.armW - 0.1 * s.claws, f.armW + 0.06 * s.claws], 0.025, { tip: 0.002, sides: 6 })
       }
     },
   },
@@ -624,7 +639,7 @@ const ARMS = [
         k.cone('outfit', arm, [0, end / 2, 0], f.armW * 2 * s.sleeves, -end, { tip: f.armW * 1.1, sides: 14 })
         k.tube('trim', arm, [0, end + 0.02, 0], f.armW * 2 * s.sleeves * 0.98, 0.04, { sides: 14 })
         k.limb('skin', arm, [0, end, 0], [0, -f.AL, 0.02], f.armW * 0.8)
-        k.ball('skin', `hand.${side}`, [0, 0, 0], f.armW * 1.2)
+        hand(k, side, 'skin', f.armW * 1.2, f)
       }
     },
   },
@@ -641,7 +656,7 @@ const ARMS = [
         k.limb(BONE, arm, [0, 0, 0], [0, -f.AL * 0.5, 0], f.armW)
         k.ball(BONE, arm, [0, -f.AL * 0.5, 0], f.armW * 1.4)
         k.limb(BONE, arm, [0, -f.AL * 0.5, 0], [0, -f.AL, 0.02], f.armW * 0.9)
-        k.ball(BONE, `hand.${side}`, [0, 0, 0], f.armW * 1.9)
+        hand(k, side, BONE, f.armW * 1.9, f)
       }
     },
   },
@@ -752,6 +767,9 @@ const LEGS = [
 ]
 
 // ── Weapons (main hand) ───────────────────────────────────────────────────────────────
+
+// Long poles stand up in the fist instead of pointing forward (a part's `grip`, figure.js).
+const POLE = [12, 0, 10]
 
 function handle(k, j, from, to, r = 0.035, colour = 'wood') {
   k.tube(colour, j, [0, (from + to) / 2, 0], r, to - from, { sides: 8 })
@@ -889,6 +907,7 @@ const WEAPONS = [
   },
   {
     id: 'spear',
+    grip: POLE,
     name: 'Spear',
     emoji: '🔱',
     shape: [sl('length', 'Long', 0.5, 1.8), sl('tip', 'Point', 0.5, 2.2)],
@@ -901,6 +920,7 @@ const WEAPONS = [
   },
   {
     id: 'trident',
+    grip: POLE,
     name: 'Trident',
     emoji: '🔱',
     shape: [sl('length', 'Long', 0.5, 1.8), sl('prongs', 'Prongs', 0.5, 2)],
@@ -918,6 +938,7 @@ const WEAPONS = [
   },
   {
     id: 'staff',
+    grip: POLE,
     name: 'Magic staff',
     emoji: '🪄',
     shape: [sl('length', 'Long', 0.5, 1.8), sl('orb', 'Orb', 0.4, 2.2)],
@@ -949,6 +970,7 @@ const WEAPONS = [
   },
   {
     id: 'scythe',
+    grip: POLE,
     name: 'Scythe',
     emoji: '🌙',
     shape: [sl('length', 'Long', 0.5, 1.8), sl('blade', 'Blade', 0.5, 2)],
@@ -1096,6 +1118,7 @@ function roundShield(k, s, colour = 'wood') {
 const OFF_HAND = [
   {
     id: 'round-shield',
+    fist: false,
     name: 'Round shield',
     emoji: '🛡️',
     shape: [sl('size', 'Size', 0.6, 1.6), sl('boss', 'Middle bump', 0, 2)],
@@ -1106,6 +1129,7 @@ const OFF_HAND = [
   },
   {
     id: 'kite-shield',
+    fist: false,
     name: 'Knight shield',
     emoji: '🔰',
     shape: [sl('size', 'Size', 0.6, 1.6), sl('width', 'Wide', 0.7, 1.4)],
@@ -1121,6 +1145,7 @@ const OFF_HAND = [
   },
   {
     id: 'tower-shield',
+    fist: false,
     name: 'Tower shield',
     emoji: '🚪',
     shape: [sl('size', 'Size', 0.6, 1.5), sl('width', 'Wide', 0.7, 1.4)],
@@ -1144,6 +1169,7 @@ const OFF_HAND = [
   },
   {
     id: 'spiky-shield',
+    fist: false,
     name: 'Spiky shield',
     emoji: '🌵',
     shape: [sl('size', 'Size', 0.6, 1.6), sl('spikes', 'Spikes', 0.3, 2)],
@@ -1161,6 +1187,7 @@ const OFF_HAND = [
   },
   {
     id: 'torch',
+    grip: [25, 0, 10],
     name: 'Torch',
     emoji: '🔥',
     shape: [sl('length', 'Long', 0.6, 1.6), sl('flame', 'Flame', 0.4, 2.2)],
@@ -1186,6 +1213,7 @@ const OFF_HAND = [
   },
   {
     id: 'orb',
+    fist: false,
     name: 'Magic orb',
     emoji: '🔮',
     shape: [sl('size', 'Size', 0.5, 2), sl('float', 'Float', 0, 2)],
