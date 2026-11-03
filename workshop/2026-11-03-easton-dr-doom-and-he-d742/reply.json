@@ -30,6 +30,17 @@
    ],
    "at": "2026-11-03T02:45:00Z",
    "model": "model-3.glb"
+  },
+  {
+   "note": "Round 4: I pushed the mask back into his face so it doesn't stick out any more. Everything else stays the same. Try \ud83c\udfa8 Tweak it yourself too, to change his colors or size!",
+   "pictures": [
+    "front-4.png",
+    "side-4.png",
+    "attack-4.png",
+    "with-knight-4.png"
+   ],
+   "model": "model-4.glb",
+   "at": "2026-11-03T02:55:00Z"
   }
  ]
 }
