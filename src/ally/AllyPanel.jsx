@@ -14,6 +14,7 @@ import { fanReaction } from './fanPowers.js'
 import { teamReaction } from './boardPowers.js'
 import { audioBusy } from '../audio/busy.js'
 import { isReading } from '../components/CardReading.jsx'
+import { fxEndMs } from '../board/attackFx.js'
 
 // How long the ally waits between taps, so everyone can see what it did.
 export const ALLY_STEP_MS = 2500
@@ -117,8 +118,9 @@ export function useAllyDriver(state, dispatch, drive) {
       }
       const hero = activeAlly(s)
       if (!hero) return ALLY_STEP_MS
-      // A big moment on screen (a level up, a defeat): let it play first.
-      if (s.moment && serverNow() - s.moment.at < 3000) return 800
+      // A big moment on screen (a level up, a defeat): let it play first, and an attack's
+      // animation on the board to the end, so the next card doesn't cover it.
+      if (s.moment && serverNow() - s.moment.at < Math.max(3000, fxEndMs(s.moment) + 300)) return 800
       // A monster just hit a player's hero: give them time to use a reaction.
       const hit = s.turn.lastMonsterAttack
       if (hit && hit !== mem.attackSeen) {

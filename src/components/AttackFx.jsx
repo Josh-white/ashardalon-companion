@@ -21,12 +21,15 @@ export function useAttackFx(moment) {
   const timers = useRef([])
   // Only a new attack replaces the one playing: a moment that follows straight after
   // (the treasure for a defeated monster, the next monster's turn) lets it finish.
+  // A new attack that waits for this one (moment.after) lets it play to the end first.
   useEffect(() => {
     if (!moment?.fx || serverNow() - moment.at > STALE_MS) return
-    timers.current.forEach(clearTimeout)
+    const lead = fxLeadMs(moment)
+    if (!moment.after) timers.current.forEach(clearTimeout)
     timers.current = [
-      setTimeout(() => setPlaying({ id: moment.id, fx: moment.fx }), fxLeadMs(moment) + FX_DELAY_MS),
-      setTimeout(() => setPlaying(null), fxLeadMs(moment) + FX_DELAY_MS + FX_MS + 800),
+      ...(moment.after ? timers.current : []),
+      setTimeout(() => setPlaying({ id: moment.id, fx: moment.fx }), lead + FX_DELAY_MS),
+      setTimeout(() => setPlaying((p) => (p?.id === moment.id ? null : p)), lead + FX_DELAY_MS + FX_MS + 800),
     ]
   }, [moment?.id]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => timers.current.forEach(clearTimeout), [])

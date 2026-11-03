@@ -184,7 +184,7 @@ export function momentSounds(moment) {
   // A monster walking up first, or a moment waiting for the board (board/attackFx.js fxLeadMs):
   // every sound waits.
   const lead = fxLeadMs(moment)
-  if (lead > 0) return momentSounds({ ...moment, wait: 0, ...(moment.fx && { fx: { ...moment.fx, walk: 0 } }) }).map(([sound, ms]) => [sound, ms + lead])
+  if (lead > 0) return momentSounds({ ...moment, wait: 0, after: 0, ...(moment.fx && { fx: { ...moment.fx, walk: 0 } }) }).map(([sound, ms]) => [sound, ms + lead])
   const rolls = moment.rolls ?? (moment.value != null ? [{ value: moment.value }] : [])
   const values = rolls.map((r) => r.value)
 

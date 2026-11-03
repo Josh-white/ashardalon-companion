@@ -294,7 +294,7 @@ function makeCage() {
   return cage
 }
 
-function setCaged(stage, node, on) {
+function setCaged(stage, node, on, hold = 0) {
   if (Boolean(node.userData.cage) === on) return
   const icons = node.userData.icons
   // A cage still flying off (freed, then caged again quickly, as with Undo) goes now
@@ -309,8 +309,19 @@ function setCaged(stage, node, on) {
     const drop = 2.2
     cage.position.y = stage.still ? 0 : drop
     if (!stage.still) {
-      // Falls with a little bounce when it lands.
-      stage.tweens.push({ cageOf: node, ms: 650, step: (k) => (cage.position.y = k < 0.8 ? drop * (1 - (k / 0.8) ** 2) : Math.sin(((k - 0.8) / 0.2) * Math.PI) * 0.08) })
+      // Falls with a little bounce when it lands (out of sight until then).
+      cage.visible = hold <= 0
+      stage.tweens.push({
+        cageOf: node,
+        wait: hold,
+        ms: 650,
+        done: () => ((cage.visible = true), (cage.position.y = 0)),
+        step: (k) => {
+          if (k <= 0) return
+          cage.visible = true
+          cage.position.y = k < 0.8 ? drop * (1 - (k / 0.8) ** 2) : Math.sin(((k - 0.8) / 0.2) * Math.PI) * 0.08
+        },
+      })
     }
   } else {
     const cage = node.userData.cage
@@ -318,7 +329,7 @@ function setCaged(stage, node, on) {
     icons.position.y = node.userData.kind === 'villain' ? 1.45 : 1.12
     const gone = () => (node.remove(cage), disposeTree(cage))
     if (stage.still) gone()
-    else stage.tweens.push({ cageOf: node, ms: 600, done: gone, step: (k) => (cage.position.y = k * k * 2.4, k >= 1 && gone()) })
+    else stage.tweens.push({ cageOf: node, wait: hold, ms: 600, done: gone, step: (k) => (cage.position.y = k * k * 2.4, k >= 1 && gone()) })
   }
   stage.render()
 }
@@ -378,7 +389,10 @@ function forget(node) {
 
 // Figures come, go and walk to their new squares. `fallAt(figure)`: when a hero who just
 // dropped to 0 HP should fall over (after the attack animation that downs them), in ms.
-export function syncFigures(stage, figures, art, fallAt, killedAt = () => false) {
+// `hold`: how long what changes now waits (ms), for a new moment's card to step aside
+// (MomentOverlay.jsx boardHoldMs): a hero downed by poison falls, a monster defeated by a
+// trap goes through its portal, a new monster pops up, a cage lifts, once it's out of the way.
+export function syncFigures(stage, figures, art, fallAt, killedAt = () => false, hold = 0) {
   const seen = new Set()
   // Squares a figure is about to leave (or is leaving) by portal or beam of light, and how
   // long that takes. A figure arriving on one waits for it (a Time Leap's monster takes the
@@ -388,7 +402,7 @@ export function syncFigures(stage, figures, art, fallAt, killedAt = () => false)
   if (!stage.still) {
     for (const [id, node] of stage.nodes) {
       if (!ids.has(id) && node.userData.at && !node.userData.anim?.down && !killedAt(node.userData.at)) {
-        exits.set(`${node.userData.at[0]},${node.userData.at[1]}`, node.userData.kind === 'hero' ? HERO_EXIT_MS : FIGURE_EXIT_MS)
+        exits.set(`${node.userData.at[0]},${node.userData.at[1]}`, hold + (node.userData.kind === 'hero' ? HERO_EXIT_MS : FIGURE_EXIT_MS))
       }
     }
   }
@@ -412,7 +426,7 @@ export function syncFigures(stage, figures, art, fallAt, killedAt = () => false)
     if (!node) {
       node = makeStandee(stage, f, url)
       node.position.copy(to)
-      const wait = exits.get(`${f.at[0]},${f.at[1]}`)
+      const wait = exits.get(`${f.at[0]},${f.at[1]}`) ?? hold
       if (wait) arriveAfter(stage, node, wait)
       node.userData.look = look
       node.userData.lookKey = lookKey
@@ -429,7 +443,7 @@ export function syncFigures(stage, figures, art, fallAt, killedAt = () => false)
         })
       }
     } else if (node.position.distanceTo(to) > 0.01) {
-      glide(stage, node, to)
+      glide(stage, node, to, hold)
     }
     node.userData.at = f.at
     const { ring, faceMat, baseMat } = node.userData
@@ -441,12 +455,12 @@ export function syncFigures(stage, figures, art, fallAt, killedAt = () => false)
     if (node.userData.faded !== f.faded) {
       node.userData.faded = f.faded
       clearTimeout(node.userData.fallTimer)
-      const wait = f.faded ? fallAt(f) : 0
+      const wait = f.faded ? fallAt(f) || hold : 0
       if (wait > 0) node.userData.fallTimer = setTimeout(() => (setDown(node, true), stage.render()), wait)
       else setDown(node, f.faded)
     }
     setIcons(stage, node, f.icons ?? [])
-    if (f.kind === 'hero') setCaged(stage, node, Boolean(f.caged))
+    if (f.kind === 'hero') setCaged(stage, node, Boolean(f.caged), hold)
   }
   for (const [id, node] of stage.nodes) {
     if (seen.has(id)) continue
@@ -472,6 +486,7 @@ export function syncFigures(stage, figures, art, fallAt, killedAt = () => false)
         playExit3D(stage, node, gone)
       }
       if (killedAt(node.userData.at)) node.userData.leaveTimer = setTimeout(exit, FX_DELAY_MS + 3500)
+      else if (hold > 0) node.userData.leaveTimer = setTimeout(exit, hold)
       else exit()
       continue
     }
@@ -523,21 +538,30 @@ export function lookAtRest(stage, node, now = false) {
 }
 
 // A figure hops to its new square (a hop per square, so a walk looks like steps).
-function glide(stage, node, to) {
+// `hold`: it waits that long first (for a card to step aside).
+function glide(stage, node, to, hold = 0) {
   stage.tweens = stage.tweens.filter((t) => t.node !== node)
   const from = node.position.clone()
   const hops = Math.max(1, Math.round(from.distanceTo(to)))
   const ms = stage.still ? 1 : Math.min(hops, 6) * STEP_MS * (node.userData.model ? 1.6 : 1)
   // A hero figure walks there, facing the way it goes; a standee hops.
   const walker = Boolean(node.userData.model)
-  if (walker) {
+  const setOff = () => {
     face(node, to.x - from.x, to.z - from.z)
     if (!stage.still) setWalking(node, true)
   }
+  if (walker && !(hold > 0)) setOff()
+  let started = !(hold > 0)
   stage.tweens.push({
     node,
+    wait: stage.still ? 0 : hold,
     ms,
     step: (k) => {
+      if (!started) {
+        if (k <= 0) return
+        started = true
+        if (walker) setOff()
+      }
       node.position.lerpVectors(from, to, k)
       node.userData.body.position.y = stage.still || walker ? 0 : Math.abs(Math.sin(k * Math.PI * hops)) * 0.12
       if (k >= 1 && walker) {
