@@ -452,6 +452,8 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   if (passedKey !== passedSeen) {
     setPassedSeen(passedKey)
     if (passedIds) setChosen(passedIds.filter((id) => foes(state).some((m) => m.id === id)))
+    // The walk was cancelled (or the hero moved on): its picks go too.
+    else if (passedSeen) setChosen([])
   }
   const tap = (id) =>
     setChosen((list) => {

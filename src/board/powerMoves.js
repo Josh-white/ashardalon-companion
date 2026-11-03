@@ -108,6 +108,25 @@ export function pathBack(state) {
   return withPassed({ ...placed, turn: { ...placed.turn, boardMove: { ...move, steps: [{ ...s, trail }, ...rest] } } })
 }
 
+// Cancel a power's walk (Whirling Mantis Step) before its attack: the hero goes back to where
+// the walk began and the power forgets the walk and the monsters it passed, so it can be
+// walked again later (or the hero moves normally first).
+export function cancelPath(state) {
+  const path = pathOf(state)
+  if (!path) return state
+  const move = state.turn.boardMove
+  const placed = placeToken(state, move.heroId, path.trail[0])
+  return { ...placed, turn: { ...placed.turn, boardMove: null, powerPassed: null, beforeMoved: null } }
+}
+
+// A hero's own move after a finished power walk (but before its attack) means the walk is
+// off: the monsters it passed aren't the ones the power attacks any more.
+export function forgetPassed(state, heroId) {
+  const passed = state.turn.powerPassed
+  if (!passed || passed.heroId !== heroId || state.turn.boardMove) return state
+  return { ...state, turn: { ...state.turn, powerPassed: null, beforeMoved: null } }
+}
+
 // Cause Fear: once the allies' extra attacks are done (and no other move is waiting), each
 // monster figure still on the cleric's tile goes onto a tile within 2 tiles of the cleric.
 export function queueFearMove(state) {
