@@ -5,7 +5,7 @@ import { bonusWords, encounterCancelCost, foeBonus } from '../data/difficulty.js
 import { heroItems } from '../data/items.js'
 import { reactionsFor } from '../data/powerEffects.js'
 import { ENCOUNTER_LABELS, encounterCount, isWrathCheck, phaseChecks, villainInPlay } from '../state/game.js'
-import { attackBlocked, attackRolls, boardEffect, boardFound, effectWords, encounterNotes, extraEncounterReasons, firstPicks, fixedTargets, heroNames, standingHeroes, hitWords, resolveLabel, takesWords, targetQuestion, trapDisable, trapRollMods } from '../state/encounterRules.js'
+import { attackBlocked, boardEffect, boardFound, effectWords, encounterNotes, extraEncounterReasons, firstPicks, fixedTargets, heroNames, standingHeroes, hitWords, resolveLabel, takesWords, targetQuestion, trapDisable, trapRollMods } from '../state/encounterRules.js'
 import { rollD20, shuffleNumbers } from '../state/random.js'
 import { useCards } from '../state/useCards.js'
 import { boardAnswer } from '../board/checks.js'
@@ -25,10 +25,9 @@ import { highAlertPass, passWords, warpPasses } from '../state/passMonsters.js'
 const BOTTOM_TILE_CARDS = new Set(['occupied-lair', 'scream-of-the-sentry', 'spotted'])
 
 // Thief in the Dark: the active hero picks one of their treasure cards to lose.
-function ThiefStep({ hero, dispatch }) {
-  const [stolen, setStolen] = useState(null)
+function ThiefStep({ state, hero, dispatch }) {
   const items = heroItems(hero)
-  if (stolen) return <p className="text-emerald-300">✓ The thief took {hero.name}'s {stolen}.</p>
+  if (state.encounter.stepDone) return <p className="text-emerald-300">✓ {state.encounter.stepDone}</p>
   if (items.length === 0) {
     return <p className="text-zinc-200">{hero.name} has no treasure cards. Discard a Treasure token if you have one; if not, the thief gets nothing.</p>
   }
@@ -40,10 +39,7 @@ function ThiefStep({ hero, dispatch }) {
           <Button
             key={item.id}
             variant="danger"
-            onClick={() => {
-              dispatch({ type: 'DISCARD_ITEM', heroId: hero.id, itemId: item.id })
-              setStolen(item.name)
-            }}
+            onClick={() => dispatch({ type: 'DISCARD_ITEM', heroId: hero.id, itemId: item.id, encounterStep: `The thief took ${hero.name}'s ${item.name}.` })}
           >
             💰 {item.name}
           </Button>
@@ -96,13 +92,15 @@ export function AffectedHeroes({ heroes, label }) {
 // Rolls an attack from an encounter card or a trap. `dispatchAttack` sends the targets.
 // On the virtual board the heroes it reaches are picked (and highlighted) from where they
 // stand; the players can still change the picks. `trap` is the marker for a trap's attack.
-function AttackStep({ state, hero, name, attack, onAttack, onNobody, dispatch, trap }) {
+// `rolled` is the rolls the game kept once the attack was made (an empty list when it found
+// nobody), so the results stay up after a tab switch or on another screen instead of a new Roll button.
+function AttackStep({ state, hero, name, attack, onAttack, onNobody, dispatch, trap, rolled }) {
   const question = targetQuestion(attack.targets, hero)
   const fixed = fixedTargets(state, attack, hero)
   const [fromBoard] = useState(() => (question ? encounterTargetIds(state, attack.targets, hero, { trap }) : null))
   const [chosen, setChosen] = useState(firstPicks(attack, hero, fromBoard))
   const [guarded, setGuarded] = useState([])
-  const [results, setResults] = useState(null)
+  const results = rolled?.map((r) => ({ ...r, hero: state.heroes.find((h) => h.id === r.heroId) })).filter((r) => r.hero) ?? null
   const targets = fixed ?? chosen
   const downHeroes = state.heroes.filter((h) => h.hp <= 0)
   const toggle = (id) => setChosen((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]))
@@ -110,9 +108,9 @@ function AttackStep({ state, hero, name, attack, onAttack, onNobody, dispatch, t
   const roll = () => {
     const rolled = targets.map((heroId) => ({ heroId, roll: rollD20() }))
     onAttack(rolled, guarded)
-    setResults(attackRolls(state, attack, rolled, guarded))
   }
 
+  if (results && results.length === 0) return <p className="text-lg text-zinc-300">✓ {name} found nobody to attack.</p>
   if (results) {
     return (
       <ul className="space-y-2">
@@ -197,9 +195,8 @@ function AttackStep({ state, hero, name, attack, onAttack, onNobody, dispatch, t
 
 // Revel in Destruction: a damaged monster heals.
 function HealMonster({ state, amount, dispatch }) {
-  const [healed, setHealed] = useState(null)
   const damaged = state.monsters.filter((m) => m.hp < m.maxHp)
-  if (healed) return <p className="text-zinc-300">✓ The {healed} healed {amount}.</p>
+  if (state.encounter.stepDone) return <p className="text-zinc-300">✓ {state.encounter.stepDone}</p>
   if (damaged.length === 0) return <p className="text-zinc-400">No monster is damaged, so nothing happens.</p>
   return (
     <div className="space-y-2">
@@ -208,10 +205,7 @@ function HealMonster({ state, amount, dispatch }) {
         {damaged.map((m) => (
           <Button
             key={m.id}
-            onClick={() => {
-              dispatch({ type: 'ADJUST_MONSTER_HP', monsterId: m.id, amount })
-              setHealed(m.name)
-            }}
+            onClick={() => dispatch({ type: 'ADJUST_MONSTER_HP', monsterId: m.id, amount, encounterStep: `The ${m.name} healed ${amount}.` })}
           >
             {m.name} ({m.hp}/{m.maxHp})
           </Button>
@@ -223,9 +217,8 @@ function HealMonster({ state, amount, dispatch }) {
 
 // Ancient Spirit's Blessing: flip up a used daily power belonging to any hero.
 function RefreshDaily({ state, dispatch }) {
-  const [done, setDone] = useState(null)
   const used = state.heroes.flatMap((h) => h.powers.filter((p) => p.type === 'daily' && p.used).map((p) => ({ hero: h, power: p })))
-  if (done) return <p className="text-zinc-300">✓ {done} is ready again.</p>
+  if (state.encounter.stepDone) return <p className="text-zinc-300">✓ {state.encounter.stepDone}</p>
   if (used.length === 0) return <p className="text-zinc-400">Nobody has a used daily power, so nothing to flip.</p>
   return (
     <div className="space-y-2">
@@ -234,10 +227,7 @@ function RefreshDaily({ state, dispatch }) {
         <Button
           key={power.id}
           className="w-full text-left"
-          onClick={() => {
-            dispatch({ type: 'TOGGLE_POWER', heroId: hero.id, powerId: power.id })
-            setDone(`${hero.name}'s ${power.name}`)
-          }}
+          onClick={() => dispatch({ type: 'TOGGLE_POWER', heroId: hero.id, powerId: power.id, encounterStep: `${hero.name}'s ${power.name} is ready again.` })}
         >
           <span className={HERO_COLORS[hero.color].text}>{hero.name}</span>: {power.name}
         </Button>
@@ -437,6 +427,7 @@ function EncounterCard({ state, hero, dispatch }) {
               hero={hero}
               name={card.name}
               attack={card.attack}
+              rolled={state.encounter.attackRolls ?? (attacked ? [] : null)}
               onAttack={(targets, tileGuarded) => dispatch({ type: 'ENCOUNTER_ATTACK', targets, tileGuarded })}
               onNobody={() => dispatch({ type: 'ENCOUNTER_ATTACK', nobody: true })}
               dispatch={dispatch}
@@ -484,7 +475,7 @@ function EncounterCard({ state, hero, dispatch }) {
               {card.damagePoisoned > 0 && villainHere && (
                 <AffectedHeroes heroes={state.heroes.filter((h) => h.conditions.includes('Poisoned'))} label="Poisoned now" />
               )}
-              {card.id === 'thief-in-the-dark' && <ThiefStep hero={hero} dispatch={dispatch} />}
+              {card.id === 'thief-in-the-dark' && <ThiefStep state={state} hero={hero} dispatch={dispatch} />}
               {BOTTOM_TILE_CARDS.has(card.id) &&
                 (card.id === 'scream-of-the-sentry' && state.board ? (
                   <ScreamTile state={state} dispatch={dispatch} />
@@ -666,7 +657,7 @@ function TrapStep({ state, trap, dispatch }) {
 }
 
 // Tap every hero a damage-only trap reaches (the board picks them when it knows where the trap is).
-function TrapDamage({ state, trap, damage, dispatch, onHit, onNobody }) {
+function TrapDamage({ state, trap, damage, dispatch, onNobody }) {
   const [chosen, setChosen] = useState(() => heroesOnTrap(state, trap) ?? [])
   const toggle = (id) => setChosen((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]))
   return (
@@ -679,7 +670,6 @@ function TrapDamage({ state, trap, damage, dispatch, onHit, onNobody }) {
         onClick={() => {
           if (chosen.length === 0) return onNobody()
           dispatch({ type: 'TRAP_DAMAGE', trapId: trap.id, heroIds: chosen })
-          onHit()
         }}
       >
         {chosen.length > 0 ? `Deal ${damage} damage` : 'Nobody is there'}
@@ -691,7 +681,8 @@ function TrapDamage({ state, trap, damage, dispatch, onHit, onNobody }) {
 // Traps take a turn in their owner's Villain Phase, after the monsters.
 function TrapActivation({ state, hero, trap, dispatch, onDone }) {
   const { attack, damage } = trap.card.trap ?? {}
-  const [hit, setHit] = useState(false)
+  // Kept in the game, so a tab switch doesn't bring the Roll button back.
+  const hit = Boolean(state.turn.trapRolls?.[trap.id])
   const trigger = trap.card.text.split('\n').find((line) => /^Trigger/i.test(line)) ?? ''
   // Moving and spreading traps go first on the virtual board, when it knows where they are.
   const stepFirst = (isMovingTrap(trap) || isLava(trap)) && trapStepChoices(state, trap) !== null && !trapStepped(state, trap)
@@ -708,15 +699,13 @@ function TrapActivation({ state, hero, trap, dispatch, onDone }) {
           name={`The ${trap.name}`}
           attack={attack}
           trap={trap}
-          onAttack={(targets, tileGuarded) => {
-            dispatch({ type: 'TRAP_ATTACK', trapId: trap.id, targets, tileGuarded })
-            setHit(true)
-          }}
+          rolled={state.turn.trapRolls?.[trap.id] ?? null}
+          onAttack={(targets, tileGuarded) => dispatch({ type: 'TRAP_ATTACK', trapId: trap.id, targets, tileGuarded })}
           onNobody={onDone}
           dispatch={dispatch}
         />
       )}
-      {!stepFirst && !attack && damage > 0 && !hit && <TrapDamage state={state} trap={trap} damage={damage} dispatch={dispatch} onHit={() => setHit(true)} onNobody={onDone} />}
+      {!stepFirst && !attack && damage > 0 && !hit && <TrapDamage state={state} trap={trap} damage={damage} dispatch={dispatch} onNobody={onDone} />}
       {(hit || (!attack && !damage)) && (
         <Button variant="gold" className="w-full py-3 text-lg" onClick={onDone}>
           Done with the {trap.name}
@@ -731,7 +720,8 @@ export function TrapTurns({ state, hero, dispatch }) {
   const done = state.turn.acted ?? []
   const traps = (state.traps ?? []).filter((t) => t.ownerId === hero.id && t.type === 'trap')
   if (traps.length === 0) return null
-  const active = traps.find((t) => t.id === activeId)
+  // A trap that already attacked stays open (the game remembers it) until Done is tapped.
+  const active = traps.find((t) => !done.includes(t.id) && (t.id === activeId || state.turn.trapRolls?.[t.id]))
   return (
     <div className="mt-5">
       <h3 className="font-display text-xl font-bold text-zinc-200">Trap turns</h3>
