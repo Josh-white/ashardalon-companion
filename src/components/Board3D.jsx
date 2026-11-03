@@ -7,7 +7,7 @@ import { artUrl, useArt } from '../state/useArt.js'
 import { TOKEN_COLORS } from './Board.jsx'
 import { useAttackFx } from './AttackFx.jsx'
 import { useHealFx } from './HealFx.jsx'
-import { canvasTexture, playAttack3D, playHeal3D } from './board3dFx.js'
+import { canvasTexture, playAttack3D, playExit3D, playHeal3D } from './board3dFx.js'
 import { FLOOR_LOOKS, dressDungeon, hideTorches, stoneMaterials } from './dungeonLook3d.js'
 import { attachModel, detachModel, face, setDown, setWalking, stepModels } from './figureModels.js'
 import { FX_DELAY_MS, FX_MS } from '../board/attackFx.js'
@@ -674,6 +674,64 @@ function setIcons(stage, node, icons) {
   })
 }
 
+// The Cage curse: iron bars round the hero's square. It drops in from above when the hero is
+// caged and lifts away when they get out.
+const CAGE_H = 1.3
+function makeCage() {
+  const cage = new THREE.Group()
+  const iron = new THREE.MeshStandardMaterial({ color: '#3f3f46', metalness: 0.7, roughness: 0.45 })
+  const rust = new THREE.MeshStandardMaterial({ color: '#7c2d12', metalness: 0.4, roughness: 0.7 })
+  const R = 0.44
+  const BARS = 12
+  const bar = new THREE.CylinderGeometry(0.022, 0.022, CAGE_H, 8)
+  for (let i = 0; i < BARS; i++) {
+    const a = (i / BARS) * Math.PI * 2
+    const m = new THREE.Mesh(bar, iron)
+    m.position.set(Math.cos(a) * R, CAGE_H / 2, Math.sin(a) * R)
+    m.castShadow = true
+    cage.add(m)
+  }
+  for (const [y, mat] of [[0.03, rust], [CAGE_H * 0.55, iron], [CAGE_H, rust]]) {
+    const hoop = new THREE.Mesh(new THREE.TorusGeometry(R, 0.035, 8, 36), mat)
+    hoop.rotation.x = Math.PI / 2
+    hoop.position.y = y
+    cage.add(hoop)
+  }
+  // A domed top with a ring to hang it by.
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(R, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#27272a', metalness: 0.6, roughness: 0.5, wireframe: true }))
+  dome.position.y = CAGE_H
+  const hook = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.025, 8, 20), rust)
+  hook.position.y = CAGE_H + R + 0.06
+  cage.add(dome, hook)
+  return cage
+}
+
+function setCaged(stage, node, on) {
+  if (Boolean(node.userData.cage) === on) return
+  const icons = node.userData.icons
+  stage.tweens = stage.tweens.filter((t) => t.cageOf !== node)
+  if (on) {
+    const cage = makeCage()
+    node.userData.cage = cage
+    node.add(cage)
+    icons.position.y = CAGE_H + 0.75
+    const drop = 2.2
+    cage.position.y = stage.still ? 0 : drop
+    if (!stage.still) {
+      // Falls with a little bounce when it lands.
+      stage.tweens.push({ cageOf: node, ms: 650, step: (k) => (cage.position.y = k < 0.8 ? drop * (1 - (k / 0.8) ** 2) : Math.sin(((k - 0.8) / 0.2) * Math.PI) * 0.08) })
+    }
+  } else {
+    const cage = node.userData.cage
+    node.userData.cage = null
+    icons.position.y = node.userData.kind === 'villain' ? 1.45 : 1.12
+    const gone = () => (node.remove(cage), disposeTree(cage))
+    if (stage.still) gone()
+    else stage.tweens.push({ cageOf: node, ms: 600, step: (k) => (cage.position.y = k * k * 2.4, k >= 1 && gone()) })
+  }
+  stage.render()
+}
+
 // A standee: the round token standing up on a coloured base, with a soft shadow and a ring
 // that lights for the hero whose turn it is (gold) or the monster acting (orange).
 function makeStandee(stage, figure, url) {
@@ -729,7 +787,7 @@ function forget(node) {
 
 // Figures come, go and walk to their new squares. `fallAt(figure)`: when a hero who just
 // dropped to 0 HP should fall over (after the attack animation that downs them), in ms.
-function syncFigures(stage, figures, art, fallAt) {
+function syncFigures(stage, figures, art, fallAt, killedAt = () => false) {
   const seen = new Set()
   for (const f of figures) {
     seen.add(f.id)
@@ -783,13 +841,15 @@ function syncFigures(stage, figures, art, fallAt) {
       else setDown(node, f.faded)
     }
     setIcons(stage, node, f.icons ?? [])
+    if (f.kind === 'hero') setCaged(stage, node, Boolean(f.caged))
   }
   for (const [id, node] of stage.nodes) {
     if (seen.has(id)) continue
     stage.nodes.delete(id)
-    // A defeated monster's 3D figure stays standing until the blow that defeats it lands,
-    // then falls (board3dFx.js takes it). With no attack to play, it just goes.
-    if (node.userData.anim && !node.userData.anim.down && node.userData.kind !== 'hero') {
+    // A figure taken off the board stays a moment for its way out. One defeated by the
+    // attack about to play waits for the blow (board3dFx.js falls, crumbles or sinks it);
+    // any other goes through a portal, or (a hero) up a beam of light.
+    if (!stage.still && !node.userData.anim?.down) {
       stage.leaving.add(node)
       node.userData.ring.visible = false
       node.userData.figId = null
@@ -801,7 +861,13 @@ function syncFigures(stage, figures, art, fallAt) {
         stage.render()
       }
       node.userData.gone = gone
-      node.userData.leaveTimer = setTimeout(gone, FX_DELAY_MS + 1500)
+      const exit = () => {
+        if (node.userData.claimed || !stage.leaving.has(node)) return
+        node.userData.claimed = true
+        playExit3D(stage, node, gone)
+      }
+      if (killedAt(node.userData.at)) node.userData.leaveTimer = setTimeout(exit, FX_DELAY_MS + 1500)
+      else exit()
       continue
     }
     stage.figures.remove(node)
@@ -1015,6 +1081,12 @@ function keepOnBoard(stage) {
   stage.camera.position.z += z - t.z
   stage.camera.position.y -= t.y
   t.set(x, 0, z)
+}
+
+// Whether the attack about to play (or playing) defeats the figure on square `at`.
+function killedBy(moment, at) {
+  if (!moment?.fx || !at || serverNow() - moment.at > FX_DELAY_MS + FX_MS) return false
+  return moment.fx.shots.some((s) => s.result === 'kill' && s.to[0] === at[0] && s.to[1] === at[1])
 }
 
 // A hero downed by an attack falls when the animation's blow lands, not when the die is
@@ -1232,7 +1304,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
     const stage = stageRef.current
     if (!ready || !stage?.at) return
     stage.heroModels = heroModels
-    syncFigures(stage, figures, art, (f) => fallDelay(state.moment, f.at))
+    syncFigures(stage, figures, art, (f) => fallDelay(state.moment, f.at), (at) => killedBy(state.moment, at))
     const looks = restFacing(figures)
     for (const [id, node] of stage.nodes) {
       node.userData.lookAt = looks[id] ?? null
