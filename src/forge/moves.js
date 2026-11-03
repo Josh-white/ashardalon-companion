@@ -46,4 +46,65 @@ export const MOVES = {
       [1.2, {}],
     ],
   },
+  Shoot: {
+    frames: [
+      [0, {}],
+      [0.3, { 'arm.R': [85, 0, 0], 'arm.L': [80, 0, 10], body: [-4, -20, 0], head: [0, 15, 0] }],
+      [0.55, { 'arm.R': [80, 0, 0], 'arm.L': [95, 0, 5], body: [-6, -20, 0], head: [0, 15, 0] }],
+      [0.65, { 'arm.R': [90, 0, 0], 'arm.L': [80, 0, 10], body: [4, -15, 0], head: [0, 12, 0] }],
+      [1.1, {}],
+    ],
+  },
+  Throw: {
+    frames: [
+      [0, {}],
+      [0.3, { 'arm.R': [150, 0, -20], body: [-10, 25, 0], 'arm.L': [30, 0, 10] }],
+      [0.48, { 'arm.R': [60, 0, 0], body: [18, -15, 0], 'arm.L': [-10, 0, 0], bob: -0.04 }],
+      [1.0, {}],
+    ],
+  },
+  Hit: {
+    frames: [
+      [0, {}],
+      [0.12, { body: [-18, 8, 0], head: [-15, 0, 0], 'arm.L': [-20, 0, 25], 'arm.R': [-20, 0, -25], bob: -0.03 }],
+      [0.6, {}],
+    ],
+  },
+  Dodge: {
+    frames: [
+      [0, {}],
+      [0.2, { hips: [0, 0, 18], body: [0, 0, -10], 'leg.R': [0, 0, -20], 'arm.L': [0, 0, 40], bob: -0.05 }],
+      [0.7, {}],
+    ],
+  },
+  Fall: {
+    frames: [
+      [0, {}],
+      [0.25, { hips: [-20, 0, 0], body: [10, 0, 0], 'arm.L': [60, 0, 30], 'arm.R': [60, 0, -30], bob: -0.05 }],
+      [0.8, { hips: [-88, 0, 0], head: [10, 0, 0], 'arm.L': [10, 0, 50], 'arm.R': [10, 0, -50], 'leg.L': [20, 0, 0], 'leg.R': [10, 0, 0], bob: -0.45 }],
+    ],
+  },
+  Down: {
+    loop: true,
+    frames: [
+      [0, { hips: [-88, 0, 0], head: [10, 0, 0], 'arm.L': [10, 0, 50], 'arm.R': [10, 0, -50], 'leg.L': [20, 0, 0], 'leg.R': [10, 0, 0], bob: -0.45 }],
+      [1, { hips: [-88, 0, 0], head: [10, 0, 0], 'arm.L': [10, 0, 50], 'arm.R': [10, 0, -50], 'leg.L': [20, 0, 0], 'leg.R': [10, 0, 0], bob: -0.45 }],
+    ],
+  },
+}
+
+// The names the 3D board's figures use for each move (figureModels.js), so a Hero Builder
+// figure plays the same moves as the other figures.
+export const BOARD_MOVES = {
+  Idle: 'Idle',
+  Walk: 'Walking_A',
+  Swing: '1H_Melee_Attack_Chop',
+  Magic: 'Spellcast_Shoot',
+  Shoot: '1H_Ranged_Shoot',
+  Throw: 'Throw',
+  Hit: 'Hit_A',
+  Dodge: 'Dodge_Right',
+  Fall: 'Death_A',
+  Down: 'Death_A_Pose',
+  Cheer: 'Cheer',
 }

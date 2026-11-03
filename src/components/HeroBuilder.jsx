@@ -172,6 +172,15 @@ export default function HeroBuilder() {
                   currentId={id}
                   onOpen={(f) => open(f.recipe, f.id)}
                   onStart={(r) => open({ ...r, from: recipe.from })}
+                  onUse={async (f, on) => {
+                    try {
+                      await call(`/forge/${f.id}`, 'POST', { useInGame: on })
+                      setStatus(null)
+                    } catch (error) {
+                      setStatus(error.message)
+                    }
+                    loadFigures()
+                  }}
                   onDelete={(f) =>
                     ask({ title: `Throw away ${f.recipe.name}?`, body: 'It goes away on every screen.', yes: 'Throw it away', danger: true }, async () => {
                       await call(`/forge/${f.id}`, 'DELETE').catch(() => null)
@@ -302,7 +311,7 @@ function ColorPanel({ recipe, change }) {
   )
 }
 
-function FigureList({ figures, currentId, onOpen, onStart, onDelete }) {
+function FigureList({ figures, currentId, onOpen, onStart, onUse, onDelete }) {
   return (
     <div>
       <h2 className="text-lg font-semibold text-zinc-200">✨ Start from</h2>
@@ -314,15 +323,19 @@ function FigureList({ figures, currentId, onOpen, onStart, onDelete }) {
         ))}
       </div>
       <h2 className="mt-5 text-lg font-semibold text-zinc-200">📂 Saved heroes</h2>
+      <p className="mt-1 text-sm text-zinc-400">Tap 🎮 to play with one: your hero wears it on the 3D board when your name in the game is the same as "Made by".</p>
       {figures === null && <p className="mt-2 text-zinc-400">Opening…</p>}
       {figures?.length === 0 && <p className="mt-2 text-zinc-400">None yet. Build one and tap 💾 Save.</p>}
       <ul className="mt-2 space-y-2">
         {(figures ?? []).map((f) => (
-          <li key={f.id} className={`flex items-center gap-2 rounded-xl border p-2 ${f.id === currentId ? 'border-amber-500/70 bg-amber-500/10' : 'border-zinc-800 bg-zinc-900'}`}>
+          <li key={f.id} className={`flex flex-wrap items-center gap-2 rounded-xl border p-2 ${f.id === currentId ? 'border-amber-500/70 bg-amber-500/10' : 'border-zinc-800 bg-zinc-900'}`}>
             <div className="mr-auto min-w-0">
               <p className="truncate font-semibold text-zinc-100">{f.recipe.name}</p>
               <p className="text-sm text-zinc-500">{[f.recipe.from, f.savedAt?.slice(0, 10)].filter(Boolean).join(' · ')}</p>
             </div>
+            <Button variant={f.useInGame ? 'gold' : 'default'} aria-pressed={Boolean(f.useInGame)} disabled={!f.recipe.from} onClick={() => onUse(f, !f.useInGame)}>
+              {f.useInGame ? '🎮 In the game' : '🎮 Use'}
+            </Button>
             <Button onClick={() => onOpen(f)}>Open</Button>
             <Button variant="ghost" aria-label={`Throw away ${f.recipe.name}`} onClick={() => onDelete(f)}>
               🗑️

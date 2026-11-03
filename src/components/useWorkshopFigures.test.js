@@ -24,4 +24,10 @@ describe('player figures on the 3D board', () => {
     expect(figureOwners({ heroes, soloName: null })).toEqual({})
     expect(figureOwners({ heroes: [{ id: 'x', player: 'Easton' }, { id: 'y', player: '' }] })).toEqual({ x: 'Easton' })
   })
+
+  it('gives a Hero Builder figure as its recipe', () => {
+    const recipe = { name: 'Grim', parts: {} }
+    const hero = { kind: 'hero', player: 'Easton', model: { model: 'Knight' } }
+    expect(withPlayerFigure(hero, { easton: { recipe } }).model).toEqual({ recipe, gear: [], height: 1 })
+  })
 })

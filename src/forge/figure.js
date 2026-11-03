@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { DEFAULT_COLORS } from '../data/forge.js'
 import { PARTS, SLOTS, shapeOf } from './parts.js'
-import { MOVES } from './moves.js'
+import { BOARD_MOVES, MOVES } from './moves.js'
 
 // Builds a 🛠️ Hero Builder figure from a recipe (src/data/forge.js): a skeleton of pivots
 // (hips, body, head, arms, hands, legs, tail) with each part's shapes hung on them. The parts
@@ -153,7 +153,8 @@ export function buildFigure(recipe) {
   const rest = {}
   for (const [name, parent, at, rot] of skeleton(f)) {
     const j = new THREE.Group()
-    j.name = name
+    // No dots in the names: an animation track names its joint before a dot.
+    j.name = name.replace('.', '_')
     j.position.set(...at)
     if (rot) j.rotation.set(...rad(rot), 'YXZ')
     joints[parent].add(j)
@@ -198,6 +199,30 @@ export function pose(figure, moveName, t) {
   const bobB = b.bob ?? 0
   joints.hips.position.y = rest.hips.y + bobA + (bobB - bobA) * ease
   return !move.loop && t >= len
+}
+
+// The figure's moves as three.js animation clips, named like the 3D board's other figures'
+// moves (BOARD_MOVES), so the board plays them with its own AnimationMixer.
+export function figureClips(figure) {
+  const { joints, rest } = figure.userData
+  const euler = new THREE.Euler()
+  const q = new THREE.Quaternion()
+  return Object.entries(BOARD_MOVES).map(([moveName, clipName]) => {
+    const move = MOVES[moveName]
+    const times = move.frames.map(([t]) => t)
+    const tracks = POSED.map((name) => {
+      const values = []
+      for (const [, frame] of move.frames) {
+        const r = (frame[name] ?? [0, 0, 0]).map((d) => THREE.MathUtils.degToRad(d))
+        q.setFromEuler(euler.set(-r[0], r[1], r[2]))
+        values.push(q.x, q.y, q.z, q.w)
+      }
+      return new THREE.QuaternionKeyframeTrack(`${joints[name].name}.quaternion`, times, values)
+    })
+    const hips = rest.hips
+    tracks.push(new THREE.VectorKeyframeTrack(`${joints.hips.name}.position`, times, move.frames.flatMap(([, f]) => [hips.x, hips.y + (f.bob ?? 0), hips.z]), THREE.InterpolateSmooth))
+    return new THREE.AnimationClip(clipName, times.at(-1), tracks)
+  })
 }
 
 export function disposeFigure(figure) {
