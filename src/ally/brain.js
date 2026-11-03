@@ -190,6 +190,17 @@ function threatensHurt(state, monster) {
 // Attack the hero's buffs add to this power (Song of Courage, Heavy Hitter, a Longbow-only Power of Earth).
 const buffBonus = (hero, power) => (hero.buffs ?? []).reduce((sum, b) => sum + (b.attack && (!b.only || power.name.startsWith(b.only)) ? b.attack : 0), 0)
 
+// What healing on a hit (Sacred Flame, War Song Strike) is worth: the hero picks the most hurt
+// hero on their tile, so a friend at half HP or less makes it worth more than a monster's HP.
+// With nobody hurt it still beats a plain attack a little, so the healer keeps to it.
+function healWorth(state, hero, effects) {
+  const heal = effects.onHit?.heal
+  if (!heal) return 0
+  const onTile = (heroesInReach(state, hero.id, 'sameTile') ?? [hero.id]).map((id) => heroById(state, id)).filter((h) => h && h.hp > 0)
+  const best = Math.max(0, ...onTile.map((h) => Math.min(heal, missingHp(h)) * (badlyHurt(h) ? 2.5 : 1.5)))
+  return (best || 0.5) * (effects.onHit.even ? 0.5 : 1)
+}
+
 export const onBoard = (state, foe) => Object.keys(state.board.tokens).some((id) => baseId(id) === foe.id)
 
 // Every attack the hero could make from where they stand: [{ power, targets, score, say }].
@@ -226,7 +237,9 @@ export function attackOptions(state, hero, { atWill = false, all: every = false 
     // after a hurt friend, or the villain; nothing on one that has it already or dies anyway.
     const status = effects.onHit?.status
     const statusWorth = (m) => (!status || kills(m) || statusesOf(m).some((x) => x.kind === status) ? 0 : m.villain || threatensHurt(state, m) ? 2 : 0.5)
-    const score = hit.reduce((sum, m) => sum + chance(m) * (damage + (kills(m) ? 4 : 0) + (m.villain ? 2 : 0) + statusWorth(m)), 0)
+    // Healing on a hit happens once, when any of the rolls hits.
+    const heals = healWorth(state, hero, effects) * (1 - hit.reduce((miss, m) => miss * (1 - chance(m)), 1))
+    const score = heals + hit.reduce((sum, m) => sum + chance(m) * (damage + (kills(m) ? 4 : 0) + (m.villain ? 2 : 0) + statusWorth(m)), 0)
     const names = [...new Set(hit.map((m) => m.name))].join(' and the ')
     // Wolf Fangs costs the hero HP: only for a finishing blow or the villain, with HP to spare.
     if (effects.selfDamage && (hero.hp <= effects.selfDamage + 1 || !(hit.some(kills) || hit.some((m) => m.villain)))) continue
@@ -238,6 +251,7 @@ export function attackOptions(state, hero, { atWill = false, all: every = false 
       ranged: !['adjacent', 'sameTile'].includes(range),
       finishes: hit.filter(kills).map((m) => m.id),
       villain: hit.some((m) => m.villain),
+      heals: heals > 0,
       say: `${hero.name} attacks the ${names} with ${power.name}.`,
     })
   }
@@ -547,6 +561,26 @@ function groupedGoal(state, hero, groups) {
 
 // Where the hero goes now, or null to stay put: next to a monster it can attack from there,
 // closer to the monsters, or on to the nearest unexplored edge when there are none.
+export function healerMove(state, hero, option) {
+  if (movesLeft(state, hero) < 2 || state.turn.beforeMoved) return null
+  if (!hero.powers.some((p) => simpleAttack(p, state) && effectsOf(p).onHit?.heal)) return null
+  if (!state.heroes.some((h) => h.id !== hero.id && h.hp > 0 && missingHp(h) > 0 && state.board.tokens[h.id])) return null
+  const at = state.board.tokens[hero.id]
+  const fromHere = distances(boardGrid(state.board), at)
+  let best = null
+  for (const k of heroReach(state, hero)) {
+    if (k === key(at)) continue
+    const moved = withHeroAt(state, hero, parse(k))
+    const found = attackOptions(moved, moved.heroes.find((h) => h.id === hero.id))[0]
+    if (!found?.heals) continue
+    const steps = fromHere.get(k) ?? 99
+    if (!best || found.score > best.score || (found.score === best.score && steps < best.steps)) best = { k, score: found.score, steps }
+  }
+  // Only for a real gain: a hurt friend to heal that this square can't reach.
+  if (!best || best.score < (option?.score ?? 0) + 0.75) return null
+  return { action: { type: 'MOVE_HERO', heroId: hero.id, to: parse(best.k) }, say: `${hero.name} moves onto a hurt friend's tile to heal them.` }
+}
+
 export function bestMove(state, hero) {
   const reach = heroReach(state, hero)
   const at = state.board?.tokens[hero.id]
@@ -757,6 +791,10 @@ export function allyStep(state, { powers = [], roll = d20, cards = {} } = {}) {
     // A daily that walks first (Whirling Mantis Step, Comet Strike) when it reaches more.
     const sweep = attackGone(state, hero) ? null : sweepAttack(state, hero, option)
     if (sweep) return sweep
+    // Sacred Flame heals someone on the hero's tile: with both actions left, step onto a hurt
+    // friend's tile first when the monster is still in reach from there.
+    const healer = healerMove(state, hero, option)
+    if (healer) return healer
     if (option) return { action: attackAction(state, hero, option, roll), say: option.say }
     // Nothing in reach: Charge, Into the Fray or Taunting Advance moves first, then attacks.
     const charge = attackGone(state, hero) ? null : moveFirst(state, hero)

@@ -366,3 +366,43 @@ describe('the party sticks together', () => {
     expect(allyStep(state, { roll })).toBeNull()
   })
 })
+
+describe('a computer Quinn and Sacred Flame', () => {
+  const flame = card('Sacred Flame', 'at-will', '+6', '1', 'Attack one monster within 1 tile of you.')
+  const smite = card('Smite', 'at-will', '+7', '1', 'Attack one adjacent monster.')
+  const cleric = HERO_TEMPLATES.find((t) => t.key === 'cleric')
+  const nameOf = (state, step) => state.heroes[0].powers.find((p) => p.id === step.action.powerId).name
+
+  it('picks Sacred Flame over a plain at-will, even with nobody hurt', () => {
+    const base = start({ powers: [smite, flame] })
+    const at = base.board.tokens[base.heroes[0].id]
+    const state = withMonster(base, [at[0] + 1, at[1]], { hp: 3 })
+    expect(nameOf(state, allyStep(state, { roll }))).toBe('Sacred Flame')
+  })
+
+  it('steps onto a hurt friend\'s tile first, then heals them with the hit', () => {
+    const base = start({ powers: [smite, flame] })
+    const friend = { ...createHero(cleric), hp: 2 }
+    // The Start tile counts as two tiles: Quinn on the north half, the hurt friend on the south.
+    const tokens = { ...base.board.tokens, [base.heroes[0].id]: [1, 3], [friend.id]: [0, 7] }
+    let state = withMonster({ ...base, heroes: [base.heroes[0], friend], board: { ...base.board, tokens } }, [1, 4], { hp: 3 })
+    const move = allyStep(state, { roll })
+    expect(move.action.type).toBe('MOVE_HERO')
+    expect(move.action.to[1]).toBeGreaterThanOrEqual(4)
+    state = gameReducer(state, move.action)
+    const attack = allyStep(state, { roll })
+    expect(nameOf(state, attack)).toBe('Sacred Flame')
+    state = gameReducer(state, attack.action)
+    const heal = allyStep(state, { roll })
+    expect(heal.action).toMatchObject({ type: 'ATTACK_FOLLOW_UP', heroIds: [friend.id] })
+    expect(gameReducer(state, heal.action).heroes[1].hp).toBe(3)
+  })
+
+  it('stays put to attack when nobody else is hurt', () => {
+    const base = start({ powers: [smite, flame] })
+    const friend = createHero(cleric)
+    const tokens = { ...base.board.tokens, [base.heroes[0].id]: [1, 3], [friend.id]: [0, 7] }
+    const state = withMonster({ ...base, heroes: [base.heroes[0], friend], board: { ...base.board, tokens } }, [1, 4], { hp: 3 })
+    expect(allyStep(state, { roll }).action.type).toBe('HERO_ATTACK')
+  })
+})
