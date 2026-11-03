@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { behindShot, EYE_H, eyesShot, EYES_TILT, closeUpShot, HERO_TILT, restShot, tourShot, turnBy, viewAngles } from './camera3d.js'
+import { walkYaw, behindShot, EYE_H, eyesShot, EYES_TILT, closeUpShot, HERO_TILT, restShot, tourShot, turnBy, viewAngles } from './camera3d.js'
 
 const close = (a, b) => expect(Math.abs(turnBy(a, b))).toBeLessThan(1e-6)
 
@@ -64,7 +64,8 @@ describe('the 3D camera', () => {
     expect(camY).toBeCloseTo(EYE_H)
     expect(camZ).toBeGreaterThan(0)
     expect(camZ).toBeLessThan(0.5)
-    expect(shot.dist).toBeGreaterThanOrEqual(3)
+    // Turning the view pivots on the hero's head: it looks at a point right in front.
+    expect(shot.dist).toBeLessThan(0.5)
   })
 
   it('watches a monster come from the eyes of the hero it goes for', () => {
@@ -72,5 +73,15 @@ describe('the 3D camera', () => {
     const shot = tourShot('eyes', [0, 4], [[0, 0], [9, 9]], keep)
     close(shot.yaw, Math.PI)
     expect(restShot('eyes', [0, 0], [[3, 0]], keep).yaw).toBeCloseTo(-Math.PI / 2)
+  })
+
+  it('with no monster about, looks the way the hero walked', () => {
+    const keep = { yaw: 0, tilt: 0.8, dist: 14 }
+    // Walked toward +x: looks toward +x.
+    const yaw = walkYaw([0, 0], [3, 0])
+    const shot = restShot('eyes', [3, 0], [], { ...keep, yaw })
+    expect(shot.target[0]).toBeGreaterThan(3)
+    close(shot.target[1], 0)
+    expect(walkYaw([1, 1], [1, 1])).toBe(null)
   })
 })
