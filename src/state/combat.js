@@ -393,6 +393,9 @@ export function figuresLeft(monster, hp) {
 // it (a villain or a chamber's Altar doesn't). Returns the moment's words.
 export function defeatDetails(state, defeated, heroId) {
   if (defeated.length === 0) return { state, details: [] }
+  // Bloodlust ends when the cursed hero defeats a monster, however the monster fell: the
+  // attack itself, a reroll (Story/Easy second chance, Inspiring Advice), a Caltrop or Sphere.
+  state = endDefeatCurses(state, heroId)
   if (defeated.every((m) => m.villain || m.objective)) return { state, details: [`${defeated.map((m) => m.name).join(' and ')} defeated!`] }
   const treasure = !state.turn.treasureDrawn
   const next = treasure ? { ...state, turn: oweTreasure(state, heroId ?? null) } : state
@@ -401,6 +404,16 @@ export function defeatDetails(state, defeated, heroId) {
     state: next,
     details: [`${defeated.map((m) => m.name).join(' and ')} defeated! +${xp} XP`, treasure && treasureWords(state)].filter(Boolean),
   }
+}
+
+// Curses that end when their hero defeats a monster (Bloodlust), taken off and discarded.
+function endDefeatCurses(state, heroId) {
+  const hero = state.heroes.find((h) => h.id === heroId)
+  const ending = (hero?.curses ?? []).filter((c) => c.card?.removeOnDefeat)
+  if (ending.length === 0) return state
+  let next = updateHero(state, hero.id, (h) => ({ curses: h.curses.filter((c) => !c.card?.removeOnDefeat) }))
+  for (const curse of ending) next = withLog(discardEncounterCard(next, curse.cardId), `${hero.name}'s ${curse.name} curse is over.`)
+  return next
 }
 
 // Heals a hero (never past max HP) and logs it.

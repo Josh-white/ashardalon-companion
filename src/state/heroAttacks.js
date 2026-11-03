@@ -13,7 +13,7 @@ import { clamp, findFoe, foes, heroLabel, markUsed, updateHero, updateMonster, v
 import { spendItem } from './treasureDeck.js'
 import { applyPasses, heroOnRight, thunderPass } from './passMonsters.js'
 import { defeatDetails, healHero, hurtMonster, offerBrutalRecovery, powerNumber, rollAgainst } from './combat.js'
-import { canSpendAttack, inHeroPhase, itemAttackIsMove, powerUsesAttack, removeCurse, spendAttack } from './heroTurn.js'
+import { canSpendAttack, inHeroPhase, itemAttackIsMove, powerUsesAttack, spendAttack } from './heroTurn.js'
 
 // One attack's numbers against a monster at this distance, with where each comes from so the
 // attack box can show the sum: { bonus, damage, miss, evenBonus, crits, parts }. parts.bonus and
@@ -176,9 +176,7 @@ export function heroAttack(state, action) {
   }
   next = queueFearMove(next)
 
-  // Bloodlust ends when the hero defeats a monster.
-  const ending = defeated.length > 0 ? (hero.curses ?? []).filter((c) => c.card?.removeOnDefeat) : []
-  for (const curse of ending) next = removeCurse(next, hero.id, curse.id, `${hero.name}'s ${curse.name} curse is over.`)
+  // (Bloodlust ends in defeatDetails, for every way a hero defeats a monster.)
   const natural20 = rolls.some((r) => r.value === 20)
   const canLevel = natural20 && hero.level === 1 && next.xp >= XP_TO_LEVEL_UP
   // A natural 20 on an attack is what lets a hero level up this turn.

@@ -421,6 +421,20 @@ describe('hero attacks', () => {
     expect(reroll(state, 15).monsters).toHaveLength(0)
   })
 
+  it('ends Bloodlust when the cursed hero defeats a monster, on the first roll or a reroll', () => {
+    const bloodlust = { id: 'c1', cardId: 'bloodlust', name: 'Bloodlust', card: { startDamage: 1, removeOnDefeat: true } }
+    const cursed = (state) => ({ ...state, heroes: state.heroes.map((h, i) => (i === 0 ? { ...h, curses: [bloodlust] } : h)) })
+    expect(attack(cursed(setup()), 8).heroes[0].curses).toEqual([])
+    // Story's second chance: the first roll misses, the reroll defeats the monster.
+    const missed = attack(cursed({ ...setup(), difficulty: 'story' }), 2)
+    expect(missed.heroes[0].curses).toHaveLength(1)
+    const hero = missed.heroes[0]
+    const rerolled = gameReducer(missed, { type: 'REROLL_ATTACK', helperId: hero.id, secondChance: true, monsterId: missed.monsters[0].id, roll: 15 })
+    expect(rerolled.monsters).toHaveLength(0)
+    expect(rerolled.heroes[0].curses).toEqual([])
+    expect(rerolled.log.some((l) => (l.text ?? l).includes('Bloodlust curse is over'))).toBe(true)
+  })
+
   it('misses below the monster AC and defeats it on a hit that drops it to 0', () => {
     let state = setup()
     expect(attack(state, 7).monsters[0].hp).toBe(2) // 7 + 6 = 13 vs AC 14
