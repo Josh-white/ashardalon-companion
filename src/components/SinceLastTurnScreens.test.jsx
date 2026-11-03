@@ -56,6 +56,10 @@ async function setup(board) {
 // "Since your last turn" on Tarak's iPad: "Got it" has to keep it put away when the player
 // looks at another tab and comes back (the Turn tab is built again each time), and it comes
 // back on Tarak's next turn.
+// The whole app renders twice here: the Pi's build runs this in about 7s, past vitest's
+// 5s default, so it gets the same room as the other full-app tests.
+const SLOW = 30000
+const WAIT = { timeout: 10000 }
 const logLine = (id, round, heroIndex, text) => ({ id, round, heroIndex, text })
 
 describe('Since your last turn card', () => {
@@ -78,7 +82,7 @@ describe('Since your last turn card', () => {
       localStorage.setItem('ashardalon-companion/screen', 'hero')
       localStorage.setItem('ashardalon-companion/seat', 'rogue')
       const view = render(<App />)
-      await screen.findByLabelText('Since your last turn')
+      await screen.findByLabelText('Since your last turn', {}, WAIT)
       fireEvent.click(screen.getByRole('button', { name: 'Got it' }))
       expect(screen.queryByLabelText('Since your last turn')).toBeNull()
 
@@ -91,14 +95,14 @@ describe('Since your last turn card', () => {
       // A reload of the page (updates reload every screen) doesn't bring it back either.
       view.unmount()
       render(<App />)
-      await screen.findByRole('button', { name: /My turn/ })
+      await screen.findByRole('button', { name: /My turn/ }, WAIT)
       expect(screen.queryByLabelText('Since your last turn')).toBeNull()
 
       // Tarak's next turn has a new card.
       act(() => dispatchState(turnOf(3, [logLine('log-c', 3, other, `${name} drew a monster.`), ...round1])))
-      expect(await screen.findByLabelText('Since your last turn')).toBeTruthy()
+      expect(await screen.findByLabelText('Since your last turn', {}, WAIT)).toBeTruthy()
       expect(screen.getByText(/drew a monster/)).toBeTruthy()
-    })
+    }, SLOW)
   }
 })
 
