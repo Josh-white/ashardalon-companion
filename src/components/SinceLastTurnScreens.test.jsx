@@ -32,7 +32,10 @@ vi.mock('../audio/soundSetting.js', async (importOriginal) => ({
   useAudioLocked: () => false,
 }))
 
-beforeAll(() => {
+// Loading the whole app is the slow part (seconds on the Pi): done once up front, so it
+// counts against the 30 s setup allowance and not against the first test's own time.
+beforeAll(async () => {
+  await import('../App.jsx')
   vi.stubGlobal('fetch', async (url) => ({ ok: true, status: 200, json: async () => (String(url).includes('cards.json') ? CARDS : {}) }))
   window.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} }
   window.HTMLElement.prototype.scrollIntoView = () => {}

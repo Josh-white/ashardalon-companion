@@ -29,6 +29,15 @@ export default defineConfig({
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion()),
     'import.meta.env.VITE_BUILT_AT': JSON.stringify(new Date().toISOString()),
   },
+  test: {
+    setupFiles: ['src/test/setup.js'],
+    // The Pi's Docker build runs these on 4 small cores, 5-7 times slower than GitHub, and
+    // a timeout there rolls the update back. So every test gets Pi-sized room here, and
+    // CI's slow-test check (scripts/check-slow-tests.mjs) warns long before a test gets
+    // anywhere near it.
+    testTimeout: 30000,
+    hookTimeout: 30000,
+  },
   server: {
     // In development, `npm run dev:server` holds the shared game.
     proxy: {
