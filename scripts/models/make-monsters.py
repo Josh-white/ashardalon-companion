@@ -4,7 +4,10 @@ and a spear) Human Cultist (hooded robes, a sun sceptre and a dagger)
 Duergar Guard (a helmet, a beard, a round shield and a warhammer)
 Snake (coiled, with its own legless skeleton and moves) , Cave Bear
 (on all fours; rears up to maul) , Legion Devil (horns, black armour, a tail and a longsword)
-and Grell (a floating brain with a beak and tentacles).
+and Grell (a floating brain with a beak and tentacles). It also makes the heroes from their
+card art (hero-quinn, hero-vistra, hero-keyleth, hero-tarak, hero-heskan and the fan heroes
+hero-berryloaf, hero-darna); a hero's "HeroCape" parts become their own mesh (Hero_X_Cape),
+which the board dyes the hero's colour.
 
 Run it in Blender (tested headless on 5.2; written for 3.6 and newer):
   * Scripting workspace: open this file (or paste it), press Run Script (Alt+P).
@@ -127,6 +130,28 @@ PALETTE = {
     "silver": "d2d5dc",
     "arcane": "c77dff",
     "arcane_light": "f0dcff",
+    # The heroes (matched to their card art).
+    "hero_cape": "8a8a8a",   # dyed the hero's colour on the board
+    "skin_tan": "c68b5e",
+    "skin_halforc": "a3a68c",
+    "skin_halforc_dark": "767960",
+    "mail": "9aa1aa",
+    "mail_dark": "656b74",
+    "holy": "fff1a8",
+    "hair_black": "1f1b22",
+    "dragon": "b4733a",
+    "dragon_dark": "7a4622",
+    "dragon_belly": "e2c08a",
+    "wiz_robe": "4a4458",
+    "wiz_robe_dark": "2e2a38",
+    "white_cloth": "eeeae0",
+    "white_shade": "c9c3b4",
+    "coat": "6b2a6e",
+    "trouser_blue": "3f5f9a",
+    "eye_blue": "3f86d6",
+    "tattoo": "4b6a8a",
+    "lips": "b5464b",
+    "steel": "c9ced6",
 }
 
 argv = sys.argv
@@ -1679,6 +1704,492 @@ def join_parts(name, mat, height):
     return orc, (lambda p: Vector((p[0] * k, p[1] * k, (p[2] - bottom) * k)))
 
 
+
+# ---- Heroes (matched to the hero card art; each wears a "HeroCape" part dyed its colour) -----
+
+def hero_cape(bone, loc, size, rot=(-8, 0, 0)):
+    """The hero's cape, its own mesh (Hero_X_Cape) so the board can dye it the hero's colour."""
+    box("HeroCape", "hero_cape", bone, loc, size, bevel=0.03, rot=rot)
+
+
+def hero_face(skin, hz, r=0.32, brow="hair_black", tilt=0, eye="black", mouth="line", ears="round",
+              lips=None, cheeks=True):
+    """A big villager-style face: round eyes, brows (tilt < 0 angry, > 0 worried), nose, mouth and ears.
+    ears: "round", "elf" (long and swept back), "half" (short points), or None."""
+    k = r / 0.32
+    sphere("Face", skin, "head", (0, -0.02, hz), r, scale=(1.0, 0.95, 1.0), segments=16, rings=10)
+    for side in (1, -1):
+        sphere(f"EyeWhite{side}", "eye_white", "head", (0.11 * k * side, -0.27 * k, hz + 0.02 * k), 0.06 * k,
+               scale=(1, 0.5, 1.15), segments=10, rings=7)
+        sphere(f"Pupil{side}", eye, "head", (0.11 * k * side, -0.30 * k, hz + 0.01 * k), 0.035 * k,
+               scale=(1, 0.5, 1.2), segments=8, rings=6)
+        if cheeks:
+            sphere(f"Cheek{side}", "cheek", "head", (0.19 * k * side, -0.24 * k, hz - 0.08 * k), 0.045 * k,
+                   scale=(1.2, 0.4, 0.8), segments=8, rings=5)
+        box(f"Brow{side}", brow, "head", (0.11 * k * side, -0.28 * k, hz + 0.12 * k), (0.11 * k, 0.03, 0.03 * k),
+            bevel=0.008, rot=(0, tilt * side, 0))
+        if ears == "round":
+            sphere(f"Ear{side}", skin, "head", (0.31 * k * side, 0.0, hz), 0.07 * k, scale=(0.5, 1, 1.1),
+                   segments=8, rings=6)
+        elif ears == "elf":
+            cone(f"Ear{side}", skin, "head", (0.40 * k * side, 0.06 * k, hz + 0.08 * k), 0.07 * k, 0.34 * k,
+                 rot=(-25, 62 * side, 0), scale=(1, 0.4, 1), sides=6)
+        elif ears == "half":
+            cone(f"Ear{side}", skin, "head", (0.35 * k * side, 0.03 * k, hz + 0.04 * k), 0.07 * k, 0.20 * k,
+                 rot=(-15, 65 * side, 0), scale=(1, 0.45, 1), sides=6)
+    sphere("Nose", skin, "head", (0, -0.31 * k, hz - 0.04 * k), 0.045 * k, scale=(1, 0.8, 1), segments=8, rings=6)
+    if mouth == "smirk":
+        box("Mouth", "black", "head", (0.02 * k, -0.295 * k, hz - 0.15 * k), (0.10 * k, 0.02, 0.02 * k),
+            bevel=0.006, rot=(0, -14, 0))
+    else:
+        box("Mouth", lips or "black", "head", (0, -0.295 * k, hz - 0.15 * k), (0.09 * k, 0.02, 0.025 * k),
+            bevel=0.006)
+
+
+def hero_sword(hand, d, tilt, length=0.80, guard="gold", blade="steel"):
+    """A straight sword held in the fist at `hand`, its blade along `d`."""
+    box("SwordGrip", "leather_dark", "arm.R", hand, (0.06, 0.06, 0.20), bevel=0.02, rot=tilt)
+    sphere("SwordPommel", guard, "arm.R", hand - d * 0.13, 0.045, segments=8, rings=6)
+    box("SwordGuard", guard, "arm.R", hand + d * 0.11, (0.28, 0.06, 0.05), bevel=0.015, rot=tilt)
+    box("SwordBlade", blade, "arm.R", hand + d * (0.13 + length / 2), (0.10, 0.025, length), bevel=0.01, rot=tilt)
+    box("SwordFuller", "iron", "arm.R", hand + d * (0.13 + length / 2) - Vector((0, 0, 0)), (0.025, 0.03, length * 0.8),
+        bevel=0.005, rot=tilt)
+    cone("SwordTip", blade, "arm.R", hand + d * (0.13 + length + 0.05), 0.07, 0.12, rot=tilt, scale=(1, 0.25, 1), sides=4)
+
+
+def hero_kite_shield(at, face="steel", rim="gold", emblem="gold"):
+    """A kite shield facing forward on the left arm, with an emblem."""
+    box("Shield", face, "arm.L", at, (0.46, 0.07, 0.40), bevel=0.04)
+    box("ShieldPoint", face, "arm.L", at + Vector((0, 0, -0.24)), (0.30, 0.07, 0.30), bevel=0.04, rot=(0, 45, 0))
+    box("ShieldRim", rim, "arm.L", at + Vector((0, 0.01, 0.19)), (0.48, 0.08, 0.05), bevel=0.02)
+    box("ShieldBar", emblem, "arm.L", at + Vector((0, -0.045, -0.05)), (0.06, 0.03, 0.46), bevel=0.01)
+    box("ShieldCross", emblem, "arm.L", at + Vector((0, -0.045, 0.05)), (0.30, 0.03, 0.06), bevel=0.01)
+
+
+def build_quinn():
+    """Quinn, the human cleric: a bald, stern man in chainmail with a fur collar and leather
+    tabard, a flanged mace in his right hand and a glowing sun symbol in his left."""
+    for side, tag in ((1, "L"), (-1, "R")):
+        leg = f"leg.{tag}"
+        box(f"Boot.{tag}", "leather_dark", leg, (0.16 * side, -0.08, 0.08), (0.21, 0.30, 0.16), bevel=0.05)
+        cone(f"Shin.{tag}", "trousers", leg, (0.16 * side, 0, 0.30), 0.10, 0.36, sides=8, tip=0.11)
+    cone("MailSkirt", "mail", "hips", (0, 0, 0.56), 0.36, 0.44, sides=12, tip=0.29)
+    box("Tabard", "leather", "hips", (0, -0.27, 0.52), (0.26, 0.05, 0.46), bevel=0.02, rot=(-8, 0, 0))
+    box("TabardTrim", "gold", "hips", (0, -0.30, 0.32), (0.27, 0.05, 0.05), bevel=0.015, rot=(-8, 0, 0))
+    box("Belt", "leather_dark", "hips", (0, 0, 0.80), (0.58, 0.42, 0.08), bevel=0.02)
+    box("Buckle", "gold", "hips", (0, -0.22, 0.80), (0.10, 0.03, 0.08), bevel=0.01)
+
+    box("Torso", "mail", "body", (0, 0, 1.06), (0.58, 0.40, 0.52), bevel=0.15, segments=3)
+    box("ChestStrap", "leather", "body", (0, -0.03, 1.06), (0.08, 0.44, 0.58), bevel=0.01, rot=(0, -32, 0))
+    sphere("Symbol", "gold", "body", (-0.08, -0.22, 1.13), 0.05, scale=(1, 0.5, 1), segments=8, rings=6)
+    sphere("FurCollar", "fur", "body", (0, 0.02, 1.32), 0.33, scale=(1.15, 0.95, 0.40), segments=14, rings=8)
+    hero_cape("body", (0, 0.27, 0.92), (0.60, 0.05, 0.86))
+    for side, tag in ((1, "L"), (-1, "R")):
+        arm = f"arm.{tag}"
+        sphere(f"Pauldron.{tag}", "leather", arm, (0.37 * side, 0, 1.25), 0.15, scale=(1.1, 1.05, 0.75))
+        cone(f"Sleeve.{tag}", "mail", arm, (0.40 * side, -0.01, 1.02), 0.11, 0.36, rot=(180, 0, 0), sides=8, tip=0.09)
+        box(f"Bracer.{tag}", "leather", arm, (0.43 * side, -0.02, 0.84), (0.16, 0.16, 0.14), bevel=0.04)
+        sphere(f"Hand.{tag}", "skin_light", arm, (0.44 * side, -0.04, 0.74), 0.085)
+
+    # A flanged mace in the right fist, its head forward and down.
+    hand = Vector((-0.44, -0.04, 0.74))
+    d = Vector((0, -0.866, -0.5))
+    tilt = (120, 0, 0)
+    cone("MaceHaft", "wood", "arm.R", hand + d * 0.18, 0.035, 0.56, rot=tilt, sides=6, tip=0.035)
+    cone("MacePommel", "iron_dark", "arm.R", hand - d * 0.12, 0.05, 0.06, rot=tilt, sides=6, tip=0.03)
+    head = hand + d * 0.52
+    sphere("MaceHead", "iron", "arm.R", head, 0.11, segments=10, rings=7)
+    for i in range(6):
+        a = DEG(i * 60)
+        # Flanges stand out round the head, square to the haft.
+        side = Vector((math.cos(a), 0, 0)) + Vector((0, 0.5, -0.866)) * math.sin(a)
+        box(f"MaceFin{i}", "iron_dark", "arm.R", head + side * 0.10, (0.05, 0.05, 0.20), bevel=0.012, rot=tilt)
+    cone("MaceTop", "iron", "arm.R", head + d * 0.14, 0.05, 0.08, rot=tilt, sides=6)
+
+    # A glowing sun symbol held up in the left hand.
+    hand = Vector((0.44, -0.08, 0.74))
+    at = hand + Vector((0, -0.10, 0.14))
+    box("SymbolHandle", "gold", "arm.L", hand + Vector((0, -0.04, 0.05)), (0.04, 0.04, 0.16), bevel=0.01)
+    cone("SymbolDisc", "gold", "arm.L", at, 0.12, 0.04, rot=(90, 0, 0), sides=12, tip=0.12)
+    sphere("SymbolGlow", "holy", "arm.L", at + Vector((0, -0.03, 0)), 0.07, scale=(1, 0.5, 1), segments=10, rings=6)
+    for i in range(8):
+        a = i * 45
+        dd = Vector((math.sin(DEG(a)), 0, math.cos(DEG(a))))
+        cone(f"SymbolRay{i}", "gold", "arm.L", at + dd * 0.16, 0.03, 0.09, rot=(0, a, 0), sides=4, scale=(1, 0.4, 1))
+
+    # Head: bald and stern.
+    hz = 1.72
+    hero_face("skin_light", hz, brow="hair_black", tilt=-14)
+    sphere("Scalp", "skin_light", "head", (0, 0.04, hz + 0.06), 0.325, scale=(1.0, 1.0, 0.92), segments=16, rings=10)
+    box("Stubble", "white_shade", "head", (0, -0.24, hz - 0.21), (0.20, 0.08, 0.06), bevel=0.025)
+
+
+def build_vistra():
+    """Vistra, the dwarf fighter: a stocky dwarf woman with long dark braids and a jewelled
+    headband, studded armour with a diamond chest plate, a warhammer and a big shield."""
+    for side, tag in ((1, "L"), (-1, "R")):
+        leg = f"leg.{tag}"
+        box(f"Boot.{tag}", "iron_dark", leg, (0.24 * side, -0.05, 0.10), (0.30, 0.42, 0.20), bevel=0.07)
+        box(f"Leg.{tag}", "leather", leg, (0.24 * side, 0, 0.33), (0.26, 0.28, 0.28), bevel=0.08)
+    cone("MailSkirt", "mail_dark", "hips", (0, 0, 0.56), 0.50, 0.32, sides=12, tip=0.42)
+    box("Belt", "leather", "hips", (0, 0, 0.72), (0.90, 0.64, 0.11), bevel=0.04)
+    box("Buckle", "gold", "hips", (0, -0.33, 0.72), (0.16, 0.06, 0.14), bevel=0.02, rot=(0, 45, 0))
+    box("Fauld", "iron", "hips", (0, -0.30, 0.52), (0.34, 0.06, 0.32), bevel=0.03, rot=(-8, 0, 0))
+    for i, x in enumerate((-0.09, 0.09)):
+        cone(f"FauldStud{i}", "gold", "hips", (x, -0.34, 0.52), 0.03, 0.04, rot=(90, 0, 0), sides=4)
+
+    box("Torso", "iron", "body", (0, 0, 1.02), (0.94, 0.66, 0.62), bevel=0.24, segments=3)
+    box("ChestPlate", "iron_dark", "body", (0, -0.33, 0.98), (0.30, 0.06, 0.30), bevel=0.03, rot=(0, 45, 0))
+    cone("ChestGem", "gold", "body", (0, -0.37, 0.98), 0.09, 0.06, rot=(90, 0, 0), sides=4)
+    for row, z in enumerate((1.16, 1.24)):
+        for col, x in enumerate((-0.30, -0.18, 0.18, 0.30)):
+            cone(f"Stud{row}{col}", "iron_dark", "body", (x, -0.33 + 0.01 * abs(x), z), 0.035, 0.04, rot=(90, 0, 0), sides=4)
+    box("Gorget", "gold", "body", (0, -0.10, 1.32), (0.44, 0.34, 0.07), bevel=0.02)
+    hero_cape("body", (0, 0.36, 0.80), (0.86, 0.05, 0.78), rot=(-6, 0, 0))
+    for side in (1, -1):
+        sphere(f"Pauldron{side}", "iron_dark", "body", (0.50 * side, 0, 1.24), 0.25, scale=(1.1, 1.05, 0.7))
+        for i, y in enumerate((-0.12, 0.0, 0.12)):
+            cone(f"PauldronStud{side}{i}", "gold", "body", (0.60 * side, y, 1.38), 0.03, 0.05, sides=4)
+    for side, tag in ((1, "L"), (-1, "R")):
+        arm = f"arm.{tag}"
+        sphere(f"UpperArm.{tag}", "skin_light", arm, (0.58 * side, 0, 1.05), 0.14, scale=(1, 1, 1.2))
+        box(f"Gauntlet.{tag}", "iron_dark", arm, (0.61 * side, -0.02, 0.83), (0.25, 0.25, 0.26), bevel=0.07)
+        sphere(f"Fist.{tag}", "skin_light", arm, (0.62 * side, -0.05, 0.65), 0.13)
+
+    # Warhammer in the right fist.
+    fist = Vector((-0.62, -0.05, 0.65))
+    d = Vector((0, -0.866, -0.5))
+    tilt = (120, 0, 0)
+    cone("HammerHaft", "wood", "arm.R", fist + d * 0.22, 0.045, 0.70, rot=tilt, sides=6, tip=0.045)
+    cone("HammerPommel", "iron_dark", "arm.R", fist - d * 0.15, 0.06, 0.07, rot=tilt, sides=6, tip=0.04)
+    head = fist + d * 0.58
+    box("HammerHead", "iron", "arm.R", head, (0.40, 0.20, 0.22), bevel=0.04, rot=(30, 0, 0))
+    for side in (1, -1):
+        box(f"HammerFace{side}", "iron_dark", "arm.R", head + Vector((0.20 * side, 0, 0)), (0.06, 0.24, 0.26),
+            bevel=0.02, rot=(30, 0, 0))
+    box("HammerBand", "gold", "arm.R", head, (0.12, 0.22, 0.24), bevel=0.02, rot=(30, 0, 0))
+
+    # A big angular shield on the left arm.
+    sc = Vector((0.68, -0.24, 0.82))
+    box("Shield", "iron", "arm.L", sc, (0.62, 0.08, 0.66), bevel=0.05)
+    box("ShieldPoint", "iron", "arm.L", sc + Vector((0, 0, -0.32)), (0.42, 0.08, 0.42), bevel=0.05, rot=(0, 45, 0))
+    box("ShieldInlay", "red", "arm.L", sc + Vector((0, -0.04, 0.0)), (0.46, 0.04, 0.50), bevel=0.02)
+    box("ShieldDiamond", "gold", "arm.L", sc + Vector((0, -0.07, 0.0)), (0.18, 0.04, 0.18), bevel=0.02, rot=(0, 45, 0))
+    box("ShieldTop", "gold", "arm.L", sc + Vector((0, -0.01, 0.31)), (0.64, 0.10, 0.06), bevel=0.02)
+
+    # Head: a dwarf woman's face under a jewelled headband, long dark hair in thick braids.
+    hz = 1.66
+    hero_face("skin_light", hz, r=0.33, brow="hair_brown", tilt=-10, lips="lips")
+    sphere("HairCap", "hair_brown", "head", (0, 0.05, hz + 0.08), 0.345, scale=(1.06, 1.02, 0.90), segments=16, rings=10)
+    sphere("HairBack", "hair_brown", "head", (0, 0.22, hz - 0.18), 0.30, scale=(1.15, 0.7, 1.4), segments=12, rings=8)
+    cone("Headband", "gold", "head", (0, 0.03, hz + 0.20), 0.335, 0.07, sides=16, tip=0.33)
+    cone("HeadbandGem", "red", "head", (0, -0.32, hz + 0.20), 0.06, 0.05, rot=(90, 0, 0), sides=6)
+    for side in (1, -1):
+        sphere(f"Earring{side}", "gold", "head", (0.33 * side, -0.02, hz - 0.12), 0.03, segments=6, rings=4)
+        # A thick braid falling forward over each shoulder.
+        for i in range(5):
+            sphere(f"Braid{side}{i}", "hair_brown", "head", (0.26 * side, -0.14 - 0.01 * i, hz - 0.22 - 0.12 * i),
+                   0.085 - 0.006 * i, scale=(1, 1, 1.1), segments=8, rings=6)
+        sphere(f"BraidTie{side}", "gold", "head", (0.26 * side, -0.19, hz - 0.80), 0.045, segments=8, rings=6)
+
+
+def build_keyleth():
+    """Keyleth, the eladrin paladin: a young elf woman with long black hair, long pointed
+    ears and a swirl tattoo, in chainmail and a silver breastplate, a longsword and kite shield."""
+    for side, tag in ((1, "L"), (-1, "R")):
+        leg = f"leg.{tag}"
+        box(f"Boot.{tag}", "iron_dark", leg, (0.15 * side, -0.08, 0.08), (0.20, 0.30, 0.16), bevel=0.05)
+        cone(f"Greave.{tag}", "steel", leg, (0.15 * side, -0.01, 0.30), 0.10, 0.36, sides=8, tip=0.10)
+    cone("MailSkirt", "mail", "hips", (0, 0, 0.54), 0.34, 0.44, sides=12, tip=0.27)
+    box("Belt", "leather_dark", "hips", (0, 0, 0.79), (0.56, 0.40, 0.08), bevel=0.02)
+    box("Buckle", "steel", "hips", (0, -0.21, 0.79), (0.10, 0.03, 0.08), bevel=0.01)
+    box("BeltTail", "leather_dark", "hips", (0.10, -0.22, 0.62), (0.05, 0.02, 0.30), bevel=0.01)
+
+    box("Torso", "mail", "body", (0, 0, 1.06), (0.54, 0.38, 0.52), bevel=0.15, segments=3)
+    box("Breastplate", "steel", "body", (0, -0.12, 1.12), (0.48, 0.18, 0.34), bevel=0.08, segments=3)
+    box("PlateTrim", "gold", "body", (0, -0.21, 1.26), (0.36, 0.04, 0.04), bevel=0.01)
+    hero_cape("body", (0, 0.26, 0.92), (0.58, 0.05, 0.86))
+    for side, tag in ((1, "L"), (-1, "R")):
+        arm = f"arm.{tag}"
+        sphere(f"Pauldron.{tag}", "steel", arm, (0.36 * side, 0, 1.26), 0.15, scale=(1.15, 1.1, 0.8))
+        cone(f"PauldronTrim.{tag}", "gold", arm, (0.37 * side, 0, 1.20), 0.155, 0.03, sides=10, tip=0.15)
+        cone(f"Sleeve.{tag}", "mail", arm, (0.39 * side, -0.01, 1.02), 0.10, 0.34, rot=(180, 0, 0), sides=8, tip=0.085)
+        box(f"Vambrace.{tag}", "steel", arm, (0.42 * side, -0.02, 0.84), (0.15, 0.15, 0.14), bevel=0.04)
+        sphere(f"Hand.{tag}", "skin_pale", arm, (0.43 * side, -0.04, 0.74), 0.08)
+
+    hand = Vector((-0.43, -0.04, 0.74))
+    hero_sword(hand, Vector((0, -0.866, -0.5)), (120, 0, 0), length=0.78)
+    hero_kite_shield(Vector((0.50, -0.20, 0.86)), face="steel", rim="gold", emblem="gold")
+
+    # Head: long black hair falling down her back, elf ears, a swirl tattoo by her eye.
+    hz = 1.72
+    hero_face("skin_pale", hz, brow="hair_black", tilt=-8, ears="elf", lips="lips", cheeks=False)
+    sphere("HairCap", "hair_black", "head", (0, 0.05, hz + 0.08), 0.335, scale=(1.05, 1.02, 0.88), segments=16, rings=10)
+    box("Fringe", "hair_black", "head", (0.08, -0.22, hz + 0.21), (0.36, 0.14, 0.10), bevel=0.04, rot=(-20, -10, 0))
+    sphere("HairBack", "hair_black", "head", (0, 0.22, hz - 0.30), 0.27, scale=(1.15, 0.6, 1.9), segments=12, rings=8)
+    for side in (1, -1):
+        sphere(f"HairSide{side}", "hair_black", "head", (0.27 * side, -0.02, hz - 0.22), 0.11, scale=(0.8, 1, 2.0),
+               segments=10, rings=7)
+        sphere(f"Earring{side}", "steel", "head", (0.34 * side, 0.0, hz - 0.08), 0.025, segments=6, rings=4)
+    for i, (dx, dz, a) in enumerate(((0.17, 0.10, 30), (0.22, 0.02, -20), (0.19, -0.05, 40))):
+        box(f"Tattoo{i}", "tattoo", "head", (dx, -0.25, hz + dz), (0.07, 0.03, 0.018), bevel=0.005, rot=(0, a, 0))
+
+
+def build_tarak():
+    """Tarak, the half-orc rogue: a big, broad half-orc with short black hair and sideburns,
+    small tusks, studded leather armour, a short sword and a hand crossbow."""
+    for side, tag in ((1, "L"), (-1, "R")):
+        x = 0.24 * side
+        leg = f"leg.{tag}"
+        box(f"Boot.{tag}", "leather_dark", leg, (x, -0.04, 0.13), (0.30, 0.44, 0.26), bevel=0.08)
+        box(f"Leg.{tag}", "leather", leg, (x, 0, 0.44), (0.27, 0.30, 0.32), bevel=0.09)
+    box("Pants", "leather", "hips", (0, 0, 0.66), (0.74, 0.48, 0.30), bevel=0.12, segments=3)
+    box("Belt", "leather_dark", "hips", (0, 0, 0.80), (0.82, 0.54, 0.11), bevel=0.04)
+    box("Buckle", "iron", "hips", (0, -0.28, 0.80), (0.16, 0.06, 0.13), bevel=0.02)
+    for side in (1, -1):
+        box(f"Pouch{side}", "leather", "hips", (0.30 * side, -0.24, 0.70), (0.14, 0.10, 0.14), bevel=0.03)
+    box("Scabbard", "leather_dark", "hips", (0.40, 0.10, 0.56), (0.07, 0.10, 0.50), bevel=0.02, rot=(20, 0, 0))
+
+    # A leather jerkin with stitched plates and rivets.
+    box("Torso", "leather", "body", (0, 0, 1.12), (0.90, 0.60, 0.64), bevel=0.22, segments=3)
+    for row, z in enumerate((1.24, 1.06)):
+        box(f"Plate{row}", "leather_dark", "body", (0, -0.29, z), (0.56, 0.05, 0.15), bevel=0.03)
+        for col, x in enumerate((-0.22, 0.0, 0.22)):
+            sphere(f"Rivet{row}{col}", "iron", "body", (x, -0.32, z), 0.025, segments=6, rings=4)
+    box("Collar", "leather_dark", "body", (0, -0.05, 1.44), (0.42, 0.36, 0.10), bevel=0.03)
+    hero_cape("body", (0, 0.32, 1.08), (0.70, 0.05, 0.60), rot=(-6, 0, 0))
+    for side in (1, -1):
+        box(f"ShoulderPad{side}", "leather_dark", "body", (0.50 * side, 0, 1.42), (0.34, 0.40, 0.12), bevel=0.04,
+            rot=(0, -14 * side, 0))
+        box(f"ShoulderPad2{side}", "leather", "body", (0.56 * side, 0, 1.32), (0.30, 0.38, 0.10), bevel=0.04,
+            rot=(0, -24 * side, 0))
+        for i, y in enumerate((-0.12, 0.12)):
+            sphere(f"PadRivet{side}{i}", "iron", "body", (0.52 * side, y, 1.49), 0.025, segments=6, rings=4)
+    for side, tag in ((1, "L"), (-1, "R")):
+        arm = f"arm.{tag}"
+        sphere(f"UpperArm.{tag}", "skin_halforc", arm, (0.58 * side, 0, 1.18), 0.15, scale=(1, 1, 1.3))
+        box(f"Bracer.{tag}", "leather_dark", arm, (0.62 * side, -0.02, 0.92), (0.25, 0.25, 0.28), bevel=0.06)
+        for i, z in enumerate((0.86, 0.98)):
+            sphere(f"BracerStud.{tag}{i}", "iron", arm, (0.62 * side, -0.15, z), 0.022, segments=6, rings=4)
+        sphere(f"Fist.{tag}", "skin_halforc", arm, (0.63 * side, -0.05, 0.72), 0.15, scale=(1, 1.1, 0.95))
+
+    # A short sword in the right fist, its blade forward and down.
+    fist = Vector((-0.63, -0.05, 0.72))
+    hero_sword(fist, Vector((0, -0.866, -0.5)), (120, 0, 0), length=0.62, guard="iron", blade="steel")
+    # A hand crossbow in the left fist, pointing forward.
+    fist = Vector((0.63, -0.10, 0.72))
+    box("CrossbowStock", "wood", "arm.L", fist + Vector((0, -0.16, 0.06)), (0.07, 0.42, 0.07), bevel=0.02)
+    box("CrossbowBow", "iron_dark", "arm.L", fist + Vector((0, -0.34, 0.07)), (0.44, 0.05, 0.05), bevel=0.015)
+    for side in (1, -1):
+        box(f"CrossbowTip{side}", "iron_dark", "arm.L", fist + Vector((0.22 * side, -0.31, 0.07)), (0.05, 0.08, 0.05),
+            bevel=0.01, rot=(0, 0, 30 * side))
+    box("CrossbowString", "white_shade", "arm.L", fist + Vector((0, -0.24, 0.07)), (0.42, 0.012, 0.012), bevel=0.0)
+    box("CrossbowBolt", "iron", "arm.L", fist + Vector((0, -0.30, 0.11)), (0.025, 0.30, 0.025), bevel=0.005)
+
+    # Head: a half-orc's broad face, heavy brow, small tusks, short black hair and sideburns.
+    hz = 1.86
+    hero_face("skin_halforc", hz, r=0.36, brow="hair_black", tilt=-16, ears="half", cheeks=False)
+    box("Jaw", "skin_halforc", "head", (0, -0.10, hz - 0.20), (0.56, 0.42, 0.24), bevel=0.11, segments=3)
+    box("BrowRidge", "skin_halforc_dark", "head", (0, -0.31, hz + 0.10), (0.42, 0.08, 0.06), bevel=0.025)
+    box("JawMouth", "black", "head", (0, -0.315, hz - 0.18), (0.16, 0.02, 0.02), bevel=0.006)
+    for side in (1, -1):
+        cone(f"Tusk{side}", "bone", "head", (0.09 * side, -0.31, hz - 0.15), 0.025, 0.08, sides=5)
+        box(f"Sideburn{side}", "hair_black", "head", (0.33 * side, -0.04, hz - 0.08), (0.06, 0.14, 0.24), bevel=0.02)
+    sphere("Hair", "hair_black", "head", (0, 0.05, hz + 0.12), 0.36, scale=(1.04, 1.02, 0.78), segments=16, rings=10)
+    box("HairTop", "hair_black", "head", (0, -0.04, hz + 0.33), (0.46, 0.50, 0.08), bevel=0.04)
+
+
+def build_heskan():
+    """Heskan, the dragonborn wizard: a bronze-scaled dragon head with an open fanged jaw,
+    horns and frills, a long robe under a cloak, and a tall staff with a curved, rune-lit head."""
+    for side, tag in ((1, "L"), (-1, "R")):
+        leg = f"leg.{tag}"
+        box(f"Foot.{tag}", "dragon", leg, (0.17 * side, -0.10, 0.07), (0.22, 0.32, 0.13), bevel=0.05)
+        for i, dx in enumerate((-0.07, 0.0, 0.07)):
+            cone(f"Claw.{tag}{i}", "bone", leg, (0.17 * side + dx, -0.28, 0.05), 0.025, 0.08, rot=(90, 0, 0), sides=4)
+        cone(f"Shin.{tag}", "dragon_dark", leg, (0.16 * side, 0, 0.25), 0.09, 0.30, sides=8, tip=0.09)
+    tail = [((0, 0.36, 0.40), 0.12), ((0, 0.52, 0.30), 0.10), ((0.04, 0.66, 0.20), 0.08), ((0.10, 0.78, 0.13), 0.06)]
+    for i, (at, r) in enumerate(tail):
+        sphere(f"Tail{i}", "dragon", "tail", at, r, scale=(1, 1.3, 0.9))
+    cone("TailTip", "dragon_dark", "tail", (0.15, 0.88, 0.10), 0.05, 0.14, rot=(-80, 0, -20), sides=6)
+
+    cone("Robe", "wiz_robe", "hips", (0, 0, 0.55), 0.46, 0.80, sides=12, tip=0.31)
+    cone("Hem", "gold", "hips", (0, 0, 0.17), 0.47, 0.05, sides=12, tip=0.465)
+    box("Panel", "wiz_robe_dark", "hips", (0, -0.30, 0.52), (0.22, 0.06, 0.72), bevel=0.02, rot=(-12, 0, 0))
+    for i, z in enumerate((0.36, 0.56, 0.76)):
+        box(f"PanelRune{i}", "gold", "hips", (0, -0.36 + 0.04 * i, z), (0.08, 0.02, 0.08), bevel=0.01, rot=(-12, 0, 45))
+    box("Sash", "leather_dark", "hips", (0, 0, 0.94), (0.66, 0.50, 0.08), bevel=0.03)
+    sphere("SashClasp", "gold", "hips", (0, -0.25, 0.94), 0.05, scale=(1, 0.5, 1), segments=8, rings=6)
+
+    box("Torso", "wiz_robe", "body", (0, 0, 1.14), (0.60, 0.44, 0.44), bevel=0.15, segments=3)
+    box("Chest", "dragon_belly", "body", (0, -0.19, 1.24), (0.20, 0.08, 0.20), bevel=0.05)
+    box("Collar", "gold", "body", (0, -0.08, 1.33), (0.36, 0.30, 0.05), bevel=0.02)
+    # The cloak: over both shoulders and down his back to the floor.
+    hero_cape("body", (0, 0.27, 0.80), (0.70, 0.06, 1.10), rot=(-6, 0, 0))
+    for side in (1, -1):
+        box(f"HeroCapeShoulder{side}", "hero_cape", "body", (0.30 * side, 0.06, 1.34), (0.26, 0.42, 0.10), bevel=0.04,
+            rot=(0, -20 * side, 0))
+    for side, tag in ((1, "L"), (-1, "R")):
+        arm = f"arm.{tag}"
+        cone(f"Sleeve.{tag}", "wiz_robe", arm, (0.43 * side, -0.02, 1.03), 0.14, 0.46, rot=(180, 0, 0), sides=10, tip=0.10)
+        cone(f"Cuff.{tag}", "gold", arm, (0.45 * side, -0.03, 0.82), 0.145, 0.04, sides=10, tip=0.14)
+        box(f"Bracer.{tag}", "gold", arm, (0.46 * side, -0.04, 0.77), (0.12, 0.12, 0.05), bevel=0.015)
+        sphere(f"Hand.{tag}", "dragon", arm, (0.46 * side, -0.05, 0.72), 0.09)
+        for i, dx in enumerate((-0.04, 0.02)):
+            cone(f"HandClaw.{tag}{i}", "bone", arm, (0.46 * side + dx, -0.13, 0.68), 0.02, 0.07, rot=(110, 0, 0), sides=4)
+
+    # A tall staff in the right hand with a curved head like a crescent, runes glowing on it.
+    hand = Vector((-0.46, -0.05, 0.72))
+    cone("Staff", "wood", "arm.R", Vector((hand.x, hand.y, 1.08)), 0.038, 2.0, sides=6, tip=0.034)
+    cone("StaffFoot", "iron_dark", "arm.R", Vector((hand.x, hand.y, 0.08)), 0.05, 0.08, sides=6, tip=0.03)
+    box("StaffWrap", "gold", "arm.R", hand, (0.10, 0.10, 0.06), bevel=0.02)
+    centre = Vector((hand.x, hand.y - 0.20, 2.08))
+    for i in range(7):
+        a = DEG(-70 + i * 28)
+        at = centre + Vector((0, math.cos(a) * 0.22, math.sin(a) * 0.30))
+        box(f"StaffCrescent{i}", "wood", "arm.R", at, (0.06, 0.07, 0.16), bevel=0.02, rot=(math.degrees(a), 0, 0))
+        if i % 2 == 0:
+            box(f"StaffRune{i}", "arcane", "arm.R", at + Vector((0.035, 0, 0)), (0.02, 0.04, 0.06), bevel=0.005,
+                rot=(math.degrees(a), 0, 0))
+    cone("StaffTip", "wood", "arm.R", centre + Vector((0, -0.10, 0.34)), 0.04, 0.14, rot=(30, 0, 0), sides=5)
+
+    # Head: a dragon's head with an open fanged jaw, yellow eyes, swept-back horns and frills.
+    dz = -0.06
+    cone("Neck", "dragon", "head", (0, 0.0, 1.48), 0.17, 0.18, sides=10, tip=0.16)
+    box("Throat", "dragon_belly", "head", (0, -0.12, 1.55), (0.22, 0.14, 0.12), bevel=0.04)
+    sphere("Skull", "dragon", "head", (0, 0.04, 1.84 + dz), 0.29, scale=(0.95, 1.05, 0.92), segments=16, rings=10)
+    box("Snout", "dragon", "head", (0, -0.28, 1.80 + dz), (0.26, 0.42, 0.16), bevel=0.07, segments=3)
+    box("SnoutTop", "dragon_dark", "head", (0, -0.26, 1.89 + dz), (0.18, 0.34, 0.03), bevel=0.012)
+    box("Jaw", "dragon", "head", (0, -0.24, 1.62 + dz), (0.22, 0.38, 0.09), bevel=0.04, rot=(-14, 0, 0))
+    box("JawBelly", "dragon_belly", "head", (0, -0.22, 1.585 + dz), (0.16, 0.30, 0.03), bevel=0.01, rot=(-14, 0, 0))
+    box("MouthInside", "red", "head", (0, -0.22, 1.69 + dz), (0.18, 0.32, 0.06), bevel=0.02, rot=(-7, 0, 0))
+    for side in (1, -1):
+        for i, y in enumerate((-0.44, -0.34, -0.24)):
+            cone(f"FangTop{side}{i}", "bone", "head", (0.09 * side, y, 1.70 + dz), 0.02, 0.07, rot=(180, 0, 0), sides=4)
+            cone(f"FangLow{side}{i}", "bone", "head", (0.08 * side, y + 0.03, 1.64 + dz + 0.03 * (i - 1) * -1),
+                 0.018, 0.06, sides=4)
+        box(f"Nostril{side}", "black", "head", (0.05 * side, -0.49, 1.85 + dz), (0.03, 0.03, 0.02), bevel=0.008)
+        sphere(f"Eye{side}", "eye", "head", (0.15 * side, -0.13, 1.94 + dz), 0.07, scale=(0.9, 0.7, 0.85))
+        box(f"Pupil{side}", "black", "head", (0.155 * side, -0.18, 1.94 + dz), (0.016, 0.02, 0.08), bevel=0.006)
+        box(f"Brow{side}", "dragon_dark", "head", (0.15 * side, -0.15, 2.02 + dz), (0.15, 0.10, 0.05), bevel=0.02,
+            rot=(0, -14 * side, 0))
+        # Swept-back horns and cheek frills.
+        cone(f"Horn{side}", "bone", "head", (0.15 * side, 0.30, 2.04 + dz), 0.06, 0.40, rot=(-120, 0, -12 * side), sides=6)
+        for i, (y, z) in enumerate(((0.10, 1.78), (0.18, 1.68), (0.24, 1.88))):
+            cone(f"Frill{side}{i}", "dragon_dark", "head", (0.27 * side, y, z + dz), 0.06, 0.24,
+                 rot=(-100, 0, -35 * side), scale=(0.4, 1, 1), sides=4)
+    for i, (y, z) in enumerate(((0.22, 2.10), (0.36, 1.98), (0.42, 1.80))):
+        cone(f"Crest{i}", "dragon_dark", "head", (0, y, z + dz), 0.07, 0.18, rot=(-40, 0, 0), scale=(0.3, 1, 1), sides=4)
+
+
+def build_berryloaf():
+    """Berryloaf, the halfling bard (fan hero): a small, grinning blond halfling with a goatee and
+    pointed ears, a purple coat over a white shirt, striped trousers, tall boots, a belt of daggers."""
+    for side, tag in ((1, "L"), (-1, "R")):
+        leg = f"leg.{tag}"
+        box(f"Boot.{tag}", "black", leg, (0.15 * side, -0.07, 0.08), (0.20, 0.30, 0.16), bevel=0.05)
+        cone(f"BootTop.{tag}", "black", leg, (0.15 * side, 0, 0.26), 0.11, 0.30, sides=8, tip=0.12)
+        cone(f"Shin.{tag}", "trouser_blue", leg, (0.15 * side, 0, 0.44), 0.11, 0.12, sides=8, tip=0.11)
+    box("Seat", "trouser_blue", "hips", (0, 0, 0.58), (0.46, 0.34, 0.24), bevel=0.08)
+    for i, x in enumerate((-0.12, 0.0, 0.12)):
+        box(f"Stripe{i}", "shirt", "hips", (x, -0.17, 0.56), (0.025, 0.02, 0.20), bevel=0.005)
+    box("Belt", "leather_dark", "hips", (0, 0, 0.78), (0.52, 0.38, 0.08), bevel=0.02)
+    box("Buckle", "gold", "hips", (0, -0.20, 0.78), (0.10, 0.03, 0.08), bevel=0.01)
+    for i, (x, a) in enumerate(((-0.18, 12), (0.16, -8), (0.24, -16))):
+        box(f"Sheath{i}", "red", "hips", (x, -0.19, 0.64), (0.05, 0.04, 0.22), bevel=0.015, rot=(0, a, 0))
+        box(f"SheathHilt{i}", "gold", "hips", (x, -0.19, 0.78), (0.08, 0.04, 0.03), bevel=0.008, rot=(0, a, 0))
+
+    # A white shirt under a purple coat that flares into tails at the back (dyed the hero's colour).
+    box("Torso", "shirt", "body", (0, 0, 1.05), (0.50, 0.36, 0.52), bevel=0.15, segments=3)
+    for side in (1, -1):
+        box(f"CoatFront{side}", "coat", "body", (0.17 * side, -0.05, 1.04), (0.20, 0.32, 0.54), bevel=0.06)
+        box(f"Lapel{side}", "shirt", "body", (0.12 * side, -0.20, 1.20), (0.08, 0.03, 0.18), bevel=0.01,
+            rot=(0, 20 * side, 0))
+        for i, z in enumerate((1.12, 0.98)):
+            sphere(f"CoatButton{side}{i}", "gold", "body", (0.22 * side, -0.21, z), 0.02, segments=6, rings=4)
+    box("CoatBack", "coat", "body", (0, 0.10, 1.04), (0.52, 0.18, 0.54), bevel=0.08)
+    box("Sash", "gold", "body", (0, 0, 1.06), (0.05, 0.40, 0.58), bevel=0.01, rot=(0, 34, 0))
+    hero_cape("body", (0, 0.20, 0.66), (0.50, 0.05, 0.50), rot=(-14, 0, 0))
+    for side, tag in ((1, "L"), (-1, "R")):
+        arm = f"arm.{tag}"
+        x = 0.33 * side
+        sphere(f"Shoulder.{tag}", "coat", arm, (x, 0, 1.22), 0.11)
+        cone(f"Sleeve.{tag}", "coat", arm, (x * 1.06, -0.01, 1.00), 0.10, 0.36, rot=(180, 0, 0), sides=8, tip=0.09)
+        cone(f"Cuff.{tag}", "shirt", arm, (x * 1.1, -0.02, 0.82), 0.10, 0.05, sides=8, tip=0.10)
+        sphere(f"Hand.{tag}", "skin_light", arm, (x * 1.12, -0.04, 0.74), 0.08)
+    # A dagger in the right hand, ready to throw.
+    hand = Vector((-0.37, -0.04, 0.74))
+    box("DaggerGrip", "leather_dark", "arm.R", hand + Vector((0, 0, 0.02)), (0.04, 0.04, 0.12), bevel=0.01)
+    box("DaggerGuard", "gold", "arm.R", hand + Vector((0, 0, 0.09)), (0.14, 0.04, 0.03), bevel=0.01)
+    box("DaggerBlade", "steel", "arm.R", hand + Vector((0, 0, 0.22)), (0.06, 0.02, 0.22), bevel=0.006)
+    cone("DaggerTip", "steel", "arm.R", hand + Vector((0, 0, 0.36)), 0.04, 0.07, scale=(1, 0.3, 1), sides=4)
+
+    # Head: a grinning halfling with swept blond hair, a goatee and pointed ears.
+    hz = 1.72
+    hero_face("skin_light", hz, brow="hair_blonde", tilt=6, eye="eye_blue", mouth="smirk", ears="half")
+    sphere("HairCap", "hair_blonde", "head", (0, 0.06, hz + 0.08), 0.335, scale=(1.04, 1.0, 0.88), segments=16, rings=10)
+    box("Quiff", "hair_blonde", "head", (0.06, -0.16, hz + 0.27), (0.42, 0.20, 0.12), bevel=0.05, rot=(-25, 10, 0))
+    sphere("HairBack", "hair_blonde", "head", (0, 0.20, hz - 0.08), 0.26, scale=(1.1, 0.7, 1.1), segments=12, rings=8)
+    cone("Goatee", "hair_blonde", "head", (0, -0.26, hz - 0.25), 0.06, 0.12, rot=(180, 0, 0), sides=6)
+    box("Moustache", "hair_blonde", "head", (0, -0.30, hz - 0.10), (0.18, 0.04, 0.03), bevel=0.012)
+    sphere("Earring", "gold", "head", (0.33, 0.02, hz - 0.06), 0.025, segments=6, rings=4)
+
+
+def build_darna():
+    """Darna, the human monk (fan hero): a strong woman with long black hair, in a white wrap top
+    and loose white trousers, wrapped forearms and bare fists, a sash at her waist."""
+    for side, tag in ((1, "L"), (-1, "R")):
+        leg = f"leg.{tag}"
+        box(f"Foot.{tag}", "white_shade", leg, (0.15 * side, -0.07, 0.07), (0.18, 0.28, 0.13), bevel=0.05)
+        cone(f"Leg.{tag}", "white_cloth", leg, (0.15 * side, 0, 0.32), 0.13, 0.40, sides=8, tip=0.11)
+    box("Seat", "white_cloth", "hips", (0, 0, 0.60), (0.46, 0.34, 0.26), bevel=0.09)
+    # The sash (dyed the hero's colour), knotted at the front with the ends hanging down.
+    box("HeroCapeSash", "hero_cape", "hips", (0, 0, 0.78), (0.52, 0.38, 0.09), bevel=0.03)
+    for i, (x, a) in enumerate(((0.05, -6), (-0.04, 8))):
+        box(f"HeroCapeTail{i}", "hero_cape", "hips", (x, -0.20, 0.58), (0.08, 0.03, 0.34), bevel=0.01, rot=(0, a, 0))
+
+    box("Midriff", "skin_tan", "body", (0, 0, 0.98), (0.44, 0.32, 0.20), bevel=0.08)
+    box("Top", "white_cloth", "body", (0, 0, 1.18), (0.50, 0.36, 0.30), bevel=0.12, segments=3)
+    box("TopNeck", "white_cloth", "body", (0, -0.02, 1.34), (0.20, 0.20, 0.08), bevel=0.03)
+    box("TopTie", "white_shade", "body", (0, -0.18, 1.04), (0.16, 0.03, 0.04), bevel=0.01)
+    for side, tag in ((1, "L"), (-1, "R")):
+        arm = f"arm.{tag}"
+        x = 0.35 * side
+        sphere(f"Shoulder.{tag}", "skin_tan", arm, (x, 0, 1.22), 0.11)
+        cone(f"Arm.{tag}", "skin_tan", arm, (x * 1.06, -0.01, 1.00), 0.10, 0.36, rot=(180, 0, 0), sides=8, tip=0.09)
+        cone(f"ArmBand.{tag}", "white_cloth", arm, (x * 1.03, -0.01, 1.12), 0.105, 0.06, sides=8, tip=0.10)
+        cone(f"Wrap.{tag}", "white_cloth", arm, (x * 1.1, -0.03, 0.84), 0.095, 0.12, sides=8, tip=0.09)
+        sphere(f"Fist.{tag}", "skin_tan", arm, (x * 1.12, -0.04, 0.74), 0.09)
+
+    # Head: long straight black hair to her shoulders, a fierce look.
+    hz = 1.72
+    hero_face("skin_tan", hz, brow="hair_black", tilt=-12, lips="lips", cheeks=False)
+    sphere("HairCap", "hair_black", "head", (0, 0.05, hz + 0.08), 0.34, scale=(1.05, 1.02, 0.90), segments=16, rings=10)
+    box("Fringe", "hair_black", "head", (-0.06, -0.22, hz + 0.21), (0.40, 0.14, 0.10), bevel=0.04, rot=(-20, 8, 0))
+    sphere("HairBack", "hair_black", "head", (0, 0.20, hz - 0.22), 0.28, scale=(1.15, 0.65, 1.5), segments=12, rings=8)
+    for side in (1, -1):
+        sphere(f"HairSide{side}", "hair_black", "head", (0.28 * side, -0.02, hz - 0.18), 0.11, scale=(0.8, 1, 1.8),
+               segments=10, rings=7)
+
+
+def join_cape(cape_parts, name, mat, size):
+    """Joins a hero's cape parts into their own mesh, sized like the figure (`size`)."""
+    bpy.ops.object.select_all(action="DESELECT")
+    for obj in cape_parts:
+        obj.select_set(True)
+    bpy.context.view_layer.objects.active = cape_parts[0]
+    bpy.ops.object.join()
+    cape = bpy.context.active_object
+    cape.name = name
+    cape.data.name = name
+    cape.data.materials.clear()
+    cape.data.materials.append(mat)
+    for v in cape.data.vertices:
+        v.co = size(v.co)
+    cape.data.update()
+    return cape
+
+
 # ---- 5. Skeleton and moves -------------------------------------------------------------------
 
 # Every figure's bones: name, head, tail, parent (design units, before sizing).
@@ -2281,6 +2792,15 @@ MONSTERS = [
     # Model Workshop figures.
     ("easton-doom-knight", "easton-doom-knight.glb", build_doom_knight, 2.8, ORC_BONES, []),
     ("colton-lizard-mage", "colton-lizard-mage.glb", build_lizard_mage, 2.5, LIZARD_BONES, ["Spellcast_Shoot"]),
+    # The heroes, from their card art (src/models/Hero_*.glb). Each has a cape mesh (Hero_X_Cape)
+    # the board dyes the hero's colour.
+    ("hero-quinn", "hero-quinn.glb", build_quinn, 2.45, CULTIST_BONES, ["Spellcast_Shoot"]),
+    ("hero-vistra", "hero-vistra.glb", build_vistra, 2.05, DUERGAR_BONES, []),
+    ("hero-keyleth", "hero-keyleth.glb", build_keyleth, 2.45, CULTIST_BONES, ["Spellcast_Shoot"]),
+    ("hero-tarak", "hero-tarak.glb", build_tarak, 2.45, ORC_BONES, ["1H_Ranged_Shoot"]),
+    ("hero-heskan", "hero-heskan.glb", build_heskan, 2.55, LIZARD_BONES, ["Spellcast_Shoot"]),
+    ("hero-berryloaf", "hero-berryloaf.glb", build_berryloaf, 1.85, CULTIST_BONES, ["Spellcast_Shoot", "1H_Ranged_Shoot"]),
+    ("hero-darna", "hero-darna.glb", build_darna, 2.4, CULTIST_BONES, []),
 ]
 # Moves only some figures have.
 EXTRA_MOVES = {"1H_Ranged_Shoot", "Spellcast_Shoot"}
@@ -2293,13 +2813,21 @@ def make(label, file_name, build, height, bones, extra, own_moves=None):
     material = palette_material()
     build()
     name = label.replace("-", "_").title()
+    # A hero's cape parts become their own mesh, so the board can dye it the hero's colour.
+    cape_parts = [p for p in parts if p.name.startswith("HeroCape")]
+    for p in cape_parts:
+        parts.remove(p)
     figure, size = join_parts(name, material, height)
-    objs = [figure]
+    cape = join_cape(cape_parts, f"{name}_Cape", material, size) if cape_parts else None
+    objs = [figure] + ([cape] if cape else [])
     moves = own_moves or [m for m in MOVES if m[0] not in EXTRA_MOVES or m[0] in extra]
     if ANIMATE:
         rig = build_rig(figure, size, bones)
+        if cape:
+            cape.parent = rig
+            cape.modifiers.new("Rig", "ARMATURE").object = rig
         add_moves(rig, moves)
-        objs = [rig, figure]
+        objs = [rig] + objs
     path = os.path.join(OUTPUT_FOLDER, file_name)
     export_glb(objs, path)
 

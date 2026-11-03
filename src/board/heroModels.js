@@ -1,6 +1,8 @@
-// Which 3D figure each hero gets on the 3D board (Board3D.jsx, figureModels.js): one of the
-// KayKit Adventurers (CC0, src/models), the gear it carries and how tall it stands. The
-// hero's cape is dyed the hero's colour, so two heroes on the same figure still look apart.
+// Which 3D figure each hero gets on the 3D board (Board3D.jsx, figureModels.js), the gear it
+// carries and how tall it stands. The box's five heroes and the fan heroes Berryloaf and Darna
+// have their own figures, made from their card art (scripts/models/make-monsters.py, Hero_*);
+// other fan heroes get one of the KayKit Adventurers (CC0, src/models) by class. Every hero's
+// cape is dyed the hero's colour, so two heroes on the same figure still look apart.
 // Monsters stay standees with their card art, except the ones we made figures for
 // (monsterModel below).
 
@@ -33,15 +35,28 @@ export const MODEL_PROPS = {
   Villager_Donnel: [],
   Villager_Elizar: [],
   Gibbering_Mouther: [],
+  Hero_Quinn: [],
+  Hero_Vistra: [],
+  Hero_Keyleth: [],
+  Hero_Tarak: [],
+  Hero_Heskan: [],
+  Hero_Berryloaf: [],
+  Hero_Darna: [],
 }
 
-// By hero (the box's five by key), then by the words in a hero's class, for fan heroes.
+// By hero (the box's five by key), then the fan heroes we made figures for (by name), then by
+// the words in a hero's class, for other fan heroes.
+const own = (model) => ({ model, gear: [] })
 const BY_KEY = {
-  cleric: { model: 'Knight', gear: ['1H_Sword', 'Badge_Shield'] },
-  fighter: { model: 'Barbarian', gear: ['1H_Axe', 'Barbarian_Round_Shield', 'Barbarian_Hat'], height: 0.88 },
-  paladin: { model: 'Knight', gear: ['1H_Sword', 'Rectangle_Shield', 'Knight_Helmet'] },
-  rogue: { model: 'Rogue_Hooded', gear: ['Knife', 'Knife_Offhand'] },
-  wizard: { model: 'Mage', gear: ['2H_Staff', 'Mage_Hat'] },
+  cleric: own('Hero_Quinn'),
+  fighter: own('Hero_Vistra'),
+  paladin: own('Hero_Keyleth'),
+  rogue: own('Hero_Tarak'),
+  wizard: own('Hero_Heskan'),
+}
+const BY_NAME = {
+  berryloaf: own('Hero_Berryloaf'),
+  darna: own('Hero_Darna'),
 }
 const BY_CLASS = [
   [/druid/, { model: 'Mage', gear: ['2H_Staff'] }],
@@ -59,7 +74,7 @@ const FALLBACK = { model: 'Knight', gear: ['1H_Sword', 'Round_Shield'] }
 
 // { model, gear, height } for a hero ({ key, className }).
 export function heroModel(hero) {
-  const pick = BY_KEY[hero?.key] ?? BY_CLASS.find(([words]) => words.test(`${hero?.key ?? ''} ${hero?.className ?? ''}`.toLowerCase()))?.[1] ?? FALLBACK
+  const pick = BY_KEY[hero?.key] ?? BY_NAME[hero?.name?.toLowerCase()] ?? BY_CLASS.find(([words]) => words.test(`${hero?.key ?? ''} ${hero?.className ?? ''}`.toLowerCase()))?.[1] ?? FALLBACK
   return { height: 1, ...pick }
 }
 
