@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { startServer } from './server.js'
-import { cleanRequest, workshopStatus } from '../src/data/workshop.js'
+import { boneScales, cleanRequest, cleanTweaks, usedSlots, workshopStatus } from '../src/data/workshop.js'
 
 describe('Model Workshop', () => {
   let dir
@@ -47,7 +47,7 @@ describe('Model Workshop', () => {
     reply(sent.id, [{ note: 'Here he is!', pictures: ['front.png', 'side.png', 'gone.png'] }])
     rmSync(join(workshopDir, sent.id, 'gone.png'))
     let [r] = await list()
-    expect(r.rounds).toEqual([{ note: 'Here he is!', at: null, pictures: ['front.png', 'side.png'] }])
+    expect(r.rounds).toEqual([{ note: 'Here he is!', at: null, pictures: ['front.png', 'side.png'], model: null }])
     expect(workshopStatus(r)).toBe('look')
     const pic = await fetch(`${url}/workshop/${sent.id}/front.png`)
     expect(pic.headers.get('content-type')).toBe('image/png')
@@ -81,11 +81,33 @@ describe('Model Workshop', () => {
     expect(readFileSync(join(workshopDir, sent.id, 'reply.json'), 'utf8')).toContain('inGame')
   })
 
+  it('serves a round\'s 3D model and saves the player\'s tweaks without answering', async () => {
+    const sent = await (await post('/workshop', { idea: 'Lizard mage', from: 'Colton' })).json()
+    reply(sent.id, [{ note: 'Hi', pictures: ['front.png'] }])
+    writeFileSync(join(workshopDir, sent.id, 'model-1.glb'), 'glTF!')
+    writeFileSync(join(workshopDir, sent.id, 'reply.json'), JSON.stringify({ rounds: [{ note: 'Hi', pictures: ['front.png'], model: 'model-1.glb' }] }))
+    let [r] = await list()
+    expect(r.rounds[0].model).toBe('model-1.glb')
+    const glb = await fetch(`${url}/workshop/${sent.id}/model-1.glb`)
+    expect(glb.headers.get('content-type')).toBe('model/gltf-binary')
+    const res = await post(`/workshop/${sent.id}`, { tweaks: { size: 9, head: 1.2, colors: { 3: '#AA00FF', x: '#fff', 4: 'red' } } })
+    expect(res.status).toBe(200)
+    ;[r] = await list()
+    expect(r.tweaks).toEqual({ size: 1.25, head: 1.2, body: 1, colors: { 3: '#aa00ff' } })
+    expect(workshopStatus(r)).toBe('look')
+  })
+
   it('turns away an empty idea and unknown ids', async () => {
     expect((await post('/workshop', { idea: '  ', from: 'Easton' })).status).toBe(400)
     expect((await post('/workshop/nope', { love: true })).status).toBe(404)
     expect((await fetch(`${url}/workshop/NOPE!/front.png`)).status).toBe(404)
     expect(await list()).toEqual([])
+  })
+
+  it('finds the colours a figure uses and sizes its bones', () => {
+    expect(usedSlots(new Float32Array([0.1, 0.5, 0.12, 0.5, 0.95, 0.5, 0.11, 0.5]), 10)).toEqual([1, 9])
+    expect(boneScales({ head: 1.2, body: 0.8 }).head).toBeCloseTo(1.5)
+    expect(cleanTweaks(undefined)).toEqual({ size: 1, head: 1, body: 1, colors: {} })
   })
 
   it('tidies what a screen sends', () => {
