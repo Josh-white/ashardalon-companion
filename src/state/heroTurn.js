@@ -312,7 +312,7 @@ export function startTurn(state) {
   if (hero?.tokens?.wolf) state = withLog(updateHero(state, hero.id, (h) => ({ tokens: { ...h.tokens, wolf: null } })), `${hero.name} changes back from Wolf Form.`)
   for (const curse of (hero?.curses ?? []).filter((c) => c.card?.removeAtTurnStart)) {
     // On the virtual board the hero waits under "Not on the board yet" for a tap.
-    const put = state.board ? `Tap ${hero.name} under "Not on the board yet", then any square.` : `Put ${hero.name} on any tile.`
+    const put = state.board ? `Tap any lit square on the map to put ${hero.name} there.` : `Put ${hero.name} on any tile.`
     state = removeCurse(state, hero.id, curse.id, `${hero.name} is back from the ${curse.name}. ${put}`)
     state = withMoment(state, { kind: 'encounter', heroId: hero.id, title: `${hero.name} is back!`, detail: `${curse.name} is over. ${put}` })
     // The Hero Phase shows how to put the hero back, and won't move on quietly until they are.

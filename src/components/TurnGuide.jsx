@@ -123,9 +123,8 @@ function HeroPhase({ state, hero, dispatch }) {
           {!state.board ? (
             <p>🌀 {hero.name} is back from the Time Leap! First, put {hero.name}'s figure on any tile. Then take your turn.</p>
           ) : leapingBack(state, hero) ? (
-            <p>
-              🌀 {hero.name} is back from the Time Leap! First, put {hero.name} on the map: tap <b>{hero.name}</b> under "Not on the
-              board yet", then tap any square.
+            <p className="text-xl font-bold">
+              🌀 {hero.name} is back from the Time Leap! First, tap any lit square on the map to put {hero.name} there.
             </p>
           ) : (
             <p>✓ {hero.name} is back on the board. Now take your turn.</p>
