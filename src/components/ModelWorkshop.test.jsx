@@ -90,7 +90,7 @@ describe('Model Workshop', () => {
     fireEvent.click(await screen.findByText(/🧙/))
     fireEvent.click(await screen.findByText('📦 Models (1)'))
     await screen.findByText('🎮 Use it in the game')
-    screen.getByText(/type your name as/)
+    screen.getByText(/Type your name as/)
     fireEvent.click(screen.getByText("🎮 Use it as Colton's hero"))
     await waitFor(() => expect(posts).toEqual([[`/workshop/${knight.id}`, { useInGame: true }]]))
   })
