@@ -124,3 +124,12 @@ export function adventureTokenSpots(state) {
     return spot ? [{ name: token.name, at: boardSquares(placed, def, [spot])[0] }] : []
   })
 }
+
+// An adventure token (Roghar's Gear) on or next to the hero's square, which the hero can pick
+// up at the end of its Hero Phase. Null when there's none.
+export function adventureTokenInReach(state, hero) {
+  const at = state.board && !hero.tokens?.refuge ? state.board.tokens[hero.id] : null
+  if (!at) return null
+  const grid = boardGrid(state.board)
+  return adventureTokenSpots(state).find((t) => key(t.at) === key(at) || adjacent(grid, at, t.at)) ?? null
+}

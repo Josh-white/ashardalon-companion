@@ -27,7 +27,7 @@ import { attackGone, canBecomeWolf, naturesHealingOk } from '../state/heroTurn.j
 import { petsDue, petsOf } from '../state/pets.js'
 import { attackItems, heroItems, itemTrapBonus } from '../data/items.js'
 import { boardMarkers, trapsToDisable } from '../board/markers.js'
-import { treasureInReach } from '../board/items.js'
+import { adventureTokenInReach, adventureTokenSpots, treasureInReach } from '../board/items.js'
 import { escapeBlockers } from '../state/adventure.js'
 import { escapeGoal, escapeHold, exitName, exitSquares } from '../board/exits.js'
 import { trapDisable } from '../state/encounterRules.js'
@@ -683,8 +683,14 @@ export function bestMove(state, hero) {
     return walkToward(state, hero, foe ?? reachableFoes, `${hero.name} heads toward the monsters.`)
   }
 
-  // No monsters it can reach: pick up a Treasure token lying about, then explore. A hero on an edge
-  // already stays to draw the tile.
+  // No monsters it can reach: go for an adventure token lying about (Roghar's Gear), then a
+  // Treasure token, then explore. A hero on an edge already stays to draw the tile.
+  const quest = adventureTokenSpots(state).map((t) => t.at)
+  if (quest.length > 0 && !adventureTokenInReach(state, hero)) {
+    const walk = walkToward(state, hero, quest, `${hero.name} goes for the ${adventureTokenSpots(state)[0].name}.`)
+    if (walk) return walk
+  }
+  if (quest.length > 0 && adventureTokenInReach(state, hero)) return null
   const loot = looseTreasure(state)
   if (loot.length > 0 && !treasureInReach(state, hero)) {
     const walk = walkToward(state, hero, loot, `${hero.name} goes for the Treasure token.`)
@@ -862,8 +868,11 @@ export function allyStep(state, { powers = [], roll = d20, cards = {} } = {}) {
     const charge = attackGone(state, hero) ? null : moveFirst(state, hero)
     if (charge) return charge
     // Nothing to fight and no edge in reach: the Wizard Eye explores from farther away.
-    const eye = exitGoal(state, hero) || looseTreasure(state).length > 0 ? null : wizardEyeStep(state, hero)
+    const eye = exitGoal(state, hero) || looseTreasure(state).length > 0 || adventureTokenSpots(state).length > 0 ? null : wizardEyeStep(state, hero)
     if (eye) return eye
+    // Next to an adventure token (Roghar's Gear) with nothing to attack: pick it up.
+    const gear = adventureTokenInReach(state, hero)
+    if (gear) return { action: { type: 'ADVENTURE_TAKE_TOKEN', name: gear.name, heroId: hero.id }, say: `${hero.name} picks up the ${gear.name}!` }
     // Next to a Closed Door, with nothing to attack: open it, or roll to unlock it.
     const door = doorStep(state, hero, { cards, roll })
     if (door) return door
