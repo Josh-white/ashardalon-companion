@@ -1044,6 +1044,17 @@ function heroModelsWanted() {
   }
 }
 
+// Whether walls between the camera and the floor drop low so nothing hides behind them
+// ('shrink', at first) or always stay full height ('tall'), per screen (Colton's ask).
+const WALLS_KEY = 'ashardalon-board3d-walls'
+function wallsWanted() {
+  try {
+    return localStorage.getItem(WALLS_KEY) === 'tall' ? 'tall' : 'shrink'
+  } catch {
+    return 'shrink'
+  }
+}
+
 // What one finger (or the left mouse button) does when it drags the 3D board, per screen:
 // 'turn' the camera around the dungeon, or 'move' (slide) the board like the flat one.
 // Two fingers or the right button always do the other one.
@@ -1175,6 +1186,9 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
   const [heroModels, setHeroModels] = useState(heroModelsWanted)
   const [drag, setDrag] = useState(dragWanted)
   const [follow, setFollow] = useState(followWanted)
+  const [wallPick, setWallPick] = useState(wallsWanted)
+  // A board drawn with walls that cut away keeps them full height when this screen says so.
+  const wallStyle = walls === 'cutaway' && wallPick === 'tall' ? 'tall' : walls
   const [view, setView] = useState(viewWanted)
   const [directTick, setDirectTick] = useState(0)
   const board = state.board
@@ -1203,7 +1217,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
     stage.still = stillWanted()
     stage.calm = calm
     stage.look = look
-    stage.walls = walls
+    stage.walls = wallStyle
     stage.heroModels = heroModels
     // Torch flicker, lava and fog keep the board drawing all the time: only on the big screen.
     stage.ambient = !stage.still && !calm
@@ -1490,6 +1504,27 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
     }
   }
 
+  // Walls shrink / stay tall: rebuilt right away, no need to wait for the camera to turn.
+  useEffect(() => {
+    const stage = stageRef.current
+    if (!ready || !stage || stage.walls === wallStyle) return
+    stage.walls = wallStyle
+    if (!stage.layout) return
+    stage.front = frontSide(stage)
+    buildWalls(stage)
+    stage.render()
+  }, [ready, wallStyle])
+
+  const switchWalls = () => {
+    const next = wallPick === 'tall' ? 'shrink' : 'tall'
+    setWallPick(next)
+    try {
+      localStorage.setItem(WALLS_KEY, next)
+    } catch {
+      // Private browsing: it just isn't remembered.
+    }
+  }
+
   const switchDrag = () => {
     const next = drag === 'move' ? 'turn' : 'move'
     setDrag(next)
@@ -1545,7 +1580,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
   return (
     <section className="relative h-full min-h-0 flex-1 overflow-hidden rounded-2xl" data-board3d>
       <div ref={mountRef} className="h-full w-full" />
-      <div className="absolute right-2 top-2 flex gap-2">
+      <div className="pointer-events-none absolute left-2 right-2 top-2 flex flex-wrap justify-end gap-2 [&>*]:pointer-events-auto">
         <button type="button" onClick={switchFigures} aria-pressed={heroModels} className={cornerButton(calm)}>
           {heroModels ? '🧍 Figures: 3D' : '🪪 Figures: tokens'}
         </button>
@@ -1564,6 +1599,17 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
         >
           {drag === 'move' ? '✋ Drag: move' : '🔄 Drag: turn'}
         </button>
+        {walls === 'cutaway' && (
+          <button
+            type="button"
+            onClick={switchWalls}
+            aria-pressed={wallPick === 'tall'}
+            title={wallPick === 'tall' ? 'Walls always stay full height, even when they hide a square.' : 'Walls between you and the floor drop low so they never hide anyone.'}
+            className={cornerButton(calm)}
+          >
+            {wallPick === 'tall' ? '🧱 Walls: stay tall' : '🧱 Walls: shrink'}
+          </button>
+        )}
         <button type="button" onClick={fit} className={cornerButton(calm)}>
           Fit
         </button>
