@@ -406,3 +406,55 @@ describe('a computer Quinn and Sacred Flame', () => {
     expect(allyStep(state, { roll }).action.type).toBe('HERO_ATTACK')
   })
 })
+
+describe('every computer hero plays the powers that do more than damage', () => {
+  const jab = card('Jab', 'at-will', '+6', '1', 'Attack one adjacent monster.')
+  const cleric = HERO_TEMPLATES.find((t) => t.key === 'cleric')
+  const nameOf = (state, step) => state.heroes[0].powers.find((p) => p.id === step.action.powerId)?.name
+  const picks = (state) => nameOf(state, allyStep(state, { roll }))
+  // The ally (hp given) with a monster next to it, and maybe a friend beside it on the same tile.
+  function fight(powers, { hp, friendHp } = {}) {
+    const base = start({ powers })
+    const me = { ...base.heroes[0], hp: hp ?? base.heroes[0].hp }
+    const friend = friendHp ? { ...createHero(cleric), hp: friendHp } : null
+    const heroes = friend ? [me, friend] : [me]
+    const tokens = { ...base.board.tokens, [me.id]: [1, 1], ...(friend ? { [friend.id]: [0, 1] } : {}) }
+    return withMonster({ ...base, heroes, board: { ...base.board, tokens } }, [2, 1], { hp: 5 })
+  }
+
+  it("Keyleth's Righteous Smite is spent when it heals a hurt tile, and saved when nobody is hurt", () => {
+    const smite = card('Righteous Smite', 'daily', '+7', '2', 'Attack one adjacent monster.')
+    expect(picks(fight([jab, smite]))).toBe('Jab')
+    const hurt = fight([jab, smite], { hp: 3, friendHp: 6 })
+    expect(picks(hurt)).toBe('Righteous Smite')
+  })
+
+  it("Vistra's Comeback Strike is used when she's badly hurt", () => {
+    const comeback = card('Comeback Strike', 'daily', '+6', '2', 'Attack one adjacent monster.')
+    expect(picks(fight([jab, comeback]))).toBe('Jab')
+    const hurt = fight([jab, comeback], { hp: 3 })
+    expect(picks(hurt)).toBe('Comeback Strike')
+  })
+
+  it("Quinn's Cleric's Shield and Tarak's Lucky Strike beat a plain attack with the same numbers", () => {
+    const shield = card("Cleric's Shield", 'at-will', '+6', '1', 'Attack one adjacent monster.')
+    const lucky = card('Lucky Strike', 'at-will', '+6', '1', 'Attack one adjacent monster.')
+    expect(picks(fight([jab, shield]))).toBe("Cleric's Shield")
+    expect(picks(fight([jab, lucky]))).toBe('Lucky Strike')
+  })
+
+  it('walks over to a hurt friend to use Lay On Hands', () => {
+    const lay = card('Lay On Hands', 'utility', '', '', 'Choose an adjacent hero. That hero regains 2 HP.')
+    const base = start({ powers: [jab, lay] })
+    const friend = { ...createHero(cleric), hp: 4 }
+    const tokens = { ...base.board.tokens, [base.heroes[0].id]: [1, 1], [friend.id]: [1, 6] }
+    let state = { ...base, heroes: [base.heroes[0], friend], board: { ...base.board, tokens } }
+    const walk = allyStep(state, { roll })
+    expect(walk.action.type).toBe('MOVE_HERO')
+    expect(walk.say).toMatch(/Lay On Hands/)
+    state = gameReducer(state, walk.action)
+    const heal = allyStep(state, { roll })
+    expect(heal.action).toMatchObject({ type: 'USE_POWER', heroIds: [friend.id] })
+    expect(gameReducer(state, heal.action).heroes[1].hp).toBe(6)
+  })
+})

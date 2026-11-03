@@ -190,16 +190,32 @@ function threatensHurt(state, monster) {
 // Attack the hero's buffs add to this power (Song of Courage, Heavy Hitter, a Longbow-only Power of Earth).
 const buffBonus = (hero, power) => (hero.buffs ?? []).reduce((sum, b) => sum + (b.attack && (!b.only || power.name.startsWith(b.only)) ? b.attack : 0), 0)
 
-// What healing on a hit (Sacred Flame, War Song Strike) is worth: the hero picks the most hurt
-// hero on their tile, so a friend at half HP or less makes it worth more than a monster's HP.
-// With nobody hurt it still beats a plain attack a little, so the healer keeps to it.
-function healWorth(state, hero, effects) {
-  const heal = effects.onHit?.heal
-  if (!heal) return 0
-  const onTile = (heroesInReach(state, hero.id, 'sameTile') ?? [hero.id]).map((id) => heroById(state, id)).filter((h) => h && h.hp > 0)
-  const best = Math.max(0, ...onTile.map((h) => Math.min(heal, missingHp(h)) * (badlyHurt(h) ? 2.5 : 1.5)))
-  return (best || 0.5) * (effects.onHit.even ? 0.5 : 1)
+// What a power does on top of its damage, in the same points as a monster's HP:
+//   heal   healing (Sacred Flame and War Song Strike on a hit, Comeback Strike for the hero itself
+//          on a hit, Righteous Smite for the whole tile hit or miss). A friend at half HP or less
+//          is worth the most. Sacred Flame with nobody hurt still beats a plain attack a little,
+//          so the healer keeps to it.
+//   shield Cleric's Shield's +2 AC (hit or miss) for the weakest hero on the tile, worth more on a
+//          hurt one, nothing when that hero already has this hero's shield.
+// anyHit is the chance at least one of the attack's rolls hits.
+const healPoints = (h, n) => Math.min(n, missingHp(h)) * (badlyHurt(h) ? 2.5 : 1.5)
+function extraWorth(state, hero, effects, anyHit) {
+  const onTile = (heroesInReach(state, hero.id, 'sameTile') ?? [hero.id]).map((id) => heroById(state, id)).filter((h) => h && h.hp > 0 && !h.escaped)
+  let heal = 0
+  if (effects.onHit?.heal) heal += (Math.max(0, ...onTile.map((h) => healPoints(h, effects.onHit.heal))) || 0.5) * (effects.onHit.even ? 0.5 : 1) * anyHit
+  if (effects.onHit?.healSelf) heal += healPoints(hero, effects.onHit.healSelf) * anyHit
+  if (effects.after === 'heal-tile') heal += onTile.reduce((sum, h) => sum + healPoints(h, 1), 0)
+  let shield = 0
+  if (effects.after === 'shield') {
+    const target = [...onTile].sort((a, b) => a.hp - b.hp)[0] ?? hero
+    shield = target.shieldedBy === hero.id ? 0 : badlyHurt(target) ? 1.2 : 0.6
+  }
+  return { heal, shield }
 }
+
+// Healing points (healPoints) that make a daily worth spending: 2 HP for friends, or 1 HP
+// for a friend at half HP or less plus a bit more.
+const HEALING_DAILY = 3
 
 export const onBoard = (state, foe) => Object.keys(state.board.tokens).some((id) => baseId(id) === foe.id)
 
@@ -238,8 +254,10 @@ export function attackOptions(state, hero, { atWill = false, all: every = false 
     const status = effects.onHit?.status
     const statusWorth = (m) => (!status || kills(m) || statusesOf(m).some((x) => x.kind === status) ? 0 : m.villain || threatensHurt(state, m) ? 2 : 0.5)
     // Healing on a hit happens once, when any of the rolls hits.
-    const heals = healWorth(state, hero, effects) * (1 - hit.reduce((miss, m) => miss * (1 - chance(m)), 1))
-    const score = heals + hit.reduce((sum, m) => sum + chance(m) * (damage + (kills(m) ? 4 : 0) + (m.villain ? 2 : 0) + statusWorth(m)), 0)
+    const extra = extraWorth(state, hero, effects, 1 - hit.reduce((miss, m) => miss * (1 - chance(m)), 1))
+    // Lucky Strike: +1 damage on an even die, about half of the hits.
+    const even = (effects.evenBonus ?? 0) / 2
+    const score = extra.heal + extra.shield + hit.reduce((sum, m) => sum + chance(m) * (damage + even + (kills(m) ? 4 : 0) + (m.villain ? 2 : 0) + statusWorth(m)), 0)
     const names = [...new Set(hit.map((m) => m.name))].join(' and the ')
     // Wolf Fangs costs the hero HP: only for a finishing blow or the villain, with HP to spare.
     if (effects.selfDamage && (hero.hp <= effects.selfDamage + 1 || !(hit.some(kills) || hit.some((m) => m.villain)))) continue
@@ -251,17 +269,18 @@ export function attackOptions(state, hero, { atWill = false, all: every = false 
       ranged: !['adjacent', 'sameTile'].includes(range),
       finishes: hit.filter(kills).map((m) => m.id),
       villain: hit.some((m) => m.villain),
-      heals: heals > 0,
+      heals: extra.heal,
       say: `${hero.name} attacks the ${names} with ${power.name}.`,
     })
   }
-  // Dailies are saved for a villain, or a monster no at-will power could finish off. With no
-  // at-will that can reach anything, the daily is better than doing nothing.
+  // Dailies are saved for a villain, or a monster no at-will power could finish off, or real
+  // healing (Righteous Smite on a hurt tile, Comeback Strike when the hero is badly hurt). With
+  // no at-will that can reach anything, the daily is better than doing nothing.
   const atWills = options.filter((o) => o.power.type !== 'daily')
   const atWillFinishes = new Set(atWills.flatMap((o) => o.finishes))
   return options
     // A daily that isn't used up when it misses from the shadows (Into Darkness) is fine there too.
-    .filter((o) => every || o.power.type !== 'daily' || atWills.length === 0 || o.villain || o.finishes.some((id) => !atWillFinishes.has(id)) || (hero.tokens?.shadow && effectsOf(o.power).shadowKeep))
+    .filter((o) => every || o.power.type !== 'daily' || atWills.length === 0 || o.villain || o.heals >= HEALING_DAILY || o.finishes.some((id) => !atWillFinishes.has(id)) || (hero.tokens?.shadow && effectsOf(o.power).shadowKeep))
     .sort((a, b) => b.score - a.score)
 }
 
@@ -360,6 +379,37 @@ export function supportPower(state, hero) {
     return { action: { type: 'USE_POWER', heroId: hero.id, powerId: power.id, heroIds }, say: `${hero.name} uses ${power.name} to heal ${who}.` }
   }
   return null
+}
+
+// A healing utility that only reaches a friend next to the hero or on its tile (Lay On Hands,
+// Healing Hymn): with both actions left, walk to where it reaches a friend who has lost at
+// least that much, and use it there (supportPower, next step). The attack is still left.
+export function healWalk(state, hero) {
+  if (movesLeft(state, hero) < 2 || state.turn.beforeMoved) return null
+  const at = state.board?.tokens[hero.id]
+  if (!at) return null
+  const fromHere = distances(boardGrid(state.board), at)
+  let best = null
+  for (const power of hero.powers.filter((p) => !p.used && p.card && !wolfBlocked(hero, p))) {
+    const use = effectsOf(power).use
+    if (!use?.heal || use.pick !== 'other' || use.board || use.move || forTheFallen(power)) continue
+    const reach = use.reach ?? 'sameTile'
+    const close = new Set(nearby(state, hero, reach).map((h) => h.id))
+    const needy = state.heroes.filter((h) => h.id !== hero.id && h.hp > 0 && !h.escaped && state.board.tokens[h.id] && missingHp(h) >= use.heal && !close.has(h.id))
+    if (needy.length === 0) continue
+    for (const k of heroReach(state, hero)) {
+      const moved = withHeroAt(state, hero, parse(k))
+      const there = nearby(moved, hero, reach).filter((h) => needy.some((n) => n.id === h.id))
+      const who = neediest(there)
+      if (!who) continue
+      const steps = fromHere.get(k) ?? 99
+      // A square it can still attack from is better, among the ones that reach the friend.
+      const worth = healPoints(who, use.heal) + (attackOptions(moved, hero)[0]?.score ?? 0)
+      if (!best || worth > best.worth || (worth === best.worth && steps < best.steps)) best = { k, worth, steps, who, power }
+    }
+  }
+  if (!best) return null
+  return { action: { type: 'MOVE_HERO', heroId: hero.id, to: parse(best.k) }, say: `${hero.name} goes to ${best.who.name} to use ${best.power.name}.` }
 }
 
 // A healing potion or a cure among the ally's items, for itself or a hero next to it who
@@ -559,11 +609,12 @@ function groupedGoal(state, hero, groups) {
   return [...groups].sort((a, b) => score(a) - score(b))[0] ?? null
 }
 
-// Where the hero goes now, or null to stay put: next to a monster it can attack from there,
-// closer to the monsters, or on to the nearest unexplored edge when there are none.
+// A healer with both actions left (Sacred Flame, Righteous Smite) steps onto a hurt friend's
+// tile first when an attack from there is worth more, healing included.
+const healsOnAttack = (e) => Boolean(e.onHit?.heal || e.after === 'heal-tile')
 export function healerMove(state, hero, option) {
   if (movesLeft(state, hero) < 2 || state.turn.beforeMoved) return null
-  if (!hero.powers.some((p) => simpleAttack(p, state) && effectsOf(p).onHit?.heal)) return null
+  if (!hero.powers.some((p) => simpleAttack(p, state) && healsOnAttack(effectsOf(p)))) return null
   if (!state.heroes.some((h) => h.id !== hero.id && h.hp > 0 && missingHp(h) > 0 && state.board.tokens[h.id])) return null
   const at = state.board.tokens[hero.id]
   const fromHere = distances(boardGrid(state.board), at)
@@ -581,6 +632,8 @@ export function healerMove(state, hero, option) {
   return { action: { type: 'MOVE_HERO', heroId: hero.id, to: parse(best.k) }, say: `${hero.name} moves onto a hurt friend's tile to heal them.` }
 }
 
+// Where the hero goes now, or null to stay put: next to a monster it can attack from there,
+// closer to the monsters, or on to the nearest unexplored edge when there are none.
 export function bestMove(state, hero) {
   const reach = heroReach(state, hero)
   const at = state.board?.tokens[hero.id]
@@ -748,6 +801,8 @@ export function allyStep(state, { powers = [], roll = d20, cards = {} } = {}) {
     if (start) return start
     const care = improvise(state, hero) ?? supportItem(state, hero) ?? supportPower(state, hero) ?? buffPower(state, hero) ?? chorusStep(state, hero) ?? giftsStep(state, hero) ?? rescueStride(state, hero) ?? circleStep(state, hero) ?? seekersPower(state, hero)
     if (care) return care
+    const walk = healWalk(state, hero)
+    if (walk) return walk
     // A Treasure token on or next to the hero: pick it up (nothing else waiting to be handed out).
     const loot = treasureInReach(state, hero)
     if (loot && !state.treasure && !state.turn.treasureOwed && !state.turn.tokenOwed) {
