@@ -1,4 +1,4 @@
-import { withAttackFx } from '../board/attackFx.js'
+import { withAttackFx, withMomentQueue } from '../board/attackFx.js'
 import { withHealFx } from '../board/healFx.js'
 import { difficultyOf, encounterCancelCost, surgeHp } from '../data/difficulty.js'
 import { hasAbility, HERO_TEMPLATES, MAX_LEVEL, STARTING_SURGES, templateFor, XP_TO_LEVEL_UP } from '../data/heroes.js'
@@ -79,8 +79,18 @@ function evadeHit(state, action) {
 
 // Every action, then a check for an adventure's victory, then the recap's counts.
 // A failed roll a bard can sing for keeps the game from before it (bardicSong.js).
-export const gameReducer = (state, action) =>
-  action?.type === 'BARDIC_SONG' ? singAgain(state, action, gameReducer) : keepCardsQuiet(state, trackSongRoll(state, reduceGame(state, action), action))
+// A new moment waits for an attack still playing on the board (withMomentQueue), worked out
+// once for the whole action (not again when an action runs another inside it).
+let depth = 0
+export const gameReducer = (state, action) => {
+  depth++
+  try {
+    const next = action?.type === 'BARDIC_SONG' ? singAgain(state, action, gameReducer) : keepCardsQuiet(state, trackSongRoll(state, reduceGame(state, action), action))
+    return depth === 1 ? withMomentQueue(state, next) : next
+  } finally {
+    depth--
+  }
+}
 
 // Heroes reading drawn cards aloud switched off (players who know the cards) stays off
 // through new games, Try again and the next campaign adventure, until someone turns it on.

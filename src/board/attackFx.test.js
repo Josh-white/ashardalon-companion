@@ -3,9 +3,9 @@ import { HERO_TEMPLATES } from '../data/heroes.js'
 import { createHero, gameReducer, initialState } from '../state/game.js'
 import { momentSounds } from '../audio/sfx.js'
 import { tokenFx } from '../components/AttackFx.jsx'
-import { momentBusyMs } from '../components/MomentOverlay.jsx'
+import { boardHoldMs, momentBusyMs } from '../components/MomentOverlay.jsx'
 import { msAt, slowMo } from '../components/attackFxDraw.js'
-import { FX_DELAY_MS, FX_IMPACT_MS, attackFx, fxLeadMs, heroLook, monsterLook, rayColor } from './attackFx.js'
+import { FX_DELAY_MS, FX_IMPACT_MS, FX_MS, attackFx, fxEndMs, fxLeadMs, heroLook, monsterLook, rayColor, withMomentQueue } from './attackFx.js'
 import { normalizeTiles } from './tileDefs.js'
 
 const TILES = normalizeTiles(
@@ -121,6 +121,38 @@ describe('attack animations on the virtual board', () => {
     expect(fxLeadMs({ ...spawn, wait: 2000 })).toBe(2000)
     expect(momentSounds({ ...spawn, wait: 2000 })).toEqual(momentSounds(spawn).map(([sound, ms]) => [sound, ms + 2000]))
     expect(momentBusyMs({ ...spawn, wait: 2000 })).toBe(momentBusyMs(spawn) + 2000)
+  })
+
+  // Nothing covers an attack while it plays (2026-11-03): the next card waits for it.
+  describe('a moment that comes while an attack is still playing', () => {
+    it("waits for the attack to finish: card, sounds and the board's moves", () => {
+      const { state, heroes } = game()
+      const first = gameReducer(state, { type: 'HERO_ATTACK', heroId: heroes[0].id, powerId: 'arc', targets: [{ monsterId: 'm1', roll: 19 }] })
+      expect(first.moment.after).toBeUndefined()
+      const next = gameReducer(first, { type: 'HERO_ATTACK', heroId: heroes[1].id, powerId: 'ss', targets: [{ monsterId: 'm2', roll: 19 }] })
+      const left = next.moment.after
+      expect(left).toBeGreaterThan(FX_DELAY_MS + FX_MS - 1000)
+      expect(left).toBeLessThanOrEqual(fxEndMs(first.moment))
+      expect(fxLeadMs(next.moment)).toBe(left)
+      expect(momentSounds(next.moment)).toEqual(momentSounds({ ...next.moment, after: 0 }).map(([sound, ms]) => [sound, ms + left]))
+      expect(boardHoldMs(next.moment)).toBe(left)
+    })
+
+    it('not once the attack is over, nor for an Undo back to an older moment', () => {
+      const last = { id: 'a', at: 1000, kind: 'roll', fx: { shots: [] } }
+      const next = { id: 'b', at: 1500, kind: 'treasure' }
+      expect(withMomentQueue({ moment: last }, { moment: next }, 1500).moment.after).toBe(fxEndMs(last) - 500)
+      expect(withMomentQueue({ moment: last }, { moment: next }, 1000 + fxEndMs(last) + 1).moment.after).toBeUndefined()
+      expect(withMomentQueue({ moment: last }, { moment: { ...next, at: 500 } }, 1500).moment.after).toBeUndefined()
+      expect(withMomentQueue({ moment: { ...last, fx: undefined } }, { moment: next }, 1500).moment.after).toBeUndefined()
+    })
+  })
+
+  it("holds the board's own changes until a plain card steps aside, not an attack's or a Time Leap's", () => {
+    expect(boardHoldMs({ kind: 'down' })).toBe(3500)
+    expect(boardHoldMs({ kind: 'defeat', after: 1000 })).toBe(4000)
+    expect(boardHoldMs({ kind: 'roll', fx: { shots: [] } })).toBe(0)
+    expect(boardHoldMs({ kind: 'spawn', wait: 2100 })).toBe(0)
   })
 
   it('a hero knocked to 0 HP is down', () => {

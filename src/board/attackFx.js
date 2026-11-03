@@ -20,10 +20,28 @@ export const FX_IMPACT_MS = 1000
 // animation wait this long (about the 3D figure's walk, a step at a time).
 const WALK_STEP_MS = 290
 // A moment can also wait for something already playing on the board (`moment.wait`, in ms):
-// a Time Leap's monster card waits for the hero to vanish up the beam of light first.
+// a Time Leap's monster card waits for the hero to vanish up the beam of light first. And
+// one that comes while the last attack's animation is still playing waits for it to end
+// (`moment.after`, in ms, see withMomentQueue), so a card never covers an attack.
 export function fxLeadMs(moment) {
   const steps = moment?.fx?.walk ?? 0
-  return (moment?.wait ?? 0) + (steps > 0 ? Math.min(6, steps) * WALK_STEP_MS + 250 : 0)
+  return (moment?.after ?? 0) + (moment?.wait ?? 0) + (steps > 0 ? Math.min(6, steps) * WALK_STEP_MS + 250 : 0)
+}
+
+// When a moment's attack animation is over on the board, in ms from the moment (0 for a
+// moment with no animation).
+export const fxEndMs = (moment) => (moment?.fx ? fxLeadMs(moment) + FX_DELAY_MS + FX_MS : 0)
+
+// The reducer's last step: a new moment that comes while the last one's attack is still
+// playing (the treasure after a kill, the next monster's turn, a quick tap) waits for the
+// attack to finish: its card, sounds, narrator and its moves on the board all hold back.
+// An Undo (an older moment coming back) doesn't wait.
+export function withMomentQueue(before, after, now = Date.now()) {
+  const last = before?.moment
+  const next = after?.moment
+  if (!last?.fx || !next || next.id === last.id || next.after != null || next.at < last.at) return after
+  const left = last.at + fxEndMs(last) - now
+  return left > 0 ? { ...after, moment: { ...next, after: left } } : after
 }
 
 // How long a hero takes to rise up the beam of light off the 3D board (board3dFx.js

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { heroArt } from '../data/art.js'
 import { HERO_COLORS } from '../data/heroes.js'
 import { artUrl, useArt } from '../state/useArt.js'
@@ -23,6 +23,18 @@ export function momentBusyMs(moment) {
 export function momentCoverMs(moment) {
   if (!moment) return 0
   return fxLeadMs(moment) + (moment.fx ? FX_DELAY_MS + FX_IMPACT_MS + 300 : SHOW_MS[moment.kind] ?? 2500)
+}
+
+// How long the board holds back the figures' own changes that come with this moment (a hero
+// falling, a monster going through its portal or popping up, a cage, a walk), in ms from the
+// moment: until its card steps aside, so the card never covers them. A moment that waits for
+// an attack still playing waits that long too. An attack's own changes are timed by its
+// animation (and its walk is seen before the die), and a moment that waits for the board
+// (moment.wait, a Time Leap) lets the board go first.
+export function boardHoldMs(moment) {
+  if (!moment) return 0
+  const after = moment.after ?? 0
+  return moment.fx || moment.wait ? after : after + (SHOW_MS[moment.kind] ?? 2500)
 }
 
 // False while the latest big moment (dice, a defeat, the attack's animation) is still
@@ -112,17 +124,26 @@ export function AnklesBroken({ moment, big = false }) {
 function MomentCard({ moment, heroes, big = false }) {
   const [visible, setVisible] = useState(null)
   const art = useArt()
+  // When the card showing now steps aside (Date.now() ms).
+  const hideAt = useRef(0)
 
   useEffect(() => {
     if (!moment || Date.now() - moment.at > STALE_MS) return
     // A monster walking up to its hero is seen walking first; then the die comes up. (A Time
-    // Leap's monster card waits for the hero to vanish.)
+    // Leap's monster card waits for the hero to vanish, and a card that comes while the last
+    // attack is playing waits for it.)
     const lead = fxLeadMs(moment)
-    setVisible(lead > 0 ? null : moment)
+    // The last attack's die, still showing, stays up for its own time.
+    const keepLast = moment.after > 0 ? Math.max(0, Math.min(lead, hideAt.current - Date.now())) : 0
+    if (keepLast === 0) setVisible(lead > 0 ? null : moment)
+    const step = keepLast > 0 ? setTimeout(() => setVisible((v) => (v?.id === moment.id ? v : null)), keepLast) : null
     const show = lead > 0 ? setTimeout(() => setVisible(moment), lead) : null
     // On the virtual board it steps aside once the die is read, for the attack's animation.
-    const hide = setTimeout(() => setVisible(null), lead + (moment.fx ? FX_DELAY_MS : SHOW_MS[moment.kind] ?? 2500))
+    const shown = lead + (moment.fx ? FX_DELAY_MS : SHOW_MS[moment.kind] ?? 2500)
+    hideAt.current = Date.now() + shown
+    const hide = setTimeout(() => setVisible(null), shown)
     return () => {
+      clearTimeout(step)
       clearTimeout(show)
       clearTimeout(hide)
     }

@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { boardExtras, boardFigures, boardLayout, restFacing } from '../board/scene3d.js'
 import { artUrl, useArt } from '../state/useArt.js'
 import { useAttackFx } from './AttackFx.jsx'
+import { boardHoldMs } from './MomentOverlay.jsx'
 import { useHealFx } from './HealFx.jsx'
 import { canvasTexture, playAttack3D, playHeal3D } from './board3dFx.js'
 import { useWorkshopFigures, withPlayerFigure } from './useWorkshopFigures.js'
@@ -341,7 +342,15 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
     const stage = stageRef.current
     if (!ready || !stage?.at) return
     stage.heroModels = heroModels
-    syncFigures(stage, figures, art, (f) => fallDelay(state.moment, f.at), (at) => killedBy(state.moment, at))
+    // What comes with a new moment waits for its card to step aside (boardHoldMs).
+    // (Not a moment already there when the board opened.)
+    let hold = 0
+    const momentId = state.moment?.id ?? null
+    if (stage.momentSeen !== undefined && momentId && momentId !== stage.momentSeen && !stage.still) {
+      hold = Math.max(0, state.moment.at + boardHoldMs(state.moment) - serverNow())
+    }
+    stage.momentSeen = momentId
+    syncFigures(stage, figures, art, (f) => fallDelay(state.moment, f.at), (at) => killedBy(state.moment, at), hold)
     const looks = restFacing(figures)
     for (const [id, node] of stage.nodes) {
       node.userData.lookAt = looks[id] ?? null
