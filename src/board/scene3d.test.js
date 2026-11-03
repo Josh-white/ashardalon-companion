@@ -107,6 +107,14 @@ describe('markers and tokens on the 3D board', () => {
     const sick = { ...state, heroes: state.heroes.map((h, i) => (i === 0 ? { ...h, conditions: ['Poisoned', 'Dazed'] } : h)) }
     expect(boardFigures(sick)[0].icons).toEqual(['🧪', '💫'])
   })
+
+  it('puts a hero hit by the Cage in a cage until it is opened', () => {
+    const state = game()
+    expect(boardFigures(state)[0].caged).toBe(false)
+    const shut = { ...state, heroes: state.heroes.map((h, i) => (i === 0 ? { ...h, curses: [{ cardId: 'cage' }] } : h)) }
+    expect(boardFigures(shut)[0].caged).toBe(true)
+    expect(boardFigures(shut)[1]?.caged ?? false).toBe(false)
+  })
 })
 
 describe('who the 3D figures look at', () => {
