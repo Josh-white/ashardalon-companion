@@ -4,6 +4,7 @@ import { createHero, gameReducer, initialState } from '../state/game.js'
 import { normalizeTiles } from '../board/tileDefs.js'
 import { allyHostSeat, allyStep, attackOptions, simpleAttack, strayDistance } from './brain.js'
 import { boardGrid } from '../board/play.js'
+import { newAdventure } from '../state/adventure.js'
 
 // A made-up Start tile: 3 floor columns and a wall column, open to the north.
 const TILES = normalizeTiles(
@@ -156,6 +157,41 @@ describe('the ally looks after the party', () => {
     expect(gameReducer(far, step.action).board.tokens[state.heroes[0].id][1]).toBeGreaterThan(at[1])
     const near = { ...state, board: { ...state.board, items: [{ id: 't1', kind: 'treasure', at: [at[0], at[1] + 1] }] } }
     expect(allyStep(near, { roll }).action).toEqual({ type: 'PICK_UP_TREASURE', id: 't1', heroId: state.heroes[0].id })
+  })
+
+  // Roghar's Gear lies on the first floor square of the tile named in the reveal (the Start
+  // tile here, which has no desk). Exploring the open edge must wait until it's picked up.
+  const withGear = (state, held = null) => {
+    const tile = state.board.defs[state.board.tiles[0].tileId].name
+    const card = { title: "Roghar's Gear", story: {}, win: { tokens: ["Roghar's Gear"], villains: [] }, reveals: [{ tile, actions: [{ type: 'placeToken', name: "Roghar's Gear" }] }] }
+    return { ...state, adventure: { ...newAdventure(card), tokens: [{ name: "Roghar's Gear", heldBy: held }] } }
+  }
+
+  it("walks to Roghar's Gear instead of exploring, then picks it up", () => {
+    const state = start()
+    const id = state.heroes[0].id
+    const gear = withGear({ ...state, board: { ...state.board, tokens: { ...state.board.tokens, [id]: [2, 7] } } })
+    const step = allyStep(gear, { roll })
+    expect(step.action.type).toBe('MOVE_HERO')
+    expect(step.say).toMatch(/Roghar's Gear/)
+    let moved = gameReducer(gear, step.action)
+    expect(moved.board.tokens[id][1]).toBeLessThan(7)
+    // Its second action walks on if it still isn't next to the Gear.
+    let next = allyStep(moved, { roll })
+    if (next.action.type === 'MOVE_HERO') {
+      moved = gameReducer(moved, next.action)
+      next = allyStep(moved, { roll })
+    }
+    expect(next.action).toEqual({ type: 'ADVENTURE_TAKE_TOKEN', name: "Roghar's Gear", heroId: id })
+    expect(gameReducer(moved, next.action).adventure.tokens[0].heldBy).toBe(id)
+  })
+
+  it('explores as before once the Gear is carried', () => {
+    const state = start()
+    const id = state.heroes[0].id
+    const held = withGear({ ...state, board: { ...state.board, tokens: { ...state.board.tokens, [id]: [2, 7] } } }, 'someone')
+    const step = allyStep(held, { roll })
+    expect(step?.say ?? '').not.toMatch(/Gear/)
   })
 })
 
