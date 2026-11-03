@@ -73,11 +73,14 @@ export function loadReply(dir, id) {
 export function createWorkshop(dir, { onUse } = {}) {
   const file = join(dir, 'requests.json')
   let requests = readJsonFile(file, {}).requests ?? []
-  function save() {
+  // Writes `next` and only then keeps it, so a save that fails (cards/workshop belonging to
+  // root, a full disk) leaves the list as the Pi really has it.
+  function save(next) {
     mkdirSync(dir, { recursive: true })
     const temp = `${file}.tmp`
-    writeFileSync(temp, JSON.stringify({ requests }, null, 1))
+    writeFileSync(temp, JSON.stringify({ requests: next }, null, 1))
     renameSync(temp, file)
+    requests = next
   }
   const send = (res, status, body) =>
     res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(body))
@@ -106,15 +109,7 @@ export function createWorkshop(dir, { onUse } = {}) {
       if (!request) return send(res, 400, { error: 'Tell Claude what to make first.' })
       if (requests.length >= MAX_REQUESTS) return send(res, 507, { error: 'The workshop is full.' })
       const saved = { id: requestId(request), ...request, sentAt: new Date().toISOString(), answers: [] }
-      try {
-        requests = [...requests, saved]
-        save()
-      } catch (error) {
-        // Most likely cards/workshop on the Pi belongs to root (made by Docker, not by auto-update.sh).
-        console.error('Model Workshop: could not save a request:', error.message)
-        requests = requests.filter((r) => r.id !== saved.id)
-        return send(res, 500, { error: "The workshop couldn't save it on the Pi. Ask Dad to check it." })
-      }
+      save([...requests, saved])
       return send(res, 201, withReply(saved))
     }
     const [id, name, extra] = path.slice('/workshop/'.length).split('/')
@@ -130,14 +125,12 @@ export function createWorkshop(dir, { onUse } = {}) {
       if (body.tweaks !== undefined) {
         // The player's own 🎨 tweaks: saved as they are, without answering the pictures.
         const tweaks = cleanTweaks(body.tweaks)
-        requests = requests.map((r, n) => (n === index ? { ...r, tweaks, tweakedAt: new Date().toISOString() } : r))
-        save()
+        save(requests.map((r, n) => (n === index ? { ...r, tweaks, tweakedAt: new Date().toISOString() } : r)))
         return send(res, 200, withReply(requests[index]))
       }
       const { rounds } = loadReply(dir, id)
       if (body.hidden === false) {
-        requests = requests.map((r, n) => (n === index ? { ...r, hidden: false } : r))
-        save()
+        save(requests.map((r, n) => (n === index ? { ...r, hidden: false } : r)))
         return send(res, 200, withReply(requests[index]))
       }
       if (body.useInGame !== undefined) {
@@ -148,8 +141,7 @@ export function createWorkshop(dir, { onUse } = {}) {
         const key = playerKey(mine.from)
         if (on && !key) return send(res, 400, { error: 'This model has no name on it, so the game does not know whose hero wears it.' })
         if (on && !lovedRound({ ...mine, rounds })?.model) return send(res, 409, { error: 'Tap Love it first.' })
-        requests = requests.map((r, n) => (n === index ? { ...r, useInGame: on } : on && r.useInGame && playerKey(r.from) === key ? { ...r, useInGame: false } : r))
-        save()
+        save(requests.map((r, n) => (n === index ? { ...r, useInGame: on } : on && r.useInGame && playerKey(r.from) === key ? { ...r, useInGame: false } : r)))
         if (on) onUse?.(key)
         return send(res, 200, withReply(requests[index]))
       }
@@ -158,14 +150,13 @@ export function createWorkshop(dir, { onUse } = {}) {
       if (!body.love && !change) return send(res, 400, { error: 'Say what to change.' })
       const answer = { round: rounds.length, ...(body.love ? { love: true } : { change }), at: new Date().toISOString() }
       const answers = [...(requests[index].answers ?? []).filter((a) => a.round !== answer.round), answer]
-      requests = requests.map((r, n) => (n === index ? { ...r, answers } : r))
-      save()
+      save(requests.map((r, n) => (n === index ? { ...r, answers } : r)))
       return send(res, 200, withReply(requests[index]))
     }
     if (req.method === 'DELETE') {
-      // Hidden, not deleted: a player who changes their mind can bring it back.
-      requests = requests.map((r, n) => (n === index ? { ...r, hidden: true } : r))
-      save()
+      // Hidden, not deleted: a player who changes their mind can bring it back. It comes out
+      // of the game too, so bringing it back can't leave two figures on for one player.
+      save(requests.map((r, n) => (n === index ? { ...r, hidden: true, useInGame: false } : r)))
       return send(res, 200, { ok: true })
     }
     send(res, 405, { error: 'Not allowed.' })
@@ -175,9 +166,8 @@ export function createWorkshop(dir, { onUse } = {}) {
     // A player turned on another figure (a 🛠️ Hero Builder one): this one comes off.
     stopUsing(key) {
       if (!requests.some((r) => r.useInGame && playerKey(r.from) === key)) return
-      requests = requests.map((r) => (r.useInGame && playerKey(r.from) === key ? { ...r, useInGame: false } : r))
       try {
-        save()
+        save(requests.map((r) => (r.useInGame && playerKey(r.from) === key ? { ...r, useInGame: false } : r)))
       } catch (error) {
         console.error('Model Workshop: could not save:', error.message)
       }
@@ -188,7 +178,11 @@ export function createWorkshop(dir, { onUse } = {}) {
       if (path !== '/workshop.json' && path !== '/workshop' && !path.startsWith('/workshop/')) return false
       respond(req, res).catch((error) => {
         console.error('Model Workshop:', error.message)
-        if (!res.headersSent) send(res, 400, { error: 'Could not read that.' })
+        if (res.headersSent) return
+        // A file error (it has a code, like EACCES) is the Pi failing to save, most likely
+        // cards/workshop belonging to root (made by Docker, not by auto-update.sh).
+        if (error.code) send(res, 500, { error: "The workshop couldn't save it on the Pi. Ask Dad to check it." })
+        else send(res, 400, { error: 'Could not read that.' })
       })
       return true
     },

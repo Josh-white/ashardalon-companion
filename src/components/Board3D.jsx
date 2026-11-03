@@ -724,6 +724,9 @@ function makeCage() {
 function setCaged(stage, node, on) {
   if (Boolean(node.userData.cage) === on) return
   const icons = node.userData.icons
+  // A cage still flying off (freed, then caged again quickly, as with Undo) goes now
+  // instead of being left hanging over the hero.
+  for (const t of stage.tweens) if (t.cageOf === node) t.done?.()
   stage.tweens = stage.tweens.filter((t) => t.cageOf !== node)
   if (on) {
     const cage = makeCage()
@@ -742,7 +745,7 @@ function setCaged(stage, node, on) {
     icons.position.y = node.userData.kind === 'villain' ? 1.45 : 1.12
     const gone = () => (node.remove(cage), disposeTree(cage))
     if (stage.still) gone()
-    else stage.tweens.push({ cageOf: node, ms: 600, step: (k) => (cage.position.y = k * k * 2.4, k >= 1 && gone()) })
+    else stage.tweens.push({ cageOf: node, ms: 600, done: gone, step: (k) => (cage.position.y = k * k * 2.4, k >= 1 && gone()) })
   }
   stage.render()
 }
