@@ -85,6 +85,17 @@ describe('Hero Builder', () => {
     expect(screen.getByRole('button', { name: /None/ }).getAttribute('aria-pressed')).toBe('true')
   })
 
+  // Found by the robot (src/robot/builder.test.jsx): a surprise figure saved with nobody's name
+  // on it can't be turned on for the game.
+  it('keeps "Made by" for a surprise figure', async () => {
+    pi()
+    render(<HeroBuilder />)
+    fireEvent.change(screen.getByLabelText('Made by'), { target: { value: 'Easton' } })
+    fireEvent.click(screen.getByText('🎲 Surprise me'))
+    expect(screen.getByLabelText('Hero name').value).toBe('Surprise hero')
+    expect(screen.getByLabelText('Made by').value).toBe('Easton')
+  })
+
   it('opens and throws away saved heroes', async () => {
     const saved = { id: 'abc', savedAt: '2026-11-03T03:00:00Z', recipe: { name: 'Lava Knight', from: 'Easton', size: 1, colors: {}, parts: { body: { id: 'brute', shape: {} }, head: { id: 'orc', shape: {} } } } }
     const calls = pi([saved])

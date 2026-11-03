@@ -24,7 +24,7 @@ const tests = (report.testResults ?? []).flatMap((file) => file.assertionResults
 const failed = tests.filter((t) => t.status === 'failed')
 const games = read(logFile)
   .split('\n')
-  .filter((l) => /^(Robot .*game \d+|Ally game \d+|Computer heroes won)/.test(l))
+  .filter((l) => /^(Robot .*game \d+|Robot Hero Builder run \d+|Ally game \d+|Computer heroes won)/.test(l))
   .map((l) => l.trim())
 const wins = games.find((l) => l.startsWith('Computer heroes won')) ?? null
 const passed = tests.length - failed.length
