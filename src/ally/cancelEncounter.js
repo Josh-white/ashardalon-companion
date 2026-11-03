@@ -1,6 +1,6 @@
 // Should the computer ally spend party XP to cancel the encounter card it just drew?
 //
-// Party XP does two jobs: 5 XP levels a hero up on a natural 20, and 5 XP (Story 3, Hard 7)
+// Party XP does two jobs: 5 XP (Story 3) levels a hero up on a natural 20, and 5 XP (Story 3, Hard 7)
 // cancels an encounter. Levelling up is worth more, so the ally keeps back enough XP for
 // every hero still at level 1 (human heroes too: the party shares the XP) and only spends
 // what's left over. With XP to spare it cancels the nasty cards (curses, traps, a monster,
@@ -10,15 +10,15 @@
 
 import { encounterTargetIds, heroesInReach } from '../board/encounters.js'
 import { effectsOf } from '../data/powerEffects.js'
-import { MAX_LEVEL, XP_TO_LEVEL_UP } from '../data/heroes.js'
-import { encounterCancelCost, foeBonus } from '../data/difficulty.js'
+import { MAX_LEVEL } from '../data/heroes.js'
+import { encounterCancelCost, foeBonus, levelUpCost } from '../data/difficulty.js'
 import { villainInPlay } from '../state/monsterDeck.js'
 
 // Cards that help the party (or do next to nothing): never worth XP.
 const HELPFUL = new Set(['hidden-treasure', 'dragon-s-tribute', 'ancient-spirit-s-blessing'])
 
-// XP kept back for levelling up: 5 for each hero not yet at the top level.
-export const levelUpReserve = (state) => state.heroes.filter((h) => h.level < MAX_LEVEL).length * XP_TO_LEVEL_UP
+// XP kept back for levelling up: the level-up cost (5, Story 3) for each hero not yet at the top level.
+export const levelUpReserve = (state) => state.heroes.filter((h) => h.level < MAX_LEVEL).length * levelUpCost(state)
 
 // XP the party can spend on cancelling without anyone missing a level up.
 export const spareXp = (state) => Math.max(0, state.xp - levelUpReserve(state))
@@ -86,7 +86,7 @@ export function cancelAdvice(state, hero) {
     return {
       cancel: false,
       tone: 'save',
-      text: `Better to save the XP: ${who} still ${names.length === 1 ? 'needs' : 'need'} ${XP_TO_LEVEL_UP} XP each to level up on a natural 20 (${levelUpReserve(state)} XP to keep).`,
+      text: `Better to save the XP: ${who} still ${names.length === 1 ? 'needs' : 'need'} ${levelUpCost(state)} XP each to level up on a natural 20 (${levelUpReserve(state)} XP to keep).`,
     }
   }
   const why = waiting.length === 0 ? 'every hero is level 2, so XP is only good for cancelling' : `you have ${spare} XP left over after saving for level ups`

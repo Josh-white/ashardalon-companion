@@ -1,4 +1,4 @@
-import { XP_TO_CANCEL_ENCOUNTER } from './heroes.js'
+import { XP_TO_CANCEL_ENCOUNTER, XP_TO_LEVEL_UP } from './heroes.js'
 
 // Easy / Normal / Hard, picked in the lobby. Normal is the rulebook. Easy and Hard are a
 // house dial for rough nights or a bigger challenge, in the spirit of the fan variants on
@@ -8,8 +8,8 @@ import { XP_TO_CANCEL_ENCOUNTER } from './heroes.js'
 // reroll comes back every turn. Every setting can be switched mid-game (SET_DIFFICULTY).
 export const DIFFICULTIES = [
   {
-    key: 'story', icon: '📖', label: 'Story', surges: 2, extraSurges: 3, secondChance: true, rerollEachTurn: true, cancelCost: 3, attackShift: -2, healEachTurn: 1, fullSurge: true,
-    detail: '+3 healing surges that heal to full HP, monsters and traps attack at −2, heroes heal 1 HP each turn, a reroll every turn, and cancelling an encounter costs 3 XP',
+    key: 'story', icon: '📖', label: 'Story', surges: 2, extraSurges: 3, secondChance: true, rerollEachTurn: true, cancelCost: 3, levelCost: 3, attackShift: -2, healEachTurn: 1, fullSurge: true,
+    detail: '+3 healing surges that heal to full HP, monsters and traps attack at −2, heroes heal 1 HP each turn, a reroll every turn, and levelling up or cancelling an encounter costs 3 XP',
   },
   { key: 'easy', icon: '😊', label: 'Easy', surges: 2, extraSurges: 2, secondChance: true, cancelCost: XP_TO_CANCEL_ENCOUNTER, detail: '+2 healing surges, and each hero can reroll one missed attack' },
   { key: 'normal', icon: '⚔️', label: 'Normal', surges: 2, extraSurges: 0, secondChance: false, cancelCost: XP_TO_CANCEL_ENCOUNTER, detail: 'The rulebook' },
@@ -20,6 +20,9 @@ export const difficultyOf = (key) => DIFFICULTIES.find((d) => d.key === key) ?? 
 
 // What cancelling an encounter costs in this game (before Perseverance).
 export const encounterCancelCost = (state) => difficultyOf(state?.difficulty).cancelCost
+
+// What levelling up costs in this game (Story 3, everything else the rulebook's 5).
+export const levelUpCost = (state) => difficultyOf(state?.difficulty).levelCost ?? XP_TO_LEVEL_UP
 
 // Story: what a monster, trap or encounter attack adds to (or takes off) its bonus.
 export const attackShift = (state) => difficultyOf(state?.difficulty).attackShift ?? 0

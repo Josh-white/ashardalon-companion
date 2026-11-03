@@ -42,6 +42,16 @@ describe('computer allies cancelling encounters', () => {
     expect(spareXp(game({ xp: 12 }))).toBe(2)
   })
 
+  it('keeps only 3 XP back per level-1 hero on Story', () => {
+    const state = { ...game({ xp: 7 }), difficulty: 'story' }
+    expect(levelUpReserve(state)).toBe(6)
+    expect(spareXp(state)).toBe(1)
+    const advice = cancelAdvice({ ...state, xp: 8 }, hero(state))
+    expect(advice.text).toContain('need 3 XP each')
+    expect(advice.text).toContain('6 XP to keep')
+    expect(cancelEncounter({ ...state, xp: 9 }, hero(state)).say).toMatch(/spends 3 XP to cancel/)
+  })
+
   it("doesn't touch the level-up XP", () => {
     const state = game({ xp: 12 })
     expect(cancelEncounter(state, hero(state))).toBeNull()

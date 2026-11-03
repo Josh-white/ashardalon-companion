@@ -1,8 +1,8 @@
 // A hero attacking: the attack numbers, the roll against the monster's AC, rerolls,
 // follow-ups, power damage and the powers that dodge a hit. The reducer is in game.js.
-import { XP_TO_LEVEL_UP, hasAbility, levelCrits } from '../data/heroes.js'
+import { hasAbility, levelCrits } from '../data/heroes.js'
 import { attackItems, heroItems, itemAttackParts } from '../data/items.js'
-import { hasSecondChance } from '../data/difficulty.js'
+import { hasSecondChance, levelUpCost } from '../data/difficulty.js'
 import { effectsOf, maxRolls, onHitHeals, shadowAfter, shadowKept, wolfBlocked, wolfDodge } from '../data/powerEffects.js'
 import { addStatus, attackedStatus } from './monsterStatus.js'
 import { summonPets } from './pets.js'
@@ -178,7 +178,7 @@ export function heroAttack(state, action) {
 
   // (Bloodlust ends in defeatDetails, for every way a hero defeats a monster.)
   const natural20 = rolls.some((r) => r.value === 20)
-  const canLevel = natural20 && hero.level === 1 && next.xp >= XP_TO_LEVEL_UP
+  const canLevel = natural20 && hero.level === 1 && next.xp >= levelUpCost(next)
   // A natural 20 on an attack is what lets a hero level up this turn.
   if (natural20) next = offerBrutalRecovery({ ...next, turn: { ...next.turn, natural20: hero.id } })
   const won = defeatDetails(next, defeated, hero.id)

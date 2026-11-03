@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { playerName } from '../state/gameHelpers.js'
 import { heroArt, heroCardArt } from '../data/art.js'
-import { CONDITIONS, HERO_COLORS, MAX_LEVEL, XP_TO_LEVEL_UP, hasAbility } from '../data/heroes.js'
-import { surgeHp } from '../data/difficulty.js'
+import { CONDITIONS, HERO_COLORS, MAX_LEVEL, hasAbility } from '../data/heroes.js'
+import { levelUpCost, surgeHp } from '../data/difficulty.js'
 import { artUrl, useArt } from '../state/useArt.js'
 import { useCards } from '../state/useCards.js'
 import Art from './Art.jsx'
@@ -276,6 +276,7 @@ export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, 
   const [conditionsOpen, setConditionsOpen] = useState(false)
   const color = HERO_COLORS[hero.color]
   const down = hero.hp === 0
+  const levelCost = levelUpCost(state)
   const abilities = (useCards().abilities ?? []).filter((a) => a.hero === hero.key && a.level <= hero.level)
   const cardArt = artUrl(useArt(), showCardArt ? heroCardArt(hero.key) : null)
 
@@ -448,11 +449,11 @@ export default function HeroCard({ state, hero, isActive, xp, surges, dispatch, 
           <Button
             variant="ghost"
             className="text-sm"
-            disabled={!natural20 || xp < XP_TO_LEVEL_UP}
-            title="Roll a natural 20 on an attack and spend 5 XP, then flip your hero card"
+            disabled={!natural20 || xp < levelCost}
+            title={`Roll a natural 20 on an attack and spend ${levelCost} XP, then flip your hero card`}
             onClick={() => dispatch({ type: 'LEVEL_UP', heroId: hero.id })}
           >
-            Level up (5 XP)
+            Level up ({levelCost} XP)
           </Button>
         )}
       </div>
