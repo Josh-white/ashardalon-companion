@@ -6,6 +6,9 @@ import { MOVES } from './moves.js'
 import { DEFAULT_RECIPE, randomRecipe, STARTERS } from './recipes.js'
 import { cleanRecipe } from '../data/forge.js'
 
+// Builds hundreds of figures: a few seconds here, but over 6 on the Pi's own build.
+const SLOW = 60000
+
 const meshes = (figure) => {
   let n = 0
   figure.traverse((o) => {
@@ -38,7 +41,7 @@ describe('Hero Builder figures', () => {
         }
       }
     }
-  })
+  }, SLOW)
 
   it('builds the starters and random figures, and a saved recipe builds the same', () => {
     let seed = 7
@@ -48,7 +51,7 @@ describe('Hero Builder figures', () => {
       const again = buildFigure(cleanRecipe(recipe))
       expect(meshes(again)).toBe(meshes(figure))
     }
-  })
+  }, SLOW)
 
   it('stands on the ground: longer legs make a taller figure', () => {
     const short = frameFor({ parts: { legs: { id: 'trousers', shape: { length: 0.5 } } } })
