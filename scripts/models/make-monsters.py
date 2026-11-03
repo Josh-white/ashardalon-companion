@@ -803,7 +803,9 @@ def build_duergar(captain=False):
     d = Vector((0, -0.866, -0.5))
     tilt = (120, 0, 0)
     if captain:
-        build_great_axe(fist)
+        # The same one-piece axe as Easton's Doom Knight, without the fire: every piece leans
+        # the same way, and the blades sit front and back so the chop doesn't swing them through the head.
+        build_doom_axe(fist, gem="glow", flames=False)
     else:
         build_duergar_hammer_and_shield(fist, d, tilt)
     build_duergar_head(captain)
@@ -830,37 +832,8 @@ def build_duergar_hammer_and_shield(fist, d, tilt):
                0.03, segments=6, rings=4)
 
 
-def build_great_axe(fist, gem="glow", flames=False):
-    """A long-hafted double axe held upright in the right fist, the blades above the head."""
-    up = Vector((0, -0.2, 1)).normalized()
-    tilt = (-math.degrees(math.atan2(0.2, 1)), 0, 0)  # turns +Z to point along `up`
-    cone("AxeHaft", "wood", "arm.R", fist + up * 0.45, 0.05, 1.50, rot=tilt, sides=6, tip=0.045)
-    cone("AxeButt", "iron_dark", "arm.R", fist - up * 0.32, 0.07, 0.10, rot=tilt, sides=6, tip=0.03)
-    box("AxeGrip", "leather_dark", "arm.R", fist, (0.12, 0.12, 0.24), bevel=0.04, rot=tilt)
-    head = fist + up * 1.05
-    box("AxeSocket", "iron_dark", "arm.R", head, (0.14, 0.16, 0.30), bevel=0.04, rot=tilt)
-    cone("AxeTop", "iron", "arm.R", head + up * 0.24, 0.05, 0.18, rot=tilt, sides=4)
-    for side in (1, -1):
-        # A half-moon blade on each side: a flat oval, a bright cutting edge and hooked tips.
-        sphere(f"AxeBlade{side}", "iron_dark", "arm.R", head + Vector((0.24 * side, 0, 0)), 0.30,
-               scale=(0.75, 0.12, 1.15), rot=tilt, segments=16, rings=10)
-        sphere(f"AxeEdge{side}", "iron", "arm.R", head + Vector((0.36 * side, 0, 0)), 0.30,
-               scale=(0.42, 0.09, 1.08), rot=tilt, segments=16, rings=10)
-    sphere("AxeGem", gem, "arm.R", head + Vector((0, -0.09, 0)), 0.045, scale=(1, 0.5, 1), segments=8, rings=6)
-    if flames:
-        # Green fire licking up off both blades.
-        for side in (1, -1):
-            for i, (dz, h, r) in enumerate(((-0.20, 0.26, 0.07), (0.0, 0.34, 0.08), (0.20, 0.30, 0.07))):
-                at = head + Vector((0.46 * side, 0, dz + h / 2))
-                cone(f"AxeFlame{side}{i}", "fel", "arm.R", at, r, h, rot=(tilt[0], -20 * side, 0), sides=6)
-                cone(f"AxeFlameCore{side}{i}", "fel_light", "arm.R", at + Vector((-0.02 * side, -0.02, -h * 0.15)),
-                     r * 0.5, h * 0.6, rot=(tilt[0], -20 * side, 0), sides=5)
-        for i, (dx, h) in enumerate(((-0.08, 0.22), (0.08, 0.26))):
-            cone(f"AxeTopFlame{i}", "fel", "arm.R", head + up * 0.36 + Vector((dx, 0, h / 2)), 0.06, h, rot=tilt, sides=6)
-
-
 def build_doom_axe(fist, gem="fel", flames=True):
-    """Easton's axe: a long-hafted double axe held upright in the right fist, its blades front and back."""
+    """Easton's axe (and the Duergar Captain's, without fire): a long-hafted double axe held upright in the right fist, its blades front and back."""
     up = Vector((0, -0.2, 1)).normalized()
     tilt = (math.degrees(math.atan2(0.2, 1)), 0, 0)  # turns +Z to point along `up`
     # The blades stick out front and back (Easton: sideways they swung through his head).
