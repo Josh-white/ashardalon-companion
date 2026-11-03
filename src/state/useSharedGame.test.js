@@ -66,7 +66,7 @@ describe('useSharedGame', () => {
   it('joins the asked-for game and tells the Pi its seat', () => {
     renderHook(() => shared.useSharedGame('keyleth', 'friday'))
     const socket = latest()
-    expect(socket.url).toBe('wss://pi.local/ws?game=friday')
+    expect(socket.url).toBe('wss://pi.local/ws?game=friday&patch=1')
     act(() => socket.open())
     expect(socket.sent[0]).toEqual({ type: 'seat', seat: 'keyleth' })
   })
@@ -81,6 +81,27 @@ describe('useSharedGame', () => {
     expect(result.current.undo).toBe('Tarak −1 HP')
     expect(result.current.undoDepth).toBe(3)
     expect(result.current.game).toEqual({ id: 'family', name: 'Family' })
+  })
+
+  it("puts the game together from the Pi's changes, and asks for all of it after missing one", () => {
+    const { result } = renderHook(() => shared.useSharedGame('table'))
+    const socket = latest()
+    act(() => socket.open())
+    const deck = { cards: [1, 2, 3] }
+    act(() => socket.receive({ type: 'state', seq: 4, state: { xp: 0, deck, log: [{ id: 'a' }] } }))
+    const shownDeck = result.current.state.deck
+    act(() => socket.receive({ type: 'state', seq: 5, base: 4, patch: { changes: { xp: 2 }, logAdd: [{ id: 'b' }], logLen: 2 } }))
+    expect(result.current.state).toEqual({ xp: 2, deck, log: [{ id: 'b' }, { id: 'a' }] })
+    // The rest stays the very same object, so nothing has to be drawn again for it.
+    expect(result.current.state.deck).toBe(shownDeck)
+    // Missed number 6: this one can't be used, so it asks for the whole game (once).
+    act(() => socket.receive({ type: 'state', seq: 7, base: 6, patch: { changes: { xp: 9 } } }))
+    act(() => socket.receive({ type: 'state', seq: 8, base: 7, patch: { changes: { xp: 10 } } }))
+    expect(result.current.state.xp).toBe(2)
+    expect(socket.sent.filter((m) => m.type === 'resync')).toHaveLength(1)
+    act(() => socket.receive({ type: 'state', seq: 8, state: { xp: 10, deck, log: [] } }))
+    act(() => socket.receive({ type: 'state', seq: 9, base: 8, patch: { changes: { xp: 11 } } }))
+    expect(result.current.state.xp).toBe(11)
   })
 
   it('lets every listener hear two states that arrive together, in order', () => {

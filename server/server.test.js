@@ -5,11 +5,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import WebSocket from 'ws'
 import { HERO_TEMPLATES } from '../src/data/heroes.js'
 import { createHero, initialState } from '../src/state/game.js'
+import { applyPatch } from '../src/state/statePatch.js'
 import { byteRange, gameIdFor, keepWhoPlays, listSounds, loadCards, loadGameList, loadSavedGame, FINISHED_DAYS, MAX_GAMES, startServer } from './server.js'
 
 // Opens a socket and collects every state the server sends.
-function connect(port, game) {
-  const socket = new WebSocket(`ws://localhost:${port}/ws${game ? `?game=${game}` : ''}`)
+function connect(port, game, { patches = false } = {}) {
+  const query = [game ? `game=${game}` : '', patches ? 'patch=1' : ''].filter(Boolean).join('&')
+  const socket = new WebSocket(`ws://localhost:${port}/ws${query ? `?${query}` : ''}`)
   const states = []
   const messages = []
   const waiters = []
@@ -96,6 +98,36 @@ describe('sync server', () => {
     dad.socket.send(JSON.stringify({ type: 'action', id: 'tap-2', action: { type: 'ADJUST_XP', amount: 1 } }))
     expect((await dad.nextState(6)).xp).toBe(1) // ack, ack, new state
     expect(dad.messages.filter((m) => m.type === 'ack').map((m) => m.id)).toEqual(['tap-1', 'tap-1', 'tap-2'])
+  })
+
+  it('sends a screen that can take them only the changes, and the whole game to an older screen', async () => {
+    const old = connect(server.port)
+    const fresh = connect(server.port, null, { patches: true })
+    await old.nextState(1)
+    await fresh.nextState(1)
+    old.send({ type: 'START_GAME', heroes: [createHero(HERO_TEMPLATES[0])] })
+    old.send({ type: 'ADJUST_XP', amount: 2 })
+    const whole = await old.nextState(3)
+    await fresh.nextState(3)
+    const [first, ...changes] = fresh.messages.filter((m) => m.type === 'state')
+    expect(first.state).toBeDefined()
+    expect(changes.map((m) => [m.base, m.seq])).toEqual([[first.seq, first.seq + 1], [first.seq + 1, first.seq + 2]])
+    expect(changes[1].patch.changes).toEqual({ xp: 2 })
+    // Put together on the screen, it's the very same game the older screen got whole.
+    const built = changes.reduce((game, m) => applyPatch(game, m.patch), first.state)
+    expect(built).toEqual(whole)
+    expect(JSON.stringify(changes[1]).length).toBeLessThan(JSON.stringify(old.messages.at(-1)).length / 3)
+  })
+
+  it('sends the whole game again to a screen that lost track', async () => {
+    const fresh = connect(server.port, null, { patches: true })
+    await fresh.nextState(1)
+    fresh.send({ type: 'START_GAME', heroes: [createHero(HERO_TEMPLATES[0])] })
+    await fresh.nextState(2)
+    fresh.socket.send(JSON.stringify({ type: 'resync' }))
+    const again = await fresh.nextState(3)
+    expect(again.status).toBe('playing')
+    expect(fresh.messages.at(-1).seq).toBe(fresh.messages.at(-2).seq)
   })
 
   it("tells every screen which seats are open, and stamps each state with the Pi's clock", async () => {

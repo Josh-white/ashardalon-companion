@@ -25,6 +25,7 @@ import { describeAction } from '../src/state/describeAction.js'
 import { gameReducer, initialState } from '../src/state/game.js'
 import { migrateSave } from '../src/state/saves.js'
 import { refreshCardEffects } from '../src/state/cardRefresh.js'
+import { makePatch } from '../src/state/statePatch.js'
 import { markAdventure, recordsReply, syncRecord } from '../src/state/records.js'
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -633,11 +634,20 @@ export function startServer({
   })
   const screensIn = (r) => [...wss.clients].filter((c) => c.room === r)
 
-  const stateMessage = (r) =>
+  // The game as a room last sent it, numbered (r.sent, r.seq): a screen that has that one
+  // gets only what changed since (src/state/statePatch.js). A screen opened before patches
+  // existed (no ?patch=1) still gets the whole game every time.
+  const markSent = (r) => {
+    if (r.sent === r.state) return
+    r.sent = r.state
+    r.seq = (r.seq ?? 0) + 1
+  }
+  const stateMessage = (r, patch = null, base = null) =>
     // `now` lets each screen tell how old a moment is by the Pi's clock, not its own.
     JSON.stringify({
       type: 'state',
-      state: r.state,
+      ...(patch ? { patch, base } : { state: r.state }),
+      seq: r.seq ?? 0,
       game: { id: r.id, name: gameName(r.id) },
       undo: r.history.at(-1)?.label ?? null,
       undoDepth: r.history.length,
@@ -645,13 +655,31 @@ export function startServer({
       build,
       now: Date.now(),
     })
+  // The whole game, for a screen that just came in (or lost track).
+  const fullState = (r) => {
+    markSent(r)
+    return stateMessage(r)
+  }
 
   function broadcastRaw(message, clients = wss.clients) {
     for (const client of clients) {
       if (client.readyState === client.OPEN) client.send(message)
     }
   }
-  const broadcast = (r) => broadcastRaw(stateMessage(r), screensIn(r))
+  const broadcast = (r) => {
+    const before = r.sent
+    markSent(r)
+    // A rename sends the same game again: then it's a patch with nothing in it.
+    const base = before === r.state ? r.seq : r.seq - 1
+    const clients = screensIn(r)
+    let whole = null
+    let patched = null
+    for (const client of clients) {
+      if (client.readyState !== client.OPEN) continue
+      if (client.patches && before) client.send((patched ??= stateMessage(r, makePatch(before, r.state), base)))
+      else client.send((whole ??= stateMessage(r)))
+    }
+  }
 
   // Which seats have a screen open in a game right now, so a table screen knows
   // whether the projector is there to play the sound.
@@ -707,7 +735,7 @@ export function startServer({
       return
     }
     client.room = room(FAMILY_GAME)
-    if (client.readyState === client.OPEN) client.send(stateMessage(client.room))
+    if (client.readyState === client.OPEN) client.send(fullState(client.room))
   }
 
   // Moves a game to the Finished list. Its screens go to the family game (friends' to "Which game?").
@@ -846,8 +874,10 @@ export function startServer({
     if (socket.who.family) socket.room = room(isGame(asked) ? asked : FAMILY_GAME)
     else socket.room = game && canSee(socket.who, game) ? room(asked) : null
     if (!socket.who.family) friendLog.seen(socket.who.email)
+    // Screens that can put a game together from what changed (src/state/statePatch.js).
+    socket.patches = new URL(req.url, 'http://localhost').searchParams.get('patch') === '1'
     if (socket.room) {
-      socket.send(stateMessage(socket.room))
+      socket.send(fullState(socket.room))
       socket.send(screensMessage(socket.room))
     } else socket.send(JSON.stringify({ type: 'no-game' }))
     socket.on('close', () => {
@@ -858,6 +888,11 @@ export function startServer({
       try {
         message = JSON.parse(raw)
       } catch {
+        return
+      }
+      // A screen that missed a change (or came in between two) asks for the whole game.
+      if (message?.type === 'resync') {
+        if (socket.room) socket.send(fullState(socket.room))
         return
       }
       if (message?.type === 'seat') {

@@ -115,15 +115,19 @@ export function buildExtras(stage, extras) {
   group.clear()
   stage.animators = []
   const at = stage.at
+  for (const light of stage.lavaLights ?? []) light.intensity = 0
+  let lavaUsed = 0
   for (const m of extras.markers) {
     const centre = m.squares.reduce((c, [x, y]) => [c[0] + x / m.squares.length, c[1] + y / m.squares.length], [0, 0])
     if (m.floor === 'lava') {
       const lava = new THREE.MeshStandardMaterial({ color: '#7f1d1d', emissive: '#ff4d00', emissiveIntensity: 1.1, roughness: 0.5 })
       for (const [x, y] of m.squares) group.add(squarePlane(lava, ...at(x, y), 0.006))
-      const glow = new THREE.PointLight('#ff5a1f', 3, 5, 1.4)
+      // One of the stage's own lava lights (a new light would make every material rebuild):
+      // past the last of them a pool just glows without one.
+      const glow = stage.lavaLights?.[lavaUsed++] ?? { position: new THREE.Vector3(), intensity: 0 }
       const [gx, gz] = at(centre[0], centre[1])
       glow.position.set(gx, 0.8, gz)
-      group.add(glow)
+      glow.intensity = 3
       stage.animators.push((now) => {
         lava.emissiveIntensity = 1 + Math.sin(now / 600) * 0.3 + Math.sin(now / 230) * 0.1
         glow.intensity = 3 + Math.sin(now / 400) * 0.6
@@ -369,7 +373,9 @@ function makeStandee(stage, figure, url) {
   icons.position.y = figure.kind === 'villain' ? 1.45 : 1.12
   node.add(shadow, ring, body, icons)
   if (figure.kind === 'hero') {
-    const torch = new THREE.PointLight('#ff9a3c', 6, 8, 1.2)
+    // Where the hero's torch is held. The light itself is one of the stage's own (see
+    // placeHeroLights): a light that comes or goes would make every material rebuild.
+    const torch = new THREE.Object3D()
     torch.position.set(0, 1.3, 0)
     node.add(torch)
     node.userData.torch = torch
@@ -571,4 +577,33 @@ function glide(stage, node, to, hold = 0) {
     },
   })
   stage.render()
+}
+
+// The lights the stage makes once and keeps (Board3D's makeStage): three.js builds each
+// material's shader for the number of lights in the scene, so a light added or taken away
+// (a hero joining or downed, a lava pool) rebuilds every shader, a freeze of a second or more
+// on an iPad. Unused ones just stay dark.
+export const HERO_LIGHTS = 6
+export const LAVA_LIGHTS = 3
+export const makeHeroLight = () => new THREE.PointLight('#ff9a3c', 0, 8, 1.2)
+export const makeLavaLight = () => new THREE.PointLight('#ff5a1f', 0, 5, 1.4)
+
+// Each hero's torch light goes to where that hero holds it: lit while the hero stands (not
+// downed, not waiting off the board), flickering on the big screen.
+export function placeHeroLights(stage, now) {
+  const lights = stage.heroLights ?? []
+  let used = 0
+  for (const node of [...stage.nodes.values(), ...stage.leaving]) {
+    const torch = node.userData.torch
+    if (!torch || used >= lights.length) continue
+    const light = lights[used++]
+    if (!torch.visible || !node.visible || !node.parent) {
+      light.intensity = 0
+      continue
+    }
+    torch.updateWorldMatrix(true, false)
+    torch.getWorldPosition(light.position)
+    light.intensity = stage.ambient ? 6 + Math.sin(now / 90 + node.position.x) * 0.6 + Math.sin(now / 37 + node.position.z) * 0.4 : 6
+  }
+  for (; used < lights.length; used++) lights[used].intensity = 0
 }
