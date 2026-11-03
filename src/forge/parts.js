@@ -6,11 +6,12 @@
 // A part is { id, name, emoji, shape: [slider…], frame?(s, f), build(k, s, f) }:
 //   s      the part's slider values, by key
 //   f      the skeleton's measurements (figure.js BASE_FRAME), which `frame` may change
-//   k      the shape kit: k.box / ball / cone / tube / ring / flat / limb / group
+//   k      the shape kit: k.box / ball / cone / tube / ring / flat / limb / group (opts.opacity
+//          makes a shape see-through)
 // Joints: hips, body (waist up), head (neck up), arm.L/R (shoulder down), hand.L/R,
 // leg.L/R (hip down to the ground), tail, grip.L/R (a held thing points along +Y),
-// back (between the shoulder blades), hat (top of the head). Front is +Z, the figure's
-// left is +X.
+// back (between the shoulder blades), hat (top of the head), fx (the floor under the
+// figure). Front is +Z, the figure's left is +X.
 
 const sl = (key, label, min = 0.5, max = 1.6, value = 1) => ({ key, label, min, max, value })
 const SIDES = [
@@ -125,6 +126,37 @@ const BODIES = [
     build(k, s, f) {
       k.box('skin', 'body', [0, f.BH / 2, 0], [f.BW, f.BH, f.BD], { round: 0.14 })
       for (let i = 0; i < 4; i++) k.box('trim', 'body', [0, f.BH * (0.16 + i * 0.21), f.BD / 2], [f.BW * 0.5 * s.belly, f.BH * 0.16, 0.04], { round: 0.03 })
+    },
+  },
+  {
+    id: 'tabard',
+    name: 'Knight tabard',
+    emoji: '🏰',
+    shape: [sl('width', 'Wide'), sl('height', 'Tall'), sl('long', 'Long', 0.5, 1.6)],
+    frame: bodyFrame(0.62),
+    build(k, s, f) {
+      k.box('metal', 'body', [0, f.BH / 2, 0], [f.BW, f.BH, f.BD], { round: 0.12 })
+      const h = f.BH * 0.75 + 0.2 * s.long
+      for (const z of [1, -1]) k.box('outfit', 'body', [0, f.BH * 0.85 - h / 2, z * (f.BD / 2 + 0.01)], [f.BW * 0.62, h, 0.03], { round: 0.01 })
+      k.box('trim', 'body', [0, f.BH * 0.55, f.BD / 2 + 0.03], [0.06, f.BH * 0.4, 0.01], { round: 0.004 })
+      k.box('trim', 'body', [0, f.BH * 0.62, f.BD / 2 + 0.03], [f.BW * 0.3, 0.06, 0.01], { round: 0.004 })
+      belt(k, f)
+    },
+  },
+  {
+    id: 'pirate-coat',
+    name: 'Long coat',
+    emoji: '🏴‍☠️',
+    shape: [sl('width', 'Wide'), sl('height', 'Tall'), sl('coat', 'Coat tails', 0.3, 1.3, 0.9)],
+    frame: bodyFrame(0.62),
+    build(k, s, f) {
+      k.box('outfit', 'body', [0, f.BH / 2, 0], [f.BW, f.BH, f.BD], { round: 0.12 })
+      const len = (f.LL + f.foot) * s.coat
+      const r = f.BD / 2 + 0.03
+      k.cone('outfit', 'body', [0, 0.1 - len / 2, 0], r * 1.5, len, { tip: r * 1.02, open: true, theta: [Math.PI * 0.35, Math.PI * 1.3], scale: [(f.BW / f.BD) * 0.85, 1, 1], sides: 16 })
+      for (const [, x] of SIDES) k.box('trim', 'body', [x * f.BW * 0.16, f.BH * 0.62, f.BD / 2 + 0.01], [0.06, f.BH * 0.75, 0.02], { rot: [0, 0, x * -10], round: 0.005 })
+      for (let i = 0; i < 3; i++) k.ball('metal', 'body', [0, f.BH * (0.3 + i * 0.2), f.BD / 2 + 0.015], 0.025)
+      belt(k, f)
     },
   },
 ]
@@ -443,6 +475,65 @@ const HATS = [
       }
     },
   },
+  {
+    id: 'pirate-hat',
+    name: 'Pirate hat',
+    emoji: '🏴‍☠️',
+    shape: [sl('size', 'Size', 0.8, 1.5)],
+    build(k, s, f) {
+      const c = hc(f)
+      const r = f.HR * s.size
+      k.ball('outfit', 'hat', [0, c + f.HR * 0.35, 0], r * 1.02, { half: true, scale: [1, 0.85, 1] })
+      k.tube('outfit', 'hat', [0, c + f.HR * 0.38, 0], r * 1.55, 0.03, { sides: 20, scale: [1, 1, 0.75] })
+      const flap = [...Array(9)].map((_, i) => {
+        const a = Math.PI * (i / 8)
+        return [Math.cos(a) * r * 1.3, Math.sin(a) * r * 0.95]
+      })
+      k.flat('outfit', 'hat', [0, c + f.HR * 0.36, r * 1.05], flap, 0.025, { rot: [-12, 0, 0] })
+      k.ball('#f4f4f5', 'hat', [0, c + f.HR * 0.36 + r * 0.4, r * 1.1], r * 0.15, { scale: [1, 1, 0.5] })
+    },
+  },
+  {
+    id: 'halo',
+    name: 'Halo',
+    emoji: '😇',
+    shape: [sl('size', 'Size', 0.6, 1.6), sl('height', 'Float', 0, 2)],
+    build(k, s, f) {
+      k.ring('glow:#fde047', 'hat', [0, 0.06 + 0.08 * s.height, 0], f.HR * 0.75 * s.size, 0.025, { rot: [90, 0, 0], sides: 32 })
+    },
+  },
+  {
+    id: 'jester-hat',
+    name: 'Jester hat',
+    emoji: '🃏',
+    shape: [sl('size', 'Size', 0.8, 1.5), sl('flop', 'Floppy', 0, 2)],
+    build(k, s, f) {
+      const c = hc(f)
+      k.ball('outfit', 'hat', [0, c + f.HR * 0.15, 0], f.HR * 1.05, { thetaLen: Math.PI * 0.45 })
+      k.tube('trim', 'hat', [0, c + f.HR * 0.2, 0], f.HR * 1.02, 0.05, { sides: 18 })
+      for (const [colour, x] of [['outfit', 1], ['trim', -1]]) {
+        const g = k.group('hat', [x * f.HR * 0.3, c + f.HR * 0.8, 0], [0, 0, x * -50])
+        k.cone(colour, g, [0, 0.13 * s.size, 0], f.HR * 0.4, 0.26 * s.size, { tip: f.HR * 0.2 })
+        const tip = k.group(g, [0, 0.26 * s.size, 0], [0, 0, x * -60 * s.flop])
+        k.cone(colour, tip, [0, 0.1 * s.size, 0], f.HR * 0.2, 0.2 * s.size)
+        k.ball('trim', tip, [0, 0.21 * s.size, 0], 0.04)
+      }
+    },
+  },
+  {
+    id: 'animal-ears',
+    name: 'Animal ears',
+    emoji: '🐺',
+    shape: [sl('size', 'Size', 0.5, 2), sl('spread', 'Apart', 0.5, 1.5)],
+    build(k, s, f) {
+      const c = hc(f)
+      for (const [, x] of SIDES) {
+        const g = k.group('hat', [x * f.HR * 0.5 * s.spread, c + f.HR * 0.82, 0], [0, 0, x * -20 * s.spread])
+        k.cone('skin', g, [0, 0.08 * s.size, 0], 0.08 * s.size, 0.18 * s.size, { sides: 4, scale: [1, 1, 0.45] })
+        k.cone('#fda4af', g, [0, 0.07 * s.size, 0.015], 0.05 * s.size, 0.12 * s.size, { sides: 4, scale: [1, 1, 0.35] })
+      }
+    },
+  },
 ]
 
 // ── Arms ──────────────────────────────────────────────────────────────────────────────
@@ -667,14 +758,14 @@ function handle(k, j, from, to, r = 0.035, colour = 'wood') {
 }
 
 // A straight blade with a cross guard: swords and daggers.
-function blade(k, j, s, { length, width, guard }) {
+function blade(k, j, s, { length, width, guard }, colour = 'metal') {
   const L = length * s.length
   const w = width * s.width
   handle(k, j, -0.12, 0.12)
   k.ball('trim', j, [0, -0.14, 0], 0.045)
   k.box('trim', j, [0, 0.13, 0], [guard * s.guard, 0.05, 0.08], { round: 0.02 })
   k.flat(
-    'metal',
+    colour,
     j,
     [0, 0.15, 0],
     [
@@ -907,6 +998,73 @@ const WEAPONS = [
       k.tube('trim', bow, [0, 0, 0], 0.04, 0.12)
     },
   },
+  {
+    id: 'scimitar',
+    name: 'Curved sword',
+    emoji: '🌙',
+    shape: [sl('length', 'Long', 0.5, 1.8), sl('curve', 'Curve', 0, 2)],
+    build(k, s) {
+      handle(k, 'grip.R', -0.12, 0.12)
+      k.ball('trim', 'grip.R', [0, -0.14, 0], 0.045)
+      k.box('trim', 'grip.R', [0, 0.13, 0], [0.24, 0.05, 0.08], { round: 0.02 })
+      const L = 0.72 * s.length
+      const bend = (t) => -0.16 * s.curve * t * t
+      const back = [0, 0.25, 0.5, 0.75, 0.92].map((t) => [0.045 + bend(t), t * L])
+      const edge = [0.92, 0.75, 0.5, 0.25, 0].map((t) => [-0.06 - 0.03 * Math.sin(t * Math.PI) + bend(t), t * L])
+      k.flat('metal', 'grip.R', [0, 0.15, 0], [...back, [bend(1) - 0.04, L], ...edge], 0.03)
+    },
+  },
+  {
+    id: 'flail',
+    name: 'Flail',
+    emoji: '⛓️',
+    shape: [sl('handle', 'Handle', 0.5, 1.6), sl('ball', 'Ball', 0.5, 2), sl('chain', 'Chain', 0.5, 2)],
+    build(k, s) {
+      const top = 0.45 * s.handle
+      handle(k, 'grip.R', -0.15, top)
+      k.ball('metal', 'grip.R', [0, top + 0.02, 0], 0.04)
+      const n = Math.round(3 + 2 * s.chain)
+      let p = [0, top + 0.04, 0]
+      for (let i = 1; i <= n; i++) {
+        p = [-0.045 * i, top + 0.04 + 0.035 * i - 0.004 * i * i, 0]
+        k.ring('metal', 'grip.R', p, 0.022, 0.007, { rot: [0, i % 2 ? 90 : 0, 0], sides: 10 })
+      }
+      const r = 0.09 * s.ball
+      const c = [p[0] - r * 0.8, p[1] + r * 0.2, 0]
+      k.ball('metal', 'grip.R', c, r)
+      for (const n2 of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) k.limb('metal', 'grip.R', along(c, n2, r * 0.8), along(c, n2, r + 0.06), 0.025, { tip: 0.002, sides: 6 })
+    },
+  },
+  {
+    id: 'crossbow',
+    name: 'Crossbow',
+    emoji: '🎯',
+    shape: [sl('size', 'Size', 0.6, 1.6)],
+    build(k, s) {
+      const z = s.size
+      k.box('wood', 'grip.R', [0, 0.14 * z, 0.03], [0.06, 0.5 * z, 0.07], { round: 0.02 })
+      const y = 0.34 * z
+      for (const [, x] of SIDES) k.limb('wood', 'grip.R', [0, y, 0.04], [x * 0.25 * z, y - 0.07 * z, 0.04], 0.022, { tip: 0.014 })
+      k.limb(BONE, 'grip.R', [-0.25 * z, y - 0.07 * z, 0.04], [0, y - 0.16 * z, 0.06], 0.005, { sides: 4 })
+      k.limb(BONE, 'grip.R', [0.25 * z, y - 0.07 * z, 0.04], [0, y - 0.16 * z, 0.06], 0.005, { sides: 4 })
+      k.tube('wood', 'grip.R', [0, y - 0.02, 0.08], 0.012, 0.32 * z, { sides: 5 })
+      k.cone('metal', 'grip.R', [0, y + 0.16 * z, 0.08], 0.022, 0.06, { sides: 4 })
+    },
+  },
+  {
+    id: 'magic-sword',
+    name: 'Glowing sword',
+    emoji: '💫',
+    shape: [sl('length', 'Long', 0.5, 1.8), sl('width', 'Wide', 0.5, 2), sl('glow', 'Glow', 0, 2)],
+    build(k, s) {
+      blade(k, 'grip.R', { ...s, guard: 1 }, { length: 0.8, width: 0.12, guard: 0.34 }, 'magic')
+      if (s.glow > 0.05) {
+        const L = 0.8 * s.length
+        const w = 0.12 * s.width + 0.06 * s.glow
+        k.flat('magic', 'grip.R', [0, 0.13, 0], [[-w / 2, 0], [w / 2, 0], [w / 2, L - w * 0.6], [0, L + 0.06 * s.glow], [-w / 2, L - w * 0.6]], 0.08, { opacity: 0.25 })
+      }
+    },
+  },
 ]
 
 // ── Off hand: shields and other things ────────────────────────────────────────────────
@@ -1051,6 +1209,48 @@ const OFF_HAND = [
     shape: bladeShape,
     build: (k, s) => blade(k, 'grip.L', s, { length: 0.62, width: 0.1, guard: 0.28 }),
   },
+  {
+    id: 'lantern',
+    name: 'Lantern',
+    emoji: '🏮',
+    shape: [sl('size', 'Size', 0.6, 1.6)],
+    build(k, s) {
+      const z = s.size
+      const at = [0, -0.14 * z, 0.06]
+      k.ring('metal', 'hand.L', [0, -0.03 * z, 0.06], 0.04 * z, 0.008, { rot: [0, 90, 0] })
+      k.box('metal', 'hand.L', along(at, [0, 1, 0], 0.07 * z), [0.13 * z, 0.03, 0.13 * z], { round: 0.01 })
+      k.box('metal', 'hand.L', along(at, [0, -1, 0], 0.07 * z), [0.13 * z, 0.03, 0.13 * z], { round: 0.01 })
+      k.box(FIRE_CORE, 'hand.L', at, [0.1 * z, 0.12 * z, 0.1 * z], { round: 0.02, opacity: 0.85 })
+      k.cone(FIRE, 'hand.L', at, 0.025 * z, 0.06 * z, { sides: 5 })
+    },
+  },
+  {
+    id: 'potion',
+    name: 'Potion',
+    emoji: '🧪',
+    shape: [sl('size', 'Size', 0.6, 1.8)],
+    build(k, s) {
+      const z = s.size
+      const at = [0, 0.1 * z, 0.08]
+      k.ball('magic', 'hand.L', at, 0.08 * z, { opacity: 0.85 })
+      k.tube('#e0f2fe', 'hand.L', along(at, [0, 1, 0], 0.09 * z), 0.025 * z, 0.06 * z, { opacity: 0.6 })
+      k.tube('wood', 'hand.L', along(at, [0, 1, 0], 0.13 * z), 0.028 * z, 0.035 * z)
+    },
+  },
+  {
+    id: 'bomb',
+    name: 'Bomb',
+    emoji: '💣',
+    shape: [sl('size', 'Size', 0.6, 1.8)],
+    build(k, s) {
+      const z = s.size
+      const at = [0, 0.1 * z, 0.08]
+      k.ball(DARK, 'hand.L', at, 0.1 * z)
+      k.tube('metal', 'hand.L', along(at, [0, 1, 0], 0.1 * z), 0.03 * z, 0.03)
+      k.limb('wood', 'hand.L', along(at, [0, 1, 0], 0.11 * z), along(at, [0.3, 1, 0], 0.18 * z), 0.008, { sides: 4 })
+      k.ball(FIRE_CORE, 'hand.L', along(at, [0.3, 1, 0], 0.19 * z), 0.025)
+    },
+  },
 ]
 
 // ── On the back ───────────────────────────────────────────────────────────────────────
@@ -1170,6 +1370,52 @@ const BACKS = [
       }
     },
   },
+  {
+    id: 'turtle-shell',
+    name: 'Turtle shell',
+    emoji: '🐢',
+    shape: [sl('size', 'Size', 0.6, 1.5)],
+    build(k, s, f) {
+      const r = f.BW * 0.55 * s.size
+      const at = [0, -f.BH * 0.35, -0.02]
+      k.ball('wood', 'back', at, r, { half: true, rot: [-90, 0, 0], scale: [1.05, 1.25, 0.8] })
+      for (const [x, y] of [[0, 0], [0.45, 0.35], [-0.45, 0.35], [0.45, -0.35], [-0.45, -0.35], [0, 0.65], [0, -0.65]]) {
+        const p = [at[0] + x * r, at[1] + y * r * 1.1, at[2] - r * 0.8 * Math.sqrt(Math.max(0.15, 1 - x * x - y * y * 0.8))]
+        k.ball('trim', 'back', p, r * 0.22, { scale: [1, 1, 0.35], seg: 6, rings: 4 })
+      }
+    },
+  },
+  {
+    id: 'fairy-wings',
+    name: 'Fairy wings',
+    emoji: '🧚',
+    shape: [sl('span', 'Span', 0.5, 2), sl('raise', 'Up', 0, 2)],
+    build(k, s) {
+      const top = [
+        [0, 0],
+        [0.15, 0.2],
+        [0.35, 0.38],
+        [0.5, 0.4],
+        [0.52, 0.28],
+        [0.4, 0.12],
+        [0.15, 0.0],
+      ]
+      const low = [
+        [0, -0.02],
+        [0.2, -0.08],
+        [0.32, -0.2],
+        [0.3, -0.3],
+        [0.18, -0.26],
+        [0.06, -0.12],
+      ]
+      for (const [, x] of SIDES) {
+        for (const shape of [top, low]) {
+          const pts = scale(shape, s.span).map(([px, py]) => [px * x, py])
+          k.flat('magic', 'back', [x * 0.04, 0.02, -0.04], pts, 0.01, { rot: [0, x * -25, x * 20 * (s.raise - 1)], opacity: 0.45 })
+        }
+      }
+    },
+  },
 ]
 
 // ── Tails ─────────────────────────────────────────────────────────────────────────────
@@ -1228,6 +1474,201 @@ const TAILS = [
       k.flat('skin', end, [0, 0, 0], [[0, 0.01], [0.08, -0.05], [0, -0.14], [-0.08, -0.05]].map(([x, y]) => [x * s.thick, y * s.thick]), 0.025, { rot: [90, 0, 0] })
     },
   },
+  {
+    id: 'scorpion-tail',
+    name: 'Scorpion tail',
+    emoji: '🦂',
+    shape: [sl('length', 'Long', 0.5, 2), sl('thick', 'Thick', 0.5, 1.8)],
+    build(k, s) {
+      const { end } = chain(k, s, 6, 'skin', { droop: 10, curl: 34, r0: 0.06, round: true })
+      k.ball('trim', end, [0, 0, -0.03], 0.06 * s.thick)
+      k.cone('metal', end, [0, -0.03, -0.1], 0.03 * s.thick, 0.12 * s.thick, { rot: [-120, 0, 0], sides: 6 })
+    },
+  },
+]
+
+// ── Faces (on the head: beards, masks, goggles) ───────────────────────────────────────
+
+const FACES = [
+  {
+    id: 'beard',
+    name: 'Beard',
+    emoji: '🧔',
+    shape: [sl('size', 'Bushy', 0.6, 1.6), sl('length', 'Long', 0, 2.5, 0.6)],
+    build(k, s, f) {
+      const c = f.HC
+      const r = f.HR
+      k.ball('hair', 'head', [0, c - r * 0.45, r * 0.42], r * 0.62 * s.size, { scale: [1.05, 0.9, 0.75] })
+      if (s.length > 0.05) k.cone('hair', 'head', [0, c - r * 0.95 - 0.08 * s.length, r * 0.45], r * 0.55 * s.size, 0.18 * s.length, { rot: [180, 0, 0], scale: [1, 1, 0.6] })
+      k.ball('hair', 'head', [0, c - r * 0.22, r * 0.9], r * 0.18 * s.size, { scale: [1.8, 0.6, 0.7] })
+    },
+  },
+  {
+    id: 'mustache',
+    name: 'Mustache',
+    emoji: '👨',
+    shape: [sl('size', 'Size', 0.6, 2), sl('curl', 'Curly', 0, 2)],
+    build(k, s, f) {
+      const c = f.HC
+      const r = f.HR
+      for (const [, x] of SIDES) {
+        k.ball('hair', 'head', [x * r * 0.17, c - r * 0.27, r * 0.95], 0.035 * s.size, { scale: [2, 0.8, 0.8], rot: [0, 0, x * -12] })
+        if (s.curl > 0.05) k.ball('hair', 'head', [x * (r * 0.33 + 0.03 * s.size), c - r * 0.2 + 0.02 * s.curl, r * 0.88], 0.022 * s.size * (0.6 + 0.4 * s.curl))
+      }
+    },
+  },
+  {
+    id: 'eye-patch',
+    name: 'Eye patch',
+    emoji: '🏴‍☠️',
+    shape: [sl('size', 'Size', 0.6, 1.6)],
+    build(k, s, f) {
+      const c = f.HC
+      const r = f.HR
+      k.ball(DARK, 'head', [-r * 0.36, c + r * 0.08, r * 0.9], 0.07 * s.size, { scale: [1, 1, 0.4] })
+      k.ring(DARK, 'head', [0, c + r * 0.14, 0], r * 1.01, 0.012, { rot: [90, 0, -14] })
+    },
+  },
+  {
+    id: 'bandit-mask',
+    name: 'Bandit mask',
+    emoji: '🥷',
+    shape: [sl('width', 'Wide', 0.6, 1.6)],
+    build(k, s, f) {
+      const c = f.HC
+      const r = f.HR
+      k.ring('outfit', 'head', [0, c + r * 0.08, 0], r * 0.98, 0.055 * s.width, { rot: [90, 0, 0], sides: 28 })
+      for (const [, x] of SIDES) k.ball('#f4f4f5', 'head', [x * r * 0.36, c + r * 0.1, r * 0.91 + 0.05 * s.width], 0.035, { scale: [1.3, 0.8, 0.5] })
+      for (const [, x] of SIDES) k.box('outfit', 'head', [x * 0.05, c + r * 0.0, -r * 1.0], [0.05, 0.16, 0.012], { rot: [-15, 0, x * 20], round: 0.004 })
+    },
+  },
+  {
+    id: 'goggles',
+    name: 'Goggles',
+    emoji: '🥽',
+    shape: [sl('size', 'Size', 0.6, 1.6)],
+    build(k, s, f) {
+      const c = f.HC
+      const r = f.HR
+      for (const [, x] of SIDES) {
+        const at = [x * r * 0.36, c + r * 0.12, r * 0.92]
+        k.tube('metal', 'head', at, 0.075 * s.size, 0.06, { rot: [90, 0, 0], sides: 14 })
+        k.ball('magic', 'head', along(at, [0, 0, 1], 0.03), 0.06 * s.size, { scale: [1, 1, 0.3], opacity: 0.8 })
+      }
+      k.ring('wood', 'head', [0, c + r * 0.12, 0], r * 1.0, 0.02, { rot: [90, 0, 0], sides: 28 })
+    },
+  },
+  {
+    id: 'scarf',
+    name: 'Scarf',
+    emoji: '🧣',
+    shape: [sl('size', 'Thick', 0.6, 1.6), sl('long', 'Long', 0.3, 2)],
+    build(k, s) {
+      k.ring('outfit', 'head', [0, 0.04, 0], 0.13, 0.045 * s.size, { rot: [90, 0, 0], sides: 18 })
+      k.box('outfit', 'head', [0.08, -0.02 - 0.08 * s.long, 0.12], [0.08 * s.size, 0.16 * s.long, 0.03], { rot: [10, 0, -10], round: 0.01 })
+      k.box('trim', 'head', [0.09, -0.02 - 0.15 * s.long, 0.13], [0.085 * s.size, 0.025, 0.035], { rot: [10, 0, -10], round: 0.005 })
+    },
+  },
+]
+
+// ── Magic (all around the figure, from the floor up) ──────────────────────────────────
+
+const heightOf = (f) => f.LL + f.foot + f.BH + f.HS
+const around = (n, r, y = 0, turn = 0) => [...Array(n)].map((_, i) => {
+  const a = (i / n) * Math.PI * 2 + turn
+  return [Math.sin(a) * r, y, Math.cos(a) * r]
+})
+
+const EFFECTS = [
+  {
+    id: 'fire-aura',
+    name: 'Fire',
+    emoji: '🔥',
+    shape: [sl('size', 'Wide', 0.6, 1.6), sl('height', 'Tall', 0.4, 2.5)],
+    build(k, s) {
+      for (const [x, , z] of around(9, 0.42 * s.size)) {
+        const h = 0.22 * s.height * (0.8 + 0.4 * Math.abs(Math.sin(x * 9 + z * 7)))
+        k.cone(FIRE, 'fx', [x, h / 2, z], 0.07, h, { sides: 6, opacity: 0.85 })
+        k.cone(FIRE_CORE, 'fx', [x, h * 0.3, z], 0.04, h * 0.6, { sides: 5, opacity: 0.9 })
+      }
+    },
+  },
+  {
+    id: 'sparkles',
+    name: 'Sparkles',
+    emoji: '✨',
+    shape: [sl('size', 'Wide', 0.6, 1.6), sl('count', 'How many', 6, 24, 12)],
+    build(k, s, f) {
+      const n = Math.round(s.count)
+      const H = heightOf(f)
+      for (let i = 0; i < n; i++) {
+        const a = i * 2.4
+        const r = 0.42 * s.size * (0.85 + 0.3 * ((i * 7) % 5) / 5)
+        k.ball('magic', 'fx', [Math.sin(a) * r, 0.15 + ((i * 0.618) % 1) * H, Math.cos(a) * r], 0.025 + 0.015 * (i % 3), { seg: 8, rings: 6 })
+      }
+    },
+  },
+  {
+    id: 'frost',
+    name: 'Frost',
+    emoji: '❄️',
+    shape: [sl('size', 'Wide', 0.6, 1.6), sl('height', 'Big ice', 0.4, 2.2)],
+    build(k, s) {
+      for (const [i, [x, , z]] of around(7, 0.4 * s.size, 0, 0.3).entries()) {
+        const h = 0.16 * s.height * (0.7 + 0.15 * (i % 3))
+        k.cone('glow:#7dd3fc', 'fx', [x, h / 2 - 0.02, z], 0.05, h, { sides: 5, opacity: 0.75 })
+        k.cone('glow:#e0f2fe', 'fx', [x * 1.15, h * 0.3, z * 1.15], 0.03, h * 0.6, { sides: 4, opacity: 0.8 })
+      }
+      k.ring('glow:#bae6fd', 'fx', [0, 0.01, 0], 0.4 * s.size, 0.02, { rot: [90, 0, 0], sides: 32, opacity: 0.7 })
+    },
+  },
+  {
+    id: 'shadow',
+    name: 'Shadow smoke',
+    emoji: '🌑',
+    shape: [sl('size', 'Wide', 0.6, 1.6), sl('height', 'Tall', 0.4, 2)],
+    build(k, s) {
+      for (const [i, [x, , z]] of around(10, 0.36 * s.size).entries()) {
+        const y = 0.08 + (i % 3) * 0.12 * s.height
+        k.ball('#3b0764', 'fx', [x, y, z], 0.12 + 0.04 * (i % 2), { opacity: 0.4, seg: 10, rings: 8 })
+      }
+      k.ball('magic', 'fx', [0, 0.02, 0], 0.5 * s.size, { scale: [1, 0.06, 1], opacity: 0.25 })
+    },
+  },
+  {
+    id: 'lightning',
+    name: 'Lightning',
+    emoji: '⚡',
+    shape: [sl('size', 'Wide', 0.6, 1.6), sl('count', 'Bolts', 2, 6, 3)],
+    build(k, s, f) {
+      const H = heightOf(f)
+      const bolt = [
+        [0.02, 1],
+        [0.08, 1],
+        [0.03, 0.6],
+        [0.09, 0.6],
+        [-0.04, 0],
+        [0, 0.48],
+        [-0.06, 0.48],
+      ].map(([x, y]) => [x * 1.6, y * H * 0.55])
+      for (const [x, , z] of around(Math.round(s.count), 0.48 * s.size, 0, 0.5)) {
+        k.flat('glow:#facc15', 'fx', [x, H * 0.3, z], bolt, 0.02, { rot: [0, (Math.atan2(x, z) * 180) / Math.PI, 0] })
+      }
+    },
+  },
+  {
+    id: 'magic-ring',
+    name: 'Magic circle',
+    emoji: '🔮',
+    shape: [sl('size', 'Wide', 0.6, 1.6), sl('glow', 'Glow', 0.2, 2)],
+    build(k, s, f) {
+      const r = 0.5 * s.size
+      k.ring('magic', 'fx', [0, 0.015, 0], r, 0.02, { rot: [90, 0, 0], sides: 40 })
+      k.ring('magic', 'fx', [0, 0.015, 0], r * 0.78, 0.012, { rot: [90, 0, 0], sides: 40 })
+      for (const [x, , z] of around(6, r * 0.89)) k.ball('magic', 'fx', [x, 0.02, z], 0.03, { scale: [1, 0.4, 1] })
+      k.tube('magic', 'fx', [0, heightOf(f) * 0.35, 0], r * 0.95, heightOf(f) * 0.7, { open: true, sides: 24, opacity: 0.12 * s.glow, tip: r * 0.7 })
+    },
+  },
 ]
 
 // ── Slots ─────────────────────────────────────────────────────────────────────────────
@@ -1238,10 +1679,12 @@ export const SLOTS = [
   { key: 'arms', label: 'Arms', emoji: '💪' },
   { key: 'head', label: 'Head', emoji: '🙂' },
   { key: 'hat', label: 'Hat & hair', emoji: '🎩', optional: true },
+  { key: 'face', label: 'Face', emoji: '🧔', optional: true },
   { key: 'hand', label: 'Weapon', emoji: '⚔️', optional: true },
   { key: 'offhand', label: 'Other hand', emoji: '🛡️', optional: true },
   { key: 'back', label: 'Back', emoji: '🦇', optional: true },
   { key: 'tail', label: 'Tail', emoji: '🦎', optional: true },
+  { key: 'fx', label: 'Magic', emoji: '✨', optional: true },
 ]
 
 export const PARTS = {
@@ -1250,10 +1693,12 @@ export const PARTS = {
   arms: ARMS,
   head: HEADS,
   hat: HATS,
+  face: FACES,
   hand: WEAPONS,
   offhand: OFF_HAND,
   back: BACKS,
   tail: TAILS,
+  fx: EFFECTS,
 }
 
 // A part's slider values: saved ones kept in range, the rest at their normal setting.

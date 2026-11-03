@@ -44,7 +44,7 @@ export const MIN_SIZE = 0.6
 export const MAX_SIZE = 1.6
 // How far any shape slider can go (1 is the part's normal shape).
 export const MIN_SHAPE = 0
-export const MAX_SHAPE = 10
+export const MAX_SHAPE = 30
 
 const ID = /^[a-z0-9-]{1,40}$/
 const KEY = /^[a-zA-Z0-9]{1,20}$/
