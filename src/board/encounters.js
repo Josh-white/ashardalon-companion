@@ -50,7 +50,8 @@ export function foeOnHeroTile(state, hero) {
   if (!at) return null
   const grid = boardGrid(state.board)
   const tile = tileAt(grid, at)
-  const foes = new Set([...state.monsters, ...(state.villains ?? []).filter((v) => !v.defeated)].map((m) => m.id))
+  // The Vast Gate is a marker, not a monster.
+  const foes = new Set([...state.monsters.filter((m) => !m.objective), ...(state.villains ?? []).filter((v) => !v.defeated)].map((m) => m.id))
   return Object.entries(state.board.tokens).some(([id, sq]) => foes.has(baseId(id)) && tileAt(grid, sq) === tile)
 }
 

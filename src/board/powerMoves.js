@@ -73,7 +73,7 @@ export function pathOf(state) {
 // by two of its figures (Legion Devils) is listed twice, so both get attacked.
 function passedBy(state, trail) {
   const grid = boardGrid(state.board)
-  return foeTokens(state)
+  return foeTokens(state, { objectives: true })
     .filter((f) => trail.some((sq) => adjacent(grid, sq, f.at)))
     .map((f) => baseId(f.id))
 }
@@ -293,8 +293,11 @@ const step = (state) => state.turn.boardMove?.steps?.[0] ?? null
 function heroTokens(state) {
   return state.heroes.filter((h) => h.hp > 0 && state.board.tokens[h.id]).map((h) => ({ id: h.id, at: state.board.tokens[h.id] }))
 }
-function foeTokens(state) {
-  const foes = new Set([...state.monsters, ...(state.villains ?? []).filter((v) => !v.defeated)].map((f) => f.id))
+// The Vast Gate and other objectives are markers, not monsters: no power moves them, and
+// they don't count as a monster nearby. `objectives` keeps them for a power that only
+// attacks or walks up to what the hero attacked (passing it, Crane's Wings).
+function foeTokens(state, { objectives = false } = {}) {
+  const foes = new Set([...state.monsters.filter((m) => objectives || !m.objective), ...(state.villains ?? []).filter((v) => !v.defeated)].map((f) => f.id))
   return Object.entries(state.board.tokens).filter(([id]) => foes.has(baseId(id))).map(([id, at]) => ({ id, at }))
 }
 
@@ -421,7 +424,7 @@ export function moveTargets(state, id) {
       return [...new Set(near.flatMap((f) => nextTo(f.at)))]
     }
     case 'nextToAttacked': {
-      const foes = foeTokens(state).filter((f) => (move.attacked ?? []).includes(baseId(f.id)))
+      const foes = foeTokens(state, { objectives: true }).filter((f) => (move.attacked ?? []).includes(baseId(f.id)))
       return [...new Set(foes.flatMap((f) => nextTo(f.at)))]
     }
     case 'triangle': {

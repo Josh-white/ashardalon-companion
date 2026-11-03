@@ -112,6 +112,17 @@ describe('powers that move figures on the board', () => {
     expect(queueMoves(state, heroes[0], power, pull, { attacked: ['m1'], hit: false }).turn.boardMove ?? null).toBeNull()
   })
 
+  it("never moves the Vast Gate: it's a marker, not a monster (Spectral Ram hitting the gate)", () => {
+    const { state, heroes, power } = game()
+    const gate = { ...state.monsters[0], id: 'gate', name: 'Vast Gate', objective: true, ownerId: null }
+    const withGate = { ...state, monsters: [gate], board: { ...state.board, tokens: { ...state.board.tokens, gate: [1, -2] } } }
+    const push = [{ pick: 'attacked', to: 'tileWithin', n: 2 }]
+    expect(queueMoves(withGate, heroes[0], power, push, { attacked: ['gate'], hit: true }).turn.boardMove ?? null).toBeNull()
+    // Walking up to the gate the hero attacked still works.
+    const walk = queueMoves(withGate, heroes[0], power, [{ pick: 'self', to: 'nextToAttacked' }], { attacked: ['gate'] })
+    expect(moveTargets(walk, heroes[0].id)).toContain('1,-1')
+  })
+
   it('only moves after an attack from the shadows when the step says ifShadow (Alshabbah)', () => {
     const { state, heroes, power } = game()
     const steps = [{ pick: 'self', to: 'squares', n: 3, ifShadow: true }]
