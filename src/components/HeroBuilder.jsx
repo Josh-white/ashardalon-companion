@@ -162,6 +162,9 @@ export default function HeroBuilder() {
               </Button>
               <Button onClick={() => open(randomRecipe())}>🎲 Surprise me</Button>
               <Button onClick={() => setTab('figures')}>📂 My heroes{figures?.length ? ` (${figures.length})` : ''}</Button>
+              <a href="/#mine" className="inline-flex min-h-11 items-center rounded-xl bg-emerald-500/15 px-3 text-emerald-200">
+                🎮 My models
+              </a>
             </div>
             {status && !['saving', 'saved'].includes(status) && <p className="mt-2 text-red-300">{status}</p>}
 

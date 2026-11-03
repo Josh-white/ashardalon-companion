@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Button, Chip, useConfirm } from './ui.jsx'
+import { MyModels } from './MyModels.jsx'
 import { playerNames } from './IdeaBox.jsx'
 import { ATTACKS, COLORS, HOLDS, KINDS, MAX_COLORS, SIZES, lovedRound, STATUS_TEXT, workshopStatus } from '../data/workshop.js'
 
@@ -110,6 +111,9 @@ export function Workshop({ names = [], me = '', onClose = null }) {
         <Chip active={shownTab === 'mine'} onClick={() => setTab('mine')}>
           📦 Models{requests?.length ? ` (${requests.length})` : ''}
         </Chip>
+        <Chip active={shownTab === 'play'} onClick={() => setTab('play')}>
+          🎮 My models
+        </Chip>
       </div>
       {error && <p className="mt-3 text-red-300">{error}</p>}
       {shownTab === 'new' && (
@@ -130,6 +134,7 @@ export function Workshop({ names = [], me = '', onClose = null }) {
           <RemovedList removed={removed} reload={reload} />
         </>
       )}
+      {shownTab === 'play' && <MyModels />}
       {shownTab === null && <p className="mt-6 text-zinc-400">Opening the workshop…</p>}
     </div>
   )
