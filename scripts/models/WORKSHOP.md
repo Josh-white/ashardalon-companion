@@ -32,11 +32,21 @@ Copy into `cards/workshop/<id>/` (folder access or Remote Control, no rebuild ne
   ] }
 ```
 
+Also copy the round's model (`model-2.glb`) and name it in the round (`"model": "model-2.glb"`):
+it lights up **🎨 Tweak it yourself**, where the player resizes and recolors the figure on
+their iPad with no new build. Their saved tweaks land in `requests.json` as
+`"tweaks": { "size", "head", "body", "colors": { paletteSlot: "#rrggbb" } }`; bake them in
+when the figure goes into the game (slot = index in make-monsters.py's PALETTE order).
+
 Use new file names for each round (`front-2.png`), so the earlier ones still show.
 Their 🧙 button changes to "📸 Pictures!" within a minute, and they tap ❤️ Love it or
 ✏️ Change it. A change adds a round: build again, add the next round to `reply.json`.
 
 ## 4. Put it in the game
+
+Small changes ("make it purple", "bigger head") are what the Tweak panel is for: point
+the player at it rather than doing another build. (If builds still cost too much later, the
+saved ideas are a 3-round limit per model and building once a day.)
 
 Once they love it, wire the figure in like any other (src/models, figureModels.js,
 heroModels.js and their tests), open a PR, and when JJ merges it set

@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Button, Chip, useConfirm } from './ui.jsx'
 import { playerNames } from './IdeaBox.jsx'
 import { ATTACKS, COLORS, HOLDS, KINDS, MAX_COLORS, SIZES, STATUS_TEXT, workshopStatus } from '../data/workshop.js'
+
+// The 🎨 Tweak panel brings three.js with it, so it loads only when opened.
+const WorkshopTweaker = lazy(() => import('./WorkshopTweaker.jsx'))
 
 // The 🧙 Model Workshop: a player describes their own 3D figure, Claude builds it and
 // sends pictures back here, and the player taps "Love it" or asks for changes. The Pi
@@ -318,6 +321,7 @@ function RequestCard({ request: r, reload, onDelete }) {
   const [error, setError] = useState(null)
   const [big, setBig] = useState(null)
   const [showOld, setShowOld] = useState(false)
+  const [tweaking, setTweaking] = useState(false)
   const latest = r.rounds?.at(-1)
   const answer = async (body) => {
     setError(null)
@@ -354,6 +358,19 @@ function RequestCard({ request: r, reload, onDelete }) {
           {latest.note && <p className="rounded-xl bg-zinc-800/70 p-3 text-zinc-200">🧙 {latest.note}</p>}
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{latest.pictures.map((p) => picture(r.rounds.length, p))}</div>
         </div>
+      )}
+      {latest?.model && status !== 'inGame' && !tweaking && (
+        <div className="mt-3">
+          <Button onClick={() => setTweaking(true)}>🎨 Tweak it yourself{r.tweaks ? ' (saved)' : ''}</Button>
+        </div>
+      )}
+      {tweaking && latest?.model && (
+        <Suspense fallback={<p className="mt-3 text-zinc-400">Opening the tweak panel…</p>}>
+          <WorkshopTweaker request={r} model={latest.model} onSaved={reload} />
+          <button type="button" className="mt-2 text-sm text-zinc-400 underline" onClick={() => setTweaking(false)}>
+            Close the tweak panel
+          </button>
+        </Suspense>
       )}
       {status === 'look' && !changing && (
         <div className="mt-4 flex flex-wrap justify-end gap-2">

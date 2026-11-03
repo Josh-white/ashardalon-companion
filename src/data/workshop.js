@@ -89,3 +89,47 @@ export const STATUS_TEXT = {
   loved: { badge: '❤️ Loved', line: 'You love it! Claude is putting it in the game.' },
   inGame: { badge: '🎉 In the game', line: "It's in the game! Look for it on the 3D board." },
 }
+
+// The 🎨 Tweak panel: changes a player makes to their own figure in the browser, with no
+// new build. Saved with the request, so Claude bakes them in when it goes in the game.
+export const TWEAK_SLIDERS = [
+  { key: 'size', label: 'Size', min: 0.8, max: 1.25, step: 0.05 },
+  { key: 'head', label: 'Head', min: 0.8, max: 1.3, step: 0.05 },
+  { key: 'body', label: 'Body', min: 0.8, max: 1.2, step: 0.05 },
+]
+export const NO_TWEAKS = { size: 1, head: 1, body: 1, colors: {} }
+const HEX = /^#[0-9a-f]{6}$/
+
+// Tweaks a screen sent, tidied: sliders kept in range, colours as { paletteSlot: "#rrggbb" }.
+export function cleanTweaks(t = {}) {
+  const out = { ...NO_TWEAKS, colors: {} }
+  for (const { key, min, max } of TWEAK_SLIDERS) {
+    const n = Number(t?.[key])
+    if (Number.isFinite(n)) out[key] = Math.round(Math.min(max, Math.max(min, n)) * 100) / 100
+  }
+  const colors = t?.colors && typeof t.colors === 'object' ? t.colors : {}
+  for (const [slot, hex] of Object.entries(colors).slice(0, 64)) {
+    const i = Number(slot)
+    if (Number.isInteger(i) && i >= 0 && i < 256 && typeof hex === 'string' && HEX.test(hex.toLowerCase())) out.colors[i] = hex.toLowerCase()
+  }
+  return out
+}
+
+// The palette slots a figure's mesh really uses, most-used first: each part's colour comes
+// from one square of a strip of colour squares (scripts/models/make-monsters.py), picked by
+// its texture's u. `uvs` is the mesh's uv numbers (u, v, u, v, …), `slots` how many squares.
+export function usedSlots(uvs, slots) {
+  const counts = new Map()
+  for (let i = 0; i < uvs.length; i += 2) {
+    const slot = Math.min(slots - 1, Math.max(0, Math.floor(uvs[i] * slots)))
+    counts.set(slot, (counts.get(slot) ?? 0) + 1)
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0]).map(([slot]) => slot)
+}
+
+// How big to make each bone for the sliders. The head hangs off the body, so it's divided by
+// the body's size to grow on its own.
+export function boneScales(tweaks) {
+  const t = { ...NO_TWEAKS, ...tweaks }
+  return { body: t.body, head: t.head / t.body }
+}
