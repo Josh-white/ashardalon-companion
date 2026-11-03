@@ -12,6 +12,7 @@ import OpeningStory from './components/OpeningStory.jsx'
 import GamePicker, { GameBar } from './components/GamePicker.jsx'
 import { IdeaButton } from './components/IdeaBox.jsx'
 import { WorkshopButton } from './components/WorkshopButton.jsx'
+import MindOverBodyPrompt from './components/MindOverBodyPrompt.jsx'
 import MomentOverlay, { useMomentsDone } from './components/MomentOverlay.jsx'
 import MonsterList, { VillainList } from './components/MonsterList.jsx'
 import ProjectorView from './components/ProjectorView.jsx'
@@ -402,6 +403,7 @@ export default function App() {
     <>
       <FirstRoll state={state} dispatch={dispatch} heroId={myHero?.id ?? null} screens={screens} />
       <MomentOverlay moment={state.moment} heroes={state.heroes} />
+      <MindOverBodyPrompt state={state} dispatch={dispatch} heroId={myHero?.id ?? null} />
       <CardReading state={state} dispatch={dispatch} />
       <TapForSound locked={soundLocked} ipad={Boolean(myHero)} />
       <DungeonDoors at={doorsAt} />
