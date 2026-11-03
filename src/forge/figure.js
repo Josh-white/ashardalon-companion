@@ -25,7 +25,7 @@ export const BASE_FRAME = {
   HC: 0.29, // head centre, above the neck
 }
 
-// The joints the moves turn. grip.*, back and hat are fixed to them.
+// The joints the moves turn. grip.*, back, hat and fx are fixed to them.
 const POSED = ['hips', 'body', 'head', 'arm.L', 'arm.R', 'hand.L', 'hand.R', 'leg.L', 'leg.R', 'tail']
 
 function skeleton(f) {
@@ -46,6 +46,8 @@ function skeleton(f) {
     ['grip.L', 'hand.L', [0, 0, 0], [20, 0, -18]],
     ['back', 'body', [0, f.BH * 0.78, -f.BD / 2]],
     ['hat', 'head', [0, f.HS, 0]],
+    // Magic effects around the whole figure, from the floor up; it turns slowly in the builder.
+    ['fx', 'root', [0, 0, 0]],
   ]
 }
 
@@ -57,11 +59,11 @@ const UP = new THREE.Vector3(0, 1, 0)
 // #hex; "magic" and "glow:<colour>" shine.
 export function kit(joints, palette, materials = new Map()) {
   let groups = 0
-  const mat = (colour, side) => {
+  const mat = (colour, side, opacity = 1) => {
     const glow = colour === 'magic' || colour.startsWith('glow:')
     const name = colour.startsWith('glow:') ? colour.slice(5) : colour
     const hex = palette[name] ?? (name.startsWith('#') ? name : '#ff00ff')
-    const key = `${hex}|${glow}|${side ? 2 : 0}`
+    const key = `${hex}|${glow}|${side ? 2 : 0}|${opacity}`
     if (!materials.has(key)) {
       materials.set(
         key,
@@ -72,13 +74,15 @@ export function kit(joints, palette, materials = new Map()) {
           emissive: glow ? hex : '#000000',
           emissiveIntensity: glow ? 0.9 : 0,
           side: side ? THREE.DoubleSide : THREE.FrontSide,
+          // See-through shapes (smoke, fairy wings, a magic aura) don't hide what's behind them.
+          ...(opacity < 1 ? { transparent: true, opacity, depthWrite: false } : {}),
         }),
       )
     }
     return materials.get(key)
   }
   const place = (geometry, colour, joint, at, opts = {}) => {
-    const mesh = new THREE.Mesh(geometry, mat(colour, opts.double))
+    const mesh = new THREE.Mesh(geometry, mat(colour, opts.double, opts.opacity))
     mesh.position.set(...at)
     if (opts.rot) mesh.rotation.set(...rad(opts.rot), 'YXZ')
     if (opts.scale) mesh.scale.set(...(typeof opts.scale === 'number' ? [opts.scale, opts.scale, opts.scale] : opts.scale))
@@ -198,6 +202,7 @@ export function pose(figure, moveName, t) {
   const bobA = a.bob ?? 0
   const bobB = b.bob ?? 0
   joints.hips.position.y = rest.hips.y + bobA + (bobB - bobA) * ease
+  joints.fx.rotation.y = t * 0.9
   return !move.loop && t >= len
 }
 

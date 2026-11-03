@@ -238,7 +238,7 @@ function SlotPanel({ slot, pick, setPart, setShape }) {
           </div>
           <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
             {part.shape.map(({ key, label, min, max }) => {
-              const whole = max - min >= 2 && Number.isInteger(min) && Number.isInteger(max) && max <= 10 && min >= 1
+              const whole = max - min >= 2 && Number.isInteger(min) && Number.isInteger(max) && max <= 30 && min >= 1
               return (
                 <label key={key} className="block text-zinc-200">
                   {label} <span className="text-sm text-zinc-500">{whole ? Math.round(shape[key]) : `${Math.round(shape[key] * 100)}%`}</span>
