@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { startServer } from './server.js'
-import { boneScales, cleanRequest, cleanTweaks, usedSlots, workshopStatus } from '../src/data/workshop.js'
+import { boneScales, cleanRequest, cleanTweaks, playerFigures, usedSlots, workshopStatus } from '../src/data/workshop.js'
 
 describe('Model Workshop', () => {
   let dir
@@ -95,6 +95,46 @@ describe('Model Workshop', () => {
     ;[r] = await list()
     expect(r.tweaks).toEqual({ size: 1.25, head: 1.2, body: 1, colors: { 3: '#aa00ff' } })
     expect(workshopStatus(r)).toBe('look')
+  })
+
+  it('puts a loved model on its player\'s hero, one per player', async () => {
+    const make = async (idea) => {
+      const sent = await (await post('/workshop', { idea, from: 'Colton' })).json()
+      reply(sent.id, [{ note: 'Hi', pictures: ['front.png'] }])
+      writeFileSync(join(workshopDir, sent.id, 'model-1.glb'), 'glTF!')
+      writeFileSync(join(workshopDir, sent.id, 'reply.json'), JSON.stringify({ rounds: [{ note: 'Hi', pictures: ['front.png'], model: 'model-1.glb' }] }))
+      return sent.id
+    }
+    const lizard = await make('Lizard mage')
+    // Not loved yet: it can't go in the game.
+    expect((await post(`/workshop/${lizard}`, { useInGame: true })).status).toBe(409)
+    await post(`/workshop/${lizard}`, { love: true })
+    await post(`/workshop/${lizard}`, { tweaks: { size: 0.95, colors: { 9: '#18181b' } } })
+    let [r] = await list()
+    expect(workshopStatus(r)).toBe('loved')
+    expect(playerFigures(await list())).toEqual({})
+
+    expect((await post(`/workshop/${lizard}`, { useInGame: true })).status).toBe(200)
+    ;[r] = await list()
+    expect(workshopStatus(r)).toBe('inGame')
+    expect(playerFigures(await list())).toEqual({ colton: { url: `/workshop/${lizard}/model-1.glb`, tweaks: { size: 0.95, head: 1, body: 1, colors: { 9: '#18181b' } } } })
+
+    // A second loved model turned on takes over: the first goes off.
+    const dragon = await make('Dragon knight')
+    await post(`/workshop/${dragon}`, { love: true })
+    await post(`/workshop/${dragon}`, { useInGame: true })
+    const both = await list()
+    expect(both.map((x) => [x.id, workshopStatus(x)])).toEqual([[dragon, 'inGame'], [lizard, 'loved']])
+    expect(playerFigures(both).colton.url).toBe(`/workshop/${dragon}/model-1.glb`)
+
+    await post(`/workshop/${dragon}`, { useInGame: false })
+    expect(playerFigures(await list())).toEqual({})
+
+    // No name on it: nobody to give it to.
+    const nameless = await (await post('/workshop', { idea: 'A frog' })).json()
+    reply(nameless.id, [{ note: 'Hi', pictures: ['front.png'] }])
+    await post(`/workshop/${nameless.id}`, { love: true })
+    expect((await post(`/workshop/${nameless.id}`, { useInGame: true })).status).toBe(400)
   })
 
   it('turns away an empty idea and unknown ids', async () => {

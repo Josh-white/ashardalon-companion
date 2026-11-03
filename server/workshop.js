@@ -14,7 +14,8 @@
 //   GET    /workshop.json              every request with its rounds, newest first
 //   POST   /workshop                   { idea, from, kind, colors, size, holds, attack }
 //   POST   /workshop/<id>              { love: true } or { change: "…" } for the latest pictures,
-//                                      or { tweaks } from the 🎨 Tweak panel
+//                                      or { tweaks } from the 🎨 Tweak panel,
+//                                      or { useInGame: true|false } for a loved model (one per player)
 //   GET    /workshop/<id>/<name>.glb   a round's 3D model ("model": "model-3.glb" in a round)
 //   DELETE /workshop/<id>              takes a request off the list (its folder stays)
 //   GET    /workshop/<id>/<name>.png   one of the pictures
@@ -24,7 +25,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSyn
 import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
 import { readBody } from './readBody.js'
-import { cleanRequest, cleanTweaks, MAX_CHANGE_LENGTH, MAX_REQUESTS } from '../src/data/workshop.js'
+import { cleanRequest, cleanTweaks, lovedRound, MAX_CHANGE_LENGTH, MAX_REQUESTS, playerKey } from '../src/data/workshop.js'
 
 const ID = /^[a-z0-9-]{1,80}$/
 const PICTURE = /^[a-zA-Z0-9_-]{1,60}\.(png|jpg)$/
@@ -132,6 +133,18 @@ export function createWorkshop(dir) {
         return send(res, 200, withReply(requests[index]))
       }
       const { rounds } = loadReply(dir, id)
+      if (body.useInGame !== undefined) {
+        // The player's hero wears it on the 3D board. Only a loved model with its 3D file, and
+        // only one per player: turning one on turns their others off.
+        const on = Boolean(body.useInGame)
+        const mine = requests[index]
+        const key = playerKey(mine.from)
+        if (on && !key) return send(res, 400, { error: 'This model has no name on it, so the game does not know whose hero wears it.' })
+        if (on && !lovedRound({ ...mine, rounds })?.model) return send(res, 409, { error: 'Tap Love it first.' })
+        requests = requests.map((r, n) => (n === index ? { ...r, useInGame: on } : on && r.useInGame && playerKey(r.from) === key ? { ...r, useInGame: false } : r))
+        save()
+        return send(res, 200, withReply(requests[index]))
+      }
       if (!rounds.length) return send(res, 409, { error: 'There are no pictures to answer yet.' })
       const change = typeof body.change === 'string' ? body.change.trim().slice(0, MAX_CHANGE_LENGTH) : ''
       if (!body.love && !change) return send(res, 400, { error: 'Say what to change.' })

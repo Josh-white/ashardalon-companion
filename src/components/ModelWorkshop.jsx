@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Button, Chip, useConfirm } from './ui.jsx'
 import { playerNames } from './IdeaBox.jsx'
-import { ATTACKS, COLORS, HOLDS, KINDS, MAX_COLORS, SIZES, STATUS_TEXT, workshopStatus } from '../data/workshop.js'
+import { ATTACKS, COLORS, HOLDS, KINDS, MAX_COLORS, SIZES, lovedRound, STATUS_TEXT, workshopStatus } from '../data/workshop.js'
 
 // The 🎨 Tweak panel brings three.js with it, so it loads only when opened.
 const WorkshopTweaker = lazy(() => import('./WorkshopTweaker.jsx'))
@@ -314,6 +314,40 @@ function RequestList({ requests, reload, onNew }) {
   )
 }
 
+// A loved model goes on the player's hero: whenever someone plays with the name on the
+// request, their hero is this figure on the 3D board (src/components/Board3D.jsx).
+function UseInGame({ request: r, on, answer }) {
+  const name = r.from
+  return (
+    <div className={`mt-4 rounded-2xl border p-4 ${on ? 'border-emerald-500 bg-emerald-950/40' : 'border-amber-500 bg-amber-950/30'}`}>
+      <p className="text-lg font-semibold">🎮 Use it in the game</p>
+      {name ? (
+        <>
+          <ol className="mt-2 list-decimal space-y-1 pl-6 text-zinc-200">
+            <li>
+              Turn it on here{on ? ' (it is on!)' : ''}.
+            </li>
+            <li>
+              When you pick your hero, type your name as <b>{name}</b>.
+            </li>
+            <li>On the 3D board your hero is this figure, with your 🎨 tweaks. Any hero you pick wears it.</li>
+            <li>
+              Seeing a flat board? Tap <b>🧊</b>. Seeing cards instead of figures? Tap <b>🪪 Figures</b> so it says <b>🧍 Figures: 3D</b>.
+            </li>
+          </ol>
+          <div className="mt-3 flex justify-end">
+            <Button variant={on ? 'ghost' : 'gold'} className="text-lg" onClick={() => answer({ useInGame: !on })}>
+              {on ? 'Stop using it' : `🎮 Use it as ${name}'s hero`}
+            </Button>
+          </div>
+        </>
+      ) : (
+        <p className="mt-2 text-zinc-300">This model has no name on it, so the game can't tell whose hero should wear it. Send it again with your name.</p>
+      )}
+    </div>
+  )
+}
+
 function RequestCard({ request: r, reload, onDelete }) {
   const status = workshopStatus(r)
   const [changing, setChanging] = useState(false)
@@ -359,7 +393,7 @@ function RequestCard({ request: r, reload, onDelete }) {
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{latest.pictures.map((p) => picture(r.rounds.length, p))}</div>
         </div>
       )}
-      {latest?.model && status !== 'inGame' && !tweaking && (
+      {latest?.model && !tweaking && (
         <div className="mt-3">
           <Button onClick={() => setTweaking(true)}>🎨 Tweak it yourself{r.tweaks ? ' (saved)' : ''}</Button>
         </div>
@@ -372,6 +406,7 @@ function RequestCard({ request: r, reload, onDelete }) {
           </button>
         </Suspense>
       )}
+      {(status === 'loved' || status === 'inGame') && lovedRound(r)?.model && <UseInGame request={r} on={status === 'inGame'} answer={answer} />}
       {status === 'look' && !changing && (
         <div className="mt-4 flex flex-wrap justify-end gap-2">
           <Button onClick={() => setChanging(true)}>✏️ Change it</Button>

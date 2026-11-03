@@ -9,6 +9,7 @@ import { useAttackFx } from './AttackFx.jsx'
 import { useHealFx } from './HealFx.jsx'
 import { canvasTexture, playAttack3D, playExit3D, playHeal3D } from './board3dFx.js'
 import { FLOOR_LOOKS, WALL_DEPTH, dressDungeon, hideTorches, stoneMaterials } from './dungeonLook3d.js'
+import { useWorkshopFigures, withPlayerFigure } from './useWorkshopFigures.js'
 import { attachModel, detachModel, face, setDown, setWalking, stepModels } from './figureModels.js'
 import { FX_DELAY_MS, FX_MS, fxLeadMs } from '../board/attackFx.js'
 import { closeUpShot, EYES_TILT, eyesCloseUp, restShot, tourShot, turnBy, VIEW_LABELS, viewAngles, VIEWS } from '../board/camera3d.js'
@@ -1127,6 +1128,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
   const tapsRef = useRef(taps)
   tapsRef.current = taps
   const art = useArt()
+  const ownFigures = useWorkshopFigures()
   const [ready, setReady] = useState(false)
   const [heroModels, setHeroModels] = useState(heroModelsWanted)
   const [drag, setDrag] = useState(dragWanted)
@@ -1139,7 +1141,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const layout = useMemo(() => (board ? boardLayout(board) : null), [layoutKey])
   const selected = taps?.selected ?? new Set()
-  const figures = boardFigures(state).map((f) => ({ ...f, selected: selected.has(f.id) }))
+  const figures = boardFigures(state).map((f) => ({ ...withPlayerFigure(f, ownFigures), selected: selected.has(f.id) }))
   const extras = boardExtras(state)
   const extrasKey = JSON.stringify(extras)
   const targetsKey = (taps?.targets ?? []).join(' ')

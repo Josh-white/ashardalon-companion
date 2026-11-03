@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { MODEL_PROPS } from '../board/heroModels.js'
+import { boneScales, NO_TWEAKS } from '../data/workshop.js'
 import Knight from '../models/Knight.glb?url'
 import Barbarian from '../models/Barbarian.glb?url'
 import Mage from '../models/Mage.glb?url'
@@ -93,36 +94,79 @@ const RANGED = new Set(['cast', 'shoot', 'throw'])
 // Weapons held in both hands use the two-handed moves.
 const TWO_HANDED = /^2H_/
 
+// A figure is one of ours by name (look.model), or a player's own from the Model Workshop by
+// its address on the Pi (look.url, with the player's 🎨 tweaks in look.tweaks).
+const fileOf = (look) => look.url ?? FILES[look.model]
+
 const loads = new Map()
-function loadModel(name) {
-  if (!loads.has(name)) {
+function loadModel(file) {
+  if (!loads.has(file)) {
     loads.set(
-      name,
-      new GLTFLoader().loadAsync(FILES[name]).catch((error) => {
-        loads.delete(name)
+      file,
+      new GLTFLoader().loadAsync(file).catch((error) => {
+        loads.delete(file)
         throw error
       }),
     )
   }
-  return loads.get(name)
+  return loads.get(file)
+}
+
+// Pixels per colour square in a workshop figure's palette strip (scripts/models/make-monsters.py).
+const SWATCH = 4
+
+// The figure's palette with the player's 🎨 colours painted over their squares, or null when
+// there are none (or no palette).
+function tintedPalette(map, colors) {
+  const image = map?.image
+  if (!image || !Object.keys(colors ?? {}).length || typeof document === 'undefined') return null
+  const canvas = document.createElement('canvas')
+  canvas.width = image.width
+  canvas.height = image.height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+  ctx.drawImage(image, 0, 0)
+  for (const [slot, hex] of Object.entries(colors)) {
+    ctx.fillStyle = hex
+    ctx.fillRect(Number(slot) * SWATCH, 0, SWATCH, canvas.height)
+  }
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.flipY = false
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.magFilter = THREE.NearestFilter
+  texture.minFilter = THREE.NearestFilter
+  texture.generateMipmaps = false
+  return texture
+}
+
+// Moves the figure on, then puts the player's head and body sizes back (a move would undo them).
+function update(anim, seconds) {
+  anim.mixer.update(seconds)
+  for (const [bone, k] of anim.bones) bone.scale.setScalar(k)
 }
 
 // Gives the standee `node` its hero figure once the file is in. `look` is heroModel()'s
 // pick, `color` the hero's colour (the cape). Calls `ready` after, to draw again.
 export function attachModel(node, look, color, ready) {
-  if (!FILES[look.model]) return
-  loadModel(look.model)
+  const file = fileOf(look)
+  if (!file) return
+  const tweaks = { ...NO_TWEAKS, ...look.tweaks }
+  loadModel(file)
     .then((gltf) => {
       if (node.userData.disposed) return
       const figure = cloneSkinned(gltf.scene)
-      figure.scale.setScalar(SCALE)
-      figure.scale.y = SCALE * look.height
+      figure.scale.setScalar(SCALE * tweaks.size)
+      figure.scale.y = SCALE * look.height * tweaks.size
       // One coat of paint per hero (it flashes red when hit), the cape dyed its colour.
       let paint = null
+      let tint = null
+      const sizes = look.tweaks ? boneScales(tweaks) : {}
+      const bones = []
       const cape = new THREE.MeshStandardMaterial({ color, roughness: 0.85, side: THREE.DoubleSide })
       const gear = new Set(look.gear)
       figure.traverse((o) => {
         if (MODEL_PROPS[look.model]?.includes(o.name)) o.visible = gear.has(o.name)
+        if (o.isBone && sizes[o.name] && sizes[o.name] !== 1) bones.push([o, sizes[o.name]])
         if (!o.isMesh) return
         o.castShadow = true
         o.frustumCulled = false
@@ -130,7 +174,11 @@ export function attachModel(node, look, color, ready) {
           o.material = cape
           return
         }
-        paint ??= o.material.clone()
+        if (!paint) {
+          paint = o.material.clone()
+          tint = tintedPalette(paint.map, tweaks.colors)
+          if (tint) paint.map = tint
+        }
         o.material = paint
       })
       const mixer = new THREE.AnimationMixer(figure)
@@ -143,7 +191,7 @@ export function attachModel(node, look, color, ready) {
         // lunges with its attack instead of standing still.
         return RANGED.has(move) && clips.has(MOVES.attack) ? mixer.clipAction(clips.get(MOVES.attack)) : null
       }
-      const anim = { mixer, action, clips, state: null, busy: false, cape, paint }
+      const anim = { mixer, action, clips, state: null, busy: false, cape, paint, tint, bones }
       mixer.addEventListener('finished', (e) => {
         // Only the move playing now: one it cut short doesn't send the figure back to idle.
         if (e.action !== anim.current) return
@@ -179,7 +227,7 @@ function settle(anim, now = false) {
   // It keeps drawing while it eases in, even where the idle itself doesn't move.
   anim.busy = !now
   anim.easing = now ? 0 : EASE
-  anim.mixer.update(now ? 0.01 : 0)
+  update(anim, now ? 0.01 : 0)
 }
 
 // One move (attack, cast, shoot, throw, hit, dodge, fall), then back to standing.
@@ -267,7 +315,7 @@ export function stepModels(nodes, seconds, ambient) {
   for (const node of nodes) {
     const anim = node.userData.anim
     if (!anim) continue
-    if (anim.busy || ambient) anim.mixer.update(seconds)
+    if (anim.busy || ambient) update(anim, seconds)
     if (anim.easing > 0) {
       anim.easing -= seconds
       if (anim.easing <= 0) anim.busy = false
@@ -284,6 +332,7 @@ export function detachModel(node) {
   anim.mixer.stopAllAction()
   body.remove(model)
   anim.paint?.dispose()
+  anim.tint?.dispose()
   anim.cape.dispose()
   card.visible = true
   node.userData.faceMat = standeeMat

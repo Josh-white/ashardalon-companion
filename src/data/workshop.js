@@ -71,23 +71,47 @@ export function cleanRequest(body = {}) {
 //   waiting  sent, Claude hasn't sent pictures yet
 //   look     new pictures to look at
 //   fixing   the player asked for changes, Claude is on it
-//   loved    the player loves it; Claude puts it in the game
-//   inGame   it's in the game
+//   loved    the player loves it, and can turn on "Use it in the game"
+//   inGame   it's their hero's figure on the 3D board
 export function workshopStatus(request) {
   if (request.inGame) return 'inGame'
   const rounds = request.rounds ?? []
   if (!rounds.length) return 'waiting'
   const answer = (request.answers ?? []).find((a) => a.round === rounds.length)
   if (!answer) return 'look'
-  return answer.love ? 'loved' : 'fixing'
+  if (!answer.love) return 'fixing'
+  return request.useInGame && lovedRound(request)?.model ? 'inGame' : 'loved'
+}
+
+// The round of pictures the player loved (its 3D model is the one that goes in the game).
+export function lovedRound(request) {
+  const loved = (request.answers ?? []).filter((a) => a.love).at(-1)
+  return loved ? (request.rounds ?? [])[loved.round - 1] ?? null : null
+}
+
+// The name a figure follows: whoever plays with that name gets it as their hero.
+export const playerKey = (name) => (typeof name === 'string' ? name.trim().toLowerCase() : '')
+
+// Each player's own figure, for the 3D board: { "colton": { url, tweaks } }, from the
+// workshop's requests (newest first, as /workshop.json lists them). Only loved models the
+// player turned on, and only one per player (the newest).
+export function playerFigures(requests = []) {
+  const out = {}
+  for (const r of requests) {
+    const key = playerKey(r.from)
+    const round = lovedRound(r)
+    if (!key || out[key] || !r.useInGame || !round?.model) continue
+    out[key] = { url: `/workshop/${r.id}/${round.model}`, tweaks: cleanTweaks(r.tweaks) }
+  }
+  return out
 }
 
 export const STATUS_TEXT = {
   waiting: { badge: '⏳ Sent, being built', line: 'Sent! Building it takes time (it can take a day or two). The pictures will show up here.' },
   look: { badge: '📸 Pictures!', line: 'Your model is ready to look at. Do you love it?' },
   fixing: { badge: '🔨 Fixing', line: 'Claude is making your changes. New pictures come here.' },
-  loved: { badge: '❤️ Loved', line: 'You love it! Claude is putting it in the game.' },
-  inGame: { badge: '🎉 In the game', line: "It's in the game! Look for it on the 3D board." },
+  loved: { badge: '❤️ Loved', line: 'You love it! Turn on "Use it in the game" to play with it.' },
+  inGame: { badge: '🎉 In the game', line: "It's your hero's figure on the 3D board!" },
 }
 
 // The 🎨 Tweak panel: changes a player makes to their own figure in the browser, with no

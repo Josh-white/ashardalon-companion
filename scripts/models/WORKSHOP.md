@@ -48,6 +48,11 @@ Small changes ("make it purple", "bigger head") are what the Tweak panel is for:
 the player at it rather than doing another build. (If builds still cost too much later, the
 saved ideas are a 3-round limit per model and building once a day.)
 
-Once they love it, wire the figure in like any other (src/models, figureModels.js,
-heroModels.js and their tests), open a PR, and when JJ merges it set
-`"inGame": true` in `reply.json` so the workshop says 🎉 In the game.
+Once they love it, there's nothing to build: the loved card shows **🎮 Use it in the game**.
+Turned on, whoever plays with the name on the request (any hero they pick) wears the loved
+round's `model-N.glb` on the 3D board, with their 🎨 tweaks (src/components/useWorkshopFigures.js,
+figureModels.js). One figure per player; turning another on turns the old one off. So every
+round must ship its `model-N.glb`, and the request needs a name.
+
+Only wire a figure in for good (src/models, heroModels.js, a PR) if it should be a monster
+or villain everyone fights; then set `"inGame": true` in `reply.json`.
