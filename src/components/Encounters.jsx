@@ -12,7 +12,7 @@ import { boardAnswer } from '../board/checks.js'
 import { encounterTargetIds, foeOnHeroTile } from '../board/encounters.js'
 import { wrathPull } from '../board/monsters.js'
 import { markerOnHeroTile, trapsToDisable } from '../board/markers.js'
-import { heroesOnTrap, isLava, isMovingTrap, trapStepChoices, trapStepped } from '../board/traps.js'
+import { heroesOnTrap, isLava, isMovingTrap, trapFindsNobody, trapStepChoices, trapStepped } from '../board/traps.js'
 import { DrawMonsterButton, HeroPicker } from './MonsterTurns.jsx'
 import { MonsterChoice } from './Pickers.jsx'
 import { TileGuardQuestion } from './Treasure.jsx'
@@ -625,7 +625,7 @@ function TrapStep({ state, trap, dispatch }) {
 }
 
 // Tap every hero a damage-only trap reaches (the board picks them when it knows where the trap is).
-function TrapDamage({ state, trap, damage, dispatch, onHit }) {
+function TrapDamage({ state, trap, damage, dispatch, onHit, onNobody }) {
   const [chosen, setChosen] = useState(() => heroesOnTrap(state, trap) ?? [])
   const toggle = (id) => setChosen((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]))
   return (
@@ -636,7 +636,8 @@ function TrapDamage({ state, trap, damage, dispatch, onHit }) {
         variant="danger"
         className="w-full py-3 text-lg font-bold"
         onClick={() => {
-          if (chosen.length > 0) dispatch({ type: 'TRAP_DAMAGE', trapId: trap.id, heroIds: chosen })
+          if (chosen.length === 0) return onNobody()
+          dispatch({ type: 'TRAP_DAMAGE', trapId: trap.id, heroIds: chosen })
           onHit()
         }}
       >
@@ -670,11 +671,11 @@ function TrapActivation({ state, hero, trap, dispatch, onDone }) {
             dispatch({ type: 'TRAP_ATTACK', trapId: trap.id, targets, tileGuarded })
             setHit(true)
           }}
-          onNobody={() => setHit(true)}
+          onNobody={onDone}
           dispatch={dispatch}
         />
       )}
-      {!stepFirst && !attack && damage > 0 && !hit && <TrapDamage state={state} trap={trap} damage={damage} dispatch={dispatch} onHit={() => setHit(true)} />}
+      {!stepFirst && !attack && damage > 0 && !hit && <TrapDamage state={state} trap={trap} damage={damage} dispatch={dispatch} onHit={() => setHit(true)} onNobody={onDone} />}
       {(hit || (!attack && !damage)) && (
         <Button variant="gold" className="w-full py-3 text-lg" onClick={onDone}>
           Done with the {trap.name}
@@ -711,11 +712,19 @@ export function TrapTurns({ state, hero, dispatch }) {
         <ul className="mt-2 space-y-2">
           {traps.map((trap) => (
             <li key={trap.id} className="flex items-center justify-between gap-3 rounded-xl bg-zinc-950/50 p-3">
-              <span className={`text-lg font-semibold ${done.includes(trap.id) ? 'text-zinc-500 line-through' : 'text-red-300'}`}>
+              <span className={`text-lg font-semibold ${done.includes(trap.id) || trapFindsNobody(state, trap) ? 'text-zinc-500 line-through' : 'text-red-300'}`}>
                 {trap.name}
               </span>
               {done.includes(trap.id) ? (
                 <span className="text-zinc-500">✓ Done</span>
+              ) : trapFindsNobody(state, trap) ? (
+                // The board knows nobody is on its tile, so there's nothing to ask.
+                <span className="flex flex-wrap items-center justify-end gap-2 text-emerald-300">
+                  📍 Nobody is on its tile
+                  <Button className="text-sm" onClick={() => setActiveId(trap.id)}>
+                    The board's wrong
+                  </Button>
+                </span>
               ) : (
                 <Button variant="danger" className="font-bold" onClick={() => setActiveId(trap.id)}>
                   Trigger it

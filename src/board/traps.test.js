@@ -4,7 +4,9 @@ import { createHero, gameReducer, initialState } from '../state/game.js'
 import { encounterTargetIds } from './encounters.js'
 import { boardMarkers, markerOnHeroTile } from './markers.js'
 import { normalizeTiles } from './tileDefs.js'
-import { heroesOnTrap, trapStepChoices } from './traps.js'
+import { heroesOnTrap, trapFindsNobody, trapStepChoices } from './traps.js'
+import { phaseTodo } from '../state/heroTurn.js'
+import { PHASES } from '../data/phases.js'
 
 // A made-up start tile (two tiles by the rules: 'start' on top, 'start/2' below) with
 // rooms north of it (t1, then t2) and one south of it (t3).
@@ -115,5 +117,41 @@ describe('Lava Flow spreading on the board', () => {
     const state = game([trap('lava-flow', { tile: 't1', tiles: ['t1', 'start'], card: { text: TEXT['lava-flow'], trap: { damage: 1, disable: 10 } } })], [0, 1])
     const next = gameReducer({ ...state, status: 'playing' }, { type: 'DISABLE_TRAP', trapId: 'lava-flow', heroId: state.heroes[0].id, roll: 20, free: true })
     expect(next.traps).toEqual([])
+  })
+})
+
+describe('Poisoned Dart Trap with nobody on its tile', () => {
+  const dart = (extra) => ({
+    id: 'dart', cardId: 'poisoned-dart-trap', name: 'Poisoned Dart Trap', type: 'trap',
+    card: { text: 'Trigger the trap during your Villain Phase: Attack each Hero on this tile.', trap: { attack: { bonus: 8, damage: 2, targets: 'trapTile' } } },
+    ...extra,
+  })
+  const villainPhase = (state) => ({ ...state, turn: { ...state.turn, heroIndex: 0, phase: PHASES.findIndex((p) => p.key === 'villain') } })
+
+  it("isn't owed in the Villain Phase when the board knows nobody is there", () => {
+    const base = game([], [0, 5])
+    const state = villainPhase({ ...base, traps: [dart({ tile: 't2', ownerId: base.heroes[0].id })] })
+    expect(trapFindsNobody(state, state.traps[0])).toBe(true)
+    expect(phaseTodo(state)).not.toContain('the Poisoned Dart Trap')
+  })
+
+  it('is still owed when a hero is on its tile', () => {
+    const base = game([], [0, -3])
+    const state = villainPhase({ ...base, traps: [dart({ tile: 't1', ownerId: base.heroes[0].id })] })
+    expect(trapFindsNobody(state, state.traps[0])).toBe(false)
+    expect(phaseTodo(state)).toContain('the Poisoned Dart Trap')
+  })
+
+  it('still asks when the marker has no saved tile', () => {
+    const base = game([], [0, 5])
+    const state = villainPhase({ ...base, traps: [dart({ ownerId: base.heroes[0].id })] })
+    expect(trapFindsNobody(state, state.traps[0])).toBe(false)
+    expect(phaseTodo(state)).toContain('the Poisoned Dart Trap')
+  })
+
+  it("waits for a moving trap to move before skipping it", () => {
+    const base = game([], [0, 5])
+    const state = { ...base, traps: [trap('whirling-blades', { tile: 't2', tracked: true })] }
+    expect(trapFindsNobody(state, state.traps[0])).toBe(false)
   })
 })

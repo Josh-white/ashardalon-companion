@@ -12,6 +12,7 @@ import { adjacent } from '../board/paths.js'
 import { baseId } from '../board/grid.js'
 import { boardAnswer } from '../board/checks.js'
 import { wrathPull } from '../board/monsters.js'
+import { trapFindsNobody } from '../board/traps.js'
 import { queueMoves, queueWandOfFear } from '../board/powerMoves.js'
 import { addCarpet } from '../board/items.js'
 import { activeVillains, buildDeck, findFoe, foes, heroLabel, lose, updateHero, validRoll, withLog, withMoment } from './gameHelpers.js'
@@ -180,7 +181,10 @@ export function phaseTodo(state, cards = {}) {
       else if (state.encounter || encounterCount(state, hero) > 0) todo.push('the encounter card')
     }
     for (const monster of state.monsters.filter((m) => m.ownerId === hero.id)) if (!acted.includes(monster.id)) todo.push(`the ${monster.name}'s turn`)
-    for (const trap of (state.traps ?? []).filter((t) => t.ownerId === hero.id && t.type === 'trap')) if (!acted.includes(trap.id)) todo.push(`the ${trap.name}`)
+    // A trap with nobody on its tile (the board knows) has nothing to do, so it isn't owed.
+    for (const trap of (state.traps ?? []).filter((t) => t.ownerId === hero.id && t.type === 'trap')) {
+      if (!acted.includes(trap.id) && !trapFindsNobody(state, trap)) todo.push(`the ${trap.name}`)
+    }
   }
   return todo
 }
