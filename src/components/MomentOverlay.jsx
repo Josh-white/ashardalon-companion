@@ -15,14 +15,14 @@ const STALE_MS = 8000
 // attack's animation (AttackFx plays it from FX_DELAY_MS for FX_MS, then lingers 800 ms).
 export function momentBusyMs(moment) {
   if (!moment) return 0
-  return moment.fx ? fxLeadMs(moment) + FX_DELAY_MS + FX_MS + 800 : SHOW_MS[moment.kind] ?? 2500
+  return fxLeadMs(moment) + (moment.fx ? FX_DELAY_MS + FX_MS + 800 : SHOW_MS[moment.kind] ?? 2500)
 }
 
 // How long this moment covers the board before something on the board should play: its
 // own screen, or for an attack, until the attack lands (a heal on a hit shows after it).
 export function momentCoverMs(moment) {
   if (!moment) return 0
-  return moment.fx ? fxLeadMs(moment) + FX_DELAY_MS + FX_IMPACT_MS + 300 : SHOW_MS[moment.kind] ?? 2500
+  return fxLeadMs(moment) + (moment.fx ? FX_DELAY_MS + FX_IMPACT_MS + 300 : SHOW_MS[moment.kind] ?? 2500)
 }
 
 // False while the latest big moment (dice, a defeat, the attack's animation) is still
@@ -115,7 +115,8 @@ function MomentCard({ moment, heroes, big = false }) {
 
   useEffect(() => {
     if (!moment || Date.now() - moment.at > STALE_MS) return
-    // A monster walking up to its hero is seen walking first; then the die comes up.
+    // A monster walking up to its hero is seen walking first; then the die comes up. (A Time
+    // Leap's monster card waits for the hero to vanish.)
     const lead = fxLeadMs(moment)
     setVisible(lead > 0 ? null : moment)
     const show = lead > 0 ? setTimeout(() => setVisible(moment), lead) : null
