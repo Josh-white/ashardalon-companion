@@ -14,6 +14,7 @@ import { cleanEmail, createAccess } from './access.js'
 import { createSignInList } from './signInList.js'
 import { createIdeaBox } from './ideas.js'
 import { createWorkshop } from './workshop.js'
+import { createForge, isForgePath } from './forge.js'
 import { createFriendLog } from './friendLog.js'
 import { readBody } from './readBody.js'
 import { normalizeCardFile } from '../src/data/cards.js'
@@ -390,6 +391,8 @@ export function startServer({
   const ideaBox = createIdeaBox(join(dirname(saveFile), 'ideas.json'))
   // The players' own 3D figures: what they asked for, and Claude's pictures back.
   const workshop = createWorkshop(workshopDir)
+  // The 🛠️ Hero Builder's saved figures sit in the same folder (server/forge.js).
+  const forge = createForge(workshopDir)
   // How much each friend plays, for the #friends page (server/friendLog.js).
   const friendLog = createFriendLog(join(dirname(saveFile), 'friends.json'))
   let { games: otherGames, finished } = loadGameList(gameListFile)
@@ -456,7 +459,7 @@ export function startServer({
     const reading = req.method === 'GET' || req.method === 'HEAD'
     if (path.startsWith('/art/')) return !reading
     if (path === '/ideas') return req.method !== 'POST'
-    return path === '/ideas.json' || path.startsWith('/ideas/') || path === '/friends.json' || path.startsWith('/sign-in-') || path === '/robot-check.json' || path === '/auto-update.json' || path === '/workshop.json' || path === '/workshop' || path.startsWith('/workshop/')
+    return path === '/ideas.json' || path.startsWith('/ideas/') || path === '/friends.json' || path.startsWith('/sign-in-') || path === '/robot-check.json' || path === '/auto-update.json' || path === '/workshop.json' || path === '/workshop' || path.startsWith('/workshop/') || isForgePath(path)
   }
 
   function respond(req, res, who) {
@@ -542,6 +545,7 @@ export function startServer({
     }
     if (ideaBox.handle(req, res, who.family ? null : who.email)) return
     if (workshop.handle(req, res)) return
+    if (forge.handle(req, res)) return
     // Friends hear only lines already recorded, so they never spend the ElevenLabs credits.
     if (narrator.handle(req, res, { recordedOnly: !who.family })) return
     serveStatic(staticDir, req, res)
