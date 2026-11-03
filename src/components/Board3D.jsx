@@ -8,7 +8,7 @@ import { TOKEN_COLORS } from './Board.jsx'
 import { useAttackFx } from './AttackFx.jsx'
 import { useHealFx } from './HealFx.jsx'
 import { canvasTexture, playAttack3D, playExit3D, playHeal3D } from './board3dFx.js'
-import { FLOOR_LOOKS, dressDungeon, stoneMaterials } from './dungeonLook3d.js'
+import { FLOOR_LOOKS, dressDungeon, hideTorches, stoneMaterials } from './dungeonLook3d.js'
 import { attachModel, detachModel, face, setDown, setWalking, stepModels } from './figureModels.js'
 import { FX_DELAY_MS, FX_MS } from '../board/attackFx.js'
 import { closeUpShot, restShot, tourShot, turnBy, VIEW_LABELS, viewAngles, VIEWS } from '../board/camera3d.js'
@@ -27,6 +27,38 @@ import { serverNow } from '../state/useSharedGame.js'
 const FLOOR_H = 0.16
 const ROCK_H = 0.55
 const WALL_H = 0.55
+const TALL_H = 1.5
+const CUT_H = 0.3
+
+// A block whose sides repeat the brick pattern up its height (rather than stretching it).
+function tallBox(w, h, d) {
+  const box = new THREE.BoxGeometry(w, h, d)
+  const uv = box.attributes.uv
+  // Faces in order +x, -x, +y, -y, +z, -z, four corners each; the sides' v runs up the wall.
+  for (const face of [0, 1, 4, 5]) for (let k = 0; k < 4; k++) uv.setY(face * 4 + k, uv.getY(face * 4 + k) * (h / ROCK_H))
+  return box
+}
+
+const seeThrough = (mat) =>
+  [].concat(mat).map((m) => {
+    const c = m.clone()
+    c.userData = {}
+    c.transparent = true
+    c.opacity = 0.22
+    c.depthWrite = false
+    return c
+  })
+
+// The side of a square that faces the camera: the way the camera looks from, to the
+// nearest quarter turn (south when it hasn't been placed yet).
+function frontSide(stage) {
+  const cam = stage.camera?.position
+  const target = stage.controls?.target
+  if (!cam || !target || (cam.x === target.x && cam.z === target.z)) return 'S'
+  const a = Math.atan2(cam.x - target.x, cam.z - target.z)
+  const q = Math.round(a / (Math.PI / 2))
+  return q === 0 ? 'S' : q === 1 ? 'E' : q === -1 ? 'W' : 'N'
+}
 const STEP_MS = 180
 const TORCH_LIGHTS = 6
 
@@ -128,10 +160,10 @@ function buildDungeon(stage, layout) {
   stage.center.set(cx, 0, cy)
   const at = (x, y) => [x + 0.5 - cx, y + 0.5 - cy]
   stage.at = at
+  stage.torchGroup = null
 
   const onExit = new Set(layout.exits.flatMap((e) => (e.type === 'stairs' ? e.squares.map(([x, y]) => `${x},${y}`) : [])))
   const floors = layout.squares.filter((s) => s.floor && !onExit.has(`${s.x},${s.y}`))
-  const rocks = layout.squares.filter((s) => !s.floor && !s.door)
   const doors = layout.squares.filter((s) => s.door)
   const matrix = new THREE.Matrix4()
   const color = new THREE.Color()
@@ -165,18 +197,13 @@ function buildDungeon(stage, layout) {
     dungeon.add(floorMesh)
   }
 
-  const rockMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, ROCK_H, 1), stone ? stone.rock : new THREE.MeshStandardMaterial({ roughness: 1 }), Math.max(rocks.length, 1))
-  rockMesh.count = rocks.length
-  rocks.forEach((s, i) => {
-    const [x, z] = at(s.x, s.y)
-    matrix.makeTranslation(x, ROCK_H / 2 - 0.1, z)
-    rockMesh.setMatrixAt(i, matrix)
-    const v = stone ? 0.75 + seeded(s.x * 13 + s.y * 3) * 0.3 : 0.16 + seeded(s.x * 13 + s.y * 3) * 0.06
-    rockMesh.setColorAt(i, color.setRGB(v * 1.05, v, v * 0.95))
-  })
-  rockMesh.castShadow = true
-  rockMesh.receiveShadow = true
-  dungeon.add(rockMesh)
+  // The rock and the walls go in their own group: on 'cutaway' they're rebuilt when the
+  // camera swings round to another side (see the tick's frontSide check).
+  stage.layout = layout
+  stage.wallGroup = new THREE.Group()
+  dungeon.add(stage.wallGroup)
+  stage.front = frontSide(stage)
+  buildWalls(stage)
 
   // A shut door: a banded wooden block on its square.
   const doorMat = new THREE.MeshStandardMaterial({ color: '#5b3a1e', roughness: 0.8 })
@@ -202,25 +229,6 @@ function buildDungeon(stage, layout) {
   dungeon.add(seamMesh)
 
   // Walls stand on the edge between squares (or round the outside of the dungeon).
-  const wallMesh = new THREE.InstancedMesh(
-    new THREE.BoxGeometry(1, WALL_H, stone ? 0.16 : 0.12),
-    stone ? stone.wall : new THREE.MeshStandardMaterial({ color: '#3a322c', roughness: 1 }),
-    Math.max(layout.walls.length, 1),
-  )
-  wallMesh.count = layout.walls.length
-  const turn = new THREE.Quaternion()
-  layout.walls.forEach((w, i) => {
-    const [x, z] = at(w.x, w.y)
-    const dx = w.side === 'E' ? 0.5 : w.side === 'W' ? -0.5 : 0
-    const dz = w.side === 'S' ? 0.5 : w.side === 'N' ? -0.5 : 0
-    turn.setFromAxisAngle(up, dx ? Math.PI / 2 : 0)
-    matrix.compose(new THREE.Vector3(x + dx, WALL_H / 2 - 0.1, z + dz), turn, new THREE.Vector3(1, 1, 1))
-    wallMesh.setMatrixAt(i, matrix)
-  })
-  wallMesh.castShadow = true
-  wallMesh.receiveShadow = true
-  dungeon.add(wallMesh)
-
   // Open edges glow cyan, like the flat board's: the next tile goes there.
   const edgeMat = new THREE.MeshBasicMaterial({ color: '#22d3ee', transparent: true, opacity: 0.55 })
   for (const e of layout.openEdges) {
@@ -262,7 +270,11 @@ function buildDungeon(stage, layout) {
   // Torches on the walls (and bones and rubble), with the board's darker torchlit air.
   // Torch lights left over (a small dungeon) stay dark.
   for (const light of stage.torchLights) light.intensity = 0
-  stage.dungeonAnimators = stone && stage.look !== 'stone' ? dressDungeon(dungeon, layout, at, { lights: stage.torchLights, wallH: WALL_H, props: stage.look === 'full' }) : []
+  stage.torchGroup = new THREE.Group()
+  dungeon.add(stage.torchGroup)
+  const tall = (stage.walls ?? 'low') !== 'low'
+  stage.dungeonAnimators = stone && stage.look !== 'stone' ? dressDungeon(stage.torchGroup, layout, at, { lights: stage.torchLights, wallH: tall ? 1.05 : WALL_H, props: stage.look === 'full' }) : []
+  hideTorches(stage.torchGroup, stage.walls === 'cutaway' ? stage.front : null)
   setAir(stage, stone && stage.look !== 'stone')
 
   // Shadows cover the whole dungeon.
@@ -270,6 +282,74 @@ function buildDungeon(stage, layout) {
   Object.assign(stage.moon.shadow.camera, { left: -span, right: span, top: span, bottom: -span, near: 1, far: span * 4 })
   stage.moon.shadow.camera.updateProjectionMatrix()
   stage.moon.position.set(-span * 0.6, span * 1.6, span * 0.5)
+}
+
+// The rock and walls (rebuilt on their own when the camera turns to another side and the
+// walls nearest it get cut low).
+function buildWalls(stage) {
+  const { layout, at, wallGroup: dungeon } = stage
+  disposeTree(dungeon)
+  dungeon.clear()
+  const stone = stage.look === 'plain' ? null : stoneMaterials()
+  const rocks = layout.squares.filter((s) => !s.floor && !s.door)
+  const matrix = new THREE.Matrix4()
+  const color = new THREE.Color()
+  const up = new THREE.Vector3(0, 1, 0)
+  const one = new THREE.Vector3(1, 1, 1)
+  // How tall the rock and walls stand (stage.walls): 'low' (under the figures), 'tall'
+  // (over them), 'cutaway' (tall, but the ones between the camera and the floor stay low)
+  // or 'fade' (tall, those ones see-through).
+  const style = stage.walls ?? 'low'
+  const high = style === 'low' ? ROCK_H : TALL_H
+  const front = stage.front
+  const floorAt = new Set(layout.squares.filter((s) => s.floor).map((s) => `${s.x},${s.y}`))
+  // Rock in front of floor (between it and the camera) hides that floor.
+  const rockFront = (s) => style !== 'low' && style !== 'tall' && floorAt.has(`${s.x - STEP[front][0]},${s.y - STEP[front][1]}`)
+  const rockMat = stone ? stone.rock : new THREE.MeshStandardMaterial({ roughness: 1 })
+  const rockSets = [
+    [rocks.filter((s) => !rockFront(s)), high, rockMat],
+    [rocks.filter(rockFront), style === 'cutaway' ? CUT_H : high, style === 'fade' ? seeThrough(rockMat) : rockMat],
+  ]
+  for (const [list, h, mat] of rockSets) {
+    if (list.length === 0) continue
+    const rockMesh = new THREE.InstancedMesh(tallBox(1, h, 1), mat, list.length)
+    list.forEach((s, i) => {
+      const [x, z] = at(s.x, s.y)
+      matrix.makeTranslation(x, h / 2 - 0.1, z)
+      rockMesh.setMatrixAt(i, matrix)
+      const v = stone ? 0.75 + seeded(s.x * 13 + s.y * 3) * 0.3 : 0.16 + seeded(s.x * 13 + s.y * 3) * 0.06
+      rockMesh.setColorAt(i, color.setRGB(v * 1.05, v, v * 0.95))
+    })
+    rockMesh.castShadow = true
+    rockMesh.receiveShadow = true
+    dungeon.add(rockMesh)
+  }
+
+  // A wall on the camera's side of its floor square hides that square.
+  const wallFront = (w) => style !== 'low' && style !== 'tall' && w.side === front
+  const wallMat = stone ? stone.wall : new THREE.MeshStandardMaterial({ color: '#3a322c', roughness: 1 })
+  const turn = new THREE.Quaternion()
+  const wallSets = [
+    [layout.walls.filter((w) => !wallFront(w)), high, wallMat],
+    [layout.walls.filter(wallFront), style === 'cutaway' ? CUT_H : high, style === 'fade' ? seeThrough(wallMat) : wallMat],
+  ]
+  for (const [list, h, mat] of wallSets) {
+    if (list.length === 0) continue
+    const wallMesh = new THREE.InstancedMesh(tallBox(1, h, stone ? 0.16 : 0.12), mat, list.length)
+    list.forEach((w, i) => {
+      const [x, z] = at(w.x, w.y)
+      const dx = w.side === 'E' ? 0.5 : w.side === 'W' ? -0.5 : 0
+      const dz = w.side === 'S' ? 0.5 : w.side === 'N' ? -0.5 : 0
+      turn.setFromAxisAngle(up, dx ? Math.PI / 2 : 0)
+      matrix.compose(new THREE.Vector3(x + dx, h / 2 - 0.1, z + dz), turn, one)
+      wallMesh.setMatrixAt(i, matrix)
+    })
+    wallMesh.castShadow = true
+    wallMesh.receiveShadow = true
+    dungeon.add(wallMesh)
+  }
+
+  if (stage.torchGroup) hideTorches(stage.torchGroup, style === 'cutaway' ? front : null)
 }
 
 // A tile's own shade: a little lighter or darker than its neighbours, steady for the game.
@@ -1019,7 +1099,7 @@ function fallDelay(moment, at) {
 
 // `taps` (a board that moves figures): { targets, selected, onSquare, onFigure, onItem,
 // onMarker, onBackground }, the same handlers the flat board uses. `calm`: see makeStage.
-export default function Board3D({ state, onFail, onSlow, taps = null, calm = false, look = 'full' }) {
+export default function Board3D({ state, onFail, onSlow, taps = null, calm = false, look = 'full', walls = 'cutaway' }) {
   const mountRef = useRef(null)
   const stageRef = useRef(null)
   const tapsRef = useRef(taps)
@@ -1057,6 +1137,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
     stage.still = stillWanted()
     stage.calm = calm
     stage.look = look
+    stage.walls = walls
     stage.heroModels = heroModels
     // Torch flicker, lava and fog keep the board drawing all the time: only on the big screen.
     stage.ambient = !stage.still && !calm
@@ -1095,6 +1176,11 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
       for (const node of stage.nodes.values()) {
         const p = node.position
         node.userData.card.rotation.set(-0.3, Math.atan2(stage.camera.position.x - p.x, stage.camera.position.z - p.z), 0, 'YXZ')
+      }
+      // Walls cut low on the camera's side follow it round.
+      if (stage.walls === 'cutaway' && stage.layout && frontSide(stage) !== stage.front) {
+        stage.front = frontSide(stage)
+        buildWalls(stage)
       }
       stage.renderer.render(stage.scene, stage.camera)
       const torches = stage.ambient && [...stage.nodes.values()].some((n) => n.userData.torch?.visible)
