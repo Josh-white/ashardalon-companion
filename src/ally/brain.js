@@ -225,8 +225,15 @@ export function attackOptions(state, hero, { atWill = false, all: every = false 
     const kills = (m) => damage >= figureHp(m)
     // Finish off what it can, then the weakest, villains first among equals.
     let order = [...inReach].sort((a, b) => Number(kills(b)) - Number(kills(a)) || Number(Boolean(b.villain)) - Number(Boolean(a.villain)) || figureHp(a) - figureHp(b))
-    // Trapping Shot: every monster it attacks is on the first one's tile.
-    if (effects.oneTile) order = order.filter((m) => targetAllowed(state, hero, effects, m, [order[0].id]))
+    // Trapping Shot, Hurled Breath, Shock Sphere: every monster it attacks is on one tile. A power
+    // that hits them all takes the tile with the most to hit (finishing blows count double).
+    if (effects.oneTile) {
+      const group = (first) => order.filter((m) => targetAllowed(state, hero, effects, m, [first.id]))
+      const worth = (list) => list.length + list.filter(kills).length
+      const anchor = maxRolls(power) === Infinity ? order.reduce((best, m) => (worth(group(m)) > worth(group(best)) ? m : best), order[0]) : order[0]
+      order = group(anchor)
+      order = [anchor, ...order.filter((m) => m !== anchor)]
+    }
     const limit = maxRolls(power)
     let picked
     if (effects.sameTarget) picked = Array(limit).fill(order[0].id)

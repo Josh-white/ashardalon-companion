@@ -8,6 +8,7 @@ import { useCards } from '../state/useCards.js'
 import { HeroChoice, InReach, MonsterChoice } from './Pickers.jsx'
 import { fanUseBlocked, foesInReach, isCharmable, nearestOtherFoe, newestMonster, resolveUse, trapsOnTile } from '../state/fanPowers.js'
 import { heroesInReach } from '../board/encounters.js'
+import { fearAllies } from '../board/powerMoves.js'
 import { Button } from './ui.jsx'
 
 // compact: two short lines (name, then type · attack · damage) for the narrow column beside the board.
@@ -95,7 +96,12 @@ function UsePanel({ state, hero, power, dispatch, onClose }) {
     setChosen([id])
     setCondition(null)
   }
-  const toggle = (id) => setChosen((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]))
+  // Cause Fear works on one tile: on the virtual board, an ally on another tile starts a new pick.
+  const fearTiles = use.causeFear ? fearAllies(state, hero.id) : null
+  const fearNear = fearTiles ? Object.values(fearTiles).flat() : null
+  const tileOf = (id) => (fearTiles ? Object.keys(fearTiles).find((t) => fearTiles[t].includes(id)) : null)
+  const fearToggle = (id) =>
+    setChosen((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list.filter((x) => !fearTiles || tileOf(x) === tileOf(id)), id]))
   // One for the Team: there has to be another hero's encounter card to take.
   const encounter = state.encounter
   const takeable = Boolean(encounter && !encounter.attacked && encounter.heroId !== hero.id)
@@ -195,8 +201,12 @@ function UsePanel({ state, hero, power, dispatch, onClose }) {
       )}
       {use.causeFear && (
         <>
-          <p className="text-zinc-200">Tap each ally on that tile who is next to a monster. Each gets an at-will attack at +2.</p>
-          <HeroChoice heroes={others} chosen={chosen} onToggle={toggle} />
+          <p className="text-zinc-200">
+            Pick a tile within 1 tile of {hero.name}: tap each ally on it who is next to a monster. Each gets an at-will attack at +2. Then the monsters left on that tile run.
+          </p>
+          <InReach items={others} near={fearNear}>
+            {(shown) => <HeroChoice heroes={shown} chosen={chosen} onToggle={fearToggle} />}
+          </InReach>
         </>
       )}
       {use.pick && (

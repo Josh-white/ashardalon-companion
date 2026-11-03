@@ -10,6 +10,7 @@ import { distances, tilesBetween } from '../board/paths.js'
 import { boardGrid } from '../board/play.js'
 import { HERO_TOKENS, movableToken, sphereOf, sphereVictims, tokenMoveTargets, tokenTargets } from '../board/heroTokens.js'
 import { heroesInReach } from '../board/encounters.js'
+import { fearAllies } from '../board/powerMoves.js'
 import { foesInRange } from '../board/monsters.js'
 import { effectsOf, pendingDodge, wolfBlocked, wolfDodge } from '../data/powerEffects.js'
 import { hasAbility } from '../data/heroes.js'
@@ -165,8 +166,12 @@ function approaching(state, hero) {
 }
 
 // Other heroes who'd get an extra attack from Cause Fear: ones with an at-will in reach.
+// The allies Cause Fear helps: those on the one tile (within 1 tile of the cleric, next to a
+// monster) with the most heroes who have an at-will in reach.
 function fearHelpers(state, hero, canAttack) {
-  return standingHeroes(state).filter((h) => h.id !== hero.id && !h.tokens?.refuge && canAttack(h))
+  const byTile = fearAllies(state, hero.id) ?? {}
+  const groups = Object.values(byTile).map((ids) => standingHeroes(state).filter((h) => ids.includes(h.id) && !h.tokens?.refuge && canAttack(h)))
+  return groups.sort((a, b) => b.length - a.length)[0] ?? []
 }
 
 // A daily that's better than the hero's best attack right now: Flaming Sphere on a tile of

@@ -158,6 +158,19 @@ describe('hero attacks on the board', () => {
     expect(powerRange('Swap places with a Hero within 1 tile. Attack a Monster within 2 tiles.')).toBeNull()
     // The range can come after the first mention of the monsters.
     expect(powerRange('Attack up to two Monsters. Each can be on your tile or within 1 tile of you.')).toBe('within1')
+    expect(powerRange('Attack one Monster on your tile or on any tile within 2 tiles of you.')).toBe('within2')
+  })
+
+  // Made-up wordings shaped like the real cards'.
+  it("stops reading at what happens after the roll, and the first reach the card says wins", () => {
+    // Acrobatic Onslaught: the 2 tiles are where the hero lands, not the attack's reach.
+    expect(powerRange('Attack one adjacent Monster.\nHit or Miss: Place your Hero on any tile within 2 tiles of where you started.')).toBe('adjacent')
+    expect(powerRange('Attack one adjacent Monster. If you miss, place it within 2 tiles.')).toBe('adjacent')
+    expect(powerRange('Attack one adjacent Monster. After the attack, choose a Monster within 1 tile.')).toBe('adjacent')
+    // One Hundred Leaves: it attacks its own tile; the "within 1 tile" is where they're moved.
+    expect(powerRange('Attack all Monsters on your tile. Move all Monsters on your tile to any space within 1 tile of you after the attack.')).toBe('sameTile')
+    // Hypnotism still reaches within 1 tile, its "adjacent" comes later.
+    expect(powerRange('Choose a Monster within 1 tile of you. Move that Monster 1 tile. If it ends adjacent to another Monster, attack it.')).toBe('within1')
   })
 
   it('offers only the monsters in reach, and says how far each is', () => {

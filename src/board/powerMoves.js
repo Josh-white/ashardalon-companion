@@ -31,6 +31,7 @@ import { adjacent, distances, reachable, tilesBetween } from './paths.js'
 import { newestMonster } from '../state/fanPowers.js'
 import { heroesFor } from './tactics.js'
 import { boardGrid, moveSpeed, occupied, placeToken } from './play.js'
+import { effectsOf } from '../data/powerEffects.js'
 
 const parse = (k) => k.split(',').map(Number)
 
@@ -108,15 +109,63 @@ export function pathBack(state) {
   return withPassed({ ...placed, turn: { ...placed.turn, boardMove: { ...move, steps: [{ ...s, trail }, ...rest] } } })
 }
 
-// Cancel a power's walk (Whirling Mantis Step) before its attack: the hero goes back to where
-// the walk began and the power forgets the walk and the monsters it passed, so it can be
-// walked again later (or the hero moves normally first).
-export function cancelPath(state) {
-  const path = pathOf(state)
-  if (!path) return state
+// A power's move before its attack (Charge, Divine Challenge, Whirling Mantis Step...), started
+// with START_BOARD_MOVE: the move is marked `before`, and `origins` keeps where each figure it
+// moved stood, so it can be called off.
+export function startBeforeMove(state, hero, power) {
+  const cleared = cancelBeforeMove(state)
+  const marked = { ...cleared, turn: { ...cleared.turn, beforeMoved: power.id } }
+  const queued = queueMoves(marked, hero, power, effectsOf(power).board?.before)
+  const move = queued.turn.boardMove
+  if (!move || move === marked.turn.boardMove) return queued
+  // The heroes' trails this turn, put back too on a cancel (Volcanic Vapors, Dwarven Hammer).
+  const trails = { heroesMoved: marked.turn.heroesMoved ?? null, heroTiles: marked.turn.heroTiles ?? null }
+  return { ...queued, turn: { ...queued.turn, boardMove: { ...move, before: true, origins: {}, trails } } }
+}
+
+// Cancel a power's move before its attack (the ✕ Cancel on the board, or picking another
+// power): every figure it moved goes back where it stood, and the power forgets the move, the
+// monsters it walked past and the one it moved, so it can be done again later (or the hero
+// moves normally first, or attacks with another power).
+export function cancelBeforeMove(state) {
   const move = state.turn.boardMove
-  const placed = placeToken(state, move.heroId, path.trail[0])
-  return { ...placed, turn: { ...placed.turn, boardMove: null, powerPassed: null, beforeMoved: null } }
+  if (!move?.before && !pathOf(state)) return state
+  const back = { ...(move.origins ?? {}) }
+  const path = pathOf(state)
+  if (path) back[move.heroId] = path.trail[0]
+  // Only figures still on the board go back (a monster a Blade Barrier finished stays gone).
+  const tokens = { ...state.board.tokens }
+  for (const [id, at] of Object.entries(back)) if (tokens[id]) tokens[id] = [at[0], at[1]]
+  const trails = move.trails ? { heroesMoved: move.trails.heroesMoved ?? undefined, heroTiles: move.trails.heroTiles ?? undefined } : {}
+  const placed = { ...state, board: { ...state.board, tokens }, turn: { ...state.turn, ...trails, boardMove: null } }
+  return forgetPowerMove(placed, move.heroId, move.source)
+}
+
+// The power's move and what it remembered (the walk's monsters, the monster it moved) are done with.
+function forgetPowerMove(state, heroId, source) {
+  const t = state.turn
+  return {
+    ...state,
+    turn: {
+      ...t,
+      beforeMoved: null,
+      powerPassed: t.powerPassed?.heroId === heroId ? null : t.powerPassed ?? null,
+      powerMoved: t.powerMoved && (!source || t.powerMoved.source === source) ? null : t.powerMoved ?? null,
+    },
+  }
+}
+
+// The hero attacked (or the Hero Phase ended): a power's move before an attack that was
+// still waiting is dropped where it stands, and the turn forgets that power's move. An attack
+// that isn't the hero's attack (Hurled Breath, a Throwing Shield: `free`) leaves another
+// power's move alone.
+export function endBeforeMove(state, heroId, { free = false, source = null } = {}) {
+  const move = state.turn.boardMove
+  const waiting = Boolean(move?.before && move.heroId === heroId)
+  if (free && !(waiting && move.source === source)) return state
+  const ended = waiting ? { ...state, turn: { ...state.turn, boardMove: null } } : state
+  if (!waiting && !state.turn.beforeMoved && state.turn.powerPassed?.heroId !== heroId && !state.turn.powerMoved) return state
+  return forgetPowerMove(ended, heroId, null)
 }
 
 // A hero's own move after a finished power walk (but before its attack) means the walk is
@@ -127,8 +176,33 @@ export function forgetPassed(state, heroId) {
   return { ...state, turn: { ...state.turn, powerPassed: null, beforeMoved: null } }
 }
 
+// Cause Fear: "choose a tile within 1 tile of you; each ally on that tile adjacent to a
+// monster can make an at-will attack". The allies who could, by the tile they're on:
+// { [tile]: [hero ids] }, or null off the board (the players pick).
+export function fearAllies(state, heroId) {
+  const self = state.board?.tokens[heroId]
+  if (!self) return null
+  const grid = boardGrid(state.board)
+  const foes = foeTokens(state)
+  const byTile = {}
+  for (const h of heroTokens(state)) {
+    if (h.id === heroId || tilesBetween(grid, self, h.at) > 1 || !foes.some((f) => adjacent(grid, h.at, f.at))) continue
+    const tile = grid.get(key(h.at))?.area
+    byTile[tile] = [...(byTile[tile] ?? []), h.id]
+  }
+  return byTile
+}
+
+// The tile Cause Fear was cast on: the picked allies' tile on the virtual board, else the cleric's own.
+export function fearTile(state, heroId, allyIds = []) {
+  if (!state.board?.tokens[heroId]) return null
+  const grid = boardGrid(state.board)
+  const at = allyIds.map((id) => state.board.tokens[id]).find(Boolean) ?? state.board.tokens[heroId]
+  return grid.get(key(at))?.area ?? null
+}
+
 // Cause Fear: once the allies' extra attacks are done (and no other move is waiting), each
-// monster figure still on the cleric's tile goes onto a tile within 2 tiles of the cleric.
+// monster figure still on the tile it was cast on goes onto a tile within 2 tiles of the cleric.
 export function queueFearMove(state) {
   const fear = state.turn.causeFear
   if (!fear || !state.board || state.turn.boardMove) return state
@@ -138,7 +212,7 @@ export function queueFearMove(state) {
   const cleared = { ...state, turn: { ...state.turn, causeFear: null } }
   if (!self) return cleared
   const grid = boardGrid(state.board)
-  const tile = grid.get(key(self))?.area
+  const tile = fear.tile ?? grid.get(key(self))?.area
   const tokens = foeTokens(state).filter((f) => grid.get(key(f.at))?.area === tile).map((f) => f.id)
   const steps = tokens.map(() => ({ pick: 'listed', to: 'tileWithin', n: 2 }))
   return queueMoves(cleared, hero, { name: fear.source }, steps, { tokens })
@@ -417,7 +491,7 @@ export function boardMove(state, action) {
     const me = state.turn.boardMove.heroId
     if (!moveChoices(state).includes(id)) return state
     const [a, b] = [state.board.tokens[me], state.board.tokens[id]]
-    const swapped = placeToken(placeToken(state, me, b), id, a)
+    const swapped = placeToken(placeToken(withOrigins(state, [me, id]), me, b), id, a)
     // `speedCost: n`: the swap costs the hero n squares of its next walk (Yer Own Size!).
     const cost = s.speedCost > 0 ? { ...swapped, turn: { ...swapped.turn, speedLoss: { heroId: me, n: s.speedCost } } } : swapped
     return nextStep(cost)
@@ -432,13 +506,22 @@ export function boardMove(state, action) {
     const walked = withPassed({ ...placed, turn: { ...placed.turn, boardMove: { ...move, steps: [{ ...s, trail }, ...move.steps.slice(1)] } } })
     return trail.length - 1 >= path.total ? nextStep(walked) : walked
   }
-  const placed = placeToken(state, id, to)
+  const placed = placeToken(withOrigins(state, [id]), id, to)
   // The last figure a power moved (Hypnotism attacks a monster next to it).
   const moved = { ...placed, turn: { ...placed.turn, powerMoved: { source: placed.turn.boardMove.source, id } } }
   const move = moved.turn.boardMove
   // A listed figure is moved once, so it isn't offered again for the next step.
   const tokens = move.tokens?.filter((t) => t !== id)
   return nextStep(tokens ? { ...moved, turn: { ...moved.turn, boardMove: { ...move, tokens } } } : moved)
+}
+
+// A power's move before its attack keeps where each figure it moves stood first (see cancelBeforeMove).
+function withOrigins(state, ids) {
+  const move = state.turn.boardMove
+  if (!move?.before) return state
+  const origins = { ...move.origins }
+  for (const id of ids) if (!origins[id] && state.board.tokens[id]) origins[id] = state.board.tokens[id]
+  return { ...state, turn: { ...state.turn, boardMove: { ...move, origins } } }
 }
 
 // Hypnotism: the monster the power moved, and the monsters (ids) it ended up next to.

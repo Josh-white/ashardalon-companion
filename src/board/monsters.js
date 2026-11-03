@@ -137,18 +137,26 @@ export function closestTarget(state, monsterId) {
   return closestOf(boardGrid(state.board), at, stepTargets(state, { move: 'toward' }))
 }
 
-// How far a power reaches, read from its card text before "Hit:": "an adjacent monster",
-// "within 2 tiles", "on your tile". Null when the text doesn't say, or when the hero moves,
-// swaps or is placed before choosing the monster (Charge), so every monster is offered.
+// How far a power reaches, read from its card text up to what happens after the roll ("Hit:",
+// "Hit or Miss:", "If you hit", "After the attack"): "an adjacent monster", "within 2 tiles",
+// "on your tile". The first of them the card says wins ("Attack all Monsters on your tile. Move
+// them within 1 tile" reaches its own tile), and "on your tile or any tile within 1 tile" is
+// within 1. Null when the text doesn't say, or when the hero moves, swaps or is placed before
+// choosing the monster (Charge), so every monster is offered.
 export function powerRange(text) {
-  const words = String(text ?? '').split(/hit:/i)[0].toLowerCase()
+  const words = String(text ?? '').split(/hit or miss:|\bhit:|\bmiss:|\bif you (?:hit|miss)\b|\bafter the attacks?\b/i)[0].toLowerCase()
   const beforeMonster = words.split('monster')[0]
   if (/\bmove|\bswap|place your hero/.test(beforeMonster)) return null
-  const within = /within (\d+) tiles?/.exec(words)
-  if (within) return `within${Math.min(3, Number(within[1]))}`
-  if (/adjacent/.test(words)) return 'adjacent'
-  if (/(on|in) your tile|on the same tile/.test(words)) return 'sameTile'
-  return null
+  const either = /(?:on|in) your tile,? or (?:on )?(?:any tile )?within (\d+) tiles?/.exec(words)
+  if (either) return `within${Math.min(3, Number(either[1]))}`
+  const found = [
+    [/within (\d+) tiles?/.exec(words), (m) => `within${Math.min(3, Number(m[1]))}`],
+    [/adjacent/.exec(words), () => 'adjacent'],
+    [/(?:on|in) your tile|on the same tile/.exec(words), () => 'sameTile'],
+  ].filter(([m]) => m)
+  if (found.length === 0) return null
+  const [m, name] = found.sort((a, b) => a[0].index - b[0].index)[0]
+  return name(m)
 }
 
 // The monsters and villains a hero can reach with a range: any of a monster's figures will

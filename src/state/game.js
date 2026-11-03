@@ -17,7 +17,7 @@ import { escapeAtPhaseEnd, escapedHero } from '../board/exits.js'
 import { applyPasses, highAlertPass } from './passMonsters.js'
 import { dropItem, moveHeroToken, syncHeroTokens, trippedTokens } from '../board/heroTokens.js'
 import { moveHero, moveToken, newBoard, placeNewFigures, pruneTokens } from '../board/play.js'
-import { boardMove, cancelPath, forgetPassed, pathBack, queueFearMove, queueFoeStep, queueHitMoves, queueMonsterControl, queueMoves, skipBoardMove } from '../board/powerMoves.js'
+import { boardMove, cancelBeforeMove, endBeforeMove, forgetPassed, pathBack, queueFearMove, queueFoeStep, queueHitMoves, queueMonsterControl, skipBoardMove, startBeforeMove } from '../board/powerMoves.js'
 import { addTreasureToken, flyCarpet, pickUpTreasure, placeItem, removeItem } from '../board/items.js'
 import { trapStep } from '../board/traps.js'
 import { activeVillains, buildDeck, clamp, heroLabel, lose, markUsed, newId, shuffle, toggle, updateHero, updateMonster, validRoll, withCast, withLog, withMoment } from './gameHelpers.js'
@@ -312,7 +312,7 @@ function reduce(state, action) {
     case 'PATH_BACK':
       return pathBack(state)
     case 'CANCEL_BOARD_MOVE':
-      return cancelPath(state)
+      return cancelBeforeMove(state)
 
     case 'SKIP_BONUS_ATTACK': {
       // An ally passes on a Cause Fear or Acrobatic Onslaught attack.
@@ -328,9 +328,9 @@ function reduce(state, action) {
       const hero = state.heroes.find((h) => h.id === action.heroId)
       const power = hero?.powers.find((p) => p.id === action.powerId && !p.used)
       if (!power) return state
-      // The power's attack is now open to the computer heroes (src/ally/brain.js).
-      const moved = { ...state, turn: { ...state.turn, beforeMoved: power.id } }
-      return queueMoves(moved, hero, power, effectsOf(power).board?.before)
+      // The power's attack is now open to the computer heroes (src/ally/brain.js). Another
+      // power's move still waiting is called off first.
+      return startBeforeMove(state, hero, power)
     }
 
     case 'MOVE_HERO': {
@@ -1006,7 +1006,8 @@ function reduce(state, action) {
         // Trapping Attack (a fan Assassin): the traps the hero armed go off as the Villain Phase starts.
         if (PHASES[phase + 1]?.key === 'villain') return springArmedTraps(next, next.heroes[heroIndex])
         if (PHASES[phase].key !== 'hero') return next
-        const out = endHeroPhase(next, next.heroes[heroIndex], action.roll)
+        // A power's move before an attack that never came is over with the Hero Phase.
+        const out = endHeroPhase(endBeforeMove(next, next.heroes[heroIndex].id), next.heroes[heroIndex], action.roll)
         // Ending the Hero Phase on the exit's stairs gets the hero out (virtual board).
         return escapeAtPhaseEnd(out, out.heroes[heroIndex])
       }

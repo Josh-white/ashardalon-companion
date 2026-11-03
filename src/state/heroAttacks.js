@@ -7,7 +7,7 @@ import { effectsOf, maxRolls, onHitHeals, shadowAfter, shadowKept, wolfBlocked, 
 import { addStatus, attackedStatus } from './monsterStatus.js'
 import { summonPets } from './pets.js'
 import { applyFanUse, fanUseBlocked, resolveUse, sendSeeker, targetAllowed } from './fanPowers.js'
-import { queueFearMove, queueMoves } from '../board/powerMoves.js'
+import { endBeforeMove, fearTile, queueFearMove, queueMoves } from '../board/powerMoves.js'
 import { heroesInReach } from '../board/encounters.js'
 import { clamp, findFoe, foes, heroLabel, markUsed, updateHero, updateMonster, validRoll, withCast, withLog, withMoment } from './gameHelpers.js'
 import { spendItem } from './treasureDeck.js'
@@ -151,6 +151,12 @@ export function heroAttack(state, action) {
   }
 
   if (itemMove && state.board && inHeroPhase(state, hero)) next = { ...next, turn: { ...next.turn, boardMoves: (next.turn.boardMoves ?? 0) + 1 } }
+  // A power's move before an attack that was still waiting (Taunting Advance's pull, or another
+  // power's Charge the player started) is over: this was the attack.
+  next = endBeforeMove(next, hero.id, { free: freeAttack || Boolean(extraAttack), source: source.name })
+  // Cleric's Shield lasts "until you use this power again": using it ends the old shield, even
+  // when nobody is picked for the new one.
+  if (effects.after === 'shield') next = { ...next, heroes: next.heroes.map((h) => (h.shieldedBy === hero.id ? { ...h, shieldedBy: null } : h)) }
 
   // On the virtual board a power that moves a hero waits for the player to pick the square.
   // Wrathful Thunder: on the virtual board the app picks the monster on the hero's tile and
@@ -228,6 +234,9 @@ export function rerollAttack(state, action) {
     const effects = effectsOf(power)
     if (power?.type === 'daily') next = markUsed(next, hero.id, power.id)
     if (effects.onHit?.healSelf && !last.rolls.some((r) => r.hit)) next = healHero(next, hero.id, effects.onHit.healSelf, power.name)
+    // A status the hit gives (a fan power's Trapped, Slowed...), as a first roll's hit would.
+    if (effects.onHit?.status && !hurt.defeated) next = addStatus(next, monster.id, effects.onHit.status, power.name)
+    if (!last.rolls.some((r) => r.hit)) next = hitMovesAfterReroll(next, hero, power, last)
   }
   if (action.roll === 20) next = offerBrutalRecovery({ ...next, turn: { ...next.turn, natural20: hero.id } })
   const won = defeatDetails(next, hurt.defeated ? [monster] : [], hero.id)
@@ -238,6 +247,21 @@ export function rerollAttack(state, action) {
     detail: won.details.join(' '),
     rolls: [{ monsterId: monster.id, label: monster.name, value: action.roll, total: result.total, ac: monster.ac, hit: result.hit, outcome: result.outcome }],
   })
+}
+
+// The power's board moves were queued for a miss: now that the roll again hit, the moves only
+// a hit makes (Distracting Jab's monster 1 square) come first, and those only a miss makes go.
+function hitMovesAfterReroll(state, hero, power, last) {
+  const steps = effectsOf(power).board?.after
+  if (!state.board || !Array.isArray(steps) || !steps.some((s) => s.hit || s.miss)) return state
+  const attacked = last.rolls.map((r) => r.monsterId)
+  const waiting = state.turn.boardMove
+  if (waiting && (waiting.heroId !== hero.id || waiting.source !== power.name)) return state
+  const rest = (waiting?.steps ?? []).filter((s) => !s.miss)
+  const cleared = { ...state, turn: { ...state.turn, boardMove: null } }
+  // Queued anew with the hit's steps first, then whatever of the miss's moves were still waiting.
+  const hitSteps = steps.filter((s) => s.hit)
+  return queueMoves(cleared, hero, power, [...hitSteps, ...rest], { attacked, hit: true, shadow: Boolean(hero.tokens?.shadow), tokens: waiting?.tokens })
 }
 
 // The question a power asks after its attack: who gets healed or shielded, or which
@@ -442,9 +466,12 @@ export function usePower(state, action) {
     next = withLog(next, `${hero.name} takes ${taken.card.name} instead, as if ${hero.name} drew it.`)
   }
   if (use.causeFear) {
-    const extras = heroIds.filter((id) => id !== hero.id).map((heroId) => ({ heroId, bonus: 2, source: power.name }))
-    // Afterwards the monsters left on the cleric's tile are moved (on the virtual board).
-    const causeFear = { heroId: hero.id, source: power.name }
+    // The allies the players picked (on the virtual board the picker offers the ones on one tile
+    // within 1 tile of the cleric, next to a monster: fearAllies).
+    const allies = heroIds.filter((id) => id !== hero.id)
+    const extras = allies.map((heroId) => ({ heroId, bonus: 2, source: power.name }))
+    // Afterwards the monsters left on that tile are moved (on the virtual board).
+    const causeFear = { heroId: hero.id, source: power.name, tile: fearTile(state, hero.id, allies) }
     next = { ...next, turn: { ...next.turn, bonusAttacks: [...(next.turn.bonusAttacks ?? []), ...extras], causeFear } }
     next = queueFearMove(next)
   }
