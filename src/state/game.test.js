@@ -47,6 +47,15 @@ describe('heroes', () => {
     expect(gameReducer(state, { type: 'LEVEL_UP', heroId: hero.id })).toBe(state)
   })
 
+  it('levels up for 3 XP on Story', () => {
+    let state = { ...startGame(), difficulty: 'story' }
+    const hero = state.heroes[0]
+    state = { ...state, xp: 3, turn: { ...state.turn, natural20: hero.id } }
+    state = gameReducer(state, { type: 'LEVEL_UP', heroId: hero.id })
+    expect(state.heroes[0].level).toBe(2)
+    expect(state.xp).toBe(0)
+  })
+
   it('only levels up after that hero rolls a natural 20 this turn', () => {
     const state = { ...startGame(), xp: 6 }
     expect(gameReducer(state, { type: 'LEVEL_UP', heroId: state.heroes[0].id })).toBe(state)

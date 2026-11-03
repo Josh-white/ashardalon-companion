@@ -1,7 +1,7 @@
 import { withAttackFx, withMomentQueue } from '../board/attackFx.js'
 import { withHealFx } from '../board/healFx.js'
-import { difficultyOf, encounterCancelCost, surgeHp } from '../data/difficulty.js'
-import { hasAbility, HERO_TEMPLATES, MAX_LEVEL, STARTING_SURGES, templateFor, XP_TO_LEVEL_UP } from '../data/heroes.js'
+import { difficultyOf, encounterCancelCost, levelUpCost, surgeHp } from '../data/difficulty.js'
+import { hasAbility, HERO_TEMPLATES, MAX_LEVEL, STARTING_SURGES, templateFor } from '../data/heroes.js'
 import { monsterArt } from '../data/art.js'
 import { PHASES } from '../data/phases.js'
 import { heroItems } from '../data/items.js'
@@ -580,8 +580,8 @@ function reduce(state, action) {
 
     case 'LEVEL_UP': {
       const hero = state.heroes.find((h) => h.id === action.heroId)
-      if (!hero || hero.level >= MAX_LEVEL || state.xp < XP_TO_LEVEL_UP || state.turn.natural20 !== hero.id) return state
-      return levelUp({ ...state, xp: state.xp - XP_TO_LEVEL_UP }, hero)
+      if (!hero || hero.level >= MAX_LEVEL || state.xp < levelUpCost(state) || state.turn.natural20 !== hero.id) return state
+      return levelUp({ ...state, xp: state.xp - levelUpCost(state) }, hero)
     }
 
     case 'ADD_MONSTER': {

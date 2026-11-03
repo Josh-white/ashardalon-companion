@@ -7,7 +7,7 @@ export const PHASES = [
     steps: [
       'If your hero is at 0 HP, spend a healing surge first.',
       'Move and attack, attack and move, or move twice.',
-      'Rolled a natural 20 with 5 XP? You can level up!',
+      'Rolled a natural 20 with enough XP? You can level up!',
     ],
   },
   {

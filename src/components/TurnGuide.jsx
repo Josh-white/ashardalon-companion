@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
-import { HERO_COLORS, XP_TO_LEVEL_UP } from '../data/heroes.js'
+import { HERO_COLORS } from '../data/heroes.js'
+import { levelUpCost } from '../data/difficulty.js'
 import { PHASES } from '../data/phases.js'
 import { surgeHp } from '../data/difficulty.js'
 import { CurseNotes, PhaseChecks, DisableTraps, EncounterStep, EnvironmentBanner, PassMonsters, encountersLeft, TrapTurns } from './Encounters.jsx'
@@ -153,14 +154,14 @@ function HeroPhase({ state, hero, dispatch }) {
         <Note tone="good">
           <p>
             Natural 20!{' '}
-            {state.xp >= XP_TO_LEVEL_UP
-              ? `Spend ${XP_TO_LEVEL_UP} XP to reach level 2.`
-              : `Leveling up takes ${XP_TO_LEVEL_UP} XP, and the party has ${state.xp}.`}
+            {state.xp >= levelUpCost(state)
+              ? `Spend ${levelUpCost(state)} XP to reach level 2.`
+              : `Leveling up takes ${levelUpCost(state)} XP, and the party has ${state.xp}.`}
           </p>
           <Button
             variant="gold"
             className="mt-2"
-            disabled={state.xp < XP_TO_LEVEL_UP}
+            disabled={state.xp < levelUpCost(state)}
             onClick={() => dispatch({ type: 'LEVEL_UP', heroId: hero.id })}
           >
             Level up

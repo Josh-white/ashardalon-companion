@@ -25,13 +25,13 @@ import { powerNumber } from '../state/combat.js'
 import { foes } from '../state/gameHelpers.js'
 import { attackGone, canBecomeWolf, naturesHealingOk } from '../state/heroTurn.js'
 import { petsDue, petsOf } from '../state/pets.js'
-import { XP_TO_LEVEL_UP } from '../data/heroes.js'
 import { attackItems, heroItems, itemTrapBonus } from '../data/items.js'
 import { boardMarkers, trapsToDisable } from '../board/markers.js'
 import { treasureInReach } from '../board/items.js'
 import { escapeBlockers } from '../state/adventure.js'
 import { escapeGoal, escapeHold, exitName, exitSquares } from '../board/exits.js'
 import { trapDisable } from '../state/encounterRules.js'
+import { levelUpCost } from '../data/difficulty.js'
 import { cancelEncounter } from './cancelEncounter.js'
 import { badlyHurt, d20, heroById, missingHp, parse } from './helpers.js'
 import { doorGoals, doorStep, goalDoor } from './doors.js'
@@ -800,7 +800,7 @@ export function allyStep(state, { powers = [], roll = d20, cards = {} } = {}) {
   if (phase === 'hero') {
     // A move waiting for someone else, or someone's extra attack: those come first.
     if (state.turn.boardMove || (state.turn.bonusAttacks ?? []).length > 0) return null
-    if (hero.level === 1 && state.turn.natural20 === hero.id && state.xp >= XP_TO_LEVEL_UP) {
+    if (hero.level === 1 && state.turn.natural20 === hero.id && state.xp >= levelUpCost(state)) {
       return { action: { type: 'LEVEL_UP', heroId: hero.id }, say: `Natural 20! ${hero.name} levels up.` }
     }
     // Nature's Healing and Wolf Form come before anything else in the Hero Phase.
