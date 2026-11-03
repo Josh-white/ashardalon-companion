@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { buildFigure, disposeFigure, frameFor, pose } from './figure.js'
+import { buildFigure, disposeFigure, figureClips, frameFor, pose } from './figure.js'
 import { PARTS, SLOTS } from './parts.js'
 import { MOVES } from './moves.js'
 import { DEFAULT_RECIPE, randomRecipe, STARTERS } from './recipes.js'
@@ -78,5 +78,20 @@ describe('Hero Builder figures', () => {
   it('ignores parts it does not know', () => {
     const figure = buildFigure({ ...DEFAULT_RECIPE, parts: { ...DEFAULT_RECIPE.parts, hand: { id: 'laser-cannon', shape: {} } } })
     expect(meshes(figure)).toBeGreaterThan(5)
+  })
+
+  it('has the 3D board\'s moves as animation clips that play', () => {
+    const figure = buildFigure(DEFAULT_RECIPE)
+    const clips = figureClips(figure)
+    expect(clips.map((c) => c.name)).toEqual(expect.arrayContaining(['Idle', 'Walking_A', '1H_Melee_Attack_Chop', 'Spellcast_Shoot', 'Hit_A', 'Death_A', 'Death_A_Pose', 'Cheer']))
+    const mixer = new THREE.AnimationMixer(figure)
+    const fall = mixer.clipAction(clips.find((c) => c.name === 'Death_A'))
+    fall.setLoop(THREE.LoopOnce, 1)
+    fall.clampWhenFinished = true
+    fall.play()
+    mixer.update(2)
+    // Lying down: the hips tipped over and lowered.
+    expect(Math.abs(figure.userData.joints.hips.rotation.x)).toBeGreaterThan(1.2)
+    expect(figure.userData.joints.hips.position.y).toBeLessThan(figure.userData.rest.hips.y - 0.3)
   })
 })

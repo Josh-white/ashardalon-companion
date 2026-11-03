@@ -76,3 +76,17 @@ export function cleanRecipe(body = {}) {
     parts,
   }
 }
+
+const playerKey = (name) => (typeof name === 'string' ? name.trim().toLowerCase() : '')
+
+// Each player's Hero Builder figure that they turned on ("🎮 Use in the game"), for the 3D
+// board: { "colton": { recipe } }, from /forge.json's list (newest first). One per player.
+export function builderFigures(figures = []) {
+  const out = {}
+  for (const f of figures) {
+    const key = playerKey(f.recipe?.from)
+    if (!key || out[key] || !f.useInGame) continue
+    out[key] = { recipe: f.recipe }
+  }
+  return out
+}

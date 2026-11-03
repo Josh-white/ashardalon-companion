@@ -12,9 +12,12 @@ afterEach(() => {
   if (dir) rmSync(dir, { recursive: true, force: true })
 })
 
+let used = []
 async function start() {
   dir = mkdtempSync(join(tmpdir(), 'forge-'))
-  const forge = createForge(dir)
+  used = []
+  const forge = createForge(dir, { onUse: (key) => used.push(key) })
+  start.forge = forge
   server = createServer((req, res) => {
     if (!forge.handle(req, res)) res.writeHead(404).end()
   })
@@ -60,5 +63,26 @@ describe('Hero Builder figures on the Pi', () => {
     await new Promise((resolve) => server.listen(0, resolve))
     const r = await fetch(`http://localhost:${server.address().port}/forge.json`).then((x) => x.json())
     expect(r.figures[0].recipe.name).toBe('Kept')
+  })
+
+  it('puts one figure per player in the game', async () => {
+    const call = await start()
+    const a = (await call('/forge', 'POST', { name: 'A', from: 'Colton' })).body
+    const b = (await call('/forge', 'POST', { name: 'B', from: ' colton ' })).body
+    const nameless = (await call('/forge', 'POST', { name: 'C' })).body
+    expect((await call(`/forge/${nameless.id}`, 'POST', { useInGame: true })).status).toBe(400)
+    expect((await call(`/forge/${a.id}`, 'POST', { useInGame: true })).body.useInGame).toBe(true)
+    await call(`/forge/${b.id}`, 'POST', { useInGame: true })
+    let list = (await call('/forge.json')).body.figures
+    expect(list.filter((f) => f.useInGame).map((f) => f.recipe.name)).toEqual(['B'])
+    expect(used).toEqual(['colton', 'colton'])
+    // Saving changes keeps it in the game; the name in it is unchanged.
+    await call(`/forge/${b.id}`, 'POST', { ...b.recipe, name: 'B2' })
+    list = (await call('/forge.json')).body.figures
+    expect(list.find((f) => f.id === b.id).useInGame).toBe(true)
+    // The player turned on a Model Workshop figure instead.
+    start.forge.stopUsing('colton')
+    list = (await call('/forge.json')).body.figures
+    expect(list.some((f) => f.useInGame)).toBe(false)
   })
 })

@@ -68,7 +68,8 @@ export function loadReply(dir, id) {
   return { rounds, inGame: Boolean(reply.inGame) }
 }
 
-export function createWorkshop(dir) {
+// `onUse(key)` hears when a player turns a model on for the game.
+export function createWorkshop(dir, { onUse } = {}) {
   const file = join(dir, 'requests.json')
   let requests = readJsonFile(file, {}).requests ?? []
   function save() {
@@ -143,6 +144,7 @@ export function createWorkshop(dir) {
         if (on && !lovedRound({ ...mine, rounds })?.model) return send(res, 409, { error: 'Tap Love it first.' })
         requests = requests.map((r, n) => (n === index ? { ...r, useInGame: on } : on && r.useInGame && playerKey(r.from) === key ? { ...r, useInGame: false } : r))
         save()
+        if (on) onUse?.(key)
         return send(res, 200, withReply(requests[index]))
       }
       if (!rounds.length) return send(res, 409, { error: 'There are no pictures to answer yet.' })
@@ -163,6 +165,16 @@ export function createWorkshop(dir) {
   }
 
   return {
+    // A player turned on another figure (a 🛠️ Hero Builder one): this one comes off.
+    stopUsing(key) {
+      if (!requests.some((r) => r.useInGame && playerKey(r.from) === key)) return
+      requests = requests.map((r) => (r.useInGame && playerKey(r.from) === key ? { ...r, useInGame: false } : r))
+      try {
+        save()
+      } catch (error) {
+        console.error('Model Workshop: could not save:', error.message)
+      }
+    },
     // True when the request was for the workshop (and it has been answered).
     handle(req, res) {
       const path = req.url.split('?')[0]

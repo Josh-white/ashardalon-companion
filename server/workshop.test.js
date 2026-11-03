@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { startServer } from './server.js'
 import { boneScales, cleanRequest, cleanTweaks, playerFigures, usedSlots, workshopStatus } from '../src/data/workshop.js'
+import { builderFigures } from '../src/data/forge.js'
 
 describe('Model Workshop', () => {
   let dir
@@ -135,6 +136,24 @@ describe('Model Workshop', () => {
     reply(nameless.id, [{ note: 'Hi', pictures: ['front.png'] }])
     await post(`/workshop/${nameless.id}`, { love: true })
     expect((await post(`/workshop/${nameless.id}`, { useInGame: true })).status).toBe(400)
+  })
+
+  it('gives a player one figure in the game, from the workshop or the Hero Builder', async () => {
+    const sent = await (await post('/workshop', { idea: 'Lizard mage', from: 'Colton' })).json()
+    reply(sent.id, [{ note: 'Hi', pictures: ['front.png'], model: 'model-1.glb' }])
+    writeFileSync(join(workshopDir, sent.id, 'model-1.glb'), 'glTF!')
+    await post(`/workshop/${sent.id}`, { love: true })
+    await post(`/workshop/${sent.id}`, { useInGame: true })
+    const built = await (await post('/forge', { name: 'Grim', from: 'colton' })).json()
+    const forge = async () => (await (await fetch(`${url}/forge.json`)).json()).figures
+
+    expect((await post(`/forge/${built.id}`, { useInGame: true })).status).toBe(200)
+    expect(playerFigures(await list())).toEqual({})
+    expect(builderFigures(await forge()).colton.recipe.name).toBe('Grim')
+
+    await post(`/workshop/${sent.id}`, { useInGame: true })
+    expect(playerFigures(await list()).colton).toBeTruthy()
+    expect(builderFigures(await forge())).toEqual({})
   })
 
   it('turns away an empty idea and unknown ids', async () => {

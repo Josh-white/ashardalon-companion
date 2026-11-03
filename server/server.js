@@ -390,9 +390,10 @@ export function startServer({
   // The players' ideas and feedback, sent from the 💡 button (server/ideas.js).
   const ideaBox = createIdeaBox(join(dirname(saveFile), 'ideas.json'))
   // The players' own 3D figures: what they asked for, and Claude's pictures back.
-  const workshop = createWorkshop(workshopDir)
+  // A player wears one figure at a time: turning on one from either place turns off the other's.
+  const workshop = createWorkshop(workshopDir, { onUse: (key) => forge.stopUsing(key) })
   // The 🛠️ Hero Builder's saved figures sit in the same folder (server/forge.js).
-  const forge = createForge(workshopDir)
+  const forge = createForge(workshopDir, { onUse: (key) => workshop.stopUsing(key) })
   // How much each friend plays, for the #friends page (server/friendLog.js).
   const friendLog = createFriendLog(join(dirname(saveFile), 'friends.json'))
   let { games: otherGames, finished } = loadGameList(gameListFile)

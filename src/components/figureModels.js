@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { MODEL_PROPS } from '../board/heroModels.js'
 import { boneScales, NO_TWEAKS } from '../data/workshop.js'
+import { buildFigure, disposeFigure, figureClips } from '../forge/figure.js'
 import Knight from '../models/Knight.glb?url'
 import Barbarian from '../models/Barbarian.glb?url'
 import Mage from '../models/Mage.glb?url'
@@ -94,8 +95,9 @@ const RANGED = new Set(['cast', 'shoot', 'throw'])
 // Weapons held in both hands use the two-handed moves.
 const TWO_HANDED = /^2H_/
 
-// A figure is one of ours by name (look.model), or a player's own from the Model Workshop by
-// its address on the Pi (look.url, with the player's 🎨 tweaks in look.tweaks).
+// A figure is one of ours by name (look.model), a player's own from the Model Workshop by
+// its address on the Pi (look.url, with the player's 🎨 tweaks in look.tweaks), or one a
+// player put together in the 🛠️ Hero Builder (look.recipe, built right here).
 const fileOf = (look) => look.url ?? FILES[look.model]
 
 const loads = new Map()
@@ -148,6 +150,7 @@ function update(anim, seconds) {
 // Gives the standee `node` its hero figure once the file is in. `look` is heroModel()'s
 // pick, `color` the hero's colour (the cape). Calls `ready` after, to draw again.
 export function attachModel(node, look, color, ready) {
+  if (look.recipe) return attachBuilt(node, look.recipe, ready)
   const file = fileOf(look)
   if (!file) return
   const tweaks = { ...NO_TWEAKS, ...look.tweaks }
@@ -192,25 +195,75 @@ export function attachModel(node, look, color, ready) {
         return RANGED.has(move) && clips.has(MOVES.attack) ? mixer.clipAction(clips.get(MOVES.attack)) : null
       }
       const anim = { mixer, action, clips, state: null, busy: false, cape, paint, tint, bones }
-      mixer.addEventListener('finished', (e) => {
-        // Only the move playing now: one it cut short doesn't send the figure back to idle.
-        if (e.action !== anim.current) return
-        anim.busy = false
-        settle(anim)
-      })
-      const { body, card, faceMat } = node.userData
-      card.visible = false
-      body.add(figure)
-      node.userData.model = figure
-      node.userData.anim = anim
-      // The red flash of a hit, and the grey of a fallen hero, go on the figure now.
-      node.userData.standeeMat = faceMat
-      node.userData.faceMat = paint ?? faceMat
-      node.userData.capeMat = cape
-      settle(anim, true)
-      ready()
+      standUp(node, figure, anim, paint, ready)
     })
     .catch((error) => console.warn('3D hero figure did not load', error))
+}
+
+// Puts a loaded figure on its standee's spot and starts it standing.
+function standUp(node, figure, anim, paint, ready) {
+  anim.mixer.addEventListener('finished', (e) => {
+    // Only the move playing now: one it cut short doesn't send the figure back to idle.
+    if (e.action !== anim.current) return
+    anim.busy = false
+    settle(anim)
+  })
+  const { body, card, faceMat } = node.userData
+  card.visible = false
+  body.add(figure)
+  node.userData.model = figure
+  node.userData.anim = anim
+  // The red flash of a hit, and the grey of a fallen hero, go on the figure now.
+  node.userData.standeeMat = faceMat
+  node.userData.faceMat = paint ?? faceMat
+  node.userData.capeMat = anim.cape
+  settle(anim, true)
+  ready()
+}
+
+// About as tall as the other figures (one square), whatever its own size slider says, so a
+// big hero still fits its square; the size slider still makes it a little bigger or smaller.
+const BUILT_HEIGHT = 1.0
+
+// A 🛠️ Hero Builder figure: built from its recipe, no file to load. Its parts keep their own
+// colours; a hit flashes all of them (they share one flash, `paint`'s glow).
+function attachBuilt(node, recipe, ready) {
+  let figure
+  try {
+    figure = buildFigure(recipe)
+  } catch (error) {
+    console.warn('Hero Builder figure did not build', error)
+    return
+  }
+  const size = recipe.size ?? 1
+  figure.scale.setScalar((BUILT_HEIGHT / (figure.userData.height / size)) * (0.85 + 0.15 * size))
+  // One material the flashes can light up, shared by every part through onBeforeRender.
+  const paint = new THREE.MeshStandardMaterial({ emissive: '#000000', emissiveIntensity: 0 })
+  figure.traverse((o) => {
+    if (!o.isMesh) return
+    o.castShadow = true
+    o.frustumCulled = false
+    const own = o.material
+    o.onBeforeRender = () => {
+      own.userData.glow ??= { color: own.emissive.clone(), intensity: own.emissiveIntensity }
+      if (paint.emissiveIntensity > 0) {
+        own.emissive.copy(paint.emissive)
+        own.emissiveIntensity = paint.emissiveIntensity
+      } else {
+        own.emissive.copy(own.userData.glow.color)
+        own.emissiveIntensity = own.userData.glow.intensity
+      }
+    }
+  })
+  const mixer = new THREE.AnimationMixer(figure)
+  const clips = new Map(figureClips(figure).map((c) => [c.name, c]))
+  const action = (move) => {
+    const name = MOVES[move]
+    return clips.has(name) ? mixer.clipAction(clips.get(name)) : null
+  }
+  const cape = new THREE.MeshStandardMaterial()
+  const anim = { mixer, action, clips, state: null, busy: false, cape, paint, tint: null, bones: [], built: figure }
+  standUp(node, figure, anim, paint, ready)
 }
 
 // Back to what the figure does when nothing is happening: standing, or lying down.
@@ -333,6 +386,7 @@ export function detachModel(node) {
   body.remove(model)
   anim.paint?.dispose()
   anim.tint?.dispose()
+  if (anim.built) disposeFigure(anim.built)
   anim.cape.dispose()
   card.visible = true
   node.userData.faceMat = standeeMat
