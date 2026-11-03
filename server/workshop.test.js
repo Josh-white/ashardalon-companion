@@ -78,8 +78,14 @@ describe('Model Workshop', () => {
     await start()
     expect(await list()).toHaveLength(1)
     expect((await fetch(`${url}/workshop/${sent.id}`, { method: 'DELETE' })).status).toBe(200)
-    expect(await list()).toEqual([])
+    // Only hidden: it can come back, answers and all.
+    ;[r] = await list()
+    expect(r.hidden).toBe(true)
     expect(readFileSync(join(workshopDir, sent.id, 'reply.json'), 'utf8')).toContain('inGame')
+    expect((await post(`/workshop/${sent.id}`, { hidden: false })).status).toBe(200)
+    ;[r] = await list()
+    expect(r.hidden).toBe(false)
+    expect(r.answers).toHaveLength(2)
   })
 
   it('serves a round\'s 3D model and saves the player\'s tweaks without answering', async () => {

@@ -17,7 +17,8 @@
 //                                      or { tweaks } from the 🎨 Tweak panel,
 //                                      or { useInGame: true|false } for a loved model (one per player)
 //   GET    /workshop/<id>/<name>.glb   a round's 3D model ("model": "model-3.glb" in a round)
-//   DELETE /workshop/<id>              takes a request off the list (its folder stays)
+//   DELETE /workshop/<id>              takes a request off the list: it's only hidden, so
+//                                      { hidden: false } brings it back with its tweaks
 //   GET    /workshop/<id>/<name>.png   one of the pictures
 //
 // Friends from outside can't use it: it's the family's workshop.
@@ -134,6 +135,11 @@ export function createWorkshop(dir, { onUse } = {}) {
         return send(res, 200, withReply(requests[index]))
       }
       const { rounds } = loadReply(dir, id)
+      if (body.hidden === false) {
+        requests = requests.map((r, n) => (n === index ? { ...r, hidden: false } : r))
+        save()
+        return send(res, 200, withReply(requests[index]))
+      }
       if (body.useInGame !== undefined) {
         // The player's hero wears it on the 3D board. Only a loved model with its 3D file, and
         // only one per player: turning one on turns their others off.
@@ -157,7 +163,8 @@ export function createWorkshop(dir, { onUse } = {}) {
       return send(res, 200, withReply(requests[index]))
     }
     if (req.method === 'DELETE') {
-      requests = requests.filter((_, n) => n !== index)
+      // Hidden, not deleted: a player who changes their mind can bring it back.
+      requests = requests.map((r, n) => (n === index ? { ...r, hidden: true } : r))
       save()
       return send(res, 200, { ok: true })
     }

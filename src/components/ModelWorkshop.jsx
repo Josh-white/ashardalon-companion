@@ -37,12 +37,16 @@ async function post(path, body) {
 // The workshop's list, loaded now and again every `every` ms while it's showing.
 function useWorkshop(every) {
   const [requests, setRequests] = useState(null)
+  const [removed, setRemoved] = useState([])
   const [error, setError] = useState(null)
   const reload = useCallback(
     () =>
       loadWorkshop().then(
         (r) => {
-          setRequests(r)
+          // Some other screen's pretend Pi (the tests) may answer with no list at all.
+          const all = Array.isArray(r) ? r : []
+          setRequests(all.filter((x) => !x.hidden))
+          setRemoved(all.filter((x) => x.hidden))
           setError(null)
         },
         (e) => setError(e.message),
@@ -55,7 +59,7 @@ function useWorkshop(every) {
     const timer = setInterval(reload, every)
     return () => clearInterval(timer)
   }, [reload, every])
-  return { requests, error, reload }
+  return { requests, removed, error, reload }
 }
 
 // The 🧙 pill on the game bar. It says "📸 Pictures!" when Claude has sent new ones.
@@ -80,7 +84,7 @@ export function WorkshopButton({ state, me = '', className = '' }) {
 }
 
 export function Workshop({ names = [], me = '', onClose = null }) {
-  const { requests, error, reload } = useWorkshop(20000)
+  const { requests, removed, error, reload } = useWorkshop(20000)
   const [tab, setTab] = useState(null) // null until loaded: then the list if there is one, else the form
   const shownTab = tab ?? (requests?.length ? 'mine' : requests ? 'new' : null)
   return (
@@ -120,7 +124,12 @@ export function Workshop({ names = [], me = '', onClose = null }) {
           onSeeList={() => setTab('mine')}
         />
       )}
-      {shownTab === 'mine' && <RequestList requests={requests ?? []} reload={reload} onNew={() => setTab('new')} />}
+      {shownTab === 'mine' && (
+        <>
+          <RequestList requests={requests ?? []} reload={reload} onNew={() => setTab('new')} />
+          <RemovedList removed={removed} reload={reload} />
+        </>
+      )}
       {shownTab === null && <p className="mt-6 text-zinc-400">Opening the workshop…</p>}
     </div>
   )
@@ -285,6 +294,39 @@ export function pickedLine(r) {
     .join(' · ')
 }
 
+// Models taken off the list, to bring back (tweaks, love and all).
+function RemovedList({ removed, reload }) {
+  const [open, setOpen] = useState(false)
+  if (!removed.length) return null
+  return (
+    <div className="mt-6">
+      <button type="button" className="text-sm text-zinc-400 underline" onClick={() => setOpen(!open)}>
+        ♻️ Taken off the list ({removed.length})
+      </button>
+      {open && (
+        <ul className="mt-2 space-y-2">
+          {removed.map((r) => (
+            <li key={r.id} className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
+              <span className="mr-auto text-zinc-300">
+                {r.from ? `${r.from}: ` : ''}
+                {r.idea.length > 60 ? `${r.idea.slice(0, 60)}…` : r.idea}
+              </span>
+              <Button
+                onClick={async () => {
+                  await post(`/workshop/${r.id}`, { hidden: false }).catch(() => null)
+                  reload()
+                }}
+              >
+                Bring it back
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 function RequestList({ requests, reload, onNew }) {
   const [ask, dialog] = useConfirm()
   if (!requests.length) {
@@ -305,7 +347,7 @@ function RequestList({ requests, reload, onNew }) {
           request={r}
           reload={reload}
           onDelete={() =>
-            ask({ title: 'Take this model off the list?', body: 'Its pictures stay safe on the Pi.', yes: 'Take it off', danger: true }, async () => {
+            ask({ title: 'Take this model off the list?', body: 'You can bring it back later from ♻️ Taken off the list, at the bottom.', yes: 'Take it off', danger: true }, async () => {
               await fetch(`/workshop/${r.id}`, { method: 'DELETE' }).catch(() => null)
               reload()
             })

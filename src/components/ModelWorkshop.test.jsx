@@ -104,6 +104,17 @@ describe('Model Workshop', () => {
     screen.getByText('🎉 In the game')
   })
 
+  it('keeps models taken off the list, to bring back', async () => {
+    const posts = pi([{ ...knight, rounds: [] }, { ...knight, id: 'gone-1', idea: 'A lizard mage', hidden: true, rounds: [] }])
+    render(<WorkshopButton state={state} me="Colton" />)
+    fireEvent.click(await screen.findByText(/🧙/))
+    fireEvent.click(await screen.findByText('📦 Models (1)'))
+    fireEvent.click(await screen.findByText('♻️ Taken off the list (1)'))
+    screen.getByText('Colton: A lizard mage')
+    fireEvent.click(screen.getByText('Bring it back'))
+    await waitFor(() => expect(posts).toEqual([['/workshop/gone-1', { hidden: false }]]))
+  })
+
   it('sums up the picks in one line', () => {
     expect(pickedLine(knight)).toBe('A monster · red · Big · holds Axe · Swings it')
   })

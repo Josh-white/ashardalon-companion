@@ -100,7 +100,7 @@ export function playerFigures(requests = []) {
   for (const r of requests) {
     const key = playerKey(r.from)
     const round = lovedRound(r)
-    if (!key || out[key] || !r.useInGame || !round?.model) continue
+    if (!key || out[key] || !r.useInGame || r.hidden || !round?.model) continue
     out[key] = { url: `/workshop/${r.id}/${round.model}`, tweaks: cleanTweaks(r.tweaks) }
   }
   return out
