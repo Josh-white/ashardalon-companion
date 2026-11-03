@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { makeTurntable } from './turntable.js'
 import { galleryFigures, galleryMoves, LOOPING } from '../board/modelGallery.js'
 import { useCards } from '../state/useCards.js'
 import { useMe } from '../state/useMe.js'
@@ -98,50 +98,36 @@ function Turntable({ figure }) {
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
-    const el = mount.current
-    let renderer
-    try {
-      renderer = new THREE.WebGLRenderer({ antialias: true })
-    } catch {
+    let node = null
+    const table = makeTurntable(mount.current, {
+      background: '#0c0a09',
+      toneMapping: true,
+      light: ['#c7d2fe', '#3b2a1a', 1.4],
+      key: ['#fff4e0', 1.6, [2, 4, 3]],
+      rim: ['#93c5fd', 0.8, [-3, 2, -3]],
+      // The stand: one board square, the size a figure stands on in the game.
+      stand: 0.75,
+      standColor: '#3f3a36',
+      fov: 35,
+      camera: [0, 0.95, 3],
+      target: [0, 0.55, 0],
+      near: 1,
+      far: 8,
+      onFrame: (seconds) => node && stepModels([node], seconds, true),
+    })
+    if (!table) {
       setFailed(true)
       return undefined
     }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
-    renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.domElement.style.display = 'block'
-    renderer.domElement.style.width = '100%'
-    renderer.domElement.style.height = '100%'
-    renderer.domElement.style.touchAction = 'none'
-    el.appendChild(renderer.domElement)
-
-    const scene = new THREE.Scene()
-    scene.background = new THREE.Color('#0c0a09')
-    const camera = new THREE.PerspectiveCamera(35, 1, 0.05, 50)
-    camera.position.set(0, 0.95, 3)
-    const controls = new OrbitControls(camera, renderer.domElement)
-    controls.target.set(0, 0.55, 0)
-    controls.minDistance = 1
-    controls.maxDistance = 8
-    controls.enableDamping = true
-    controls.autoRotateSpeed = 1.5
-    spinRef.current = controls
-    scene.add(new THREE.HemisphereLight('#c7d2fe', '#3b2a1a', 1.4))
-    const key = new THREE.DirectionalLight('#fff4e0', 1.6)
-    key.position.set(2, 4, 3)
-    const rim = new THREE.DirectionalLight('#93c5fd', 0.8)
-    rim.position.set(-3, 2, -3)
-    scene.add(key, rim)
-
-    // The stand: one board square, the size a figure stands on in the game.
-    const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.8, 0.08, 48), new THREE.MeshStandardMaterial({ color: '#3f3a36', roughness: 0.9 }))
-    stand.position.y = -0.04
+    const scene = table.scene
+    spinRef.current = table.controls
     const square = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.01, 0.95), new THREE.MeshStandardMaterial({ color: '#57534e', roughness: 0.95 }))
     square.position.y = 0.005
-    scene.add(stand, square)
+    scene.add(square)
 
     // figureModels.js dresses a board figure: a node with a body to hang the model on, and a
     // card (the standee art) to hide once it's in.
-    const node = new THREE.Group()
+    node = new THREE.Group()
     const body = new THREE.Group()
     const card = new THREE.Object3D()
     node.add(body, card)
@@ -154,37 +140,11 @@ function Turntable({ figure }) {
       setPlaying('Idle')
     })
 
-    const resize = () => {
-      const { clientWidth: w, clientHeight: h } = el
-      renderer.setSize(w, h, false)
-      camera.aspect = w / Math.max(h, 1)
-      camera.updateProjectionMatrix()
-    }
-    resize()
-    const watcher = new ResizeObserver(resize)
-    watcher.observe(el)
-
-    let last = performance.now()
-    let frame = requestAnimationFrame(function draw(now) {
-      stepModels([node], Math.min(Math.max(now - last, 0) / 1000, 0.1), true)
-      last = now
-      controls.update()
-      renderer.render(scene, camera)
-      frame = requestAnimationFrame(draw)
-    })
-
     return () => {
-      cancelAnimationFrame(frame)
-      watcher.disconnect()
       node.userData.disposed = true
+      // The model's parts are shared with the game's copy, so it comes off before the rest goes.
       detachModel(node)
-      controls.dispose()
-      scene.traverse((o) => {
-        o.geometry?.dispose()
-        for (const m of [].concat(o.material ?? [])) m.dispose()
-      })
-      renderer.dispose()
-      renderer.domElement.remove()
+      table.dispose()
     }
   }, [figure])
 

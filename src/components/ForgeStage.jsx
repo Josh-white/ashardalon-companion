@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import * as THREE from 'three'
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { makeTurntable } from './turntable.js'
 import { buildFigure, disposeFigure, pose } from '../forge/figure.js'
 
 // The 🛠️ Hero Builder's turntable: the figure built from the recipe, turning slowly on a
@@ -13,69 +12,32 @@ export default function ForgeStage({ recipe, move = 'Idle', moveKey = 0, spin = 
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
-    const el = mount.current
-    let renderer
-    try {
-      renderer = new THREE.WebGLRenderer({ antialias: true })
-    } catch {
+    const s = { scene: null, camera: null, controls: null, figure: null, move: 'Idle', started: 0, framed: false }
+    const table = makeTurntable(mount.current, {
+      light: ['#ffffff', '#3b2a4a', 2.0],
+      key: ['#fff4e0', 2.4, [3, 5, 4]],
+      rim: ['#a78bfa', 1.2, [-4, 3, -4]],
+      fov: 30,
+      onFrame: (_, now) => {
+        if (s.figure && pose(s.figure, s.move, (now - s.started) / 1000) && s.move !== 'Idle') {
+          s.move = 'Idle'
+          s.started = now
+        }
+      },
+    })
+    if (!table) {
       setFailed(true)
       return undefined
     }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
-    renderer.outputColorSpace = THREE.SRGBColorSpace
-    renderer.domElement.style.cssText = 'display:block;width:100%;height:100%;touch-action:none'
-    el.appendChild(renderer.domElement)
-    const scene = new THREE.Scene()
-    scene.background = new THREE.Color('#1c1426')
-    scene.add(new THREE.HemisphereLight('#ffffff', '#3b2a4a', 2.0))
-    const key = new THREE.DirectionalLight('#fff4e0', 2.4)
-    key.position.set(3, 5, 4)
-    scene.add(key)
-    const rim = new THREE.DirectionalLight('#a78bfa', 1.2)
-    rim.position.set(-4, 3, -4)
-    scene.add(rim)
-    const floor = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.2, 0.08, 48), new THREE.MeshStandardMaterial({ color: '#3f3a46', roughness: 0.9 }))
-    floor.position.y = -0.04
-    scene.add(floor)
-    const camera = new THREE.PerspectiveCamera(30, 1, 0.05, 60)
-    camera.position.set(0, 1.6, 6)
-    const controls = new OrbitControls(camera, renderer.domElement)
-    controls.target.set(0, 1, 0)
-    controls.enableDamping = true
-    controls.enablePan = false
-    controls.autoRotate = true
-    controls.autoRotateSpeed = 1.5
-    controls.minDistance = 1.5
-    controls.maxDistance = 12
-    const s = { scene, camera, controls, figure: null, move: 'Idle', started: 0, framed: false }
+    Object.assign(s, { scene: table.scene, camera: table.camera, controls: table.controls })
     stage.current = s
-
-    const resize = () => {
-      renderer.setSize(el.clientWidth, el.clientHeight, false)
-      camera.aspect = el.clientWidth / Math.max(el.clientHeight, 1)
-      camera.updateProjectionMatrix()
-    }
-    resize()
-    const watcher = new ResizeObserver(resize)
-    watcher.observe(el)
-    let frame = requestAnimationFrame(function draw(now) {
-      if (s.figure && pose(s.figure, s.move, (now - s.started) / 1000) && s.move !== 'Idle') {
-        s.move = 'Idle'
-        s.started = now
-      }
-      controls.update()
-      renderer.render(scene, camera)
-      frame = requestAnimationFrame(draw)
-    })
     return () => {
-      cancelAnimationFrame(frame)
-      watcher.disconnect()
-      controls.dispose()
-      if (s.figure) disposeFigure(s.figure)
-      floor.geometry.dispose()
-      floor.material.dispose()
-      renderer.dispose()
-      renderer.domElement.remove()
+      // Hero Builder figures share materials between parts, so they're freed their own way.
+      if (s.figure) {
+        table.scene.remove(s.figure)
+        disposeFigure(s.figure)
+      }
+      table.dispose()
       stage.current = null
     }
   }, [])
