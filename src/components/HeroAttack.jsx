@@ -552,7 +552,7 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
           {powers.length + items.length === 0 ? (
             <p className="text-zinc-400">None of {hero.name}'s unused {extra ? 'at-will ' : ''}powers has an attack number.</p>
           ) : (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col gap-1.5">
               {byKind(powers).map((p) => {
                 const kind = powerKind(p.type)
                 return (
@@ -560,13 +560,13 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
                     key={p.id}
                     type="button"
                     onClick={() => pickPower(p.id)}
-                    className={`rounded-xl border-2 px-3 py-2 text-left transition active:scale-95 ${p.id === powerId ? kind.picked : `${kind.border} bg-zinc-900`}`}
+                    className={`flex flex-wrap items-center justify-between gap-x-3 rounded-xl border-2 px-3 py-2 text-left transition active:scale-95 ${p.id === powerId ? kind.picked : `${kind.border} bg-zinc-900`}`}
                   >
                     <span className="flex items-center gap-1.5">
                       <KindBadge kind={kind} />
                       <span className="font-semibold text-zinc-100">{p.name}</span>
                     </span>
-                    <span className="text-sm text-zinc-400">
+                    <span className="ml-auto text-right text-sm text-zinc-400">
                       {p.card.attack} · {damageLabel(p.card.damage)}
                     </span>
                   </button>
@@ -577,13 +577,13 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
                   key={i.id}
                   type="button"
                   onClick={() => pickPower(i.id)}
-                  className={`rounded-xl border-2 px-3 py-2 text-left transition active:scale-95 ${i.id === powerId ? POWER_KINDS.item.picked : `${POWER_KINDS.item.border} bg-zinc-900`}`}
+                  className={`flex flex-wrap items-center justify-between gap-x-3 rounded-xl border-2 px-3 py-2 text-left transition active:scale-95 ${i.id === powerId ? POWER_KINDS.item.picked : `${POWER_KINDS.item.border} bg-zinc-900`}`}
                 >
                   <span className="flex items-center gap-1.5">
                     <KindBadge kind={POWER_KINDS.item} />
                     <span className="font-semibold text-zinc-100">{i.name}</span>
                   </span>
-                  <span className="text-sm text-zinc-400">
+                  <span className="ml-auto text-right text-sm text-zinc-400">
                     +{i.card.attack.bonus} · {i.card.attack.damage} damage
                   </span>
                 </button>
