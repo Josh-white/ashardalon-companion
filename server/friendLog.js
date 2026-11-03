@@ -2,26 +2,18 @@
 // many visits (a visit is any time after 30 minutes away), the games they started and
 // finished, and how many taps they made. Kept in friends.json next to the saved games,
 // so the nightly backup picks it up. Nothing leaves the Pi.
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { readJsonFile, writeJsonFile } from './jsonStore.js'
 
 export const VISIT_GAP_MS = 30 * 60 * 1000
 const SAVE_DELAY_MS = 2000
 
 export function createFriendLog(file, now = () => Date.now()) {
-  let friends = {}
-  try {
-    if (existsSync(file)) friends = JSON.parse(readFileSync(file, 'utf8')).friends ?? {}
-  } catch (error) {
-    console.error('Could not read the friends log:', error.message)
-  }
+  let friends = readJsonFile(file, {}, 'the friends log').friends ?? {}
   let timer = null
   const save = () => {
     timer = null
     try {
-      mkdirSync(dirname(file), { recursive: true })
-      writeFileSync(`${file}.tmp`, JSON.stringify({ friends }, null, 1))
-      renameSync(`${file}.tmp`, file)
+      writeJsonFile(file, { friends })
     } catch (error) {
       console.error('Could not save the friends log:', error.message)
     }

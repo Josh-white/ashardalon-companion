@@ -92,6 +92,16 @@ export function lovedRound(request) {
 // The name a figure follows: whoever plays with that name gets it as their hero.
 export const playerKey = (name) => (typeof name === 'string' ? name.trim().toLowerCase() : '')
 
+// A list of figures with the one at `index` turned on or off for the game. Turning one on
+// turns off that player's others, so each player wears one. `fromOf` reads a figure's maker.
+export function wearOnly(list, index, on, fromOf) {
+  const key = playerKey(fromOf(list[index]))
+  return list.map((f, n) => (n === index ? { ...f, useInGame: on } : on && f.useInGame && playerKey(fromOf(f)) === key ? { ...f, useInGame: false } : f))
+}
+
+// The same list with every one of this player's figures out of the game.
+export const wearNone = (list, key, fromOf) => list.map((f) => (f.useInGame && playerKey(fromOf(f)) === key ? { ...f, useInGame: false } : f))
+
 // Each player's own figure, for the 3D board: { "colton": { url, tweaks } }, from the
 // workshop's requests (newest first, as /workshop.json lists them). Only loved models the
 // player turned on, and only one per player (the newest).

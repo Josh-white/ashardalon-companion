@@ -22,11 +22,11 @@
 //   GET    /workshop/<id>/<name>.png   one of the pictures
 //
 // Friends from outside can't use it: it's the family's workshop.
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync, createReadStream } from 'node:fs'
+import { existsSync, statSync, createReadStream } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
-import { readBody } from './readBody.js'
-import { cleanRequest, cleanTweaks, lovedRound, MAX_CHANGE_LENGTH, MAX_REQUESTS, playerKey } from '../src/data/workshop.js'
+import { readJsonBody, readJsonFile, sendJson as send, writeJsonFile } from './jsonStore.js'
+import { cleanRequest, cleanTweaks, lovedRound, MAX_CHANGE_LENGTH, MAX_REQUESTS, playerKey, wearNone, wearOnly } from '../src/data/workshop.js'
 
 const ID = /^[a-z0-9-]{1,80}$/
 const PICTURE = /^[a-zA-Z0-9_-]{1,60}\.(png|jpg)$/
@@ -47,19 +47,9 @@ export function requestId(request, now = new Date()) {
   return [now.toISOString().slice(0, 10), slug(request.from) || 'player', words, randomBytes(2).toString('hex')].filter(Boolean).join('-')
 }
 
-function readJsonFile(file, fallback) {
-  try {
-    if (!existsSync(file)) return fallback
-    return JSON.parse(readFileSync(file, 'utf8'))
-  } catch (error) {
-    console.error(`Model Workshop: could not read ${file}:`, error.message)
-    return fallback
-  }
-}
-
 // Claude's rounds for one request, keeping only pictures that are really there.
 export function loadReply(dir, id) {
-  const reply = readJsonFile(join(dir, id, 'reply.json'), {})
+  const reply = readJsonFile(join(dir, id, 'reply.json'), {}, `Model Workshop ${id}/reply.json`)
   const rounds = (Array.isArray(reply.rounds) ? reply.rounds : []).map((r) => ({
     note: typeof r?.note === 'string' ? r.note : '',
     at: typeof r?.at === 'string' ? r.at : null,
@@ -72,18 +62,13 @@ export function loadReply(dir, id) {
 // `onUse(key)` hears when a player turns a model on for the game.
 export function createWorkshop(dir, { onUse } = {}) {
   const file = join(dir, 'requests.json')
-  let requests = readJsonFile(file, {}).requests ?? []
+  let requests = readJsonFile(file, {}, 'the Model Workshop').requests ?? []
   // Writes `next` and only then keeps it, so a save that fails (cards/workshop belonging to
   // root, a full disk) leaves the list as the Pi really has it.
   function save(next) {
-    mkdirSync(dir, { recursive: true })
-    const temp = `${file}.tmp`
-    writeFileSync(temp, JSON.stringify({ requests: next }, null, 1))
-    renameSync(temp, file)
+    writeJsonFile(file, { requests: next })
     requests = next
   }
-  const send = (res, status, body) =>
-    res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(body))
   const withReply = (r) => ({ ...r, ...loadReply(dir, r.id) })
 
   function servePicture(res, id, name) {
@@ -103,7 +88,7 @@ export function createWorkshop(dir, { onUse } = {}) {
     if (path === '/workshop.json' && req.method === 'GET') {
       return send(res, 200, { requests: [...requests].reverse().map(withReply) })
     }
-    const readJson = async () => JSON.parse((await readBody(req, 16 * 1024)).toString('utf8') || '{}')
+    const readJson = () => readJsonBody(req, 16 * 1024)
     if (path === '/workshop' && req.method === 'POST') {
       const request = cleanRequest(await readJson())
       if (!request) return send(res, 400, { error: 'Tell Claude what to make first.' })
@@ -141,7 +126,7 @@ export function createWorkshop(dir, { onUse } = {}) {
         const key = playerKey(mine.from)
         if (on && !key) return send(res, 400, { error: 'This model has no name on it, so the game does not know whose hero wears it.' })
         if (on && !lovedRound({ ...mine, rounds })?.model) return send(res, 409, { error: 'Tap Love it first.' })
-        save(requests.map((r, n) => (n === index ? { ...r, useInGame: on } : on && r.useInGame && playerKey(r.from) === key ? { ...r, useInGame: false } : r)))
+        save(wearOnly(requests, index, on, (r) => r.from))
         if (on) onUse?.(key)
         return send(res, 200, withReply(requests[index]))
       }
@@ -167,7 +152,7 @@ export function createWorkshop(dir, { onUse } = {}) {
     stopUsing(key) {
       if (!requests.some((r) => r.useInGame && playerKey(r.from) === key)) return
       try {
-        save(requests.map((r) => (r.useInGame && playerKey(r.from) === key ? { ...r, useInGame: false } : r)))
+        save(wearNone(requests, key, (r) => r.from))
       } catch (error) {
         console.error('Model Workshop: could not save:', error.message)
       }

@@ -9,10 +9,8 @@
 //
 // A friend playing from outside (server/access.js) can only send ideas; each one keeps
 // the email they signed in with, so Dad knows who sent it.
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import { dirname } from 'node:path'
-import { readBody } from './readBody.js'
+import { readJsonBody as readJson, readJsonFile, sendJson as send, writeJsonFile } from './jsonStore.js'
 
 export const MAX_IDEA_LENGTH = 2000
 export const MAX_FROM_LENGTH = 40
@@ -20,14 +18,8 @@ export const MAX_FROM_LENGTH = 40
 export const MAX_IDEAS = 1000
 
 export function loadIdeas(file) {
-  try {
-    if (!existsSync(file)) return []
-    const saved = JSON.parse(readFileSync(file, 'utf8'))
-    return Array.isArray(saved.ideas) ? saved.ideas : []
-  } catch (error) {
-    console.error('Could not read the ideas box:', error.message)
-    return []
-  }
+  const saved = readJsonFile(file, {}, 'the ideas box')
+  return Array.isArray(saved?.ideas) ? saved.ideas : []
 }
 
 // What a sent idea looks like once it's tidied up, or null when there's nothing in it.
@@ -38,20 +30,11 @@ export function cleanIdea({ text, from } = {}) {
   return { text: body, from: who || null }
 }
 
-async function readJson(req, limit = 16 * 1024) {
-  return JSON.parse((await readBody(req, limit)).toString('utf8') || '{}')
-}
-
 export function createIdeaBox(file) {
   let ideas = loadIdeas(file)
   function save() {
-    mkdirSync(dirname(file), { recursive: true })
-    const temp = `${file}.tmp`
-    writeFileSync(temp, JSON.stringify({ ideas }, null, 1))
-    renameSync(temp, file)
+    writeJsonFile(file, { ideas })
   }
-  const send = (res, status, body) =>
-    res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(body))
 
   async function respond(req, res, email) {
     const path = req.url.split('?')[0]
