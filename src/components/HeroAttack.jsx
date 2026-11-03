@@ -7,6 +7,7 @@ import { hypnotized } from '../board/powerMoves.js'
 import { difficultyOf, hasSecondChance } from '../data/difficulty.js'
 import { asksIfStayed, attackItems, distanceChoices, heroItems, itemsWithUse } from '../data/items.js'
 import { effectsOf, maxRolls, onHitHeals, reactionsFor, wolfBlocked } from '../data/powerEffects.js'
+import { POWER_KINDS, byKind, powerKind } from '../data/powerKinds.js'
 import { bardicSongsLeft, isFearlessTarget } from '../state/heroAttacks.js'
 import { rollD20 } from '../state/random.js'
 import { targetAllowed } from '../state/fanPowers.js'
@@ -367,6 +368,15 @@ function DistanceQuestion({ state, hero, chosen, distances, setDistances, fromBo
   )
 }
 
+// A small coloured tag saying what kind of power it is (At-Will, Daily, Utility, Item).
+function KindBadge({ kind }) {
+  return (
+    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-bold uppercase leading-none tracking-wide ${kind.badge}`}>
+      {kind.icon} {kind.label}
+    </span>
+  )
+}
+
 // The Hero Phase's attack: pick a power and the monster (or monsters) it hits, then the
 // app rolls against each monster's AC, takes off the damage and hands out XP.
 // `extra` is a free at-will attack from Cause Fear or Acrobatic Onslaught.
@@ -542,33 +552,38 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
             <p className="text-zinc-400">None of {hero.name}'s unused {extra ? 'at-will ' : ''}powers has an attack number.</p>
           ) : (
             <div className="flex flex-wrap gap-2">
-              {powers.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => pickPower(p.id)}
-                  className={`rounded-xl border-2 px-3 py-2 text-left transition active:scale-95 ${
-                    p.id === powerId ? 'border-amber-400 bg-amber-950/60' : 'border-zinc-700 bg-zinc-900'
-                  }`}
-                >
-                  <span className="block font-semibold text-zinc-100">{p.name}</span>
-                  <span className="text-sm text-zinc-400">
-                    {p.card.attack} · {damageLabel(p.card.damage)}{p.type === 'daily' ? ' · daily' : ''}
-                  </span>
-                </button>
-              ))}
+              {byKind(powers).map((p) => {
+                const kind = powerKind(p.type)
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => pickPower(p.id)}
+                    className={`rounded-xl border-2 px-3 py-2 text-left transition active:scale-95 ${p.id === powerId ? kind.picked : `${kind.border} bg-zinc-900`}`}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <KindBadge kind={kind} />
+                      <span className="font-semibold text-zinc-100">{p.name}</span>
+                    </span>
+                    <span className="text-sm text-zinc-400">
+                      {p.card.attack} · {damageLabel(p.card.damage)}
+                    </span>
+                  </button>
+                )
+              })}
               {items.map((i) => (
                 <button
                   key={i.id}
                   type="button"
                   onClick={() => pickPower(i.id)}
-                  className={`rounded-xl border-2 px-3 py-2 text-left transition active:scale-95 ${
-                    i.id === powerId ? 'border-amber-400 bg-amber-950/60' : 'border-yellow-700 bg-zinc-900'
-                  }`}
+                  className={`rounded-xl border-2 px-3 py-2 text-left transition active:scale-95 ${i.id === powerId ? POWER_KINDS.item.picked : `${POWER_KINDS.item.border} bg-zinc-900`}`}
                 >
-                  <span className="block font-semibold text-zinc-100">💰 {i.name}</span>
+                  <span className="flex items-center gap-1.5">
+                    <KindBadge kind={POWER_KINDS.item} />
+                    <span className="font-semibold text-zinc-100">{i.name}</span>
+                  </span>
                   <span className="text-sm text-zinc-400">
-                    +{i.card.attack.bonus} · {i.card.attack.damage} damage · item
+                    +{i.card.attack.bonus} · {i.card.attack.damage} damage
                   </span>
                 </button>
               ))}
