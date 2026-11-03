@@ -6,6 +6,7 @@ import { tileShieldNow } from '../board/checks.js'
 import { heroAc } from '../data/powerEffects.js'
 import { foeBonus } from '../data/difficulty.js'
 import { attackGone, canSpendAttack } from './heroTurn.js'
+import { knowsNoMonster } from './monsterDeck.js'
 
 // Who an attack goes after, asked as a question when the app can't tell.
 export function targetQuestion(targets, hero) {
@@ -71,7 +72,12 @@ export function encounterNotes(state, card, villainHere) {
     card.damagePoisoned > 0 && `Every Poisoned hero takes ${card.damagePoisoned} damage when you tap the button.`,
     card.filterMonsters && !state.encounter?.filtered && `The app looks at the top 5 monster cards, keeps the ${card.filterMonsters}s on top and discards the rest.`,
     card.drawAnother && villainHere && 'Then you draw another encounter card.',
-    !villainHere && (card.villain ? 'Its villain isn’t in play, so it’s just discarded.' : `The ${card.objective} isn’t in play, so it’s just discarded.`),
+    !villainHere &&
+      (card.needsMonster && knowsNoMonster(state)
+        ? 'No monster is in play, so it’s just discarded.'
+        : card.villain
+          ? 'Its villain isn’t in play, so it’s just discarded.'
+          : `The ${card.objective} isn’t in play, so it’s just discarded.`),
     villainHere && card.placeVillain && 'The app puts the villain on the board when you tap the button.',
     villainHere && card.drawMonsterType && `The app draws monster cards until ${/^[AEIOU]/.test(card.drawMonsterType) ? 'an' : 'a'} ${card.drawMonsterType} turns up, and discards the rest.`,
     villainHere && card.timeToken && `The app takes a Time token off the ${card.objective || 'Vast Gate'} (${state.adventure?.timeTokens ?? 0} left now).`,

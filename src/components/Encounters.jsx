@@ -381,7 +381,7 @@ function EncounterCard({ state, hero, dispatch }) {
       )}
       <fieldset disabled={reading} className={`contents ${reading ? '[&_button]:opacity-50' : ''}`}>
       {card.noCancel && <p className="font-semibold text-amber-300">This card can’t be canceled.</p>}
-      {!attacked && !card.noCancel && (
+      {!attacked && !card.noCancel && villainHere && (
         <Button
           className="w-full"
           disabled={state.xp < encounterCancelCost(state)}
@@ -390,8 +390,8 @@ function EncounterCard({ state, hero, dispatch }) {
           Spend {encounterCancelCost(state)} XP to cancel it (party has {state.xp})
         </Button>
       )}
-      {!attacked && !card.noCancel && <CancelAdvice state={state} hero={hero} />}
-      {!attacked && !card.noCancel && <Perseverance state={state} dispatch={dispatch} />}
+      {!attacked && !card.noCancel && villainHere && <CancelAdvice state={state} hero={hero} />}
+      {!attacked && !card.noCancel && villainHere && <Perseverance state={state} dispatch={dispatch} />}
 
       {placesMarker && !markerChecked && !attacked ? (
         <div>
@@ -476,7 +476,7 @@ function EncounterCard({ state, hero, dispatch }) {
                 <AffectedHeroes heroes={state.heroes.filter((h) => h.conditions.includes('Poisoned'))} label="Poisoned now" />
               )}
               {card.id === 'thief-in-the-dark' && <ThiefStep state={state} hero={hero} dispatch={dispatch} />}
-              {BOTTOM_TILE_CARDS.has(card.id) &&
+              {BOTTOM_TILE_CARDS.has(card.id) && villainHere &&
                 (card.id === 'scream-of-the-sentry' && state.board ? (
                   <ScreamTile state={state} dispatch={dispatch} />
                 ) : (
@@ -494,7 +494,7 @@ function EncounterCard({ state, hero, dispatch }) {
                 </Button>
               ) : leap ? (
                 <TimeLeapSteps state={state} hero={hero} dispatch={dispatch} />
-              ) : card.drawMonster &&
+              ) : card.drawMonster && villainHere &&
                 (state.encounter.monsterDrawn ? (
                   <p className="text-emerald-300">✓ Monster drawn. Put its figure where the card says.</p>
                 ) : (
