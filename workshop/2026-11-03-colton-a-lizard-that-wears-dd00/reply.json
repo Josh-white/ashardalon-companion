@@ -1,4 +1,24 @@
-{ "rounds": [
-  { "note": "Here's your Lizard Mage! A purple robe with silver trim, a black mask over just his mouth, yellow lizard eyes, a spiky purple crest, a tail, and a tall black staff with a glowing purple orb. In the attack picture he raises the staff to cast a spell. I made his scales green. Want them a different color? Tap Change it and tell me!",
-    "pictures": ["front.png", "side.png", "attack.png", "with-knight.png"], "at": "2026-11-03T02:25:00Z" }
-] }
+{
+ "rounds": [
+  {
+   "note": "Here's your Lizard Mage! A purple robe with silver trim, a black mask over just his mouth, yellow lizard eyes, a spiky purple crest, a tail, and a tall black staff with a glowing purple orb. In the attack picture he raises the staff to cast a spell. I made his scales green. Want them a different color? Tap Change it and tell me!",
+   "pictures": [
+    "front.png",
+    "side.png",
+    "attack.png",
+    "with-knight.png"
+   ],
+   "at": "2026-11-03T02:25:00Z"
+  },
+  {
+   "note": "Here he is with a purple hood with silver trim, and his neck is shorter (but not too short). A couple of his crest spikes poke out of the back of the hood. Everything else stayed the same. What do you think?",
+   "pictures": [
+    "front-2.png",
+    "side-2.png",
+    "attack-2.png",
+    "with-knight-2.png"
+   ],
+   "at": "2026-11-03T02:40:00Z"
+  }
+ ]
+}
