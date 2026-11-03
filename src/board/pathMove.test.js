@@ -5,6 +5,7 @@ import { normalizeCardFile } from '../data/cards.js'
 import { movesLeft } from './play.js'
 import { moveTargets, pathOf } from './powerMoves.js'
 import { normalizeTiles } from './tileDefs.js'
+import { attackDistances } from './attackDistances.js'
 
 // An open 4x8 Start tile (made up).
 const TILES = normalizeTiles(
@@ -78,5 +79,30 @@ describe("Whirling Mantis Step's walk", () => {
     expect(s.turn.powerPassed.ids).toEqual(['m2'])
     expect(attackGone(s, s.heroes[0])).toBeNull()
     expect(movesLeft(s, s.heroes[0])).toBe(1)
+  })
+})
+
+describe("Whirling Mantis Step and magic weapons' distance", () => {
+  const SWORD = { id: 'sword', name: 'Magic Sword', card: { inPlay: true, attackBonus: 1, attackRange: 'adjacent' } }
+  it('counts every monster walked past as next to the hero, wherever the walk ended', () => {
+    let { s, hero, power } = setup()
+    s = { ...s, heroes: s.heroes.map((h) => ({ ...h, items: [SWORD] })) }
+    s = gameReducer(s, { type: 'START_BOARD_MOVE', heroId: hero.id, powerId: power.id })
+    s = walk(s, hero, [2, 0])
+    s = walk(s, hero, [2, 2])
+    s = walk(s, hero, [1, 4])
+    s = gameReducer(s, { type: 'SKIP_BOARD_MOVE' })
+    const darna = s.heroes[0]
+    const mantis = darna.powers.find((p) => p.id === power.id)
+    expect(attackDistances(s, darna, ['m0', 'm1'], mantis)).toEqual({ m0: 'adjacent', m1: 'adjacent' })
+    // A plain attack still reads the board: from [1, 4] the rats are farther.
+    expect(attackDistances(s, darna, ['m0'], null)).toEqual({ m0: 'far' })
+  })
+
+  it('answers next to me off the virtual board too, and for an old jump-style card copy', () => {
+    const { s, hero } = setup()
+    const old = { name: 'Whirling Mantis Step', card: { text: 'Move your speed. Attack each Monster once that was adjacent to you during the movement.', effect: { board: { before: [{ pick: 'self', to: 'squares', n: 'speed' }] } } } }
+    const offBoard = { ...s, board: null }
+    expect(attackDistances(offBoard, { ...hero, items: [SWORD] }, ['m0', 'm1'], old)).toEqual({ m0: 'adjacent', m1: 'adjacent' })
   })
 })

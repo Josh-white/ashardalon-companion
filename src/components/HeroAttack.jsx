@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useShareAim } from './useAimed.js'
 import { stayedOnBoard } from '../board/play.js'
-import { figuresInRange, foeDistance, foesInRange, powerRange } from '../board/monsters.js'
+import { figuresInRange, foesInRange, powerRange } from '../board/monsters.js'
+import { attackDistances } from '../board/attackDistances.js'
 import { hypnotized } from '../board/powerMoves.js'
 import { difficultyOf, hasSecondChance } from '../data/difficulty.js'
 import { asksIfStayed, attackItems, distanceChoices, heroItems, itemsWithUse } from '../data/items.js'
@@ -417,12 +418,8 @@ export default function HeroAttack({ state, hero, dispatch, extra = null }) {
   // An item that only cares about "next to you" offers no "within 1 tile" answer, so the
   // board's within1 counts as farther. A player's tap beats the board.
   const choices = distanceChoices(hero)
-  const boardDistances = Object.fromEntries(
-    chosen
-      .map((id) => [id, foeDistance(state, hero.id, id)])
-      .filter(([, d]) => d)
-      .map(([id, d]) => [id, choices && !choices.includes(d) ? 'far' : d]),
-  )
+  // Whirling Mantis Step: every monster it attacks was next to the hero on the way.
+  const boardDistances = attackDistances(state, hero, chosen, item ? null : power)
   const allDistances = { ...boardDistances, ...distances }
   const fromBoard = Object.fromEntries(Object.keys(boardDistances).filter((id) => !distances[id]).map((id) => [id, true]))
   // The board knows whether the active hero has moved this Hero Phase (Dwarven Hammer).

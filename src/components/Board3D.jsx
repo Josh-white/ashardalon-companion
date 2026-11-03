@@ -99,6 +99,10 @@ function makeStage(mount, calm) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping
   renderer.shadowMap.enabled = !calm
   renderer.shadowMap.type = THREE.PCFShadowMap
+  // Asking the GPU about every new shader makes the browser wait for it to finish building
+  // (most of a second on an iPad); the shaders here are three.js's own, so only check them
+  // while developing.
+  renderer.debug.checkShaderErrors = import.meta.env.DEV
   renderer.domElement.style.display = 'block'
   renderer.domElement.style.width = '100%'
   renderer.domElement.style.height = '100%'
@@ -142,6 +146,22 @@ function makeStage(mount, calm) {
   const lit = new THREE.Group()
   scene.add(dungeon, extras, lit, figures)
   return { renderer, scene, camera, controls, hemi, moon, flash, torchLights, blob, dungeon, extras, lit, figures, nodes: new Map(), textures: new Map(), tweens: [], animators: [], leaving: new Set(), center: new THREE.Vector3() }
+}
+
+// three.js throws a shader away as soon as nothing drawn uses it, and builds it again the
+// next time something needs it. The board throws things away all the time (the whole dungeon
+// and every figure on a new tile, each attack's sparks and flashes, condition icons), so the
+// same dozen shaders were built over and over, each one a freeze on an iPad (Colton's lag,
+// 2026-11-03). Once built, a shader is kept until the board closes.
+function keepPrograms(renderer) {
+  for (const program of renderer.info.programs) {
+    if (program.kept) continue
+    program.kept = true
+    program.usedTimes++
+  }
+}
+function dropPrograms(renderer) {
+  for (const program of [...renderer.info.programs]) if (program.kept) program.destroy()
 }
 
 const disposeTree = (root) =>
@@ -1263,6 +1283,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
         buildWalls(stage)
       }
       stage.renderer.render(stage.scene, stage.camera)
+      keepPrograms(stage.renderer)
       const torches = stage.ambient && [...stage.nodes.values()].some((n) => n.userData.torch?.visible)
       const keepGoing = models || stage.tweens.length > 0 || torches || (stage.ambient && (stage.animators.length > 0 || stage.dungeonAnimators?.length > 0))
       last = now
@@ -1325,6 +1346,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
       canvas.removeEventListener('pointerup', release)
       stage.controls.dispose()
       disposeTree(stage.scene)
+      dropPrograms(stage.renderer)
       for (const tex of stage.textures.values()) tex.dispose()
       stage.blob.dispose()
       stage.renderer.dispose()
@@ -1342,11 +1364,20 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
     if (!ready || !stage || !layout) return
     const before = stage.viewed ? stage.center.clone() : null
     buildDungeon(stage, layout)
+    // The figures stay (rebuilding them all, a Hero Builder figure most of all, is slow on an
+    // iPad): each just moves to its square in the grown dungeon. A walk still going ends there.
     for (const node of stage.nodes.values()) {
-      stage.figures.remove(node)
-      forget(node)
+      const walk = stage.tweens.find((t) => t.node === node)
+      if (walk) {
+        stage.tweens = stage.tweens.filter((t) => t !== walk)
+        node.userData.body.position.y = 0
+        setWalking(node, false)
+      }
+      const sq = node.userData.at
+      if (!sq) continue
+      const [x, z] = stage.at(sq[0], sq[1])
+      node.position.set(x, stage.heights?.get(`${sq[0]},${sq[1]}`) ?? 0, z)
     }
-    stage.nodes.clear()
     for (const node of [...stage.leaving]) node.userData.gone()
     stage.bounds = layout.bounds
     stage.resize()
