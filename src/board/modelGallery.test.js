@@ -11,7 +11,7 @@ describe('3D figures page', () => {
   it('splits box heroes, fan heroes, 3D monsters and standees', () => {
     const g = galleryFigures(cards)
     expect(g.heroes.map((h) => h.name)).toEqual(HERO_TEMPLATES.map((t) => t.name))
-    expect(g.fanHeroes.map((h) => [h.name, h.look.model])).toEqual([['Darna', 'Rogue']])
+    expect(g.fanHeroes.map((h) => [h.name, h.look.model])).toEqual([['Darna', 'Hero_Darna']])
     expect(g.monsters.map((m) => m.look.model)).toEqual([
       'Orc_Smasher',
       'Orc_Archer',

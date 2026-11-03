@@ -31,10 +31,18 @@ import Villager_Cassi from '../models/Villager_Cassi.glb?url'
 import Villager_Donnel from '../models/Villager_Donnel.glb?url'
 import Villager_Elizar from '../models/Villager_Elizar.glb?url'
 import Gibbering_Mouther from '../models/Gibbering_Mouther.glb?url'
+import Hero_Quinn from '../models/Hero_Quinn.glb?url'
+import Hero_Vistra from '../models/Hero_Vistra.glb?url'
+import Hero_Keyleth from '../models/Hero_Keyleth.glb?url'
+import Hero_Tarak from '../models/Hero_Tarak.glb?url'
+import Hero_Heskan from '../models/Hero_Heskan.glb?url'
+import Hero_Berryloaf from '../models/Hero_Berryloaf.glb?url'
+import Hero_Darna from '../models/Hero_Darna.glb?url'
 
-// The 3D figures on the 3D board: the heroes are KayKit Adventurers (CC0, src/models, trimmed
-// to the moves used here by scripts/models/trim-models.mjs); the monsters are our own, made in
-// Blender by scripts/models/make-monsters.py with the same move names. Each file is downloaded once, the
+// The 3D figures on the 3D board: the box heroes, Berryloaf, Darna and the monsters are our own,
+// made in Blender by scripts/models/make-monsters.py; other fan heroes are KayKit Adventurers
+// (CC0, src/models, trimmed to the moves used here by scripts/models/trim-models.mjs), with the
+// same move names. Each file is downloaded once, the
 // first time a hero needs it, then copied for every hero on that figure.
 //
 // A figure stands idle, walks when it moves, swings, shoots or casts when it attacks,
@@ -69,6 +77,13 @@ const FILES = {
   Villager_Donnel,
   Villager_Elizar,
   Gibbering_Mouther,
+  Hero_Quinn,
+  Hero_Vistra,
+  Hero_Keyleth,
+  Hero_Tarak,
+  Hero_Heskan,
+  Hero_Berryloaf,
+  Hero_Darna,
 }
 // The figures are about 2.5 units tall: this makes them one square tall.
 const SCALE = 0.44

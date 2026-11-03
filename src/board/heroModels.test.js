@@ -3,13 +3,22 @@ import { HERO_TEMPLATES } from '../data/heroes.js'
 import { attackMove, heroModel, MODEL_PROPS, monsterModel } from './heroModels.js'
 
 describe("the heroes' 3D figures", () => {
-  it('gives each box hero its own look, carrying gear its figure has', () => {
+  it('gives each box hero its own figure, made from the card art', () => {
     const looks = HERO_TEMPLATES.map((t) => heroModel(t))
-    expect(new Set(looks.map((l) => `${l.model}:${l.gear.join()}`)).size).toBe(HERO_TEMPLATES.length)
-    for (const look of looks) for (const gear of look.gear) expect(MODEL_PROPS[look.model]).toContain(gear)
-    expect(heroModel({ key: 'wizard' }).model).toBe('Mage')
-    // Vistra the dwarf stands a little shorter.
-    expect(heroModel({ key: 'fighter' }).height).toBeLessThan(1)
+    expect(new Set(looks.map((l) => l.model)).size).toBe(HERO_TEMPLATES.length)
+    for (const look of looks) expect(MODEL_PROPS[look.model]).toEqual([])
+    expect(heroModel({ key: 'wizard' })).toEqual({ model: 'Hero_Heskan', gear: [], height: 1 })
+    expect(heroModel({ key: 'fighter' }).model).toBe('Hero_Vistra')
+    expect(heroModel({ key: 'cleric' }).model).toBe('Hero_Quinn')
+    expect(heroModel({ key: 'paladin' }).model).toBe('Hero_Keyleth')
+    expect(heroModel({ key: 'rogue' }).model).toBe('Hero_Tarak')
+  })
+
+  it('gives Berryloaf and Darna their own figures, by name', () => {
+    expect(heroModel({ key: 'bard', name: 'Berryloaf', className: 'Halfling Bard' }).model).toBe('Hero_Berryloaf')
+    expect(heroModel({ key: 'monk', name: 'Darna', className: 'Human Monk' }).model).toBe('Hero_Darna')
+    // Somebody else's monk still gets a figure by class.
+    expect(heroModel({ key: 'monk', name: 'Sen', className: 'Human Monk' }).model).toBe('Rogue')
   })
 
   it('picks a figure for a fan hero from its class, and one for anybody else', () => {
