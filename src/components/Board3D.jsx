@@ -7,7 +7,7 @@ import { artUrl, useArt } from '../state/useArt.js'
 import { TOKEN_COLORS } from './Board.jsx'
 import { useAttackFx } from './AttackFx.jsx'
 import { useHealFx } from './HealFx.jsx'
-import { canvasTexture, playAttack3D, playHeal3D } from './board3dFx.js'
+import { canvasTexture, playAttack3D, playExit3D, playHeal3D } from './board3dFx.js'
 import { FLOOR_LOOKS, dressDungeon, stoneMaterials } from './dungeonLook3d.js'
 import { attachModel, detachModel, face, setDown, setWalking, stepModels } from './figureModels.js'
 import { FX_DELAY_MS, FX_MS } from '../board/attackFx.js'
@@ -649,7 +649,7 @@ function forget(node) {
 
 // Figures come, go and walk to their new squares. `fallAt(figure)`: when a hero who just
 // dropped to 0 HP should fall over (after the attack animation that downs them), in ms.
-function syncFigures(stage, figures, art, fallAt) {
+function syncFigures(stage, figures, art, fallAt, killedAt = () => false) {
   const seen = new Set()
   for (const f of figures) {
     seen.add(f.id)
@@ -707,9 +707,10 @@ function syncFigures(stage, figures, art, fallAt) {
   for (const [id, node] of stage.nodes) {
     if (seen.has(id)) continue
     stage.nodes.delete(id)
-    // A defeated monster's 3D figure stays standing until the blow that defeats it lands,
-    // then falls (board3dFx.js takes it). With no attack to play, it just goes.
-    if (node.userData.anim && !node.userData.anim.down && node.userData.kind !== 'hero') {
+    // A figure taken off the board stays a moment for its way out. One defeated by the
+    // attack about to play waits for the blow (board3dFx.js falls, crumbles or sinks it);
+    // any other goes through a portal, or (a hero) up a beam of light.
+    if (!stage.still && !node.userData.anim?.down) {
       stage.leaving.add(node)
       node.userData.ring.visible = false
       node.userData.figId = null
@@ -721,7 +722,13 @@ function syncFigures(stage, figures, art, fallAt) {
         stage.render()
       }
       node.userData.gone = gone
-      node.userData.leaveTimer = setTimeout(gone, FX_DELAY_MS + 1500)
+      const exit = () => {
+        if (node.userData.claimed || !stage.leaving.has(node)) return
+        node.userData.claimed = true
+        playExit3D(stage, node, gone)
+      }
+      if (killedAt(node.userData.at)) node.userData.leaveTimer = setTimeout(exit, FX_DELAY_MS + 1500)
+      else exit()
       continue
     }
     stage.figures.remove(node)
@@ -937,6 +944,12 @@ function keepOnBoard(stage) {
   t.set(x, 0, z)
 }
 
+// Whether the attack about to play (or playing) defeats the figure on square `at`.
+function killedBy(moment, at) {
+  if (!moment?.fx || !at || serverNow() - moment.at > FX_DELAY_MS + FX_MS) return false
+  return moment.fx.shots.some((s) => s.result === 'kill' && s.to[0] === at[0] && s.to[1] === at[1])
+}
+
 // A hero downed by an attack falls when the animation's blow lands, not when the die is
 // rolled (the board already knows they're at 0 HP by then). Ms from now, 0 for at once.
 function fallDelay(moment, at) {
@@ -1146,7 +1159,7 @@ export default function Board3D({ state, onFail, onSlow, taps = null, calm = fal
     const stage = stageRef.current
     if (!ready || !stage?.at) return
     stage.heroModels = heroModels
-    syncFigures(stage, figures, art, (f) => fallDelay(state.moment, f.at))
+    syncFigures(stage, figures, art, (f) => fallDelay(state.moment, f.at), (at) => killedBy(state.moment, at))
     const looks = restFacing(figures)
     for (const [id, node] of stage.nodes) {
       node.userData.lookAt = looks[id] ?? null
