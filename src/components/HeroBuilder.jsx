@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Button, Chip, useConfirm } from './ui.jsx'
+import { FigurePicture } from './MyModels.jsx'
 import { COLOR_ROLES, MAX_NAME_LENGTH, MAX_SIZE, MIN_SIZE, NUDGE, SWATCHES } from '../data/forge.js'
 import { PARTS, SLOTS, findPart, shapeOf } from '../forge/parts.js'
 import { DEFAULT_RECIPE, randomRecipe, STARTERS } from '../forge/recipes.js'
@@ -368,6 +369,7 @@ function FigureList({ figures, currentId, onOpen, onStart, onUse, onDelete }) {
       <ul className="mt-2 space-y-2">
         {(figures ?? []).map((f) => (
           <li key={f.id} className={`flex flex-wrap items-center gap-2 rounded-xl border p-2 ${f.id === currentId ? 'border-amber-500/70 bg-amber-500/10' : 'border-zinc-800 bg-zinc-900'}`}>
+            <FigurePicture recipe={f.recipe} className="h-16 w-16 shrink-0 text-xl" />
             <div className="mr-auto min-w-0">
               <p className="truncate font-semibold text-zinc-100">{f.recipe.name}</p>
               <p className="text-sm text-zinc-500">{[f.recipe.from, f.savedAt?.slice(0, 10)].filter(Boolean).join(' · ')}</p>

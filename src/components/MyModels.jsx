@@ -86,7 +86,7 @@ export function MyModels() {
                     {m.picture ? (
                       <img src={m.picture} alt="" className="h-24 w-full rounded-lg bg-zinc-950 object-contain" />
                     ) : (
-                      <span className="flex h-24 items-center justify-center gap-0.5 rounded-lg bg-zinc-950 text-3xl">{m.emojis.slice(0, 4).join('') || '🛠️'}</span>
+                      <FigurePicture recipe={m.recipe} emojis={m.emojis} />
                     )}
                     <span className="mt-1 block truncate font-semibold">{m.title}</span>
                     <span className="block text-xs text-zinc-400">{m.source === 'workshop' ? '🧙 Model Workshop' : '🛠️ Hero Builder'}</span>
@@ -99,6 +99,28 @@ export function MyModels() {
       </div>
     </div>
   )
+}
+
+// A Hero Builder figure's picture, drawn on this screen (no waiting on the Pi): its parts'
+// emojis first, then the picture once three.js has loaded and drawn it.
+export function FigurePicture({ recipe, emojis = [], className = 'h-24 w-full text-3xl' }) {
+  const [url, setUrl] = useState(null)
+  useEffect(() => {
+    if (!recipe) return undefined
+    let live = true
+    // One at a time, after the page has shown: each picture takes a moment to draw.
+    const timer = setTimeout(() => {
+      import('../forge/snapshot.js')
+        .then(({ snapshot }) => live && setUrl(snapshot(recipe)))
+        .catch(() => null)
+    }, 30)
+    return () => {
+      live = false
+      clearTimeout(timer)
+    }
+  }, [recipe])
+  if (url) return <img src={url} alt="" data-figure-picture className={`rounded-lg bg-zinc-950 object-contain ${className}`} />
+  return <span className={`flex items-center justify-center gap-0.5 rounded-lg bg-zinc-950 ${className}`}>{emojis.slice(0, 4).join('') || '🛠️'}</span>
 }
 
 function ModelTile({ active, disabled, onClick, label, children }) {

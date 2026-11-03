@@ -23,6 +23,7 @@ export function myModels(requests = [], figures = []) {
       id: r.id,
       title: r.idea,
       picture: round.pictures?.[0] ? `/workshop/${r.id}/${round.pictures[0]}` : null,
+      recipe: null,
       emojis: [],
       on: Boolean(r.useInGame),
       at: r.sentAt ?? '',
@@ -35,6 +36,8 @@ export function myModels(requests = [], figures = []) {
       id: f.id,
       title: f.recipe?.name || 'My hero',
       picture: null,
+      // Drawn into a picture on the screen (src/forge/snapshot.js), the emojis until then.
+      recipe: f.recipe,
       emojis: ['head', 'hat', 'hand', 'offhand', 'back'].map((slot) => findPart(slot, parts[slot]?.id)?.emoji).filter(Boolean),
       on: Boolean(f.useInGame),
       at: f.savedAt ?? '',

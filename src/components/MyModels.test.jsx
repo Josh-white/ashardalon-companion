@@ -3,6 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MyModels } from './MyModels.jsx'
 import { myModels } from '../data/myModels.js'
+import { snapshot } from '../forge/snapshot.js'
+import { STARTERS } from '../forge/recipes.js'
 
 afterEach(() => {
   cleanup()
@@ -62,5 +64,10 @@ describe('My models', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Colton: normal hero' }).disabled).toBe(false))
     fireEvent.click(screen.getByRole('button', { name: 'Colton: normal hero' }))
     await waitFor(() => expect(calls[1]).toEqual(['/workshop/w-lizard', { useInGame: false }]))
+  })
+
+  it('shows the parts while a figure can\'t be drawn (no 3D here), and keeps the builder\'s recipe', () => {
+    expect(snapshot(STARTERS[0])).toBeNull()
+    expect(myModels([], FIGURES)[0].models[0].recipe.name).toBe('Grim')
   })
 })
